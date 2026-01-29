@@ -9,8 +9,8 @@ export function Header() {
             <Home className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="font-display text-xl font-semibold">Room Planner</h1>
-            <p className="text-xs text-muted-foreground">Configuration des chambres</p>
+            <h1 className="text-xl font-medium">Quinta Mor</h1>
+            <p className="text-xs text-muted-foreground">Room Setup</p>
           </div>
         </div>
       </div>

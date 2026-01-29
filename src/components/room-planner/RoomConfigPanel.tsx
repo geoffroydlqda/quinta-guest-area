@@ -1,54 +1,71 @@
 import { RoomConfig, BedType } from '@/types/room';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Button } from '@/components/ui/button';
-import { X, Bed, User, FileText, Crown } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { X, Bed, Bath, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import roomKingImage from '@/assets/room-king.jpg';
+import roomFlexibleImage from '@/assets/room-flexible.jpg';
 
 interface RoomConfigPanelProps {
   room: RoomConfig;
-  errors: string[];
   onUpdate: (updates: Partial<RoomConfig>) => void;
   onClose: () => void;
+  onReset: () => void;
 }
 
-export function RoomConfigPanel({ room, errors, onUpdate, onClose }: RoomConfigPanelProps) {
+export function RoomConfigPanel({ room, onUpdate, onClose, onReset }: RoomConfigPanelProps) {
+  const roomImage = room.isFixed ? roomKingImage : roomFlexibleImage;
+
   return (
     <div className="bg-card rounded-2xl shadow-elegant overflow-hidden animate-slide-in-right">
-      {/* Header */}
-      <div className="bg-secondary px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h3 className="font-display text-xl font-semibold">{room.name}</h3>
-          {room.isFixed && (
-            <div className="flex items-center gap-1 text-accent text-sm">
-              <Crown className="w-4 h-4" />
-              <span>Suite principale</span>
-            </div>
-          )}
-        </div>
-        <Button variant="ghost" size="icon" onClick={onClose}>
+      {/* Room image */}
+      <div className="aspect-[16/9] overflow-hidden relative">
+        <img
+          src={roomImage}
+          alt={`Room ${room.id}`}
+          className="w-full h-full object-cover"
+        />
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={onClose}
+          className="absolute top-3 right-3 bg-background/80 backdrop-blur-sm hover:bg-background"
+        >
           <X className="w-5 h-5" />
         </Button>
+      </div>
+
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-border">
+        <div className="flex items-center justify-between">
+          <h3 className="text-2xl font-medium">{room.name}</h3>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary text-sm">
+            <Bath className="w-4 h-4" />
+            <span>{room.bathroomType === 'en-suite' ? 'En-suite bathroom' : 'Shared bathroom'}</span>
+          </div>
+        </div>
+        {room.specialNote && (
+          <p className="text-sm text-muted-foreground mt-2 italic">{room.specialNote}</p>
+        )}
       </div>
 
       <div className="p-6 space-y-6">
         {/* Bed selection */}
         <div className="space-y-3">
           <Label className="flex items-center gap-2 text-base">
-            <Bed className="w-4 h-4 text-accent" />
-            Configuration du lit
+            <Bed className="w-4 h-4 text-primary" />
+            Bed Setup
           </Label>
 
           {room.isFixed ? (
-            <div className="p-4 rounded-lg bg-accent/10 border border-accent/20">
+            <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
               <div className="flex items-center gap-2">
                 <div className="bed-badge bed-badge-king">
                   <Bed className="w-3 h-3 mr-1" />
-                  King size
+                  King (fixed)
                 </div>
-                <span className="text-sm text-muted-foreground">(configuration fixe)</span>
+                <span className="text-sm text-muted-foreground">This room has a fixed bed configuration</span>
               </div>
             </div>
           ) : (
@@ -70,8 +87,8 @@ export function RoomConfigPanel({ room, errors, onUpdate, onClose }: RoomConfigP
                   )}
                 >
                   <Bed className="w-6 h-6" />
-                  <span className="font-medium">Queen size</span>
-                  <span className="text-xs text-muted-foreground">1 grand lit</span>
+                  <span className="font-medium">Queen</span>
+                  <span className="text-xs text-muted-foreground">1 large bed</span>
                 </Label>
               </div>
 
@@ -91,75 +108,24 @@ export function RoomConfigPanel({ room, errors, onUpdate, onClose }: RoomConfigP
                     <Bed className="w-5 h-5" />
                     <Bed className="w-5 h-5" />
                   </div>
-                  <span className="font-medium">2 Twin beds</span>
-                  <span className="text-xs text-muted-foreground">2 lits simples</span>
+                  <span className="font-medium">2 Twins</span>
+                  <span className="text-xs text-muted-foreground">2 single beds</span>
                 </Label>
               </div>
             </RadioGroup>
           )}
+
+          {/* Reset selection link */}
+          {!room.isFixed && room.bedType && (
+            <button
+              onClick={onReset}
+              className="text-sm text-primary hover:underline flex items-center gap-1"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reset selection
+            </button>
+          )}
         </div>
-
-        {/* Occupants */}
-        <div className="space-y-3">
-          <Label className="flex items-center gap-2 text-base">
-            <User className="w-4 h-4 text-accent" />
-            Occupants
-          </Label>
-
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor={`occ1-${room.id}`} className="text-sm text-muted-foreground">
-                Occupant 1 {room.bedType && <span className="text-destructive">*</span>}
-              </Label>
-              <Input
-                id={`occ1-${room.id}`}
-                placeholder="Prénom Nom"
-                value={room.occupant1}
-                onChange={(e) => onUpdate({ occupant1: e.target.value })}
-                className="h-11"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor={`occ2-${room.id}`} className="text-sm text-muted-foreground">
-                Occupant 2 (optionnel)
-              </Label>
-              <Input
-                id={`occ2-${room.id}`}
-                placeholder="Prénom Nom"
-                value={room.occupant2}
-                onChange={(e) => onUpdate({ occupant2: e.target.value })}
-                className="h-11"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Notes */}
-        <div className="space-y-3">
-          <Label htmlFor={`notes-${room.id}`} className="flex items-center gap-2 text-base">
-            <FileText className="w-4 h-4 text-muted-foreground" />
-            Notes chambre
-          </Label>
-          <Textarea
-            id={`notes-${room.id}`}
-            placeholder="Besoins particuliers, préférences..."
-            value={room.notes}
-            onChange={(e) => onUpdate({ notes: e.target.value })}
-            rows={2}
-          />
-        </div>
-
-        {/* Errors */}
-        {errors.length > 0 && (
-          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-            <ul className="text-sm text-destructive space-y-1">
-              {errors.map((error, i) => (
-                <li key={i}>• {error}</li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     </div>
   );

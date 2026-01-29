@@ -1,30 +1,31 @@
 import { useRoomPlanner } from '@/hooks/useRoomPlanner';
 import { Header } from '@/components/room-planner/Header';
-import { StepIndicator } from '@/components/room-planner/StepIndicator';
-import { ReservationForm } from '@/components/room-planner/ReservationForm';
+import { EventSelection } from '@/components/room-planner/EventSelection';
+import { EventForm } from '@/components/room-planner/EventForm';
 import { RoomConfiguration } from '@/components/room-planner/RoomConfiguration';
 import { Summary } from '@/components/room-planner/Summary';
-
-const STEP_LABELS = ['Informations', 'Chambres', 'Récapitulatif'];
 
 const Index = () => {
   const {
     currentStep,
     setCurrentStep,
-    reservationInfo,
-    setReservationInfo,
+    eventInfo,
+    setEventInfo,
     rooms,
     selectedRoomId,
     setSelectedRoomId,
     isSubmitted,
+    isSaved,
+    editUrl,
     stats,
-    isReservationValid,
-    isRoomsValid,
-    getRoomErrors,
-    getDuplicateOccupants,
+    isEmailValid,
+    selectEvent,
+    goBackToEvents,
     updateRoom,
     resetRoom,
+    handleSave,
     handleSubmit,
+    resetAll,
   } = useRoomPlanner();
 
   return (
@@ -32,61 +33,53 @@ const Index = () => {
       <Header />
       
       <main className="container mx-auto px-4 py-8">
-        {!isSubmitted && (
-          <div className="mb-8">
-            <StepIndicator
-              currentStep={currentStep}
-              totalSteps={3}
-              labels={STEP_LABELS}
-              onStepClick={(step) => {
-                if (step === 1 || (step === 2 && isReservationValid) || (step === 3 && isReservationValid && isRoomsValid)) {
-                  setCurrentStep(step);
-                }
-              }}
-            />
-          </div>
+        {currentStep === 'events' && (
+          <EventSelection onSelectEvent={selectEvent} />
         )}
 
-        {currentStep === 1 && !isSubmitted && (
-          <ReservationForm
-            reservationInfo={reservationInfo}
-            setReservationInfo={setReservationInfo}
-            isValid={isReservationValid}
-            onNext={() => setCurrentStep(2)}
+        {currentStep === 'form' && (
+          <EventForm
+            eventInfo={eventInfo}
+            setEventInfo={setEventInfo}
+            isEmailValid={isEmailValid}
+            onBack={goBackToEvents}
+            onNext={() => setCurrentStep('rooms')}
           />
         )}
 
-        {currentStep === 2 && !isSubmitted && (
+        {currentStep === 'rooms' && (
           <RoomConfiguration
             rooms={rooms}
             selectedRoomId={selectedRoomId}
             stats={stats}
-            duplicates={getDuplicateOccupants()}
-            isValid={isRoomsValid}
-            getRoomErrors={getRoomErrors}
             onSelectRoom={setSelectedRoomId}
             onUpdateRoom={updateRoom}
             onResetRoom={resetRoom}
-            onPrev={() => setCurrentStep(1)}
-            onNext={() => setCurrentStep(3)}
+            onPrev={() => setCurrentStep('form')}
+            onNext={() => setCurrentStep('summary')}
           />
         )}
 
-        {(currentStep === 3 || isSubmitted) && (
+        {currentStep === 'summary' && (
           <Summary
-            reservationInfo={reservationInfo}
+            eventInfo={eventInfo}
             rooms={rooms}
             stats={stats}
             isSubmitted={isSubmitted}
-            onPrev={() => setCurrentStep(2)}
+            isSaved={isSaved}
+            editUrl={editUrl}
+            isEmailValid={isEmailValid}
+            onPrev={() => setCurrentStep('rooms')}
+            onSave={handleSave}
             onSubmit={handleSubmit}
+            onNewSetup={resetAll}
           />
         )}
       </main>
 
       <footer className="border-t border-border py-6 mt-12">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>Room Planner © {new Date().getFullYear()}</p>
+          <p>Quinta Mor © {new Date().getFullYear()}</p>
         </div>
       </footer>
     </div>
