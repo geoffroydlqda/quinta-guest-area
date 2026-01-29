@@ -1,40 +1,47 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+@font-face {
+  font-family: 'Dico Typewriter';
+  src: local('Dico Typewriter'), local('DicoTypewriter');
+  font-weight: 400;
+  font-style: normal;
+}
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Room Planner Design System - Elegant Hotel/Retreat Style */
+/* Quinta Mor Room Setup - Boutique Retreat Style */
 
 @layer base {
   :root {
-    /* Warm cream/beige background palette */
-    --background: 40 33% 97%;
-    --foreground: 25 10% 15%;
+    /* Custom brand colors - warm retreat palette */
+    --background: 25 33% 95%; /* #f6efea */
+    --foreground: 0 0% 0%; /* black text */
 
     /* Cards with subtle warmth */
-    --card: 40 40% 99%;
-    --card-foreground: 25 10% 15%;
+    --card: 30 30% 98%;
+    --card-foreground: 0 0% 0%;
 
     /* Popovers */
-    --popover: 40 40% 99%;
-    --popover-foreground: 25 10% 15%;
+    --popover: 30 30% 98%;
+    --popover-foreground: 0 0% 0%;
 
-    /* Rich charcoal primary */
-    --primary: 25 10% 18%;
-    --primary-foreground: 40 33% 97%;
+    /* Accent green - #6d7855 */
+    --primary: 72 17% 40%;
+    --primary-foreground: 0 0% 100%;
 
     /* Warm beige secondary */
-    --secondary: 35 30% 92%;
-    --secondary-foreground: 25 10% 20%;
+    --secondary: 30 25% 92%;
+    --secondary-foreground: 0 0% 0%;
 
     /* Muted warm tones */
-    --muted: 35 20% 94%;
-    --muted-foreground: 25 8% 45%;
+    --muted: 30 20% 90%;
+    --muted-foreground: 25 10% 40%;
 
-    /* Golden accent */
-    --accent: 38 60% 55%;
-    --accent-foreground: 25 10% 10%;
+    /* Accent matches primary */
+    --accent: 72 17% 40%;
+    --accent-foreground: 0 0% 100%;
 
     /* Status colors */
     --destructive: 0 65% 55%;
@@ -44,60 +51,60 @@
     --success-foreground: 0 0% 100%;
 
     /* Borders and inputs */
-    --border: 35 25% 88%;
-    --input: 35 25% 88%;
-    --ring: 38 60% 55%;
+    --border: 30 20% 85%;
+    --input: 30 20% 85%;
+    --ring: 72 17% 40%;
 
-    --radius: 0.625rem;
+    --radius: 0.75rem;
 
     /* Room status colors */
     --room-configured: 145 50% 40%;
-    --room-unconfigured: 35 20% 70%;
-    --room-king: 38 60% 55%;
+    --room-unconfigured: 30 15% 70%;
+    --room-king: 72 17% 40%;
     --room-queen: 280 40% 50%;
     --room-twin: 200 60% 45%;
 
     /* Sidebar */
-    --sidebar-background: 35 30% 95%;
-    --sidebar-foreground: 25 10% 25%;
-    --sidebar-primary: 25 10% 18%;
-    --sidebar-primary-foreground: 40 33% 97%;
-    --sidebar-accent: 35 30% 90%;
-    --sidebar-accent-foreground: 25 10% 18%;
-    --sidebar-border: 35 25% 88%;
-    --sidebar-ring: 38 60% 55%;
+    --sidebar-background: 30 25% 94%;
+    --sidebar-foreground: 0 0% 0%;
+    --sidebar-primary: 72 17% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 30 25% 90%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 30 20% 85%;
+    --sidebar-ring: 72 17% 40%;
   }
 
   .dark {
     --background: 25 15% 10%;
-    --foreground: 40 20% 92%;
+    --foreground: 30 20% 92%;
     --card: 25 12% 14%;
-    --card-foreground: 40 20% 92%;
+    --card-foreground: 30 20% 92%;
     --popover: 25 12% 14%;
-    --popover-foreground: 40 20% 92%;
-    --primary: 40 30% 90%;
-    --primary-foreground: 25 15% 10%;
+    --popover-foreground: 30 20% 92%;
+    --primary: 72 25% 55%;
+    --primary-foreground: 0 0% 0%;
     --secondary: 25 10% 20%;
-    --secondary-foreground: 40 20% 90%;
+    --secondary-foreground: 30 20% 90%;
     --muted: 25 10% 20%;
-    --muted-foreground: 40 15% 60%;
-    --accent: 38 60% 55%;
-    --accent-foreground: 25 10% 10%;
+    --muted-foreground: 30 15% 60%;
+    --accent: 72 25% 55%;
+    --accent-foreground: 0 0% 0%;
     --destructive: 0 60% 45%;
     --destructive-foreground: 0 0% 100%;
     --success: 145 45% 35%;
     --success-foreground: 0 0% 100%;
     --border: 25 10% 22%;
     --input: 25 10% 22%;
-    --ring: 38 60% 55%;
+    --ring: 72 25% 55%;
     --sidebar-background: 25 12% 12%;
-    --sidebar-foreground: 40 20% 90%;
-    --sidebar-primary: 38 60% 55%;
-    --sidebar-primary-foreground: 25 15% 10%;
+    --sidebar-foreground: 30 20% 90%;
+    --sidebar-primary: 72 25% 55%;
+    --sidebar-primary-foreground: 0 0% 0%;
     --sidebar-accent: 25 10% 18%;
-    --sidebar-accent-foreground: 40 20% 90%;
+    --sidebar-accent-foreground: 30 20% 90%;
     --sidebar-border: 25 10% 22%;
-    --sidebar-ring: 38 60% 55%;
+    --sidebar-ring: 72 25% 55%;
   }
 }
 
@@ -108,22 +115,22 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Dico Typewriter', 'Courier New', monospace;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Cormorant Garamond', Georgia, serif;
-    @apply font-semibold tracking-tight;
+    font-family: 'Dico Typewriter', 'Courier New', monospace;
+    @apply font-normal tracking-tight;
   }
 }
 
 @layer components {
   .text-display {
-    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-family: 'Dico Typewriter', 'Courier New', monospace;
   }
 
   .room-card {
-    @apply relative overflow-hidden rounded-xl border border-border bg-card p-5 transition-all duration-300;
+    @apply relative overflow-hidden rounded-2xl border border-border bg-card p-5 transition-all duration-300;
     @apply hover:shadow-lg hover:border-accent/50;
   }
 
@@ -156,7 +163,7 @@
   }
 
   .bed-badge-king {
-    @apply bg-accent/20 text-accent-foreground border border-accent/30;
+    @apply bg-primary/20 text-primary border border-primary/30;
   }
 
   .bed-badge-queen {
@@ -167,8 +174,8 @@
     @apply bg-sky-100 text-sky-800 border border-sky-200;
   }
 
-  .gradient-hero {
-    background: linear-gradient(135deg, hsl(35 30% 95%) 0%, hsl(40 33% 97%) 50%, hsl(38 40% 94%) 100%);
+  .bed-badge-unselected {
+    @apply bg-muted text-muted-foreground border border-border;
   }
 
   .shadow-elegant {
@@ -192,5 +199,14 @@
 
   .glass-panel {
     @apply bg-card/80 backdrop-blur-sm border border-border/50;
+  }
+
+  .event-card {
+    @apply p-4 rounded-2xl border border-border bg-card cursor-pointer transition-all duration-200;
+    @apply hover:shadow-md hover:border-primary/50 hover:bg-primary/5;
+  }
+
+  .event-card:active {
+    @apply scale-[0.98];
   }
 }

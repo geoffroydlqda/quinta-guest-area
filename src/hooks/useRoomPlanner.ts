@@ -1,21 +1,14 @@
 import { useState, useMemo, useCallback } from 'react';
-import { RoomConfig, ReservationInfo, RoomStats, initialRooms, BedType } from '@/types/room';
-
-const initialReservation: ReservationInfo = {
-  reservationName: '',
-  email: '',
-  phone: '',
-  stayDates: '',
-  numberOfPeople: '',
-  generalNotes: '',
-};
+import { RoomConfig, EventInfo, RoomStats, initialRooms, initialEventInfo, BedType } from '@/types/room';
 
 export function useRoomPlanner() {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [reservationInfo, setReservationInfo] = useState<ReservationInfo>(initialReservation);
+  const [currentStep, setCurrentStep] = useState<'events' | 'form' | 'rooms' | 'summary'>('events');
+  const [eventInfo, setEventInfo] = useState<EventInfo>(initialEventInfo);
   const [rooms, setRooms] = useState<RoomConfig[]>(initialRooms);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [editUrl, setEditUrl] = useState<string | null>(null);
 
   // Calculate room statistics
   const stats: RoomStats = useMemo(() => {
@@ -27,73 +20,14 @@ export function useRoomPlanner() {
           acc.queensCount++;
         } else if (room.bedType === 'twin') {
           acc.twinsCount++;
+        } else if (!room.isFixed && !room.bedType) {
+          acc.unselectedCount++;
         }
-        
-        if (room.occupant1.trim()) acc.totalOccupants++;
-        if (room.occupant2.trim()) acc.totalOccupants++;
-        
         return acc;
       },
-      { kingsFixed: 0, queensCount: 0, twinsCount: 0, totalOccupants: 0 }
+      { kingsFixed: 0, queensCount: 0, twinsCount: 0, unselectedCount: 0 }
     );
   }, [rooms]);
-
-  // Get all occupant names for duplicate checking
-  const allOccupants = useMemo(() => {
-    const occupants: { name: string; roomId: number }[] = [];
-    rooms.forEach((room) => {
-      if (room.occupant1.trim()) {
-        occupants.push({ name: room.occupant1.trim().toLowerCase(), roomId: room.id });
-      }
-      if (room.occupant2.trim()) {
-        occupants.push({ name: room.occupant2.trim().toLowerCase(), roomId: room.id });
-      }
-    });
-    return occupants;
-  }, [rooms]);
-
-  // Check for duplicate occupant names
-  const getDuplicateOccupants = useCallback(() => {
-    const duplicates: { name: string; rooms: number[] }[] = [];
-    const nameMap = new Map<string, number[]>();
-    
-    allOccupants.forEach(({ name, roomId }) => {
-      const existing = nameMap.get(name) || [];
-      nameMap.set(name, [...existing, roomId]);
-    });
-    
-    nameMap.forEach((roomIds, name) => {
-      if (roomIds.length > 1) {
-        duplicates.push({ name, rooms: [...new Set(roomIds)] });
-      }
-    });
-    
-    return duplicates;
-  }, [allOccupants]);
-
-  // Check if a room has validation errors
-  const getRoomErrors = useCallback((room: RoomConfig): string[] => {
-    const errors: string[] = [];
-    
-    // If bed type is selected (or fixed), at least occupant1 is required
-    if (room.bedType && !room.occupant1.trim()) {
-      errors.push('Au moins un occupant est requis');
-    }
-    
-    // Check for duplicate names
-    const duplicates = getDuplicateOccupants();
-    duplicates.forEach(({ name, rooms: duplicateRooms }) => {
-      if (duplicateRooms.includes(room.id)) {
-        const occupant1Match = room.occupant1.trim().toLowerCase() === name;
-        const occupant2Match = room.occupant2.trim().toLowerCase() === name;
-        if (occupant1Match || occupant2Match) {
-          errors.push(`"${name}" est déjà utilisé dans une autre chambre`);
-        }
-      }
-    });
-    
-    return errors;
-  }, [getDuplicateOccupants]);
 
   // Update a room configuration
   const updateRoom = useCallback((roomId: number, updates: Partial<RoomConfig>) => {
@@ -107,12 +41,10 @@ export function useRoomPlanner() {
     setRooms((prev) =>
       prev.map((room) => {
         if (room.id !== roomId) return room;
+        if (room.isFixed) return room;
         return {
           ...room,
-          bedType: room.isFixed ? 'king' : null,
-          occupant1: '',
-          occupant2: '',
-          notes: '',
+          bedType: null,
         };
       })
     );
@@ -123,69 +55,101 @@ export function useRoomPlanner() {
     updateRoom(roomId, { bedType });
   }, [updateRoom]);
 
-  // Check if reservation info is valid
-  const isReservationValid = useMemo(() => {
-    return reservationInfo.reservationName.trim() !== '' && 
-           reservationInfo.email.trim() !== '' &&
-           /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reservationInfo.email);
-  }, [reservationInfo]);
+  // Check if event info is valid (email required)
+  const isEmailValid = useMemo(() => {
+    const email = eventInfo.organizerEmail.trim();
+    return email !== '' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }, [eventInfo.organizerEmail]);
 
-  // Check if rooms configuration is valid
-  const isRoomsValid = useMemo(() => {
-    const duplicates = getDuplicateOccupants();
-    if (duplicates.length > 0) return false;
+  // Select an event
+  const selectEvent = useCallback((eventName: string) => {
+    setEventInfo((prev) => ({ ...prev, eventName }));
+    setCurrentStep('form');
+  }, []);
+
+  // Go back to event selection
+  const goBackToEvents = useCallback(() => {
+    setCurrentStep('events');
+    setEventInfo(initialEventInfo);
+    setRooms(initialRooms);
+    setIsSubmitted(false);
+    setIsSaved(false);
+    setEditUrl(null);
+  }, []);
+
+  // Generate edit URL
+  const generateEditUrl = useCallback(() => {
+    const baseUrl = window.location.origin;
+    const recordId = `edit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${baseUrl}?edit=${recordId}`;
+  }, []);
+
+  // Handle save for later
+  const handleSave = useCallback(() => {
+    if (!isEmailValid) return;
     
-    // Check that all rooms with bed types have at least one occupant
-    return rooms.every((room) => {
-      if (!room.bedType) return true;
-      return room.occupant1.trim() !== '';
-    });
-  }, [rooms, getDuplicateOccupants]);
-
-  // Get configured rooms only
-  const configuredRooms = useMemo(() => {
-    return rooms.filter((room) => room.bedType !== null);
-  }, [rooms]);
+    const url = generateEditUrl();
+    setEditUrl(url);
+    setIsSaved(true);
+    
+    // Here you would send the email with the edit link
+    console.log('Saving setup for:', eventInfo.eventName);
+    console.log('Organizer email:', eventInfo.organizerEmail);
+    console.log('Edit URL:', url);
+    console.log('Admin email: hello@quintamor.com');
+  }, [isEmailValid, eventInfo, generateEditUrl]);
 
   // Submit handler
   const handleSubmit = useCallback(() => {
-    if (isReservationValid && isRoomsValid) {
-      setIsSubmitted(true);
-    }
-  }, [isReservationValid, isRoomsValid]);
+    if (!isEmailValid) return;
+    
+    const url = editUrl || generateEditUrl();
+    setEditUrl(url);
+    setIsSubmitted(true);
+    
+    // Here you would send the housekeeping summary email
+    console.log('Submitting final setup for:', eventInfo.eventName);
+    console.log('Organizer email:', eventInfo.organizerEmail);
+    console.log('Admin email: hello@quintamor.com');
+    console.log('Rooms:', rooms);
+    console.log('Stats:', stats);
+  }, [isEmailValid, eventInfo, rooms, stats, editUrl, generateEditUrl]);
 
   // Reset everything
   const resetAll = useCallback(() => {
-    setCurrentStep(1);
-    setReservationInfo(initialReservation);
+    setCurrentStep('events');
+    setEventInfo(initialEventInfo);
     setRooms(initialRooms);
     setSelectedRoomId(null);
     setIsSubmitted(false);
+    setIsSaved(false);
+    setEditUrl(null);
   }, []);
 
   return {
     // State
     currentStep,
     setCurrentStep,
-    reservationInfo,
-    setReservationInfo,
+    eventInfo,
+    setEventInfo,
     rooms,
     selectedRoomId,
     setSelectedRoomId,
     isSubmitted,
+    isSaved,
+    editUrl,
     stats,
     
     // Validation
-    isReservationValid,
-    isRoomsValid,
-    getRoomErrors,
-    getDuplicateOccupants,
-    configuredRooms,
+    isEmailValid,
     
     // Actions
+    selectEvent,
+    goBackToEvents,
     updateRoom,
     resetRoom,
     setRoomBedType,
+    handleSave,
     handleSubmit,
     resetAll,
   };
