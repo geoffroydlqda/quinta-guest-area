@@ -50,9 +50,7 @@ const Index = () => {
         {currentStep === 'rooms' && (
           <RoomConfiguration
             rooms={rooms}
-            selectedRoomId={selectedRoomId}
             stats={stats}
-            onSelectRoom={setSelectedRoomId}
             onUpdateRoom={updateRoom}
             onResetRoom={resetRoom}
             onPrev={() => setCurrentStep('form')}
