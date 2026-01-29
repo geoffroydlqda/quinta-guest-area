@@ -1,96 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Room Planner Design System - Elegant Hotel/Retreat Style */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Warm cream/beige background palette */
+    --background: 40 33% 97%;
+    --foreground: 25 10% 15%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Cards with subtle warmth */
+    --card: 40 40% 99%;
+    --card-foreground: 25 10% 15%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    /* Popovers */
+    --popover: 40 40% 99%;
+    --popover-foreground: 25 10% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Rich charcoal primary */
+    --primary: 25 10% 18%;
+    --primary-foreground: 40 33% 97%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Warm beige secondary */
+    --secondary: 35 30% 92%;
+    --secondary-foreground: 25 10% 20%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted warm tones */
+    --muted: 35 20% 94%;
+    --muted-foreground: 25 8% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Golden accent */
+    --accent: 38 60% 55%;
+    --accent-foreground: 25 10% 10%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Status colors */
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --success: 145 50% 40%;
+    --success-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Borders and inputs */
+    --border: 35 25% 88%;
+    --input: 35 25% 88%;
+    --ring: 38 60% 55%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* Room status colors */
+    --room-configured: 145 50% 40%;
+    --room-unconfigured: 35 20% 70%;
+    --room-king: 38 60% 55%;
+    --room-queen: 280 40% 50%;
+    --room-twin: 200 60% 45%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Sidebar */
+    --sidebar-background: 35 30% 95%;
+    --sidebar-foreground: 25 10% 25%;
+    --sidebar-primary: 25 10% 18%;
+    --sidebar-primary-foreground: 40 33% 97%;
+    --sidebar-accent: 35 30% 90%;
+    --sidebar-accent-foreground: 25 10% 18%;
+    --sidebar-border: 35 25% 88%;
+    --sidebar-ring: 38 60% 55%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --background: 25 15% 10%;
+    --foreground: 40 20% 92%;
+    --card: 25 12% 14%;
+    --card-foreground: 40 20% 92%;
+    --popover: 25 12% 14%;
+    --popover-foreground: 40 20% 92%;
+    --primary: 40 30% 90%;
+    --primary-foreground: 25 15% 10%;
+    --secondary: 25 10% 20%;
+    --secondary-foreground: 40 20% 90%;
+    --muted: 25 10% 20%;
+    --muted-foreground: 40 15% 60%;
+    --accent: 38 60% 55%;
+    --accent-foreground: 25 10% 10%;
+    --destructive: 0 60% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 145 45% 35%;
+    --success-foreground: 0 0% 100%;
+    --border: 25 10% 22%;
+    --input: 25 10% 22%;
+    --ring: 38 60% 55%;
+    --sidebar-background: 25 12% 12%;
+    --sidebar-foreground: 40 20% 90%;
+    --sidebar-primary: 38 60% 55%;
+    --sidebar-primary-foreground: 25 15% 10%;
+    --sidebar-accent: 25 10% 18%;
+    --sidebar-accent-foreground: 40 20% 90%;
+    --sidebar-border: 25 10% 22%;
+    --sidebar-ring: 38 60% 55%;
   }
 }
 
@@ -100,6 +107,90 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  .text-display {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+  }
+
+  .room-card {
+    @apply relative overflow-hidden rounded-xl border border-border bg-card p-5 transition-all duration-300;
+    @apply hover:shadow-lg hover:border-accent/50;
+  }
+
+  .room-card-configured {
+    @apply border-l-4 border-l-success;
+  }
+
+  .room-card-unconfigured {
+    @apply border-l-4 border-l-muted-foreground/30;
+  }
+
+  .step-indicator {
+    @apply flex items-center justify-center w-10 h-10 rounded-full text-sm font-medium transition-all duration-300;
+  }
+
+  .step-indicator-active {
+    @apply bg-primary text-primary-foreground shadow-md;
+  }
+
+  .step-indicator-completed {
+    @apply bg-success text-success-foreground;
+  }
+
+  .step-indicator-pending {
+    @apply bg-muted text-muted-foreground;
+  }
+
+  .bed-badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium;
+  }
+
+  .bed-badge-king {
+    @apply bg-accent/20 text-accent-foreground border border-accent/30;
+  }
+
+  .bed-badge-queen {
+    @apply bg-purple-100 text-purple-800 border border-purple-200;
+  }
+
+  .bed-badge-twin {
+    @apply bg-sky-100 text-sky-800 border border-sky-200;
+  }
+
+  .gradient-hero {
+    background: linear-gradient(135deg, hsl(35 30% 95%) 0%, hsl(40 33% 97%) 50%, hsl(38 40% 94%) 100%);
+  }
+
+  .shadow-elegant {
+    box-shadow: 0 4px 20px -5px hsl(25 10% 15% / 0.08), 0 2px 8px -3px hsl(25 10% 15% / 0.05);
+  }
+
+  .animate-fade-up {
+    animation: fadeUp 0.5s ease-out;
+  }
+
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .glass-panel {
+    @apply bg-card/80 backdrop-blur-sm border border-border/50;
   }
 }
