@@ -4,11 +4,11 @@ import { RoomTypeCard } from './RoomTypeCard';
 import { RoomStats } from './RoomStats';
 import { MapLightbox } from './MapLightbox';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowRight, Info, ZoomIn } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Crown, Home, Bath, ZoomIn } from 'lucide-react';
 import roomsArrangement from '@/assets/rooms-arrangement.png';
 import roomKingImage from '@/assets/room-king.jpg';
-import roomTwinsImage from '@/assets/room-twins.jpg';
-import roomQueenImage from '@/assets/room-queen.jpg';
+import roomTwinsImage from '@/assets/room-queen.jpg';
+import roomQueenImage from '@/assets/room-twins.jpg';
 
 interface RoomConfigurationProps {
   roomSelection: RoomSelection;
@@ -71,6 +71,48 @@ export function RoomConfiguration({
 
       <MapLightbox open={mapOpen} onOpenChange={setMapOpen} />
 
+      {/* Info Callouts - Under the Map */}
+      <div className="grid gap-3 md:grid-cols-3 mb-6">
+        {/* Callout A - King rooms */}
+        <div className="rounded-xl bg-primary/10 border-2 border-primary/30 p-4">
+          <div className="flex items-start gap-3">
+            <Crown className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-sm mb-1">King rooms are fixed</p>
+              <p className="text-xs text-muted-foreground">
+                Rooms 1 & 6 are always King beds and have en-suite bathrooms.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Callout B - Rooms 7 & 8 */}
+        <div className="rounded-xl bg-primary/10 border-2 border-primary/30 p-4">
+          <div className="flex items-start gap-3">
+            <Home className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-sm mb-1">Rooms 7 & 8</p>
+              <p className="text-xs text-muted-foreground">
+                Upstairs, accessed through the kitchen.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Callout C - Bathroom note */}
+        <div className="rounded-xl bg-primary/10 border-2 border-primary/30 p-4">
+          <div className="flex items-start gap-3">
+            <Bath className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-sm mb-1">Shared bathroom note</p>
+              <p className="text-xs text-muted-foreground">
+                The shared bathroom for Rooms 7 & 8 is slightly smaller. These rooms are often reserved for facilitators and have the best view.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Stats */}
       <RoomStats stats={stats} className="mb-6" />
 
@@ -113,16 +155,6 @@ export function RoomConfiguration({
           </p>
         </div>
       )}
-
-      {/* Info callout */}
-      <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 mb-6">
-        <div className="flex items-start gap-3">
-          <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-muted-foreground">
-            <strong>Rooms 7 & 8</strong> are upstairs and accessed through the kitchen. Their shared bathroom is slightly smaller and these rooms are often reserved for facilitators. They offer the same comfort level and the best view.
-          </p>
-        </div>
-      </div>
 
       {/* Navigation */}
       <div className="flex justify-between pt-6 border-t border-border">

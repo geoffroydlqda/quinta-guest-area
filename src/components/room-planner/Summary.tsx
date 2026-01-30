@@ -1,16 +1,14 @@
-import { UserInfo, RoomPlan, RoomStats as RoomStatsType } from '@/types/room';
+import { UserInfo, RoomStats as RoomStatsType } from '@/types/room';
 import { RoomStats } from './RoomStats';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Send, Save, CheckCircle, Copy, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface SummaryProps {
   userInfo: UserInfo;
   setUserInfo: React.Dispatch<React.SetStateAction<UserInfo>>;
-  roomPlan: RoomPlan[];
   stats: RoomStatsType;
   isSubmitted: boolean;
   isSaved: boolean;
@@ -25,7 +23,6 @@ interface SummaryProps {
 export function Summary({
   userInfo,
   setUserInfo,
-  roomPlan,
   stats,
   isSubmitted,
   isSaved,
@@ -43,20 +40,6 @@ export function Summary({
     }
   };
 
-  const getBedTypeLabel = (plan: RoomPlan) => {
-    if (plan.isFixed) return 'King (fixed)';
-    if (plan.bedType === 'queen') return 'Queen';
-    if (plan.bedType === 'twin') return '2 Twins';
-    return 'Not set';
-  };
-
-  const getBedTypeBadgeClass = (plan: RoomPlan) => {
-    if (plan.isFixed) return 'bed-badge-king';
-    if (plan.bedType === 'queen') return 'bed-badge-queen';
-    if (plan.bedType === 'twin') return 'bed-badge-twin';
-    return 'bed-badge-unselected';
-  };
-
   if (isSubmitted) {
     return (
       <div className="max-w-2xl mx-auto animate-fade-up">
@@ -70,7 +53,7 @@ export function Summary({
           </p>
         </div>
 
-        {/* Summary Card */}
+        {/* Summary Card - Totals Only */}
         <div className="bg-card rounded-2xl shadow-elegant p-6 mb-6">
           <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
             <FileText className="w-5 h-5 text-primary" />
@@ -94,32 +77,7 @@ export function Summary({
             )}
           </div>
 
-          {/* Room Plan */}
-          <div className="space-y-2 mb-6">
-            {roomPlan.map((plan) => (
-              <div
-                key={plan.roomId}
-                className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/50"
-              >
-                <span className="font-medium">Room {plan.roomId}</span>
-                <div className="flex items-center gap-2 flex-wrap justify-end">
-                  <Badge className={getBedTypeBadgeClass(plan)}>
-                    {getBedTypeLabel(plan)}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    {plan.bathroomType === 'en-suite' ? 'En-suite' : 'Shared'}
-                  </Badge>
-                  {plan.note && (
-                    <Badge variant="secondary" className="text-xs">
-                      {plan.note}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Totals */}
+          {/* Totals Only */}
           <RoomStats stats={stats} />
         </div>
 
@@ -174,34 +132,9 @@ export function Summary({
         </div>
       </div>
 
-      {/* Room Plan Preview */}
+      {/* Room Configuration - Totals Only */}
       <div className="bg-card rounded-2xl shadow-elegant p-6 mb-6">
         <h3 className="text-lg font-medium mb-4">Room Configuration</h3>
-        <div className="space-y-2 mb-6">
-          {roomPlan.map((plan) => (
-            <div
-              key={plan.roomId}
-              className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/50"
-            >
-              <span className="font-medium">Room {plan.roomId}</span>
-              <div className="flex items-center gap-2 flex-wrap justify-end">
-                <Badge className={getBedTypeBadgeClass(plan)}>
-                  {getBedTypeLabel(plan)}
-                </Badge>
-                <Badge variant="outline" className="text-xs">
-                  {plan.bathroomType === 'en-suite' ? 'En-suite' : 'Shared'}
-                </Badge>
-                {plan.note && (
-                  <Badge variant="secondary" className="text-xs">
-                    {plan.note}
-                  </Badge>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Totals */}
         <RoomStats stats={stats} />
       </div>
 
