@@ -1,80 +1,69 @@
 import { useState, useMemo, useCallback } from 'react';
-import { RoomConfig, EventInfo, RoomStats, initialRooms, initialEventInfo, BedType } from '@/types/room';
+import { 
+  UserInfo, 
+  RoomSelection, 
+  RoomStats, 
+  RoomPlan,
+  initialUserInfo, 
+  initialRoomSelection,
+  generateRoomPlan,
+  MAX_FLEXIBLE_ROOMS 
+} from '@/types/room';
 
 export function useRoomPlanner() {
-  const [currentStep, setCurrentStep] = useState<'events' | 'form' | 'rooms' | 'summary'>('events');
-  const [eventInfo, setEventInfo] = useState<EventInfo>(initialEventInfo);
-  const [rooms, setRooms] = useState<RoomConfig[]>(initialRooms);
-  const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
+  const [currentStep, setCurrentStep] = useState<'form' | 'rooms' | 'summary'>('form');
+  const [userInfo, setUserInfo] = useState<UserInfo>(initialUserInfo);
+  const [roomSelection, setRoomSelection] = useState<RoomSelection>(initialRoomSelection);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [editUrl, setEditUrl] = useState<string | null>(null);
 
   // Calculate room statistics
   const stats: RoomStats = useMemo(() => {
-    return rooms.reduce(
-      (acc, room) => {
-        if (room.bedType === 'king' && room.isFixed) {
-          acc.kingsFixed++;
-        } else if (room.bedType === 'queen') {
-          acc.queensCount++;
-        } else if (room.bedType === 'twin') {
-          acc.twinsCount++;
-        } else if (!room.isFixed && !room.bedType) {
-          acc.unselectedCount++;
-        }
-        return acc;
-      },
-      { kingsFixed: 0, queensCount: 0, twinsCount: 0, unselectedCount: 0 }
-    );
-  }, [rooms]);
+    const notSet = MAX_FLEXIBLE_ROOMS - roomSelection.queenRoomsQty - roomSelection.twinsRoomsQty;
+    return {
+      kingsFixed: 2,
+      queensCount: roomSelection.queenRoomsQty,
+      twinsCount: roomSelection.twinsRoomsQty,
+      notSetCount: Math.max(0, notSet),
+    };
+  }, [roomSelection]);
 
-  // Update a room configuration
-  const updateRoom = useCallback((roomId: number, updates: Partial<RoomConfig>) => {
-    setRooms((prev) =>
-      prev.map((room) => (room.id === roomId ? { ...room, ...updates } : room))
-    );
-  }, []);
+  // Generate room plan
+  const roomPlan: RoomPlan[] = useMemo(() => {
+    return generateRoomPlan(roomSelection);
+  }, [roomSelection]);
 
-  // Reset a room to unconfigured state
-  const resetRoom = useCallback((roomId: number) => {
-    setRooms((prev) =>
-      prev.map((room) => {
-        if (room.id !== roomId) return room;
-        if (room.isFixed) return room;
-        return {
-          ...room,
-          bedType: null,
-        };
-      })
-    );
-  }, []);
-
-  // Update room bed type
-  const setRoomBedType = useCallback((roomId: number, bedType: BedType) => {
-    updateRoom(roomId, { bedType });
-  }, [updateRoom]);
-
-  // Check if event info is valid (email required)
+  // Validation
   const isEmailValid = useMemo(() => {
-    const email = eventInfo.organizerEmail.trim();
+    const email = userInfo.email.trim();
     return email !== '' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  }, [eventInfo.organizerEmail]);
+  }, [userInfo.email]);
 
-  // Select an event
-  const selectEvent = useCallback((eventName: string) => {
-    setEventInfo((prev) => ({ ...prev, eventName }));
-    setCurrentStep('form');
+  const isNameValid = useMemo(() => {
+    return userInfo.fullName.trim().length >= 2;
+  }, [userInfo.fullName]);
+
+  const isSelectionValid = useMemo(() => {
+    return roomSelection.queenRoomsQty + roomSelection.twinsRoomsQty <= MAX_FLEXIBLE_ROOMS;
+  }, [roomSelection]);
+
+  const canProceed = isEmailValid && isNameValid;
+  const canSubmit = canProceed && isSelectionValid;
+
+  // Update room selection
+  const setQueenRooms = useCallback((qty: number) => {
+    setRoomSelection((prev) => ({
+      ...prev,
+      queenRoomsQty: Math.max(0, Math.min(MAX_FLEXIBLE_ROOMS, qty)),
+    }));
   }, []);
 
-  // Go back to event selection
-  const goBackToEvents = useCallback(() => {
-    setCurrentStep('events');
-    setEventInfo(initialEventInfo);
-    setRooms(initialRooms);
-    setIsSubmitted(false);
-    setIsSaved(false);
-    setEditUrl(null);
+  const setTwinsRooms = useCallback((qty: number) => {
+    setRoomSelection((prev) => ({
+      ...prev,
+      twinsRoomsQty: Math.max(0, Math.min(MAX_FLEXIBLE_ROOMS, qty)),
+    }));
   }, []);
 
   // Generate edit URL
@@ -86,41 +75,42 @@ export function useRoomPlanner() {
 
   // Handle save for later
   const handleSave = useCallback(() => {
-    if (!isEmailValid) return;
+    if (!canSubmit) return;
     
     const url = generateEditUrl();
     setEditUrl(url);
     setIsSaved(true);
     
-    // Here you would send the email with the edit link
-    console.log('Saving setup for:', eventInfo.eventName);
-    console.log('Organizer email:', eventInfo.organizerEmail);
+    console.log('Saving setup for:', userInfo.fullName);
+    console.log('Email:', userInfo.email);
     console.log('Edit URL:', url);
+    console.log('Room selection:', roomSelection);
+    console.log('Generated plan:', roomPlan);
     console.log('Admin email: hello@quintamor.com');
-  }, [isEmailValid, eventInfo, generateEditUrl]);
+  }, [canSubmit, userInfo, roomSelection, roomPlan, generateEditUrl]);
 
   // Submit handler
   const handleSubmit = useCallback(() => {
-    if (!isEmailValid) return;
+    if (!canSubmit) return;
     
     const url = editUrl || generateEditUrl();
     setEditUrl(url);
     setIsSubmitted(true);
     
-    // Here you would send the housekeeping summary email
-    console.log('Submitting final setup for:', eventInfo.eventName);
-    console.log('Organizer email:', eventInfo.organizerEmail);
+    console.log('Submitting final setup for:', userInfo.fullName);
+    console.log('Email:', userInfo.email);
+    console.log('Remarks:', userInfo.remarks);
     console.log('Admin email: hello@quintamor.com');
-    console.log('Rooms:', rooms);
+    console.log('Room selection:', roomSelection);
+    console.log('Generated plan:', roomPlan);
     console.log('Stats:', stats);
-  }, [isEmailValid, eventInfo, rooms, stats, editUrl, generateEditUrl]);
+  }, [canSubmit, userInfo, roomSelection, roomPlan, stats, editUrl, generateEditUrl]);
 
   // Reset everything
   const resetAll = useCallback(() => {
-    setCurrentStep('events');
-    setEventInfo(initialEventInfo);
-    setRooms(initialRooms);
-    setSelectedRoomId(null);
+    setCurrentStep('form');
+    setUserInfo(initialUserInfo);
+    setRoomSelection(initialRoomSelection);
     setIsSubmitted(false);
     setIsSaved(false);
     setEditUrl(null);
@@ -130,11 +120,10 @@ export function useRoomPlanner() {
     // State
     currentStep,
     setCurrentStep,
-    eventInfo,
-    setEventInfo,
-    rooms,
-    selectedRoomId,
-    setSelectedRoomId,
+    userInfo,
+    setUserInfo,
+    roomSelection,
+    roomPlan,
     isSubmitted,
     isSaved,
     editUrl,
@@ -142,13 +131,14 @@ export function useRoomPlanner() {
     
     // Validation
     isEmailValid,
+    isNameValid,
+    isSelectionValid,
+    canProceed,
+    canSubmit,
     
     // Actions
-    selectEvent,
-    goBackToEvents,
-    updateRoom,
-    resetRoom,
-    setRoomBedType,
+    setQueenRooms,
+    setTwinsRooms,
     handleSave,
     handleSubmit,
     resetAll,
