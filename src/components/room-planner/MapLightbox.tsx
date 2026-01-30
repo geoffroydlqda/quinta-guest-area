@@ -15,10 +15,9 @@ export function MapLightbox({ open, onOpenChange }: MapLightboxProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  const MIN_ZOOM = 0.5;
+  const MIN_ZOOM = 1;
   const MAX_ZOOM = 3;
   const ZOOM_STEP = 0.25;
 
@@ -27,7 +26,13 @@ export function MapLightbox({ open, onOpenChange }: MapLightboxProps) {
   };
 
   const handleZoomOut = () => {
-    setZoom(prev => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
+    setZoom(prev => {
+      const newZoom = Math.max(prev - ZOOM_STEP, MIN_ZOOM);
+      if (newZoom === 1) {
+        setPosition({ x: 0, y: 0 });
+      }
+      return newZoom;
+    });
   };
 
   const handleReset = () => {
@@ -38,7 +43,13 @@ export function MapLightbox({ open, onOpenChange }: MapLightboxProps) {
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-    setZoom(prev => Math.min(Math.max(prev + delta, MIN_ZOOM), MAX_ZOOM));
+    setZoom(prev => {
+      const newZoom = Math.min(Math.max(prev + delta, MIN_ZOOM), MAX_ZOOM);
+      if (newZoom === 1) {
+        setPosition({ x: 0, y: 0 });
+      }
+      return newZoom;
+    });
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -183,10 +194,9 @@ export function MapLightbox({ open, onOpenChange }: MapLightboxProps) {
           </div>
         </div>
 
-        {/* Image container */}
+        {/* Image container - fit to screen by default */}
         <div 
-          ref={containerRef}
-          className="flex-1 overflow-hidden bg-white relative"
+          className="flex-1 overflow-hidden bg-white relative p-4 flex items-center justify-center"
           onWheel={handleWheel}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
@@ -197,24 +207,17 @@ export function MapLightbox({ open, onOpenChange }: MapLightboxProps) {
           onTouchEnd={handleTouchEnd}
           style={{ cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
         >
-          <div 
-            className="absolute inset-0 flex items-center justify-center"
+          <img
+            src={roomsArrangement}
+            alt="Rooms map (1-11)"
+            className="max-w-full max-h-full select-none"
             style={{
-              transform: `translate(${position.x}px, ${position.y}px)`,
+              transform: `scale(${zoom}) translate(${position.x / zoom}px, ${position.y / zoom}px)`,
+              transformOrigin: 'center center',
+              objectFit: 'contain',
             }}
-          >
-            <img
-              src={roomsArrangement}
-              alt="Rooms map (1-11)"
-              className="max-w-none select-none"
-              style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: 'center center',
-                imageRendering: zoom > 1 ? 'auto' : 'auto',
-              }}
-              draggable={false}
-            />
-          </div>
+            draggable={false}
+          />
         </div>
 
         {/* Instructions */}
