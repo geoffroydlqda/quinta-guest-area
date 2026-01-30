@@ -42,7 +42,7 @@ export function RoomConfiguration({
       <div className="rounded-xl overflow-hidden border border-border bg-card mb-6 cursor-pointer group" onClick={() => setMapOpen(true)}>
         <div className="relative">
           <img src={roomsArrangement} alt="Rooms map" className="w-full h-auto max-h-80 object-contain bg-white" />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center text-transparent">
             <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-card/90 rounded-full px-4 py-2 flex items-center gap-2 shadow-lg">
               <ZoomIn className="w-4 h-4 text-primary" />
               <span className="text-sm font-medium">Click to enlarge</span>
