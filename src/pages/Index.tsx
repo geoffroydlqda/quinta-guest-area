@@ -1,7 +1,6 @@
 import { useRoomPlanner } from '@/hooks/useRoomPlanner';
 import { Header } from '@/components/room-planner/Header';
-import { EventSelection } from '@/components/room-planner/EventSelection';
-import { EventForm } from '@/components/room-planner/EventForm';
+import { UserForm } from '@/components/room-planner/UserForm';
 import { RoomConfiguration } from '@/components/room-planner/RoomConfiguration';
 import { Summary } from '@/components/room-planner/Summary';
 
@@ -9,20 +8,20 @@ const Index = () => {
   const {
     currentStep,
     setCurrentStep,
-    eventInfo,
-    setEventInfo,
-    rooms,
-    selectedRoomId,
-    setSelectedRoomId,
+    userInfo,
+    setUserInfo,
+    roomSelection,
+    roomPlan,
     isSubmitted,
     isSaved,
     editUrl,
     stats,
     isEmailValid,
-    selectEvent,
-    goBackToEvents,
-    updateRoom,
-    resetRoom,
+    isNameValid,
+    isSelectionValid,
+    canSubmit,
+    setQueenRooms,
+    setTwinsRooms,
     handleSave,
     handleSubmit,
     resetAll,
@@ -33,26 +32,23 @@ const Index = () => {
       <Header />
       
       <main className="container mx-auto px-4 py-8">
-        {currentStep === 'events' && (
-          <EventSelection onSelectEvent={selectEvent} />
-        )}
-
         {currentStep === 'form' && (
-          <EventForm
-            eventInfo={eventInfo}
-            setEventInfo={setEventInfo}
+          <UserForm
+            userInfo={userInfo}
+            setUserInfo={setUserInfo}
             isEmailValid={isEmailValid}
-            onBack={goBackToEvents}
+            isNameValid={isNameValid}
             onNext={() => setCurrentStep('rooms')}
           />
         )}
 
         {currentStep === 'rooms' && (
           <RoomConfiguration
-            rooms={rooms}
+            roomSelection={roomSelection}
             stats={stats}
-            onUpdateRoom={updateRoom}
-            onResetRoom={resetRoom}
+            isSelectionValid={isSelectionValid}
+            onSetQueenRooms={setQueenRooms}
+            onSetTwinsRooms={setTwinsRooms}
             onPrev={() => setCurrentStep('form')}
             onNext={() => setCurrentStep('summary')}
           />
@@ -60,13 +56,14 @@ const Index = () => {
 
         {currentStep === 'summary' && (
           <Summary
-            eventInfo={eventInfo}
-            rooms={rooms}
+            userInfo={userInfo}
+            setUserInfo={setUserInfo}
+            roomPlan={roomPlan}
             stats={stats}
             isSubmitted={isSubmitted}
             isSaved={isSaved}
             editUrl={editUrl}
-            isEmailValid={isEmailValid}
+            canSubmit={canSubmit}
             onPrev={() => setCurrentStep('rooms')}
             onSave={handleSave}
             onSubmit={handleSubmit}
@@ -77,7 +74,7 @@ const Index = () => {
 
       <footer className="border-t border-border py-6 mt-12">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>Quinta Mor © {new Date().getFullYear()}</p>
+          <p>Quinta do Amor © {new Date().getFullYear()}</p>
         </div>
       </footer>
     </div>

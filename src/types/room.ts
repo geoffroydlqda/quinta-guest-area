@@ -1,83 +1,108 @@
 export type BedType = 'king' | 'queen' | 'twin' | null;
 export type BathroomType = 'en-suite' | 'shared';
 
-export interface RoomConfig {
-  id: number;
-  name: string;
+export interface RoomPlan {
+  roomId: number;
   bedType: BedType;
-  isFixed: boolean;
   bathroomType: BathroomType;
-  specialNote?: string;
+  isFixed: boolean;
+  note?: string;
 }
 
-export interface EventInfo {
-  eventName: string;
-  organizerEmail: string;
-  stayDates: string;
-  notes: string;
+export interface UserInfo {
+  fullName: string;
+  email: string;
+  remarks: string;
+}
+
+export interface RoomSelection {
+  kingRoomsQty: number; // Always 2, locked
+  queenRoomsQty: number;
+  twinsRoomsQty: number;
 }
 
 export interface RoomStats {
   kingsFixed: number;
   queensCount: number;
   twinsCount: number;
-  unselectedCount: number;
+  notSetCount: number;
 }
 
-export const FIXED_KING_ROOMS = [1, 6];
-export const EN_SUITE_ROOMS = [1, 6, 9, 10, 11];
-
-export const EVENTS = [
-  "Edgar & Helena",
-  "Our Suite Life",
-  "Mindful Movement",
-  "Retreat do amor",
-  "Deep Dive Retreat",
-  "Ilo Retreat",
-  "Ilo Retreat (client)",
-  "Hanne Claes & Max Staples",
-  "Michael Burge & Grace Bourne",
-  "Kate Langlands Pearse and Nick Cox",
-  "Tania Brown",
-  "Mark & Philine",
-  "Awake in the dream",
-  "The Belle Method & Simone Muller",
-  "Oli, Stefie & friends",
-  "Istas sisters",
-  "Maximilian Gotzler"
-];
-
-const ROOM_DEFINITIONS: Array<{
+export const FLEXIBLE_ROOMS_ORDER: Array<{
   id: number;
-  isFixed: boolean;
   bathroomType: BathroomType;
-  specialNote?: string;
+  note?: string;
 }> = [
-  { id: 1, isFixed: true, bathroomType: 'en-suite' },
-  { id: 2, isFixed: false, bathroomType: 'shared' },
-  { id: 3, isFixed: false, bathroomType: 'shared' },
-  { id: 4, isFixed: false, bathroomType: 'shared' },
-  { id: 5, isFixed: false, bathroomType: 'shared' },
-  { id: 6, isFixed: true, bathroomType: 'en-suite' },
-  { id: 7, isFixed: false, bathroomType: 'shared', specialNote: 'Upstairs (accessed through the kitchen)' },
-  { id: 8, isFixed: false, bathroomType: 'shared', specialNote: 'Upstairs (accessed through the kitchen)' },
-  { id: 9, isFixed: false, bathroomType: 'en-suite' },
-  { id: 10, isFixed: false, bathroomType: 'en-suite' },
-  { id: 11, isFixed: false, bathroomType: 'en-suite' },
+  { id: 2, bathroomType: 'shared' },
+  { id: 3, bathroomType: 'shared' },
+  { id: 4, bathroomType: 'shared' },
+  { id: 5, bathroomType: 'shared' },
+  { id: 7, bathroomType: 'shared', note: 'Upstairs' },
+  { id: 8, bathroomType: 'shared', note: 'Upstairs' },
+  { id: 9, bathroomType: 'en-suite' },
+  { id: 10, bathroomType: 'en-suite' },
+  { id: 11, bathroomType: 'en-suite' },
 ];
 
-export const initialRooms: RoomConfig[] = ROOM_DEFINITIONS.map((def) => ({
-  id: def.id,
-  name: `Room ${def.id}`,
-  bedType: def.isFixed ? 'king' : null,
-  isFixed: def.isFixed,
-  bathroomType: def.bathroomType,
-  specialNote: def.specialNote,
-}));
+export const FIXED_ROOMS: Array<{
+  id: number;
+  bathroomType: BathroomType;
+}> = [
+  { id: 1, bathroomType: 'en-suite' },
+  { id: 6, bathroomType: 'en-suite' },
+];
 
-export const initialEventInfo: EventInfo = {
-  eventName: '',
-  organizerEmail: '',
-  stayDates: '',
-  notes: '',
+export const MAX_FLEXIBLE_ROOMS = 9;
+
+export const initialUserInfo: UserInfo = {
+  fullName: '',
+  email: '',
+  remarks: '',
 };
+
+export const initialRoomSelection: RoomSelection = {
+  kingRoomsQty: 2,
+  queenRoomsQty: 0,
+  twinsRoomsQty: 0,
+};
+
+export function generateRoomPlan(selection: RoomSelection): RoomPlan[] {
+  const plan: RoomPlan[] = [];
+  
+  // Add fixed King rooms
+  FIXED_ROOMS.forEach((room) => {
+    plan.push({
+      roomId: room.id,
+      bedType: 'king',
+      bathroomType: room.bathroomType,
+      isFixed: true,
+    });
+  });
+  
+  // Assign flexible rooms in order
+  let queensAssigned = 0;
+  let twinsAssigned = 0;
+  
+  FLEXIBLE_ROOMS_ORDER.forEach((room) => {
+    let bedType: BedType = null;
+    
+    if (queensAssigned < selection.queenRoomsQty) {
+      bedType = 'queen';
+      queensAssigned++;
+    } else if (twinsAssigned < selection.twinsRoomsQty) {
+      bedType = 'twin';
+      twinsAssigned++;
+    }
+    
+    plan.push({
+      roomId: room.id,
+      bedType,
+      bathroomType: room.bathroomType,
+      isFixed: false,
+      note: room.note,
+    });
+  });
+  
+  // Sort by room ID
+  return plan.sort((a, b) => a.roomId - b.roomId);
+}
