@@ -58,7 +58,6 @@ const Index = () => {
           <Summary
             userInfo={userInfo}
             setUserInfo={setUserInfo}
-            roomPlan={roomPlan}
             stats={stats}
             isSubmitted={isSubmitted}
             isSaved={isSaved}

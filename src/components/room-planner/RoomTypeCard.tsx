@@ -30,7 +30,7 @@ export function RoomTypeCard({
   return (
     <div className="bg-card rounded-2xl shadow-elegant overflow-hidden border border-border">
       {/* Image */}
-      <div className="relative h-40 overflow-hidden">
+      <div className="relative h-48 md:h-64 overflow-hidden">
         <img
           src={image}
           alt={title}
