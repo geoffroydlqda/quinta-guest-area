@@ -14,6 +14,7 @@ const FROM_EMAIL = "Quinta do Amor <noreply@quintamor.com>";
 
 interface GuestSummaryPayload {
   fullName: string;
+  firstName?: string;
   email: string;
   checkInDate: string | null;
   checkOutDate: string | null;
@@ -45,7 +46,10 @@ function formatDate(dateStr: string | null): string {
 }
 
 function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): string {
-  const { fullName, email, checkInDate, checkOutDate, guestsCount, roomSetup, transportation, food } = payload;
+  const { fullName, firstName, email, checkInDate, checkOutDate, guestsCount, roomSetup, transportation, food } = payload;
+  
+  // Use first name only for greeting, fallback to full name or 'Guest'
+  const greetingName = firstName || fullName?.split(' ')[0] || 'Guest';
   
   return `
     <!DOCTYPE html>
@@ -81,7 +85,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
           <strong>Guest:</strong> ${fullName}<br>
           <strong>Email:</strong> ${email}
         </div>
-        ` : `<p>Hello ${fullName || 'Guest'},</p><p>Here's a summary of your Guest Area selections:</p>`}
+        ` : `<p>Hi ${greetingName},</p><p>Here's a summary of your Guest Area selections:</p>`}
         
         <!-- Stay Dates & Guests -->
         <div class="section">

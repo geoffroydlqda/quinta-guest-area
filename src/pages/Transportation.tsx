@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Plus, Trash2, UserPlus, X, Car, Info, Copy } from 'lucide-react';
+import { Loader2, Plus, Trash2, UserPlus, X, Car, Info, Copy, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import type { TransportationTrip } from '@/types/guest';
 import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS } from '@/types/guest';
@@ -57,6 +57,7 @@ const Transportation = () => {
   const defaultTripDate = profile?.check_in_date || new Date().toISOString().split('T')[0];
 
   const [showAddTrip, setShowAddTrip] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [newTrip, setNewTrip] = useState({
     trip_direction: 'To Quinta' as 'To Quinta' | 'From Quinta',
     pickup_location: '',
@@ -94,9 +95,24 @@ const Transportation = () => {
     const pickup = newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location;
     const dropoff = newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location;
 
-    if (!pickup || !dropoff || !newTrip.trip_date || !newTrip.trip_time) {
+    // Validate required fields
+    const errors: string[] = [];
+    if (!newTrip.trip_direction) errors.push('direction');
+    if (!newTrip.pickup_location) errors.push('pickup_location');
+    if (newTrip.pickup_location === 'Custom' && !newTrip.pickup_custom) errors.push('pickup_custom');
+    if (!newTrip.dropoff_location) errors.push('dropoff_location');
+    if (newTrip.dropoff_location === 'Custom' && !newTrip.dropoff_custom) errors.push('dropoff_custom');
+    if (!newTrip.trip_date) errors.push('trip_date');
+    if (!newTrip.trip_time) errors.push('trip_time');
+    if (!newTrip.taxi_size) errors.push('taxi_size');
+    if (!newTrip.passengers_count || newTrip.passengers_count < 1) errors.push('passengers_count');
+
+    if (errors.length > 0) {
+      setValidationErrors(errors);
       return;
     }
+
+    setValidationErrors([]);
 
     await addTrip({
       trip_direction: newTrip.trip_direction,
@@ -229,14 +245,24 @@ const Transportation = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* Validation Error Banner */}
+                  {validationErrors.length > 0 && (
+                    <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-4 flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-destructive font-medium">
+                        Please fill in the highlighted fields to add this trip.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Direction */}
                   <div>
-                    <Label>Direction</Label>
+                    <Label>Direction <span className="text-destructive">*</span></Label>
                     <Select
                       value={newTrip.trip_direction}
                       onValueChange={(v) => setNewTrip(prev => ({ ...prev, trip_direction: v as any }))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className={validationErrors.includes('direction') ? 'border-destructive' : ''}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -244,16 +270,19 @@ const Transportation = () => {
                         <SelectItem value="From Quinta">From Quinta do Amor</SelectItem>
                       </SelectContent>
                     </Select>
+                    {validationErrors.includes('direction') && (
+                      <p className="text-xs text-destructive mt-1">Required</p>
+                    )}
                   </div>
 
                   {/* Pickup */}
                   <div>
-                    <Label>Pickup location</Label>
+                    <Label>Pickup location <span className="text-destructive">*</span></Label>
                     <Select
                       value={newTrip.pickup_location}
                       onValueChange={(v) => setNewTrip(prev => ({ ...prev, pickup_location: v }))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className={validationErrors.includes('pickup_location') ? 'border-destructive' : ''}>
                         <SelectValue placeholder="Select pickup" />
                       </SelectTrigger>
                       <SelectContent>
@@ -262,24 +291,32 @@ const Transportation = () => {
                         ))}
                       </SelectContent>
                     </Select>
+                    {validationErrors.includes('pickup_location') && (
+                      <p className="text-xs text-destructive mt-1">Required</p>
+                    )}
                     {newTrip.pickup_location === 'Custom' && (
-                      <Input
-                        className="mt-2"
-                        placeholder="Enter custom pickup location"
-                        value={newTrip.pickup_custom}
-                        onChange={(e) => setNewTrip(prev => ({ ...prev, pickup_custom: e.target.value }))}
-                      />
+                      <>
+                        <Input
+                          className={`mt-2 ${validationErrors.includes('pickup_custom') ? 'border-destructive' : ''}`}
+                          placeholder="Enter custom pickup location"
+                          value={newTrip.pickup_custom}
+                          onChange={(e) => setNewTrip(prev => ({ ...prev, pickup_custom: e.target.value }))}
+                        />
+                        {validationErrors.includes('pickup_custom') && (
+                          <p className="text-xs text-destructive mt-1">Required</p>
+                        )}
+                      </>
                     )}
                   </div>
 
                   {/* Dropoff */}
                   <div>
-                    <Label>Dropoff location</Label>
+                    <Label>Dropoff location <span className="text-destructive">*</span></Label>
                     <Select
                       value={newTrip.dropoff_location}
                       onValueChange={(v) => setNewTrip(prev => ({ ...prev, dropoff_location: v }))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className={validationErrors.includes('dropoff_location') ? 'border-destructive' : ''}>
                         <SelectValue placeholder="Select dropoff" />
                       </SelectTrigger>
                       <SelectContent>
@@ -288,55 +325,75 @@ const Transportation = () => {
                         ))}
                       </SelectContent>
                     </Select>
+                    {validationErrors.includes('dropoff_location') && (
+                      <p className="text-xs text-destructive mt-1">Required</p>
+                    )}
                     {newTrip.dropoff_location === 'Custom' && (
-                      <Input
-                        className="mt-2"
-                        placeholder="Enter custom dropoff location"
-                        value={newTrip.dropoff_custom}
-                        onChange={(e) => setNewTrip(prev => ({ ...prev, dropoff_custom: e.target.value }))}
-                      />
+                      <>
+                        <Input
+                          className={`mt-2 ${validationErrors.includes('dropoff_custom') ? 'border-destructive' : ''}`}
+                          placeholder="Enter custom dropoff location"
+                          value={newTrip.dropoff_custom}
+                          onChange={(e) => setNewTrip(prev => ({ ...prev, dropoff_custom: e.target.value }))}
+                        />
+                        {validationErrors.includes('dropoff_custom') && (
+                          <p className="text-xs text-destructive mt-1">Required</p>
+                        )}
+                      </>
                     )}
                   </div>
 
                   {/* Date & Time */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label>Date</Label>
+                      <Label>Date <span className="text-destructive">*</span></Label>
                       <Input
                         type="date"
                         value={newTrip.trip_date}
                         onChange={(e) => setNewTrip(prev => ({ ...prev, trip_date: e.target.value }))}
+                        className={validationErrors.includes('trip_date') ? 'border-destructive' : ''}
                       />
+                      {validationErrors.includes('trip_date') && (
+                        <p className="text-xs text-destructive mt-1">Required</p>
+                      )}
                     </div>
                     <div>
-                      <Label>Time</Label>
+                      <Label>Time <span className="text-destructive">*</span></Label>
                       <Input
                         type="time"
                         value={newTrip.trip_time}
                         onChange={(e) => setNewTrip(prev => ({ ...prev, trip_time: e.target.value }))}
+                        className={validationErrors.includes('trip_time') ? 'border-destructive' : ''}
                       />
+                      {validationErrors.includes('trip_time') && (
+                        <p className="text-xs text-destructive mt-1">Required</p>
+                      )}
                     </div>
                   </div>
 
                   {/* Passengers & Taxi Size */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label>Number of passengers</Label>
+                      <Label>Number of passengers <span className="text-destructive">*</span></Label>
                       <Input
                         type="number"
                         min={1}
                         max={6}
                         value={newTrip.passengers_count}
                         onChange={(e) => setNewTrip(prev => ({ ...prev, passengers_count: parseInt(e.target.value) || 1 }))}
+                        className={validationErrors.includes('passengers_count') ? 'border-destructive' : ''}
                       />
+                      {validationErrors.includes('passengers_count') && (
+                        <p className="text-xs text-destructive mt-1">Required</p>
+                      )}
                     </div>
                     <div>
-                      <Label>Taxi size</Label>
+                      <Label>Taxi size <span className="text-destructive">*</span></Label>
                       <Select
                         value={newTrip.taxi_size}
                         onValueChange={(v) => setNewTrip(prev => ({ ...prev, taxi_size: v as any }))}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className={validationErrors.includes('taxi_size') ? 'border-destructive' : ''}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -344,11 +401,14 @@ const Transportation = () => {
                           <SelectItem value="6 seats">6 seats</SelectItem>
                         </SelectContent>
                       </Select>
+                      {validationErrors.includes('taxi_size') && (
+                        <p className="text-xs text-destructive mt-1">Required</p>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex gap-2 pt-4">
-                    <Button variant="outline" onClick={() => setShowAddTrip(false)}>
+                    <Button variant="outline" onClick={() => { setShowAddTrip(false); setValidationErrors([]); }}>
                       Cancel
                     </Button>
                     <Button onClick={handleAddTrip}>
