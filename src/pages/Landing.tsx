@@ -1,20 +1,14 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import qdaLogo from '@/assets/qda-logo.png';
-
 const Landing = () => {
-  return (
-    <div className="min-h-screen bg-background flex flex-col">
+  return <div className="min-h-screen bg-background flex flex-col">
       <main className="flex-1 flex items-center justify-center px-4">
         <div className="max-w-md w-full text-center space-y-8 animate-fade-up">
           <div className="flex flex-col items-center gap-4">
-            <img 
-              src={qdaLogo} 
-              alt="Quinta do Amor" 
-              className="h-24 w-auto"
-            />
+            <img src={qdaLogo} alt="Quinta do Amor" className="h-24 w-auto" />
             <div>
-              <h1 className="text-3xl md:text-4xl font-medium">Guest Area</h1>
+              <h1 className="text-3xl font-medium md:text-2xl">Guest Area</h1>
               <p className="text-muted-foreground mt-2">Quinta do Amor</p>
             </div>
           </div>
@@ -39,8 +33,6 @@ const Landing = () => {
           <p>Quinta do Amor © {new Date().getFullYear()}</p>
         </div>
       </footer>
-    </div>
-  );
+    </div>;
 };
-
 export default Landing;
