@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import qdaLogo from '@/assets/qda-logo.png';
 
 const Auth = () => {
@@ -83,7 +83,7 @@ const Auth = () => {
           <div className="max-w-md w-full text-center space-y-6 animate-fade-up">
             <div className="flex flex-col items-center gap-4">
               <img src={qdaLogo} alt="Quinta do Amor" className="h-16 w-auto" />
-              <Mail className="h-16 w-16 text-primary" />
+              <span className="text-2xl md:text-[28px]" role="img" aria-label="Love letter">💌</span>
             </div>
             
             <div>
@@ -133,8 +133,7 @@ const Auth = () => {
 
           <form onSubmit={handleMagicLink} className="space-y-6 bg-card rounded-2xl shadow-elegant p-6 md:p-8">
             <div className="space-y-2">
-              <Label htmlFor="email" className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-primary" />
+              <Label htmlFor="email">
                 Email Address
               </Label>
               <Input
