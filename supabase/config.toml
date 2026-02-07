@@ -1,1 +1,7 @@
 project_id = "qbxobojrftjnftfaymhl"
+
+[functions.send-room-setup-emails]
+verify_jwt = false
+
+[functions.send-guest-summary]
+verify_jwt = false

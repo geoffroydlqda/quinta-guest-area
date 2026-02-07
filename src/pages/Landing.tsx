@@ -14,13 +14,13 @@ const Landing = () => {
               className="h-24 w-auto"
             />
             <div>
-              <h1 className="text-3xl md:text-4xl font-medium">Room Setup</h1>
+              <h1 className="text-3xl md:text-4xl font-medium">Guest Area</h1>
               <p className="text-muted-foreground mt-2">Quinta do Amor</p>
             </div>
           </div>
 
           <p className="text-muted-foreground">
-            Configure the bed setup for your stay at Quinta do Amor.
+            Manage your stay at Quinta do Amor — rooms, transportation, food, and more.
           </p>
 
           <div className="flex flex-col gap-3">

@@ -2,13 +2,13 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRoomPlanner } from '@/hooks/useRoomPlanner';
-import { Header } from '@/components/room-planner/Header';
+import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { RoomConfiguration } from '@/components/room-planner/RoomConfiguration';
 import { Summary } from '@/components/room-planner/Summary';
 import { SetupUserForm } from '@/components/room-planner/SetupUserForm';
 import { Loader2 } from 'lucide-react';
 
-const Setup = () => {
+const RoomSetup = () => {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   
@@ -50,6 +50,17 @@ const Setup = () => {
     }
   }, [user, userInfo.email, setUserInfo]);
 
+  const handleSaveAndReturn = async () => {
+    await handleSave();
+    navigate('/dashboard');
+  };
+
+  const handleSubmitAndReturn = async () => {
+    await handleSubmit();
+    // After submit, if successful, navigate to dashboard
+    // The handleSubmit already sets isSubmitted to true
+  };
+
   if (authLoading || isLoadingRecord) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -59,10 +70,11 @@ const Setup = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header showBackToDashboard />
-      
-      <main className="container mx-auto px-4 py-8">
+    <ToolPageLayout
+      title="Room Setup"
+      description="Configure the bed types for your group's stay"
+    >
+      <div className="max-w-4xl mx-auto">
         {currentStep === 'form' && (
           <SetupUserForm
             userInfo={userInfo}
@@ -98,20 +110,14 @@ const Setup = () => {
             isSaved={isSaved}
             canSubmit={canSubmit}
             onPrev={() => setCurrentStep('rooms')}
-            onSave={handleSave}
-            onSubmit={handleSubmit}
+            onSave={handleSaveAndReturn}
+            onSubmit={handleSubmitAndReturn}
             isLoading={isLoading}
           />
         )}
-      </main>
-
-      <footer className="border-t border-border py-6 mt-12">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>Quinta do Amor © {new Date().getFullYear()}</p>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </ToolPageLayout>
   );
 };
 
-export default Setup;
+export default RoomSetup;

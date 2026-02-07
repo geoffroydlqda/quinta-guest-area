@@ -14,6 +14,87 @@ export type Database = {
   }
   public: {
     Tables: {
+      docs_ack: {
+        Row: {
+          id: string
+          last_viewed_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          last_viewed_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          last_viewed_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      food_plans: {
+        Row: {
+          created_at: string
+          id: string
+          notes_food: string | null
+          selections: Json
+          status_food: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes_food?: string | null
+          selections?: Json
+          status_food?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes_food?: string | null
+          selections?: Json
+          status_food?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      guest_profiles: {
+        Row: {
+          check_in_date: string | null
+          check_out_date: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          check_in_date?: string | null
+          check_out_date?: string | null
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          check_in_date?: string | null
+          check_out_date?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       room_setups: {
         Row: {
           created_at: string
@@ -24,8 +105,10 @@ export type Database = {
           queen_ensuite_qty: number
           queen_shared_qty: number
           remarks: string | null
+          remarks_roomsetup: string | null
           room_plan: Json
           status: string
+          status_roomsetup: string
           twins_ensuite_qty: number
           twins_shared_qty: number
           updated_at: string
@@ -40,8 +123,10 @@ export type Database = {
           queen_ensuite_qty?: number
           queen_shared_qty?: number
           remarks?: string | null
+          remarks_roomsetup?: string | null
           room_plan?: Json
           status?: string
+          status_roomsetup?: string
           twins_ensuite_qty?: number
           twins_shared_qty?: number
           updated_at?: string
@@ -56,12 +141,124 @@ export type Database = {
           queen_ensuite_qty?: number
           queen_shared_qty?: number
           remarks?: string | null
+          remarks_roomsetup?: string | null
           room_plan?: Json
           status?: string
+          status_roomsetup?: string
           twins_ensuite_qty?: number
           twins_shared_qty?: number
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      transportation_passengers: {
+        Row: {
+          created_at: string
+          first_name: string
+          flight_number: string | null
+          id: string
+          phone: string
+          trip_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          first_name: string
+          flight_number?: string | null
+          id?: string
+          phone: string
+          trip_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          first_name?: string
+          flight_number?: string | null
+          id?: string
+          phone?: string
+          trip_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transportation_passengers_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "transportation_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transportation_requests: {
+        Row: {
+          created_at: string
+          id: string
+          notes_transportation: string | null
+          status_transportation: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes_transportation?: string | null
+          status_transportation?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes_transportation?: string | null
+          status_transportation?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      transportation_trips: {
+        Row: {
+          created_at: string
+          dropoff_location: string
+          id: string
+          passengers_count: number
+          pickup_location: string
+          price_estimate: string
+          taxi_size: string
+          trip_date: string
+          trip_direction: string
+          trip_time: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dropoff_location: string
+          id?: string
+          passengers_count?: number
+          pickup_location: string
+          price_estimate?: string
+          taxi_size: string
+          trip_date: string
+          trip_direction: string
+          trip_time: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dropoff_location?: string
+          id?: string
+          passengers_count?: number
+          pickup_location?: string
+          price_estimate?: string
+          taxi_size?: string
+          trip_date?: string
+          trip_direction?: string
+          trip_time?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
