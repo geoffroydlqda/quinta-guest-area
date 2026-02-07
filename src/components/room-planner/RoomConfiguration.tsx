@@ -113,7 +113,7 @@ export function RoomConfiguration({
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-6">
         {/* Card 1: King rooms (fixed) */}
         <RoomTypeCard 
-          title="King rooms (fixed)" 
+          title="King (en-suite bathroom)" 
           description="Rooms 1 & 6 are fixed King beds with en-suite bathrooms." 
           image={roomKingImage} 
           quantity={2} 
