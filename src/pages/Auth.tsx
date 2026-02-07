@@ -19,6 +19,7 @@ const Auth = () => {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [existingAccountMessage, setExistingAccountMessage] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -40,16 +41,42 @@ const Auth = () => {
     }
 
     setIsLoading(true);
+    setExistingAccountMessage(false);
 
     try {
+      // signInWithOtp works for both new and existing users
+      // It sends a magic link regardless of whether the account exists
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: {
           emailRedirectTo: `${window.location.origin}/dashboard`,
+          // shouldCreateUser: true ensures new accounts are created automatically
+          shouldCreateUser: true,
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Handle specific error cases
+        if (error.message.includes('Email rate limit exceeded')) {
+          toast({
+            title: 'Too many requests',
+            description: 'Please wait a few minutes before trying again.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        // For any other error, still try to be helpful
+        throw error;
+      }
+
+      // Check if this was a signup attempt with existing email
+      // Note: signInWithOtp doesn't tell us if user exists, so we show a unified message
+      if (mode === 'signup') {
+        // For signup mode, we show a message that works for both cases
+        setExistingAccountMessage(true);
+      }
 
       setEmailSent(true);
       toast({
@@ -58,9 +85,19 @@ const Auth = () => {
       });
     } catch (error: any) {
       console.error('Auth error:', error);
+      
+      // Provide user-friendly error messages
+      let errorMessage = 'Something went wrong. Please try again.';
+      
+      if (error.message?.includes('Invalid email')) {
+        errorMessage = 'Please enter a valid email address.';
+      } else if (error.message?.includes('network')) {
+        errorMessage = 'Network error. Please check your connection.';
+      }
+      
       toast({
         title: 'Error',
-        description: error.message || 'Something went wrong. Please try again.',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -91,6 +128,11 @@ const Auth = () => {
               <p className="text-muted-foreground mt-2">
                 We sent a magic link to <strong>{email}</strong>
               </p>
+              {existingAccountMessage && mode === 'signup' && (
+                <p className="text-sm text-muted-foreground mt-3 bg-muted/50 rounded-lg p-3">
+                  If this email already has an account, we've sent you a login link instead.
+                </p>
+              )}
               <p className="text-sm text-muted-foreground mt-4">
                 Click the link in your email to sign in. You can close this tab.
               </p>
@@ -98,7 +140,10 @@ const Auth = () => {
 
             <Button 
               variant="ghost" 
-              onClick={() => setEmailSent(false)}
+              onClick={() => {
+                setEmailSent(false);
+                setExistingAccountMessage(false);
+              }}
               className="gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
