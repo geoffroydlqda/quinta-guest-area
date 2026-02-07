@@ -11,17 +11,20 @@ const Index = () => {
     userInfo,
     setUserInfo,
     roomSelection,
-    roomPlan,
     isSubmitted,
     isSaved,
     editUrl,
     stats,
     isEmailValid,
     isNameValid,
+    isSharedValid,
+    isEnsuiteValid,
     isSelectionValid,
     canSubmit,
-    setQueenRooms,
-    setTwinsRooms,
+    setQueenShared,
+    setTwinsShared,
+    setQueenEnsuite,
+    setTwinsEnsuite,
     handleSave,
     handleSubmit,
     resetAll,
@@ -46,9 +49,13 @@ const Index = () => {
           <RoomConfiguration
             roomSelection={roomSelection}
             stats={stats}
+            isSharedValid={isSharedValid}
+            isEnsuiteValid={isEnsuiteValid}
             isSelectionValid={isSelectionValid}
-            onSetQueenRooms={setQueenRooms}
-            onSetTwinsRooms={setTwinsRooms}
+            onSetQueenShared={setQueenShared}
+            onSetTwinsShared={setTwinsShared}
+            onSetQueenEnsuite={setQueenEnsuite}
+            onSetTwinsEnsuite={setTwinsEnsuite}
             onPrev={() => setCurrentStep('form')}
             onNext={() => setCurrentStep('summary')}
           />
