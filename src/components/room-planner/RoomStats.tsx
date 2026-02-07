@@ -36,18 +36,6 @@ export function RoomStats({ stats, className }: RoomStatsProps) {
           <div className="text-xs text-muted-foreground">Not set</div>
         </div>
       </div>
-
-      {/* Totals */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-muted/50 rounded-xl p-3 text-center border border-border">
-          <div className="text-lg font-medium">{stats.totalShared}</div>
-          <div className="text-xs text-muted-foreground">Total shared bathroom rooms</div>
-        </div>
-        <div className="bg-muted/50 rounded-xl p-3 text-center border border-border">
-          <div className="text-lg font-medium">{stats.totalEnsuite}</div>
-          <div className="text-xs text-muted-foreground">Total en-suite rooms (excl. Kings)</div>
-        </div>
-      </div>
     </div>
   );
 }
