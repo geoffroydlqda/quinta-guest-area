@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "npm:resend@2.0.0";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -12,20 +14,23 @@ const corsHeaders = {
 const ADMIN_EMAIL = "hello@quintamor.com";
 const FROM_EMAIL = "Quinta do Amor <noreply@quintamor.com>";
 
-interface RoomSetupPayload {
-  action: "submit";
-  fullName: string;
-  email: string;
-  remarks?: string;
-  stats: {
-    kingsFixed: number;
-    queenSharedCount: number;
-    twinsSharedCount: number;
-    queenEnsuiteCount: number;
-    twinsEnsuiteCount: number;
-    notSetCount: number;
-  };
-}
+// Input validation schema
+const RoomSetupSchema = z.object({
+  action: z.literal('submit'),
+  fullName: z.string().min(1, "Name required").max(200, "Name too long").trim(),
+  email: z.string().email("Invalid email").max(254, "Email too long"),
+  remarks: z.string().max(2000, "Remarks too long").optional().nullable(),
+  stats: z.object({
+    kingsFixed: z.number().int().min(0).max(10),
+    queenSharedCount: z.number().int().min(0).max(10),
+    twinsSharedCount: z.number().int().min(0).max(10),
+    queenEnsuiteCount: z.number().int().min(0).max(10),
+    twinsEnsuiteCount: z.number().int().min(0).max(10),
+    notSetCount: z.number().int().min(0).max(10),
+  }),
+});
+
+type RoomSetupPayload = z.infer<typeof RoomSetupSchema>;
 
 function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): string {
   const { stats, fullName, email, remarks } = payload;
@@ -123,21 +128,68 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const payload: RoomSetupPayload = await req.json();
-
-    // Validate required fields
-    if (!payload.action || !payload.fullName || !payload.email) {
-      throw new Error("Missing required fields: action, fullName, email");
+    // Authentication: Extract and validate JWT from Authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - missing auth header' }),
+        { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
     }
 
-    // Only handle submit action (removed save/edit-link emails)
+    // Create Supabase client with user's JWT
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    // Validate JWT and get authenticated user
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: authError } = await supabaseClient.auth.getClaims(token);
+
+    if (authError || !claimsData?.claims) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - invalid token' }),
+        { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
+
+    const userEmail = claimsData.claims.email as string;
+
+    // Parse and validate input
+    const rawPayload = await req.json();
+    
+    let payload: RoomSetupPayload;
+    try {
+      payload = RoomSetupSchema.parse(rawPayload);
+    } catch (validationError) {
+      if (validationError instanceof z.ZodError) {
+        return new Response(
+          JSON.stringify({
+            error: 'Invalid input',
+            details: validationError.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        );
+      }
+      throw validationError;
+    }
+
+    // Only handle submit action
     if (payload.action !== "submit") {
-      throw new Error("Only 'submit' action is supported");
+      return new Response(
+        JSON.stringify({ error: "Only 'submit' action is supported" }),
+        { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
     }
 
-    // Validate stats for submit
-    if (!payload.stats) {
-      throw new Error("Missing stats for submit action");
+    // Verify the email in payload belongs to the authenticated user
+    if (payload.email.toLowerCase() !== userEmail?.toLowerCase()) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden - email mismatch' }),
+        { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
     }
 
     const emailPromises: Promise<any>[] = [];
