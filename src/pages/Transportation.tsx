@@ -20,7 +20,7 @@ import type { TransportationTrip } from '@/types/guest';
 import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS } from '@/types/guest';
 
 // Import driver image
-import driverImage from '@/assets/rooms-arrangement.png';
+import driverImage from '@/assets/driver-luis.jpeg';
 
 const PICKUP_OPTIONS = ['Lisbon', 'Lisbon Airport', 'Quinta do Amor', 'Custom'];
 const DROPOFF_OPTIONS = ['Quinta do Amor', 'Lisbon', 'Lisbon Airport', 'Custom'];
