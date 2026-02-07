@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -17,40 +17,131 @@ export function useGuestProfile() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [needsProfileCompletion, setNeedsProfileCompletion] = useState(false);
+  
+  // Track if we're currently creating a profile to prevent duplicate attempts
+  const isCreatingProfile = useRef(false);
+
+  // Ensure profile exists - use upsert for idempotency
+  const ensureProfileExists = useCallback(async (userId: string, email: string, metadata?: Record<string, any>) => {
+    if (isCreatingProfile.current) return null;
+    isCreatingProfile.current = true;
+    
+    try {
+      // First try to get existing profile
+      const { data: existingProfile, error: selectError } = await supabase
+        .from('guest_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      if (selectError) {
+        console.error('Error checking for existing profile:', selectError);
+      }
+      
+      if (existingProfile) {
+        isCreatingProfile.current = false;
+        return existingProfile;
+      }
+      
+      // Profile doesn't exist, create one using upsert (safe to repeat)
+      const firstName = metadata?.first_name || '';
+      const lastName = metadata?.last_name || '';
+      const fullName = metadata?.full_name || 
+        (firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName || '');
+      
+      const { data: newProfile, error: upsertError } = await supabase
+        .from('guest_profiles')
+        .upsert({
+          user_id: userId,
+          email: email,
+          full_name: fullName || '',
+          first_name: firstName || null,
+          last_name: lastName || null,
+          guests_count: 1,
+        }, {
+          onConflict: 'user_id',
+          ignoreDuplicates: false,
+        })
+        .select()
+        .single();
+      
+      if (upsertError) {
+        console.error('Error creating profile:', upsertError);
+        // Try one more time to fetch - maybe another process created it
+        const { data: retryProfile } = await supabase
+          .from('guest_profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle();
+        
+        if (retryProfile) {
+          isCreatingProfile.current = false;
+          return retryProfile;
+        }
+        
+        isCreatingProfile.current = false;
+        return null;
+      }
+      
+      isCreatingProfile.current = false;
+      return newProfile;
+    } catch (error) {
+      console.error('Error in ensureProfileExists:', error);
+      isCreatingProfile.current = false;
+      return null;
+    }
+  }, []);
 
   // Load guest profile and tool statuses
   const loadProfile = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
     
     setIsLoading(true);
     
     try {
-      // Fetch or create guest profile
-      let { data: profileData, error: profileError } = await supabase
-        .from('guest_profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      if (profileError) throw profileError;
+      // Ensure profile exists (upsert is idempotent)
+      const profileData = await ensureProfileExists(
+        user.id, 
+        user.email || '', 
+        user.user_metadata
+      );
       
       if (!profileData) {
-        // Create new profile
-        const { data: newProfile, error: createError } = await supabase
-          .from('guest_profiles')
-          .insert({
-            user_id: user.id,
-            full_name: user.user_metadata?.full_name || '',
-            email: user.email || '',
-            guests_count: 1,
-          })
-          .select()
-          .single();
+        // Silent retry after a short delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const retryData = await ensureProfileExists(
+          user.id, 
+          user.email || '', 
+          user.user_metadata
+        );
         
-        if (createError) throw createError;
-        profileData = newProfile;
+        if (!retryData) {
+          console.error('Failed to create or load profile after retry');
+          setIsLoading(false);
+          // Don't show error toast - just show loading state and allow retry
+          return;
+        }
+        
+        processProfileData(retryData);
+      } else {
+        processProfileData(profileData);
       }
       
+    } catch (error: any) {
+      console.error('Error loading profile:', error);
+      // Don't show error toast - profile will be created on next attempt
+      setIsLoading(false);
+    }
+  }, [user, ensureProfileExists]);
+
+  // Process profile data and load tool statuses
+  const processProfileData = useCallback(async (profileData: any) => {
+    if (!user) return;
+    
+    try {
       const typedProfile: GuestProfile = {
         id: profileData.id,
         user_id: profileData.user_id,
@@ -116,37 +207,41 @@ export function useGuestProfile() {
       });
       
     } catch (error: any) {
-      console.error('Error loading profile:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load your profile.',
-        variant: 'destructive',
-      });
+      console.error('Error processing profile data:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast]);
+  }, [user]);
 
   useEffect(() => {
     if (user) {
       loadProfile();
+    } else {
+      setProfile(null);
+      setIsLoading(false);
     }
   }, [user, loadProfile]);
 
   // Complete profile with first/last name
   const completeProfile = useCallback(async (firstName: string, lastName: string) => {
-    if (!user || !profile) return false;
+    if (!user) return false;
     
     try {
       const fullName = `${firstName} ${lastName}`;
+      
+      // Use upsert to ensure profile exists and update it
       const { error } = await supabase
         .from('guest_profiles')
-        .update({
+        .upsert({
+          user_id: user.id,
+          email: user.email || '',
           first_name: firstName,
           last_name: lastName,
           full_name: fullName,
-        })
-        .eq('user_id', user.id);
+          guests_count: profile?.guests_count || 1,
+        }, {
+          onConflict: 'user_id',
+        });
       
       if (error) throw error;
       
@@ -155,7 +250,21 @@ export function useGuestProfile() {
         first_name: firstName,
         last_name: lastName,
         full_name: fullName,
-      } : null);
+      } : {
+        id: '',
+        user_id: user.id,
+        first_name: firstName,
+        last_name: lastName,
+        full_name: fullName,
+        email: user.email || '',
+        check_in_date: null,
+        check_out_date: null,
+        guests_count: 1,
+        submitted_at: null,
+        status_overall: 'draft',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
       
       setNeedsProfileCompletion(false);
       return true;
