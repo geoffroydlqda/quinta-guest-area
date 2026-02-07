@@ -25,6 +25,12 @@ const statusLabels: Record<ToolStatus, string> = {
   submitted: 'Submitted',
 };
 
+const docsStatusLabels: Record<ToolStatus, string> = {
+  not_set: 'Not viewed',
+  draft: 'Viewed',
+  submitted: 'Viewed',
+};
+
 const statusColors: Record<ToolStatus, string> = {
   not_set: 'bg-muted text-muted-foreground',
   draft: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -39,8 +45,9 @@ export function ToolTile({ title, description, icon, status, href, disabled }: T
     ? (status ? 'submitted' : 'not_set')
     : status;
   
-  const statusLabel = displayStatus === 'submitted' && icon === 'docs' 
-    ? 'Viewed' 
+  // Use special labels for docs tool
+  const statusLabel = icon === 'docs' 
+    ? docsStatusLabels[displayStatus]
     : statusLabels[displayStatus];
   
   return (

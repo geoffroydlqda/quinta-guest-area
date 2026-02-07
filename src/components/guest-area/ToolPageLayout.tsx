@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GuestAreaHeader } from './GuestAreaHeader';
@@ -8,10 +8,13 @@ interface ToolPageLayoutProps {
   title: string;
   description?: string;
   isLocked?: boolean;
+  showOkButton?: boolean;
   children: React.ReactNode;
 }
 
-export function ToolPageLayout({ title, description, isLocked = false, children }: ToolPageLayoutProps) {
+export function ToolPageLayout({ title, description, isLocked = false, showOkButton = true, children }: ToolPageLayoutProps) {
+  const navigate = useNavigate();
+  
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Sticky header with back button */}
@@ -38,6 +41,19 @@ export function ToolPageLayout({ title, description, isLocked = false, children 
         {isLocked && <EditLockBanner variant="tool" />}
         
         {children}
+        
+        {/* OK Button at bottom of page */}
+        {showOkButton && (
+          <div className="mt-8 flex justify-center">
+            <Button 
+              onClick={() => navigate('/dashboard')} 
+              size="lg"
+              className="min-w-32"
+            >
+              OK
+            </Button>
+          </div>
+        )}
       </main>
 
       <footer className="border-t border-border py-6 mt-12">

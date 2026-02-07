@@ -142,6 +142,7 @@ const Dashboard = () => {
       const response = await supabase.functions.invoke('send-guest-summary', {
         body: {
           fullName: profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+          firstName: profile.first_name || null,
           email: profile.email,
           checkInDate: profile.check_in_date,
           checkOutDate: profile.check_out_date,

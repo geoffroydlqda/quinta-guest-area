@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { format, parseISO, isAfter } from 'date-fns';
 import { Calendar as CalendarIcon, AlertCircle, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,14 @@ interface StayDatesPickerProps {
   onGuestsCountChange: (count: number) => Promise<boolean>;
 }
 
+// Parse date string to Date object, handling timezone correctly
+function parseLocalDate(dateStr: string | null): Date | undefined {
+  if (!dateStr) return undefined;
+  // Parse as local date by adding time component
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function StayDatesPicker({ 
   checkInDate, 
   checkOutDate, 
@@ -26,13 +34,9 @@ export function StayDatesPicker({
   onCheckOutChange,
   onGuestsCountChange,
 }: StayDatesPickerProps) {
-  // Local state for UI - sync from props
-  const [localCheckIn, setLocalCheckIn] = useState<Date | undefined>(
-    checkInDate ? parseISO(checkInDate) : undefined
-  );
-  const [localCheckOut, setLocalCheckOut] = useState<Date | undefined>(
-    checkOutDate ? parseISO(checkOutDate) : undefined
-  );
+  // Local state for UI - INDEPENDENT of each other
+  const [localCheckIn, setLocalCheckIn] = useState<Date | undefined>(() => parseLocalDate(checkInDate));
+  const [localCheckOut, setLocalCheckOut] = useState<Date | undefined>(() => parseLocalDate(checkOutDate));
   const [localGuests, setLocalGuests] = useState(guestsCount || 1);
   
   const [isSavingCheckIn, setIsSavingCheckIn] = useState(false);
@@ -40,33 +44,56 @@ export function StayDatesPicker({
   const [isSavingGuests, setIsSavingGuests] = useState(false);
   
   const guestsDebounceRef = useRef<NodeJS.Timeout>();
+  
+  // Track if we're in the middle of a user-initiated change
+  const isUserEditingCheckIn = useRef(false);
+  const isUserEditingCheckOut = useRef(false);
 
   const isLocked = isEditingLocked(checkInDate);
   const hasDates = !!(checkInDate && checkOutDate);
   
-  // Dates remain editable even when locked; only guests_count is locked
-
-  // Sync from props when they change externally
+  // Sync check-in from props ONLY when not editing
   useEffect(() => {
-    if (checkInDate) {
-      setLocalCheckIn(parseISO(checkInDate));
+    if (!isUserEditingCheckIn.current && checkInDate) {
+      const parsed = parseLocalDate(checkInDate);
+      if (parsed && (!localCheckIn || parsed.getTime() !== localCheckIn.getTime())) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[StayDatesPicker] Syncing checkIn from props:', checkInDate);
+        }
+        setLocalCheckIn(parsed);
+      }
     }
   }, [checkInDate]);
 
+  // Sync check-out from props ONLY when not editing
   useEffect(() => {
-    if (checkOutDate) {
-      setLocalCheckOut(parseISO(checkOutDate));
+    if (!isUserEditingCheckOut.current && checkOutDate) {
+      const parsed = parseLocalDate(checkOutDate);
+      if (parsed && (!localCheckOut || parsed.getTime() !== localCheckOut.getTime())) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[StayDatesPicker] Syncing checkOut from props:', checkOutDate);
+        }
+        setLocalCheckOut(parsed);
+      }
     }
   }, [checkOutDate]);
 
+  // Sync guests count from props
   useEffect(() => {
-    setLocalGuests(guestsCount || 1);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[StayDatesPicker] guestsCount prop changed:', guestsCount, 'localGuests:', localGuests);
+    }
+    // Only update if significantly different and not during a debounce
+    if (guestsCount !== localGuests && !guestsDebounceRef.current) {
+      setLocalGuests(guestsCount || 1);
+    }
   }, [guestsCount]);
 
   // Handle check-in date change - dates always editable (even when locked)
-  const handleCheckInSelect = async (date: Date | undefined) => {
+  const handleCheckInSelect = useCallback(async (date: Date | undefined) => {
     if (!date) return;
     
+    isUserEditingCheckIn.current = true;
     setLocalCheckIn(date);
     
     // If checkout is before or on the new checkin, clear it
@@ -77,23 +104,42 @@ export function StayDatesPicker({
     setIsSavingCheckIn(true);
     await onCheckInChange(date);
     setIsSavingCheckIn(false);
-  };
+    
+    // Allow prop sync again after a short delay
+    setTimeout(() => {
+      isUserEditingCheckIn.current = false;
+    }, 500);
+  }, [localCheckOut, onCheckInChange]);
 
   // Handle check-out date change - dates always editable (even when locked)
-  const handleCheckOutSelect = async (date: Date | undefined) => {
+  const handleCheckOutSelect = useCallback(async (date: Date | undefined) => {
     if (!date) return;
     
+    isUserEditingCheckOut.current = true;
     setLocalCheckOut(date);
+    
     setIsSavingCheckOut(true);
     await onCheckOutChange(date);
     setIsSavingCheckOut(false);
-  };
+    
+    // Allow prop sync again after a short delay
+    setTimeout(() => {
+      isUserEditingCheckOut.current = false;
+    }, 500);
+  }, [onCheckOutChange]);
 
-  // Handle guests count change with debounce
-  const handleGuestsChange = (value: number) => {
+
+  // Handle guests count change with debounce - DOES NOT touch date state
+  const handleGuestsChange = useCallback((value: number) => {
     if (isLocked) return;
     
     const clampedValue = Math.min(21, Math.max(1, value));
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[StayDatesPicker] handleGuestsChange:', value, '-> clamped:', clampedValue);
+      console.log('[StayDatesPicker] Current dates - checkIn:', localCheckIn, 'checkOut:', localCheckOut);
+    }
+    
     setLocalGuests(clampedValue);
     
     // Clear existing timeout
@@ -106,8 +152,13 @@ export function StayDatesPicker({
       setIsSavingGuests(true);
       await onGuestsCountChange(clampedValue);
       setIsSavingGuests(false);
+      guestsDebounceRef.current = undefined;
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[StayDatesPicker] After guests save - checkIn:', localCheckIn, 'checkOut:', localCheckOut);
+      }
     }, 800);
-  };
+  }, [isLocked, onGuestsCountChange, localCheckIn, localCheckOut]);
 
   const isValid = localCheckIn && localCheckOut && isAfter(localCheckOut, localCheckIn) && localGuests >= 1 && localGuests <= 21;
 

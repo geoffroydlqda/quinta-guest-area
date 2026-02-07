@@ -257,13 +257,6 @@ const Documentation = () => {
             </CollapsibleContent>
           </Collapsible>
         ))}
-
-        {/* Admin Note */}
-        <div className="mt-8 p-4 rounded-xl bg-muted border border-border">
-          <p className="text-sm text-muted-foreground">
-            <strong>Admin note:</strong> To update this documentation content, edit the <code>documentationSections</code> array in <code>src/pages/Documentation.tsx</code>.
-          </p>
-        </div>
       </div>
     </ToolPageLayout>
   );
