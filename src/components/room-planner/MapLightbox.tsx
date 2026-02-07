@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ZoomIn, ZoomOut, RotateCcw, Maximize, Minimize, X } from 'lucide-react';
-import roomsArrangement from '@/assets/rooms-arrangement.png';
+import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
 
 interface MapLightboxProps {
   open: boolean;

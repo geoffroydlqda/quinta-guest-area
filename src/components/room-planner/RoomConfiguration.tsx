@@ -5,7 +5,7 @@ import { RoomStats } from './RoomStats';
 import { MapLightbox } from './MapLightbox';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ArrowRight, Crown, ZoomIn, Info } from 'lucide-react';
-import roomsArrangement from '@/assets/rooms-arrangement.png';
+import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
 import roomKingImage from '@/assets/room-king.jpg';
 import roomTwinsImage from '@/assets/room-queen.jpg';
 import roomQueenImage from '@/assets/room-twins.jpg';
