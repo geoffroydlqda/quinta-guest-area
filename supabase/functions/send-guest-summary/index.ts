@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "npm:resend@2.0.0";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -12,32 +14,41 @@ const corsHeaders = {
 const ADMIN_EMAIL = "hello@quintamor.com";
 const FROM_EMAIL = "Quinta do Amor <noreply@quintamor.com>";
 
-interface GuestSummaryPayload {
-  fullName: string;
-  firstName?: string;
-  email: string;
-  checkInDate: string | null;
-  checkOutDate: string | null;
-  guestsCount: number;
-  roomSetup: {
-    queenSharedCount: number;
-    twinsSharedCount: number;
-    queenEnsuiteCount: number;
-    twinsEnsuiteCount: number;
-  } | null;
-  transportation: {
-    tripCount: number;
-    totalPrice: number;
-    customOfferCount: number;
-  } | null;
-  food: {
-    fullBoardDays: number;
-    breakfastOnlyDays: number;
-    customDays: number;
-    dietPreference?: string | null;
-    totalCost?: number;
-  } | null;
-}
+// Input validation schema
+const GuestSummarySchema = z.object({
+  fullName: z.string().min(1, "Name required").max(200, "Name too long").trim(),
+  firstName: z.string().max(100).optional().nullable(),
+  email: z.string().email("Invalid email").max(254, "Email too long"),
+  checkInDate: z.string().nullable().refine(
+    (val) => !val || /^\d{4}-\d{2}-\d{2}$/.test(val),
+    "Invalid date format (expected YYYY-MM-DD)"
+  ),
+  checkOutDate: z.string().nullable().refine(
+    (val) => !val || /^\d{4}-\d{2}-\d{2}$/.test(val),
+    "Invalid date format"
+  ),
+  guestsCount: z.number().int().min(1).max(21),
+  roomSetup: z.object({
+    queenSharedCount: z.number().int().min(0).max(6),
+    twinsSharedCount: z.number().int().min(0).max(6),
+    queenEnsuiteCount: z.number().int().min(0).max(3),
+    twinsEnsuiteCount: z.number().int().min(0).max(3),
+  }).nullable(),
+  transportation: z.object({
+    tripCount: z.number().int().min(0).max(50),
+    totalPrice: z.number().min(0).max(10000),
+    customOfferCount: z.number().int().min(0).max(50),
+  }).nullable(),
+  food: z.object({
+    fullBoardDays: z.number().int().min(0).max(365),
+    breakfastOnlyDays: z.number().int().min(0).max(365),
+    customDays: z.number().int().min(0).max(365),
+    dietPreference: z.string().max(100).nullable().optional(),
+    totalCost: z.number().min(0).max(100000).optional(),
+  }).nullable(),
+});
+
+type GuestSummaryPayload = z.infer<typeof GuestSummarySchema>;
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return 'Not set';
@@ -217,11 +228,60 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const payload: GuestSummaryPayload = await req.json();
+    // Authentication: Extract and validate JWT from Authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - missing auth header' }),
+        { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
 
-    // Validate required fields
-    if (!payload.email) {
-      throw new Error("Missing required field: email");
+    // Create Supabase client with user's JWT
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    // Validate JWT and get authenticated user
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: authError } = await supabaseClient.auth.getClaims(token);
+
+    if (authError || !claimsData?.claims) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - invalid token' }),
+        { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
+
+    const userEmail = claimsData.claims.email as string;
+
+    // Parse and validate input
+    const rawPayload = await req.json();
+    
+    let payload: GuestSummaryPayload;
+    try {
+      payload = GuestSummarySchema.parse(rawPayload);
+    } catch (validationError) {
+      if (validationError instanceof z.ZodError) {
+        return new Response(
+          JSON.stringify({
+            error: 'Invalid input',
+            details: validationError.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+        );
+      }
+      throw validationError;
+    }
+
+    // Verify the email in payload belongs to the authenticated user
+    if (payload.email.toLowerCase() !== userEmail?.toLowerCase()) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden - email mismatch' }),
+        { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
     }
 
     const emailPromises: Promise<any>[] = [];
