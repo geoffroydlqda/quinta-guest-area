@@ -15,16 +15,24 @@ export interface UserInfo {
   remarks: string;
 }
 
+// Updated room selection with 5-card structure
 export interface RoomSelection {
   kingRoomsQty: number; // Always 2, locked
-  queenRoomsQty: number;
-  twinsRoomsQty: number;
+  queenSharedQty: number; // Queen with shared bathroom (max 6)
+  twinsSharedQty: number; // Twins with shared bathroom (max 6)
+  queenEnsuiteQty: number; // Queen with en-suite (max 3)
+  twinsEnsuiteQty: number; // Twins with en-suite (max 3)
 }
 
+// Updated stats for the new structure
 export interface RoomStats {
   kingsFixed: number;
-  queensCount: number;
-  twinsCount: number;
+  queenSharedCount: number;
+  twinsSharedCount: number;
+  queenEnsuiteCount: number;
+  twinsEnsuiteCount: number;
+  totalShared: number;
+  totalEnsuite: number;
   notSetCount: number;
 }
 
@@ -52,6 +60,8 @@ export const FIXED_ROOMS: Array<{
   { id: 6, bathroomType: 'en-suite' },
 ];
 
+export const MAX_SHARED_ROOMS = 6;
+export const MAX_ENSUITE_ROOMS = 3;
 export const MAX_FLEXIBLE_ROOMS = 9;
 
 export const initialUserInfo: UserInfo = {
@@ -62,8 +72,10 @@ export const initialUserInfo: UserInfo = {
 
 export const initialRoomSelection: RoomSelection = {
   kingRoomsQty: 2,
-  queenRoomsQty: 0,
-  twinsRoomsQty: 0,
+  queenSharedQty: 0,
+  twinsSharedQty: 0,
+  queenEnsuiteQty: 0,
+  twinsEnsuiteQty: 0,
 };
 
 export function generateRoomPlan(selection: RoomSelection): RoomPlan[] {
@@ -80,18 +92,31 @@ export function generateRoomPlan(selection: RoomSelection): RoomPlan[] {
   });
   
   // Assign flexible rooms in order
-  let queensAssigned = 0;
-  let twinsAssigned = 0;
+  let queensSharedAssigned = 0;
+  let twinsSharedAssigned = 0;
+  let queensEnsuiteAssigned = 0;
+  let twinsEnsuiteAssigned = 0;
   
   FLEXIBLE_ROOMS_ORDER.forEach((room) => {
     let bedType: BedType = null;
     
-    if (queensAssigned < selection.queenRoomsQty) {
-      bedType = 'queen';
-      queensAssigned++;
-    } else if (twinsAssigned < selection.twinsRoomsQty) {
-      bedType = 'twin';
-      twinsAssigned++;
+    if (room.bathroomType === 'shared') {
+      if (queensSharedAssigned < selection.queenSharedQty) {
+        bedType = 'queen';
+        queensSharedAssigned++;
+      } else if (twinsSharedAssigned < selection.twinsSharedQty) {
+        bedType = 'twin';
+        twinsSharedAssigned++;
+      }
+    } else {
+      // en-suite
+      if (queensEnsuiteAssigned < selection.queenEnsuiteQty) {
+        bedType = 'queen';
+        queensEnsuiteAssigned++;
+      } else if (twinsEnsuiteAssigned < selection.twinsEnsuiteQty) {
+        bedType = 'twin';
+        twinsEnsuiteAssigned++;
+      }
     }
     
     plan.push({

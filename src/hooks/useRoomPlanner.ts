@@ -7,7 +7,8 @@ import {
   initialUserInfo, 
   initialRoomSelection,
   generateRoomPlan,
-  MAX_FLEXIBLE_ROOMS 
+  MAX_SHARED_ROOMS,
+  MAX_ENSUITE_ROOMS
 } from '@/types/room';
 
 export function useRoomPlanner() {
@@ -20,11 +21,18 @@ export function useRoomPlanner() {
 
   // Calculate room statistics
   const stats: RoomStats = useMemo(() => {
-    const notSet = MAX_FLEXIBLE_ROOMS - roomSelection.queenRoomsQty - roomSelection.twinsRoomsQty;
+    const totalShared = roomSelection.queenSharedQty + roomSelection.twinsSharedQty;
+    const totalEnsuite = roomSelection.queenEnsuiteQty + roomSelection.twinsEnsuiteQty;
+    const notSet = (MAX_SHARED_ROOMS - totalShared) + (MAX_ENSUITE_ROOMS - totalEnsuite);
+    
     return {
       kingsFixed: 2,
-      queensCount: roomSelection.queenRoomsQty,
-      twinsCount: roomSelection.twinsRoomsQty,
+      queenSharedCount: roomSelection.queenSharedQty,
+      twinsSharedCount: roomSelection.twinsSharedQty,
+      queenEnsuiteCount: roomSelection.queenEnsuiteQty,
+      twinsEnsuiteCount: roomSelection.twinsEnsuiteQty,
+      totalShared,
+      totalEnsuite,
       notSetCount: Math.max(0, notSet),
     };
   }, [roomSelection]);
@@ -44,25 +52,48 @@ export function useRoomPlanner() {
     return userInfo.fullName.trim().length >= 2;
   }, [userInfo.fullName]);
 
-  const isSelectionValid = useMemo(() => {
-    return roomSelection.queenRoomsQty + roomSelection.twinsRoomsQty <= MAX_FLEXIBLE_ROOMS;
+  // Shared bathroom constraint: max 6
+  const isSharedValid = useMemo(() => {
+    return roomSelection.queenSharedQty + roomSelection.twinsSharedQty <= MAX_SHARED_ROOMS;
   }, [roomSelection]);
+
+  // En-suite constraint: max 3
+  const isEnsuiteValid = useMemo(() => {
+    return roomSelection.queenEnsuiteQty + roomSelection.twinsEnsuiteQty <= MAX_ENSUITE_ROOMS;
+  }, [roomSelection]);
+
+  const isSelectionValid = isSharedValid && isEnsuiteValid;
 
   const canProceed = isEmailValid && isNameValid;
   const canSubmit = canProceed && isSelectionValid;
 
-  // Update room selection
-  const setQueenRooms = useCallback((qty: number) => {
+  // Update room selection - Shared rooms
+  const setQueenShared = useCallback((qty: number) => {
     setRoomSelection((prev) => ({
       ...prev,
-      queenRoomsQty: Math.max(0, Math.min(MAX_FLEXIBLE_ROOMS, qty)),
+      queenSharedQty: Math.max(0, Math.min(MAX_SHARED_ROOMS, qty)),
     }));
   }, []);
 
-  const setTwinsRooms = useCallback((qty: number) => {
+  const setTwinsShared = useCallback((qty: number) => {
     setRoomSelection((prev) => ({
       ...prev,
-      twinsRoomsQty: Math.max(0, Math.min(MAX_FLEXIBLE_ROOMS, qty)),
+      twinsSharedQty: Math.max(0, Math.min(MAX_SHARED_ROOMS, qty)),
+    }));
+  }, []);
+
+  // Update room selection - En-suite rooms
+  const setQueenEnsuite = useCallback((qty: number) => {
+    setRoomSelection((prev) => ({
+      ...prev,
+      queenEnsuiteQty: Math.max(0, Math.min(MAX_ENSUITE_ROOMS, qty)),
+    }));
+  }, []);
+
+  const setTwinsEnsuite = useCallback((qty: number) => {
+    setRoomSelection((prev) => ({
+      ...prev,
+      twinsEnsuiteQty: Math.max(0, Math.min(MAX_ENSUITE_ROOMS, qty)),
     }));
   }, []);
 
@@ -132,13 +163,17 @@ export function useRoomPlanner() {
     // Validation
     isEmailValid,
     isNameValid,
+    isSharedValid,
+    isEnsuiteValid,
     isSelectionValid,
     canProceed,
     canSubmit,
     
     // Actions
-    setQueenRooms,
-    setTwinsRooms,
+    setQueenShared,
+    setTwinsShared,
+    setQueenEnsuite,
+    setTwinsEnsuite,
     handleSave,
     handleSubmit,
     resetAll,

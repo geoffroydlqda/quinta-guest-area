@@ -133,9 +133,10 @@ export function MapLightbox({ open, onOpenChange }: MapLightboxProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent 
         ref={dialogRef}
+        hideCloseButton
         className="max-w-[95vw] w-[95vw] h-[90vh] p-0 bg-card overflow-hidden flex flex-col"
       >
-        {/* Controls */}
+        {/* Controls - SINGLE close button here */}
         <div className="flex items-center justify-between p-3 border-b border-border bg-card shrink-0">
           <div className="flex items-center gap-2">
             <Button

@@ -8,22 +8,45 @@ interface RoomStatsProps {
 
 export function RoomStats({ stats, className }: RoomStatsProps) {
   return (
-    <div className={cn("grid grid-cols-2 md:grid-cols-4 gap-3", className)}>
-      <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
-        <div className="text-2xl font-medium text-primary">{stats.kingsFixed}</div>
-        <div className="text-xs text-muted-foreground">King (fixed)</div>
+    <div className={cn("space-y-4", className)}>
+      {/* Summary grid - main stats */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
+          <div className="text-2xl font-medium text-primary">{stats.kingsFixed}</div>
+          <div className="text-xs text-muted-foreground">King (fixed)</div>
+        </div>
+        <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
+          <div className="text-2xl font-medium">{stats.queenSharedCount}</div>
+          <div className="text-xs text-muted-foreground">Queen (shared)</div>
+        </div>
+        <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
+          <div className="text-2xl font-medium">{stats.twinsSharedCount}</div>
+          <div className="text-xs text-muted-foreground">Twins (shared)</div>
+        </div>
+        <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
+          <div className="text-2xl font-medium">{stats.queenEnsuiteCount}</div>
+          <div className="text-xs text-muted-foreground">Queen (en-suite)</div>
+        </div>
+        <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
+          <div className="text-2xl font-medium">{stats.twinsEnsuiteCount}</div>
+          <div className="text-xs text-muted-foreground">Twins (en-suite)</div>
+        </div>
+        <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
+          <div className="text-2xl font-medium text-muted-foreground">{stats.notSetCount}</div>
+          <div className="text-xs text-muted-foreground">Not set</div>
+        </div>
       </div>
-      <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
-        <div className="text-2xl font-medium">{stats.queensCount}</div>
-        <div className="text-xs text-muted-foreground">Queen</div>
-      </div>
-      <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
-        <div className="text-2xl font-medium">{stats.twinsCount}</div>
-        <div className="text-xs text-muted-foreground">2 Twins</div>
-      </div>
-      <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
-        <div className="text-2xl font-medium text-muted-foreground">{stats.notSetCount}</div>
-        <div className="text-xs text-muted-foreground">Not set</div>
+
+      {/* Totals */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-muted/50 rounded-xl p-3 text-center border border-border">
+          <div className="text-lg font-medium">{stats.totalShared}</div>
+          <div className="text-xs text-muted-foreground">Total shared bathroom rooms</div>
+        </div>
+        <div className="bg-muted/50 rounded-xl p-3 text-center border border-border">
+          <div className="text-lg font-medium">{stats.totalEnsuite}</div>
+          <div className="text-xs text-muted-foreground">Total en-suite rooms (excl. Kings)</div>
+        </div>
       </div>
     </div>
   );
