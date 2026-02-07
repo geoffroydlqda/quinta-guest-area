@@ -3,8 +3,8 @@ import { RoomStats } from './RoomStats';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Send, Save, CheckCircle, Copy, FileText } from 'lucide-react';
-import { toast } from 'sonner';
+import { ArrowLeft, Send, Save, CheckCircle, FileText, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface SummaryProps {
   userInfo: UserInfo;
@@ -12,12 +12,11 @@ interface SummaryProps {
   stats: RoomStatsType;
   isSubmitted: boolean;
   isSaved: boolean;
-  editUrl: string | null;
   canSubmit: boolean;
   onPrev: () => void;
   onSave: () => void;
   onSubmit: () => void;
-  onNewSetup: () => void;
+  isLoading?: boolean;
 }
 
 export function Summary({
@@ -26,20 +25,12 @@ export function Summary({
   stats,
   isSubmitted,
   isSaved,
-  editUrl,
   canSubmit,
   onPrev,
   onSave,
   onSubmit,
-  onNewSetup,
+  isLoading = false,
 }: SummaryProps) {
-  const copyEditUrl = () => {
-    if (editUrl) {
-      navigator.clipboard.writeText(editUrl);
-      toast.success('Edit link copied to clipboard');
-    }
-  };
-
   if (isSubmitted) {
     return (
       <div className="max-w-2xl mx-auto animate-fade-up">
@@ -81,27 +72,9 @@ export function Summary({
           <RoomStats stats={stats} />
         </div>
 
-        {/* Edit Link */}
-        {editUrl && (
-          <div className="bg-card rounded-2xl shadow-elegant p-6 mb-6">
-            <h4 className="font-medium mb-2">Your Edit Link</h4>
-            <p className="text-sm text-muted-foreground mb-3">
-              Use this link to make changes to your room setup later.
-            </p>
-            <div className="flex gap-2">
-              <code className="flex-1 p-3 rounded-lg bg-muted text-sm break-all">
-                {editUrl}
-              </code>
-              <Button variant="outline" size="icon" onClick={copyEditUrl}>
-                <Copy className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
         <div className="text-center">
-          <Button onClick={onNewSetup} variant="outline">
-            Start New Setup
+          <Button asChild variant="outline">
+            <Link to="/dashboard">Back to Dashboard</Link>
           </Button>
         </div>
       </div>
@@ -153,27 +126,19 @@ export function Summary({
         />
       </div>
 
-      {/* Edit Link (if saved) */}
-      {isSaved && editUrl && (
+      {/* Saved Confirmation */}
+      {isSaved && (
         <div className="bg-success/10 rounded-2xl p-6 mb-6 border border-success/30">
           <h4 className="font-medium mb-2 text-success">Setup Saved!</h4>
-          <p className="text-sm text-muted-foreground mb-3">
-            Your edit link has been sent to {userInfo.email}. You can also copy it below.
+          <p className="text-sm text-muted-foreground">
+            Your progress has been saved. You can come back anytime by logging in.
           </p>
-          <div className="flex gap-2">
-            <code className="flex-1 p-3 rounded-lg bg-card text-sm break-all">
-              {editUrl}
-            </code>
-            <Button variant="outline" size="icon" onClick={copyEditUrl}>
-              <Copy className="w-4 h-4" />
-            </Button>
-          </div>
         </div>
       )}
 
       {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-border">
-        <Button variant="outline" onClick={onPrev} className="gap-2">
+        <Button variant="outline" onClick={onPrev} className="gap-2" disabled={isLoading}>
           <ArrowLeft className="w-4 h-4" />
           Back
         </Button>
@@ -183,15 +148,23 @@ export function Summary({
         <Button
           variant="outline"
           onClick={onSave}
-          disabled={!canSubmit || isSaved}
+          disabled={!canSubmit || isLoading}
           className="gap-2"
         >
-          <Save className="w-4 h-4" />
-          {isSaved ? 'Saved' : 'Save for Later'}
+          {isLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
+          {isSaved ? 'Saved' : 'Save Draft'}
         </Button>
         
-        <Button onClick={onSubmit} disabled={!canSubmit} className="gap-2">
-          <Send className="w-4 h-4" />
+        <Button onClick={onSubmit} disabled={!canSubmit || isLoading} className="gap-2">
+          {isLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Send className="w-4 h-4" />
+          )}
           Submit Final Setup
         </Button>
       </div>
