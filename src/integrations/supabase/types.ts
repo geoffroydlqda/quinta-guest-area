@@ -14,7 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      room_setups: {
+        Row: {
+          created_at: string
+          edit_token: string
+          email: string
+          full_name: string
+          id: string
+          queen_ensuite_qty: number
+          queen_shared_qty: number
+          remarks: string | null
+          room_plan: Json
+          status: string
+          twins_ensuite_qty: number
+          twins_shared_qty: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          edit_token: string
+          email: string
+          full_name: string
+          id?: string
+          queen_ensuite_qty?: number
+          queen_shared_qty?: number
+          remarks?: string | null
+          room_plan?: Json
+          status?: string
+          twins_ensuite_qty?: number
+          twins_shared_qty?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          edit_token?: string
+          email?: string
+          full_name?: string
+          id?: string
+          queen_ensuite_qty?: number
+          queen_shared_qty?: number
+          remarks?: string | null
+          room_plan?: Json
+          status?: string
+          twins_ensuite_qty?: number
+          twins_shared_qty?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
