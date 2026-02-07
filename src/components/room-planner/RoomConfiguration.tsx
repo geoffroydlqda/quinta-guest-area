@@ -122,7 +122,7 @@ export function RoomConfiguration({
         
         {/* Card 2: Queen size bed rooms (shared bathroom) */}
         <RoomTypeCard 
-          title="Queen size bed rooms" 
+          title="Queen size (shared bathroom)" 
           description="Queen size bed in a room with shared bathroom." 
           image={roomQueenImage} 
           quantity={roomSelection.queenSharedQty} 
