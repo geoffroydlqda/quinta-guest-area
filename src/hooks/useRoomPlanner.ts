@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   UserInfo, 
   RoomSelection, 
@@ -15,7 +15,7 @@ import {
 } from '@/types/room';
 
 export function useRoomPlanner() {
-  const [searchParams] = useSearchParams();
+  const { user } = useAuth();
   const { toast } = useToast();
   
   const [currentStep, setCurrentStep] = useState<'form' | 'rooms' | 'summary'>('form');
@@ -23,8 +23,6 @@ export function useRoomPlanner() {
   const [roomSelection, setRoomSelection] = useState<RoomSelection>(initialRoomSelection);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
-  const [editUrl, setEditUrl] = useState<string | null>(null);
-  const [editToken, setEditToken] = useState<string | null>(null);
   const [recordId, setRecordId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingRecord, setIsLoadingRecord] = useState(false);
@@ -54,9 +52,9 @@ export function useRoomPlanner() {
 
   // Validation
   const isEmailValid = useMemo(() => {
-    const email = userInfo.email.trim();
-    return email !== '' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  }, [userInfo.email]);
+    // Email comes from auth, always valid if user exists
+    return !!user?.email;
+  }, [user]);
 
   const isNameValid = useMemo(() => {
     return userInfo.fullName.trim().length >= 2;
@@ -107,21 +105,9 @@ export function useRoomPlanner() {
     }));
   }, []);
 
-  // Generate edit token
-  const generateEditToken = useCallback(() => {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }, []);
-
-  // Generate edit URL from token
-  const generateEditUrl = useCallback((token: string) => {
-    const baseUrl = window.location.origin;
-    return `${baseUrl}?edit=${token}`;
-  }, []);
-
-  // Save to database
+  // Save to database (upsert for logged-in user)
   const saveToDatabase = useCallback(async (status: 'draft' | 'submitted') => {
-    const token = editToken || generateEditToken();
-    const url = generateEditUrl(token);
+    if (!user) throw new Error('User not authenticated');
     
     // Convert room plan to JSON-compatible format
     const roomPlanJson = roomPlan.map(room => ({
@@ -133,8 +119,8 @@ export function useRoomPlanner() {
     }));
     
     const recordData = {
-      edit_token: token,
-      email: userInfo.email.trim(),
+      user_id: user.id,
+      email: user.email || '',
       full_name: userInfo.fullName.trim(),
       remarks: userInfo.remarks.trim() || null,
       queen_shared_qty: roomSelection.queenSharedQty,
@@ -143,6 +129,7 @@ export function useRoomPlanner() {
       twins_ensuite_qty: roomSelection.twinsEnsuiteQty,
       room_plan: roomPlanJson,
       status,
+      edit_token: `user-${user.id}`, // Legacy field, use user_id for lookup
     };
 
     let result;
@@ -170,22 +157,19 @@ export function useRoomPlanner() {
       result = data;
     }
 
-    // Update local state
-    setEditToken(token);
-    setEditUrl(url);
     setRecordId(result.id);
+    return { record: result };
+  }, [user, recordId, userInfo, roomSelection, roomPlan]);
 
-    return { token, url, record: result };
-  }, [editToken, recordId, userInfo, roomSelection, roomPlan, generateEditToken, generateEditUrl]);
-
-  // Send emails via edge function
-  const sendEmails = useCallback(async (action: 'save' | 'submit', url: string) => {
+  // Send emails via edge function (only on submit, no edit links)
+  const sendEmails = useCallback(async () => {
+    if (!user) return;
+    
     try {
       const payload = {
-        action,
+        action: 'submit',
         fullName: userInfo.fullName.trim(),
-        email: userInfo.email.trim(),
-        editUrl: url,
+        email: user.email || '',
         remarks: userInfo.remarks.trim() || undefined,
         stats: {
           kingsFixed: stats.kingsFixed,
@@ -203,70 +187,57 @@ export function useRoomPlanner() {
 
       if (response.error) {
         console.error('Email sending error:', response.error);
-        // Don't throw - email failure shouldn't block submission
       } else {
         console.log('Emails sent successfully:', response.data);
       }
     } catch (error) {
       console.error('Failed to send emails:', error);
-      // Don't throw - email failure shouldn't block submission
     }
-  }, [userInfo, stats]);
+  }, [user, userInfo, stats]);
 
-  // Load existing record from edit token
-  const loadFromEditToken = useCallback(async (token: string) => {
+  // Load existing record for logged-in user
+  const loadUserRecord = useCallback(async () => {
+    if (!user) return;
+    
     setIsLoadingRecord(true);
     
     try {
       const { data, error } = await supabase
         .from('room_setups')
         .select('*')
-        .eq('edit_token', token)
-        .single();
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          toast({
-            title: 'Record not found',
-            description: 'The edit link is invalid or has expired.',
-            variant: 'destructive',
-          });
-        } else {
-          throw error;
+      if (error) throw error;
+
+      if (data) {
+        // Populate form with saved data
+        setUserInfo({
+          fullName: data.full_name,
+          email: data.email,
+          remarks: data.remarks || '',
+        });
+
+        setRoomSelection({
+          kingRoomsQty: 2,
+          queenSharedQty: data.queen_shared_qty,
+          twinsSharedQty: data.twins_shared_qty,
+          queenEnsuiteQty: data.queen_ensuite_qty,
+          twinsEnsuiteQty: data.twins_ensuite_qty,
+        });
+
+        setRecordId(data.id);
+        setIsSubmitted(data.status === 'submitted');
+        setIsSaved(true);
+
+        // If already submitted, show summary; otherwise start at form
+        if (data.status === 'submitted') {
+          setCurrentStep('summary');
         }
-        return;
+      } else {
+        // Pre-fill email from user
+        setUserInfo(prev => ({ ...prev, email: user.email || '' }));
       }
-
-      // Populate form with saved data
-      setUserInfo({
-        fullName: data.full_name,
-        email: data.email,
-        remarks: data.remarks || '',
-      });
-
-      setRoomSelection({
-        kingRoomsQty: 2,
-        queenSharedQty: data.queen_shared_qty,
-        twinsSharedQty: data.twins_shared_qty,
-        queenEnsuiteQty: data.queen_ensuite_qty,
-        twinsEnsuiteQty: data.twins_ensuite_qty,
-      });
-
-      setEditToken(token);
-      setEditUrl(generateEditUrl(token));
-      setRecordId(data.id);
-      setIsSubmitted(data.status === 'submitted');
-      setIsSaved(true);
-
-      // If already submitted, show summary; otherwise start at form
-      if (data.status === 'submitted') {
-        setCurrentStep('summary');
-      }
-
-      toast({
-        title: 'Configuration loaded',
-        description: 'Your saved room setup has been restored.',
-      });
     } catch (error: any) {
       console.error('Error loading record:', error);
       toast({
@@ -277,30 +248,28 @@ export function useRoomPlanner() {
     } finally {
       setIsLoadingRecord(false);
     }
-  }, [toast, generateEditUrl]);
+  }, [user, toast]);
 
-  // Check for edit token on mount
+  // Load user record on mount
   useEffect(() => {
-    const editParam = searchParams.get('edit');
-    if (editParam) {
-      loadFromEditToken(editParam);
+    if (user) {
+      loadUserRecord();
     }
-  }, [searchParams, loadFromEditToken]);
+  }, [user, loadUserRecord]);
 
-  // Handle save for later
+  // Handle save (draft)
   const handleSave = useCallback(async () => {
     if (!canSubmit || isLoading) return;
     
     setIsLoading(true);
     
     try {
-      const { url } = await saveToDatabase('draft');
-      await sendEmails('save', url);
+      await saveToDatabase('draft');
       setIsSaved(true);
       
       toast({
-        title: 'Configuration saved',
-        description: 'An edit link has been sent to your email.',
+        title: 'Saved',
+        description: 'You can come back anytime by logging in.',
       });
     } catch (error: any) {
       console.error('Save error:', error);
@@ -312,7 +281,7 @@ export function useRoomPlanner() {
     } finally {
       setIsLoading(false);
     }
-  }, [canSubmit, isLoading, saveToDatabase, sendEmails, toast]);
+  }, [canSubmit, isLoading, saveToDatabase, toast]);
 
   // Submit handler
   const handleSubmit = useCallback(async () => {
@@ -321,8 +290,8 @@ export function useRoomPlanner() {
     setIsLoading(true);
     
     try {
-      const { url } = await saveToDatabase('submitted');
-      await sendEmails('submit', url);
+      await saveToDatabase('submitted');
+      await sendEmails();
       setIsSubmitted(true);
       
       toast({
@@ -344,16 +313,11 @@ export function useRoomPlanner() {
   // Reset everything
   const resetAll = useCallback(() => {
     setCurrentStep('form');
-    setUserInfo(initialUserInfo);
+    setUserInfo(prev => ({ ...prev, fullName: '', remarks: '' }));
     setRoomSelection(initialRoomSelection);
     setIsSubmitted(false);
     setIsSaved(false);
-    setEditUrl(null);
-    setEditToken(null);
     setRecordId(null);
-    
-    // Clear URL parameter
-    window.history.replaceState({}, '', window.location.pathname);
   }, []);
 
   return {
@@ -366,7 +330,6 @@ export function useRoomPlanner() {
     roomPlan,
     isSubmitted,
     isSaved,
-    editUrl,
     stats,
     isLoading,
     isLoadingRecord,
