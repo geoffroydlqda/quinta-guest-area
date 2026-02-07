@@ -70,12 +70,7 @@ const Transportation = () => {
     taxi_size: '4 seats' as '4 seats' | '6 seats',
   });
 
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/');
-    }
-  }, [user, authLoading, navigate]);
+  // Note: Auth redirect is handled by ProtectedRoute in App.tsx
 
   // Update default date when check-in changes
   useEffect(() => {

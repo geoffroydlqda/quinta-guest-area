@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,13 +12,13 @@ import { ToolTile } from '@/components/guest-area/ToolTile';
 import { GlobalSummary } from '@/components/guest-area/GlobalSummary';
 import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
 import { ProfileCompletionModal } from '@/components/guest-area/ProfileCompletionModal';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, RefreshCw, LogOut } from 'lucide-react';
 import type { DietPreference, FoodDaySelection, TransportationTrip } from '@/types/guest';
 
-const Dashboard = () => {
-  const { user, isLoading: authLoading } = useAuth();
-  const navigate = useNavigate();
+const DashboardContent = () => {
+  const { user, signOut } = useAuth();
   const { toast } = useToast();
   
   const { 
@@ -28,12 +27,15 @@ const Dashboard = () => {
     isLoading, 
     hasDatesSet,
     needsProfileCompletion,
+    error,
+    timedOut,
     updateCheckInDate,
     updateCheckOutDate,
     updateGuestsCount,
     completeProfile,
     submitProfile,
     refreshProfile,
+    retryLoad,
   } = useGuestProfile();
 
   const [roomSetupData, setRoomSetupData] = useState<any>(null);
@@ -43,17 +45,10 @@ const Dashboard = () => {
 
   const isLocked = isEditingLocked(profile?.check_in_date || null);
 
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/');
-    }
-  }, [user, authLoading, navigate]);
-
   // Fetch summary data for tools
   useEffect(() => {
     const fetchSummaryData = async () => {
-      if (!user) return;
+      if (!user || !profile) return;
 
       // Fetch room setup data
       const { data: roomData } = await supabase
@@ -111,7 +106,7 @@ const Dashboard = () => {
     };
 
     fetchSummaryData();
-  }, [user, toolStatuses, profile?.guests_count]);
+  }, [user, profile, toolStatuses]);
 
   const handleSubmitInformation = async () => {
     if (!profile || !hasDatesSet) {
@@ -173,18 +168,40 @@ const Dashboard = () => {
     }
   };
 
-  if (authLoading || isLoading) {
+  const handleLogout = async () => {
+    await signOut();
+  };
+
+  // Loading state
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-muted-foreground">Loading your profile...</p>
       </div>
     );
   }
 
-  if (!profile) {
+  // Error or timeout state
+  if (error || timedOut || !profile) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p>Loading profile...</p>
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 px-4">
+        <div className="text-center space-y-2">
+          <h2 className="text-xl font-medium">We couldn't load your profile</h2>
+          <p className="text-muted-foreground max-w-md">
+            {error || 'Something went wrong. Please try again or contact support if the issue persists.'}
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Button onClick={retryLoad} className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Retry
+          </Button>
+          <Button variant="outline" onClick={handleLogout} className="gap-2">
+            <LogOut className="h-4 w-4" />
+            Log out
+          </Button>
+        </div>
       </div>
     );
   }
@@ -301,6 +318,15 @@ const Dashboard = () => {
         </div>
       </footer>
     </div>
+  );
+};
+
+// Wrap Dashboard with ProtectedRoute
+const Dashboard = () => {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 };
 
