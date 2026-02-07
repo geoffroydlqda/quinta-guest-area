@@ -155,7 +155,7 @@ export function RoomConfiguration({
 
         {/* Card 5: Twin size with en-suite bathroom (NEW) */}
         <RoomTypeCard 
-          title="Twin size with en-suite bathroom" 
+          title="Twins (en-suite bathroom)" 
           description="Two single beds in a room with private en-suite bathroom." 
           image={roomTwinsImage} 
           quantity={roomSelection.twinsEnsuiteQty} 
