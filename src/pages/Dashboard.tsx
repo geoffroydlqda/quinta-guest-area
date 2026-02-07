@@ -5,14 +5,17 @@ import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { isEditingLocked } from '@/lib/editLock';
+import { calculateFoodCost } from '@/lib/foodPricing';
+import { calculateTransportationCost } from '@/lib/transportationPricing';
 import { GuestAreaHeader } from '@/components/guest-area/GuestAreaHeader';
 import { StayDatesPicker } from '@/components/guest-area/StayDatesPicker';
 import { ToolTile } from '@/components/guest-area/ToolTile';
 import { GlobalSummary } from '@/components/guest-area/GlobalSummary';
 import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
+import { ProfileCompletionModal } from '@/components/guest-area/ProfileCompletionModal';
 import { Button } from '@/components/ui/button';
 import { Loader2, Send } from 'lucide-react';
-import { CUSTOM_OFFER_TEXT } from '@/types/guest';
+import type { DietPreference, FoodDaySelection, TransportationTrip } from '@/types/guest';
 
 const Dashboard = () => {
   const { user, isLoading: authLoading } = useAuth();
@@ -24,7 +27,11 @@ const Dashboard = () => {
     toolStatuses, 
     isLoading, 
     hasDatesSet,
-    updateStayInfo,
+    needsProfileCompletion,
+    updateCheckInDate,
+    updateCheckOutDate,
+    updateGuestsCount,
+    completeProfile,
     submitProfile,
     refreshProfile,
   } = useGuestProfile();
@@ -67,28 +74,15 @@ const Dashboard = () => {
       // Fetch transportation data with trip details
       const { data: tripData } = await supabase
         .from('transportation_trips')
-        .select('id, price_estimate')
+        .select('id, price_estimate, pickup_location, dropoff_location, taxi_size')
         .eq('user_id', user.id);
       
       if (tripData && tripData.length > 0) {
-        let totalPrice = 0;
-        let customOfferCount = 0;
-        
-        tripData.forEach(trip => {
-          if (trip.price_estimate === CUSTOM_OFFER_TEXT) {
-            customOfferCount++;
-          } else {
-            const priceMatch = trip.price_estimate.match(/€(\d+)/);
-            if (priceMatch) {
-              totalPrice += parseInt(priceMatch[1]);
-            }
-          }
-        });
-        
+        const costSummary = calculateTransportationCost(tripData as TransportationTrip[]);
         setTransportationData({
-          tripCount: tripData.length,
-          totalPrice,
-          customOfferCount,
+          tripCount: costSummary.totalTrips,
+          totalPrice: costSummary.fixedPriceTotal,
+          customOfferCount: costSummary.customOfferCount,
         });
       }
 
@@ -100,37 +94,39 @@ const Dashboard = () => {
         .maybeSingle();
       
       if (foodPlanData?.selections && Array.isArray(foodPlanData.selections)) {
-        let fullBoardDays = 0;
-        let breakfastOnlyDays = 0;
-        let customDays = 0;
+        const selections = foodPlanData.selections as unknown as FoodDaySelection[];
+        const diet = foodPlanData.diet_preference as DietPreference | null;
+        const guestsCount = profile?.guests_count || 1;
         
-        (foodPlanData.selections as any[]).forEach((sel: any) => {
-          if (sel.fullBoard) {
-            fullBoardDays++;
-          } else if (sel.breakfast && !sel.lunch && !sel.dinner) {
-            breakfastOnlyDays++;
-          } else if (sel.breakfast || sel.lunch || sel.dinner) {
-            customDays++;
-          }
-        });
+        const costSummary = calculateFoodCost(selections, diet, guestsCount);
         
         setFoodData({ 
-          fullBoardDays, 
-          breakfastOnlyDays, 
-          customDays,
+          fullBoardDays: costSummary.fullBoardDays, 
+          breakfastOnlyDays: costSummary.breakfastCount,
+          customDays: costSummary.lunchCount + costSummary.dinnerCount > 0 ? 1 : 0,
           dietPreference: foodPlanData.diet_preference,
+          totalCost: costSummary.grandTotal,
         });
       }
     };
 
     fetchSummaryData();
-  }, [user, toolStatuses]);
+  }, [user, toolStatuses, profile?.guests_count]);
 
   const handleSubmitInformation = async () => {
     if (!profile || !hasDatesSet) {
       toast({
         title: 'Missing information',
         description: 'Please set your check-in and check-out dates before submitting.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!profile.guests_count || profile.guests_count < 1) {
+      toast({
+        title: 'Missing information',
+        description: 'Please specify the number of guests.',
         variant: 'destructive',
       });
       return;
@@ -145,7 +141,7 @@ const Dashboard = () => {
       // Send summary email via edge function
       const response = await supabase.functions.invoke('send-guest-summary', {
         body: {
-          fullName: profile.full_name,
+          fullName: profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
           email: profile.email,
           checkInDate: profile.check_in_date,
           checkOutDate: profile.check_out_date,
@@ -192,16 +188,24 @@ const Dashboard = () => {
     );
   }
 
+  const displayName = profile.first_name || profile.full_name?.split(' ')[0] || '';
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <GuestAreaHeader />
+
+      {/* Profile Completion Modal */}
+      <ProfileCompletionModal
+        isOpen={needsProfileCompletion}
+        onComplete={completeProfile}
+      />
 
       <main className="container mx-auto px-4 py-8 flex-1">
         <div className="max-w-4xl mx-auto space-y-8 animate-fade-up">
           {/* Welcome */}
           <div className="text-center">
             <h1 className="text-3xl md:text-4xl mb-2">
-              Welcome{profile.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}
+              {displayName ? `Hi, ${displayName}` : 'Welcome'}
             </h1>
             <p className="text-muted-foreground">
               Manage your stay at Quinta do Amor
@@ -216,10 +220,9 @@ const Dashboard = () => {
             checkInDate={profile.check_in_date}
             checkOutDate={profile.check_out_date}
             guestsCount={profile.guests_count}
-            onSave={async (checkIn, checkOut, guests) => {
-              const success = await updateStayInfo(checkIn, checkOut, guests);
-              return success;
-            }}
+            onCheckInChange={updateCheckInDate}
+            onCheckOutChange={updateCheckOutDate}
+            onGuestsCountChange={updateGuestsCount}
           />
 
           {/* Section 2: Tool Tiles */}

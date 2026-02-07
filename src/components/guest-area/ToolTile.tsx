@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { BedDouble, Car, Utensils, FileText, ChevronRight } from 'lucide-react';
 import type { ToolStatus } from '@/types/guest';
@@ -47,9 +46,9 @@ export function ToolTile({ title, description, icon, status, href, disabled }: T
   return (
     <Link 
       to={disabled ? '#' : href}
-      className={`block ${disabled ? 'pointer-events-none opacity-60' : ''}`}
+      className={`block h-full ${disabled ? 'pointer-events-none opacity-60' : ''}`}
     >
-      <div className="bg-card rounded-2xl border border-border p-5 transition-all hover:shadow-md hover:border-primary/30 group">
+      <div className="bg-card rounded-2xl border border-border p-5 transition-all hover:shadow-md hover:border-primary/30 group h-full flex flex-col">
         <div className="flex items-start justify-between mb-3">
           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
             <Icon className="w-6 h-6 text-primary" />
@@ -65,11 +64,11 @@ export function ToolTile({ title, description, icon, status, href, disabled }: T
         <h3 className="text-lg font-medium mb-1 group-hover:text-primary transition-colors">
           {title}
         </h3>
-        <p className="text-sm text-muted-foreground mb-3">
+        <p className="text-sm text-muted-foreground mb-3 flex-1">
           {description}
         </p>
         
-        <div className="flex items-center text-sm text-primary font-medium">
+        <div className="flex items-center text-sm text-primary font-medium mt-auto">
           {displayStatus === 'not_set' ? 'Set up' : 'View / Edit'}
           <ChevronRight className="w-4 h-4 ml-1" />
         </div>

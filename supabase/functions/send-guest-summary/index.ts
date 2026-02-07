@@ -34,6 +34,7 @@ interface GuestSummaryPayload {
     breakfastOnlyDays: number;
     customDays: number;
     dietPreference?: string | null;
+    totalCost?: number;
   } | null;
 }
 
@@ -65,6 +66,8 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
         .not-set { color: #9ca3af; font-style: italic; }
         .footer { text-align: center; color: #6b7280; font-size: 12px; padding: 20px; }
         .guest-info { background: #f6efea; padding: 12px; border-radius: 6px; margin-bottom: 16px; }
+        .cost-highlight { background: #f0fdf4; padding: 8px 12px; border-radius: 6px; margin-top: 8px; }
+        .cost-value { color: #16a34a; font-weight: 600; }
       </style>
     </head>
     <body>
@@ -134,14 +137,14 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
           </div>
           ${transportation.totalPrice > 0 ? `
           <div class="row">
-            <span class="label">Estimated total</span>
-            <span class="value">€${transportation.totalPrice}</span>
+            <span class="label">Estimated total (fixed-price)</span>
+            <span class="value cost-value">€${transportation.totalPrice}</span>
           </div>
           ` : ''}
           ${transportation.customOfferCount > 0 ? `
           <div class="row">
-            <span class="label">Custom pricing</span>
-            <span class="value">${transportation.customOfferCount} trip${transportation.customOfferCount !== 1 ? 's' : ''}</span>
+            <span class="label">Custom offer trips</span>
+            <span class="value">${transportation.customOfferCount}</span>
           </div>
           ` : ''}
           ` : '<p class="not-set">Not set</p>'}
@@ -173,6 +176,14 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
           <div class="row">
             <span class="label">Custom selection</span>
             <span class="value">${food.customDays} day${food.customDays !== 1 ? 's' : ''}</span>
+          </div>
+          ` : ''}
+          ${food.totalCost !== undefined && food.totalCost > 0 ? `
+          <div class="cost-highlight">
+            <div class="row" style="border: none; padding: 0;">
+              <span class="label"><strong>Estimated total food cost</strong></span>
+              <span class="value cost-value">€${food.totalCost}</span>
+            </div>
           </div>
           ` : ''}
           ${!food.dietPreference && food.fullBoardDays === 0 && food.breakfastOnlyDays === 0 && food.customDays === 0 ? '<p class="not-set">No selections made</p>' : ''}

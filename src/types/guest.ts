@@ -4,6 +4,8 @@ export interface GuestProfile {
   id: string;
   user_id: string;
   full_name: string;
+  first_name: string | null;
+  last_name: string | null;
   email: string;
   check_in_date: string | null;
   check_out_date: string | null;

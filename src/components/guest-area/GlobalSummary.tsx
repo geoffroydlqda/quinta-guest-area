@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ChevronRight, BedDouble, Car, Utensils, Users } from 'lucide-react';
+import { ChevronRight, BedDouble, Car, Utensils, Users, Euro } from 'lucide-react';
 import type { ToolStatuses, GuestProfile } from '@/types/guest';
 
 interface GlobalSummaryProps {
@@ -22,6 +22,7 @@ interface GlobalSummaryProps {
     breakfastOnlyDays: number;
     customDays: number;
     dietPreference?: string | null;
+    totalCost?: number;
   };
 }
 
@@ -110,12 +111,23 @@ export function GlobalSummary({
           </div>
           {hasTransportation ? (
             <div className="text-sm text-muted-foreground pl-6 space-y-1">
-              <div>{transportationData!.tripCount} trip{transportationData!.tripCount !== 1 ? 's' : ''} scheduled</div>
+              <div className="flex justify-between">
+                <span>{transportationData!.tripCount} trip{transportationData!.tripCount !== 1 ? 's' : ''} scheduled</span>
+              </div>
               {transportationData!.totalPrice > 0 && (
-                <div>Estimated total: €{transportationData!.totalPrice}</div>
+                <div className="flex justify-between items-center">
+                  <span className="flex items-center gap-1">
+                    <Euro className="w-3 h-3" />
+                    Estimated total (fixed-price)
+                  </span>
+                  <span className="font-medium text-foreground">€{transportationData!.totalPrice}</span>
+                </div>
               )}
               {transportationData!.customOfferCount > 0 && (
-                <div>{transportationData!.customOfferCount} trip{transportationData!.customOfferCount !== 1 ? 's' : ''} with custom pricing</div>
+                <div className="flex justify-between">
+                  <span>Custom offer trips</span>
+                  <span className="font-medium text-foreground">{transportationData!.customOfferCount}</span>
+                </div>
               )}
             </div>
           ) : (
@@ -146,6 +158,15 @@ export function GlobalSummary({
               )}
               {foodData!.customDays > 0 && (
                 <div>Custom selection: {foodData!.customDays} day{foodData!.customDays !== 1 ? 's' : ''}</div>
+              )}
+              {foodData!.totalCost !== undefined && foodData!.totalCost > 0 && (
+                <div className="flex justify-between items-center mt-2 pt-2 border-t border-border">
+                  <span className="flex items-center gap-1">
+                    <Euro className="w-3 h-3" />
+                    Estimated total
+                  </span>
+                  <span className="font-medium text-foreground">€{foodData!.totalCost}</span>
+                </div>
               )}
             </div>
           ) : (

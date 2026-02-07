@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { useTransportation } from '@/hooks/useTransportation';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { isEditingLocked } from '@/lib/editLock';
+import { calculateTransportationCost } from '@/lib/transportationPricing';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
+import { TransportationCostSummaryCard } from '@/components/guest-area/TransportationCostSummary';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -46,6 +48,14 @@ const Transportation = () => {
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
   const isLocked = isEditingLocked(profile?.check_in_date || null);
 
+  // Calculate cost summary
+  const costSummary = useMemo(() => {
+    return calculateTransportationCost(trips);
+  }, [trips]);
+
+  // Default trip date to check-in date if available
+  const defaultTripDate = profile?.check_in_date || new Date().toISOString().split('T')[0];
+
   const [showAddTrip, setShowAddTrip] = useState(false);
   const [newTrip, setNewTrip] = useState({
     trip_direction: 'To Quinta' as 'To Quinta' | 'From Quinta',
@@ -53,7 +63,7 @@ const Transportation = () => {
     pickup_custom: '',
     dropoff_location: 'Quinta do Amor',
     dropoff_custom: '',
-    trip_date: '',
+    trip_date: defaultTripDate,
     trip_time: '',
     passengers_count: 1,
     taxi_size: '4 seats' as '4 seats' | '6 seats',
@@ -65,6 +75,13 @@ const Transportation = () => {
       navigate('/');
     }
   }, [user, authLoading, navigate]);
+
+  // Update default date when check-in changes
+  useEffect(() => {
+    if (profile?.check_in_date) {
+      setNewTrip(prev => ({ ...prev, trip_date: profile.check_in_date! }));
+    }
+  }, [profile?.check_in_date]);
 
   // Trigger auto-save when notes change
   useEffect(() => {
@@ -98,7 +115,7 @@ const Transportation = () => {
       pickup_custom: '',
       dropoff_location: 'Quinta do Amor',
       dropoff_custom: '',
-      trip_date: '',
+      trip_date: profile?.check_in_date || new Date().toISOString().split('T')[0],
       trip_time: '',
       passengers_count: 1,
       taxi_size: '4 seats',
@@ -138,17 +155,17 @@ const Transportation = () => {
           <AutoSaveIndicator status={saveStatus} />
         </div>
 
-        {/* Driver Intro Card */}
+        {/* Driver Intro Card - Bigger image */}
         <div className="rounded-2xl bg-card border border-border p-6">
-          <div className="flex items-start gap-4">
-            <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 bg-muted">
+          <div className="flex items-start gap-5">
+            <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden flex-shrink-0 bg-muted border-4 border-primary/20">
               <img 
                 src={driverImage} 
                 alt="Luis" 
                 className="w-full h-full object-cover"
               />
             </div>
-            <div>
+            <div className="flex-1">
               <p className="text-foreground">
                 <strong>Luis</strong> and his team will take care of the transportation of your guests and yourselves during your stay.
                 They speak perfect English and will ensure you a smooth ride.
@@ -360,6 +377,9 @@ const Transportation = () => {
             rows={3}
           />
         </div>
+
+        {/* Cost Summary */}
+        <TransportationCostSummaryCard summary={costSummary} />
       </div>
     </ToolPageLayout>
   );
@@ -489,7 +509,7 @@ function TripCard({
                 </div>
               </div>
             ) : (
-              <Button variant="ghost" size="sm" onClick={() => setShowAddPassenger(true)} className="gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowAddPassenger(true)} className="gap-1">
                 <UserPlus className="w-4 h-4" />
                 Add passenger
               </Button>

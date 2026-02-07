@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { format, parseISO, isAfter } from 'date-fns';
 import { Calendar as CalendarIcon, AlertCircle, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,52 +13,101 @@ interface StayDatesPickerProps {
   checkInDate: string | null;
   checkOutDate: string | null;
   guestsCount: number;
-  onSave: (checkIn: Date | null, checkOut: Date | null, guestsCount: number) => Promise<boolean>;
+  onCheckInChange: (date: Date | null) => Promise<boolean>;
+  onCheckOutChange: (date: Date | null) => Promise<boolean>;
+  onGuestsCountChange: (count: number) => Promise<boolean>;
 }
 
-export function StayDatesPicker({ checkInDate, checkOutDate, guestsCount, onSave }: StayDatesPickerProps) {
-  const [checkIn, setCheckIn] = useState<Date | undefined>(
+export function StayDatesPicker({ 
+  checkInDate, 
+  checkOutDate, 
+  guestsCount,
+  onCheckInChange,
+  onCheckOutChange,
+  onGuestsCountChange,
+}: StayDatesPickerProps) {
+  // Local state for UI - sync from props
+  const [localCheckIn, setLocalCheckIn] = useState<Date | undefined>(
     checkInDate ? parseISO(checkInDate) : undefined
   );
-  const [checkOut, setCheckOut] = useState<Date | undefined>(
+  const [localCheckOut, setLocalCheckOut] = useState<Date | undefined>(
     checkOutDate ? parseISO(checkOutDate) : undefined
   );
-  const [guests, setGuests] = useState(guestsCount || 1);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [localGuests, setLocalGuests] = useState(guestsCount || 1);
+  
+  const [isSavingCheckIn, setIsSavingCheckIn] = useState(false);
+  const [isSavingCheckOut, setIsSavingCheckOut] = useState(false);
+  const [isSavingGuests, setIsSavingGuests] = useState(false);
+  
+  const guestsDebounceRef = useRef<NodeJS.Timeout>();
 
   const isLocked = isEditingLocked(checkInDate);
-
-  useEffect(() => {
-    if (checkInDate) setCheckIn(parseISO(checkInDate));
-    if (checkOutDate) setCheckOut(parseISO(checkOutDate));
-    if (guestsCount) setGuests(guestsCount);
-  }, [checkInDate, checkOutDate, guestsCount]);
-
-  useEffect(() => {
-    const currentCheckIn = checkInDate ? parseISO(checkInDate) : undefined;
-    const currentCheckOut = checkOutDate ? parseISO(checkOutDate) : undefined;
-    
-    const changed = 
-      (checkIn?.toISOString() !== currentCheckIn?.toISOString()) ||
-      (checkOut?.toISOString() !== currentCheckOut?.toISOString()) ||
-      (guests !== guestsCount);
-    
-    setHasChanges(changed);
-  }, [checkIn, checkOut, guests, checkInDate, checkOutDate, guestsCount]);
-
-  const isValid = checkIn && checkOut && isAfter(checkOut, checkIn) && guests >= 1 && guests <= 21;
   const hasDates = !!(checkInDate && checkOutDate);
 
-  const handleSave = async () => {
-    if (!checkIn || !checkOut || isLocked) return;
-    setIsSaving(true);
-    const success = await onSave(checkIn, checkOut, guests);
-    if (success) {
-      setHasChanges(false);
+  // Sync from props when they change externally
+  useEffect(() => {
+    if (checkInDate) {
+      setLocalCheckIn(parseISO(checkInDate));
     }
-    setIsSaving(false);
+  }, [checkInDate]);
+
+  useEffect(() => {
+    if (checkOutDate) {
+      setLocalCheckOut(parseISO(checkOutDate));
+    }
+  }, [checkOutDate]);
+
+  useEffect(() => {
+    setLocalGuests(guestsCount || 1);
+  }, [guestsCount]);
+
+  // Handle check-in date change
+  const handleCheckInSelect = async (date: Date | undefined) => {
+    if (!date || isLocked) return;
+    
+    setLocalCheckIn(date);
+    
+    // If checkout is before or on the new checkin, clear it
+    if (localCheckOut && localCheckOut <= date) {
+      setLocalCheckOut(undefined);
+    }
+    
+    setIsSavingCheckIn(true);
+    await onCheckInChange(date);
+    setIsSavingCheckIn(false);
   };
+
+  // Handle check-out date change
+  const handleCheckOutSelect = async (date: Date | undefined) => {
+    if (!date || isLocked) return;
+    
+    setLocalCheckOut(date);
+    setIsSavingCheckOut(true);
+    await onCheckOutChange(date);
+    setIsSavingCheckOut(false);
+  };
+
+  // Handle guests count change with debounce
+  const handleGuestsChange = (value: number) => {
+    if (isLocked) return;
+    
+    const clampedValue = Math.min(21, Math.max(1, value));
+    setLocalGuests(clampedValue);
+    
+    // Clear existing timeout
+    if (guestsDebounceRef.current) {
+      clearTimeout(guestsDebounceRef.current);
+    }
+    
+    // Debounce the save
+    guestsDebounceRef.current = setTimeout(async () => {
+      setIsSavingGuests(true);
+      await onGuestsCountChange(clampedValue);
+      setIsSavingGuests(false);
+    }, 800);
+  };
+
+  const isValid = localCheckIn && localCheckOut && isAfter(localCheckOut, localCheckIn) && localGuests >= 1 && localGuests <= 21;
 
   return (
     <div className="bg-card rounded-2xl border border-border p-6">
@@ -100,6 +149,7 @@ export function StayDatesPicker({ checkInDate, checkOutDate, guestsCount, onSave
         <div>
           <Label className="text-sm text-muted-foreground mb-2 block">
             Check-in <span className="text-destructive">*</span>
+            {isSavingCheckIn && <Loader2 className="w-3 h-3 inline ml-2 animate-spin" />}
           </Label>
           <Popover>
             <PopoverTrigger asChild>
@@ -108,23 +158,18 @@ export function StayDatesPicker({ checkInDate, checkOutDate, guestsCount, onSave
                 disabled={isLocked}
                 className={cn(
                   "w-full justify-start text-left font-normal h-11",
-                  !checkIn && "text-muted-foreground"
+                  !localCheckIn && "text-muted-foreground"
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {checkIn ? format(checkIn, "PPP") : "Select date"}
+                {localCheckIn ? format(localCheckIn, "PPP") : "Select date"}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar
                 mode="single"
-                selected={checkIn}
-                onSelect={(date) => {
-                  setCheckIn(date);
-                  if (date && checkOut && checkOut <= date) {
-                    setCheckOut(undefined);
-                  }
-                }}
+                selected={localCheckIn}
+                onSelect={handleCheckInSelect}
                 disabled={(date) => date < new Date()}
                 initialFocus
                 className="p-3 pointer-events-auto"
@@ -137,6 +182,7 @@ export function StayDatesPicker({ checkInDate, checkOutDate, guestsCount, onSave
         <div>
           <Label className="text-sm text-muted-foreground mb-2 block">
             Check-out <span className="text-destructive">*</span>
+            {isSavingCheckOut && <Loader2 className="w-3 h-3 inline ml-2 animate-spin" />}
           </Label>
           <Popover>
             <PopoverTrigger asChild>
@@ -145,19 +191,19 @@ export function StayDatesPicker({ checkInDate, checkOutDate, guestsCount, onSave
                 disabled={isLocked}
                 className={cn(
                   "w-full justify-start text-left font-normal h-11",
-                  !checkOut && "text-muted-foreground"
+                  !localCheckOut && "text-muted-foreground"
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {checkOut ? format(checkOut, "PPP") : "Select date"}
+                {localCheckOut ? format(localCheckOut, "PPP") : "Select date"}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar
                 mode="single"
-                selected={checkOut}
-                onSelect={setCheckOut}
-                disabled={(date) => (checkIn ? date <= checkIn : date < new Date())}
+                selected={localCheckOut}
+                onSelect={handleCheckOutSelect}
+                disabled={(date) => (localCheckIn ? date <= localCheckIn : date < new Date())}
                 initialFocus
                 className="p-3 pointer-events-auto"
               />
@@ -169,13 +215,14 @@ export function StayDatesPicker({ checkInDate, checkOutDate, guestsCount, onSave
         <div>
           <Label className="text-sm text-muted-foreground mb-2 block">
             Guests <span className="text-destructive">*</span>
+            {isSavingGuests && <Loader2 className="w-3 h-3 inline ml-2 animate-spin" />}
           </Label>
           <Input
             type="number"
             min={1}
             max={21}
-            value={guests}
-            onChange={(e) => setGuests(Math.min(21, Math.max(1, parseInt(e.target.value) || 1)))}
+            value={localGuests}
+            onChange={(e) => handleGuestsChange(parseInt(e.target.value) || 1)}
             disabled={isLocked}
             className="h-11"
             placeholder="Number of guests"
@@ -183,15 +230,7 @@ export function StayDatesPicker({ checkInDate, checkOutDate, guestsCount, onSave
         </div>
       </div>
 
-      {/* Validation / Save */}
-      {hasChanges && isValid && !isLocked && (
-        <Button onClick={handleSave} disabled={isSaving} className="w-full sm:w-auto">
-          {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          {isSaving ? 'Saving...' : 'Save dates'}
-        </Button>
-      )}
-
-      {checkIn && checkOut && !isAfter(checkOut, checkIn) && (
+      {localCheckIn && localCheckOut && !isAfter(localCheckOut, localCheckIn) && (
         <div className="flex items-center gap-2 text-destructive text-sm mt-2">
           <AlertCircle className="w-4 h-4" />
           Check-out must be after check-in
