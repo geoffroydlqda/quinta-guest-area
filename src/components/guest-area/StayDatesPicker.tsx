@@ -43,6 +43,8 @@ export function StayDatesPicker({
 
   const isLocked = isEditingLocked(checkInDate);
   const hasDates = !!(checkInDate && checkOutDate);
+  
+  // Dates remain editable even when locked; only guests_count is locked
 
   // Sync from props when they change externally
   useEffect(() => {
@@ -61,9 +63,9 @@ export function StayDatesPicker({
     setLocalGuests(guestsCount || 1);
   }, [guestsCount]);
 
-  // Handle check-in date change
+  // Handle check-in date change - dates always editable (even when locked)
   const handleCheckInSelect = async (date: Date | undefined) => {
-    if (!date || isLocked) return;
+    if (!date) return;
     
     setLocalCheckIn(date);
     
@@ -77,9 +79,9 @@ export function StayDatesPicker({
     setIsSavingCheckIn(false);
   };
 
-  // Handle check-out date change
+  // Handle check-out date change - dates always editable (even when locked)
   const handleCheckOutSelect = async (date: Date | undefined) => {
-    if (!date || isLocked) return;
+    if (!date) return;
     
     setLocalCheckOut(date);
     setIsSavingCheckOut(true);
@@ -127,19 +129,12 @@ export function StayDatesPicker({
       </div>
 
       {isLocked && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-4 mb-4">
+        <div className="rounded-xl bg-muted/50 border border-border p-4 mb-4">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-destructive">Edits are locked</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Edits are locked within 5 days of check-in. Please contact{' '}
-                <a href="mailto:hello@quintamor.com" className="text-primary hover:underline">
-                  hello@quintamor.com
-                </a>
-                .
-              </p>
-            </div>
+            <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-muted-foreground">
+              You can still change your stay dates. Other edits are locked within 5 days of check-in.
+            </p>
           </div>
         </div>
       )}
@@ -155,7 +150,6 @@ export function StayDatesPicker({
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
-                disabled={isLocked}
                 className={cn(
                   "w-full justify-start text-left font-normal h-11",
                   !localCheckIn && "text-muted-foreground"
@@ -188,7 +182,6 @@ export function StayDatesPicker({
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
-                disabled={isLocked}
                 className={cn(
                   "w-full justify-start text-left font-normal h-11",
                   !localCheckOut && "text-muted-foreground"
