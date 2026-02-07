@@ -16,6 +16,7 @@ export function useGuestProfile() {
     documentation: false,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [needsProfileCompletion, setNeedsProfileCompletion] = useState(false);
 
   // Load guest profile and tool statuses
   const loadProfile = useCallback(async () => {
@@ -54,6 +55,8 @@ export function useGuestProfile() {
         id: profileData.id,
         user_id: profileData.user_id,
         full_name: profileData.full_name,
+        first_name: profileData.first_name || null,
+        last_name: profileData.last_name || null,
         email: profileData.email,
         check_in_date: profileData.check_in_date,
         check_out_date: profileData.check_out_date,
@@ -65,6 +68,9 @@ export function useGuestProfile() {
       };
       
       setProfile(typedProfile);
+      
+      // Check if profile needs completion (no first/last name)
+      setNeedsProfileCompletion(!typedProfile.first_name || !typedProfile.last_name);
       
       // Fetch room setup status
       const { data: roomData } = await supabase
@@ -99,10 +105,13 @@ export function useGuestProfile() {
         .eq('user_id', user.id)
         .maybeSingle();
       
+      // Determine tool statuses - show "submitted" if overall is submitted
+      const isSubmitted = typedProfile.status_overall === 'submitted';
+      
       setToolStatuses({
-        roomSetup: roomData ? 'draft' : 'not_set',
-        transportation: tripData && tripData.length > 0 ? 'draft' : 'not_set',
-        food: hasFood ? 'draft' : 'not_set',
+        roomSetup: roomData ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
+        transportation: tripData && tripData.length > 0 ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
+        food: hasFood ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
         documentation: !!docsData,
       });
       
@@ -124,7 +133,109 @@ export function useGuestProfile() {
     }
   }, [user, loadProfile]);
 
-  // Update stay dates and guests count
+  // Complete profile with first/last name
+  const completeProfile = useCallback(async (firstName: string, lastName: string) => {
+    if (!user || !profile) return false;
+    
+    try {
+      const fullName = `${firstName} ${lastName}`;
+      const { error } = await supabase
+        .from('guest_profiles')
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          full_name: fullName,
+        })
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      
+      setProfile(prev => prev ? {
+        ...prev,
+        first_name: firstName,
+        last_name: lastName,
+        full_name: fullName,
+      } : null);
+      
+      setNeedsProfileCompletion(false);
+      return true;
+    } catch (error: any) {
+      console.error('Error completing profile:', error);
+      return false;
+    }
+  }, [user, profile]);
+
+  // Update individual field - patch update
+  const updateCheckInDate = useCallback(async (checkIn: Date | null) => {
+    if (!user || !profile) return false;
+    
+    try {
+      const { error } = await supabase
+        .from('guest_profiles')
+        .update({ check_in_date: checkIn?.toISOString().split('T')[0] || null })
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      
+      setProfile(prev => prev ? {
+        ...prev,
+        check_in_date: checkIn?.toISOString().split('T')[0] || null,
+      } : null);
+      
+      return true;
+    } catch (error: any) {
+      console.error('Error updating check-in date:', error);
+      return false;
+    }
+  }, [user, profile]);
+
+  const updateCheckOutDate = useCallback(async (checkOut: Date | null) => {
+    if (!user || !profile) return false;
+    
+    try {
+      const { error } = await supabase
+        .from('guest_profiles')
+        .update({ check_out_date: checkOut?.toISOString().split('T')[0] || null })
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      
+      setProfile(prev => prev ? {
+        ...prev,
+        check_out_date: checkOut?.toISOString().split('T')[0] || null,
+      } : null);
+      
+      return true;
+    } catch (error: any) {
+      console.error('Error updating check-out date:', error);
+      return false;
+    }
+  }, [user, profile]);
+
+  const updateGuestsCount = useCallback(async (guestsCount: number) => {
+    if (!user || !profile) return false;
+    
+    try {
+      const { error } = await supabase
+        .from('guest_profiles')
+        .update({ guests_count: guestsCount })
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      
+      setProfile(prev => prev ? {
+        ...prev,
+        guests_count: guestsCount,
+      } : null);
+      
+      return true;
+    } catch (error: any) {
+      console.error('Error updating guests count:', error);
+      return false;
+    }
+  }, [user, profile]);
+
+  // Legacy combined update (still used for save button)
   const updateStayInfo = useCallback(async (
     checkIn: Date | null, 
     checkOut: Date | null,
@@ -228,8 +339,13 @@ export function useGuestProfile() {
     toolStatuses,
     isLoading,
     hasDatesSet,
+    needsProfileCompletion,
     updateStayInfo,
+    updateCheckInDate,
+    updateCheckOutDate,
+    updateGuestsCount,
     updateProfile,
+    completeProfile,
     submitProfile,
     refreshProfile: loadProfile,
   };

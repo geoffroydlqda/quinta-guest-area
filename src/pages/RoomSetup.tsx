@@ -8,6 +8,7 @@ import { isEditingLocked } from '@/lib/editLock';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
+import { RoomConfigWarning } from '@/components/guest-area/RoomConfigWarning';
 import { RoomTypeCard } from '@/components/room-planner/RoomTypeCard';
 import { RoomStats } from '@/components/room-planner/RoomStats';
 import { MapLightbox } from '@/components/room-planner/MapLightbox';
@@ -19,6 +20,8 @@ import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
 import roomKingImage from '@/assets/room-king.jpg';
 import roomTwinsImage from '@/assets/room-queen.jpg';
 import roomQueenImage from '@/assets/room-twins.jpg';
+
+const TOTAL_ROOMS = 11; // 2 King (fixed) + 6 shared + 3 ensuite
 
 const RoomSetup = () => {
   const { user, isLoading: authLoading } = useAuth();
@@ -51,6 +54,9 @@ const RoomSetup = () => {
   const remainingShared = MAX_SHARED_ROOMS - totalShared;
   const remainingEnsuite = MAX_ENSUITE_ROOMS - totalEnsuite;
 
+  // Total configured rooms (2 King fixed + shared + ensuite)
+  const totalConfigured = 2 + totalShared + totalEnsuite;
+
   // Redirect if not logged in
   useEffect(() => {
     if (!authLoading && !user) {
@@ -80,6 +86,9 @@ const RoomSetup = () => {
     >
       <div className="max-w-4xl mx-auto space-y-6">
         {isLocked && <EditLockBanner />}
+
+        {/* Room Configuration Warning Banner */}
+        <RoomConfigWarning totalConfigured={totalConfigured} targetTotal={TOTAL_ROOMS} />
 
         {/* Auto-save indicator */}
         <div className="flex justify-end">

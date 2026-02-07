@@ -1,27 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { useFoodPlan } from '@/hooks/useFoodPlan';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { isEditingLocked } from '@/lib/editLock';
+import { calculateFoodCost, DIET_OPTIONS_WITH_PRICES, BREAKFAST_PRICE, getLunchPrice, getDinnerPrice, getFullBoardPrice } from '@/lib/foodPricing';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
+import { FoodCostSummaryCard } from '@/components/guest-area/FoodCostSummary';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Loader2, AlertCircle, Check } from 'lucide-react';
+import { Loader2, AlertCircle, Check, Info } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { DietPreference } from '@/types/guest';
-
-const DIET_OPTIONS: { value: DietPreference; label: string }[] = [
-  { value: 'Vegetarian', label: 'Vegetarian' },
-  { value: 'Meat or fish for dinner', label: 'Meat or fish for dinner' },
-  { value: 'Meat or fish for dinner and lunch', label: 'Meat or fish for dinner and lunch' },
-];
 
 const Food = () => {
   const { user, isLoading: authLoading } = useAuth();
@@ -36,11 +32,22 @@ const Food = () => {
     updateDietPreference,
     updateNotes,
     autoSave,
-    summary,
   } = useFoodPlan(profile?.check_in_date || null, profile?.check_out_date || null);
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
   const isLocked = isEditingLocked(profile?.check_in_date || null);
+
+  // Calculate cost summary
+  const costSummary = useMemo(() => {
+    if (!foodPlan) {
+      return { totalPerPerson: 0, grandTotal: 0, fullBoardDays: 0, breakfastCount: 0, lunchCount: 0, dinnerCount: 0, guestsCount: 1 };
+    }
+    return calculateFoodCost(
+      foodPlan.selections,
+      foodPlan.diet_preference,
+      profile?.guests_count || 1
+    );
+  }, [foodPlan?.selections, foodPlan?.diet_preference, profile?.guests_count]);
 
   // Redirect if not logged in
   useEffect(() => {
@@ -102,21 +109,25 @@ const Food = () => {
           <AutoSaveIndicator status={saveStatus} />
         </div>
 
-        {/* Diet Preference */}
+        {/* Diet Preference with Prices */}
         <div className="bg-card rounded-2xl border border-border p-6">
-          <Label className="text-base font-medium mb-4 block">Diet preference</Label>
+          <Label className="text-base font-medium mb-2 block">Diet preference</Label>
+          <p className="text-sm text-muted-foreground mb-4">Prices are per day per person.</p>
           <RadioGroup
             value={foodPlan.diet_preference || ''}
             onValueChange={(value) => !isLocked && updateDietPreference(value as DietPreference)}
             disabled={isLocked}
             className="space-y-3"
           >
-            {DIET_OPTIONS.map((option) => (
-              <div key={option.value} className="flex items-center space-x-3">
-                <RadioGroupItem value={option.value} id={option.value} disabled={isLocked} />
-                <Label htmlFor={option.value} className="font-normal cursor-pointer">
-                  {option.label}
-                </Label>
+            {DIET_OPTIONS_WITH_PRICES.map((option) => (
+              <div key={option.value} className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <RadioGroupItem value={option.value} id={option.value} disabled={isLocked} />
+                  <Label htmlFor={option.value} className="font-normal cursor-pointer">
+                    {option.label}
+                  </Label>
+                </div>
+                <span className="text-sm font-medium text-primary">€{option.price}/day</span>
               </div>
             ))}
           </RadioGroup>
@@ -125,16 +136,16 @@ const Food = () => {
         {/* Summary Stats */}
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-card rounded-xl border border-border p-4 text-center">
-            <p className="text-2xl font-medium">{summary.fullBoardDays}</p>
+            <p className="text-2xl font-medium">{costSummary.fullBoardDays}</p>
             <p className="text-sm text-muted-foreground">Full board days</p>
           </div>
           <div className="bg-card rounded-xl border border-border p-4 text-center">
-            <p className="text-2xl font-medium">{summary.breakfastOnlyDays}</p>
+            <p className="text-2xl font-medium">{costSummary.breakfastCount}</p>
             <p className="text-sm text-muted-foreground">Breakfast only</p>
           </div>
           <div className="bg-card rounded-xl border border-border p-4 text-center">
-            <p className="text-2xl font-medium">{summary.customDays}</p>
-            <p className="text-sm text-muted-foreground">Custom selection</p>
+            <p className="text-2xl font-medium">{costSummary.lunchCount + costSummary.dinnerCount}</p>
+            <p className="text-sm text-muted-foreground">Other meals</p>
           </div>
         </div>
 
@@ -145,10 +156,28 @@ const Food = () => {
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left p-4 font-medium">Date</th>
-                  <th className="text-center p-4 font-medium">Full Board</th>
-                  <th className="text-center p-4 font-medium">Breakfast</th>
-                  <th className="text-center p-4 font-medium">Lunch</th>
-                  <th className="text-center p-4 font-medium">Dinner</th>
+                  <th className="text-center p-4 font-medium">
+                    <div>Full Board</div>
+                    <div className="text-xs font-normal text-muted-foreground">
+                      €{getFullBoardPrice(foodPlan.diet_preference)}
+                    </div>
+                  </th>
+                  <th className="text-center p-4 font-medium">
+                    <div>Breakfast</div>
+                    <div className="text-xs font-normal text-muted-foreground">€{BREAKFAST_PRICE}</div>
+                  </th>
+                  <th className="text-center p-4 font-medium">
+                    <div>Lunch</div>
+                    <div className="text-xs font-normal text-muted-foreground">
+                      €{getLunchPrice(foodPlan.diet_preference)}
+                    </div>
+                  </th>
+                  <th className="text-center p-4 font-medium">
+                    <div>Dinner</div>
+                    <div className="text-xs font-normal text-muted-foreground">
+                      €{getDinnerPrice(foodPlan.diet_preference)}
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -216,6 +245,16 @@ const Food = () => {
           <span>• Full board = all 3 meals</span>
         </div>
 
+        {/* Dinner Note */}
+        <div className="rounded-xl bg-primary/10 border border-primary/30 p-4">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+            <p className="text-sm">
+              A sweet treat is always served after dinner.
+            </p>
+          </div>
+        </div>
+
         {/* Notes */}
         <div>
           <Label>Notes (optional)</Label>
@@ -227,6 +266,9 @@ const Food = () => {
             rows={3}
           />
         </div>
+
+        {/* Cost Summary */}
+        <FoodCostSummaryCard summary={costSummary} />
       </div>
     </ToolPageLayout>
   );

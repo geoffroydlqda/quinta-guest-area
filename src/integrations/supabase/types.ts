@@ -71,9 +71,11 @@ export type Database = {
           check_out_date: string | null
           created_at: string
           email: string
+          first_name: string | null
           full_name: string
           guests_count: number | null
           id: string
+          last_name: string | null
           status_overall: string
           submitted_at: string | null
           updated_at: string
@@ -84,9 +86,11 @@ export type Database = {
           check_out_date?: string | null
           created_at?: string
           email: string
+          first_name?: string | null
           full_name: string
           guests_count?: number | null
           id?: string
+          last_name?: string | null
           status_overall?: string
           submitted_at?: string | null
           updated_at?: string
@@ -97,9 +101,11 @@ export type Database = {
           check_out_date?: string | null
           created_at?: string
           email?: string
+          first_name?: string | null
           full_name?: string
           guests_count?: number | null
           id?: string
+          last_name?: string | null
           status_overall?: string
           submitted_at?: string | null
           updated_at?: string
