@@ -1,147 +1,179 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
 import type { GuestProfile, ToolStatuses } from '@/types/guest';
+
+// Timeout for profile loading (8 seconds)
+const PROFILE_LOAD_TIMEOUT = 8000;
+
+interface ProfileLoadState {
+  profile: GuestProfile | null;
+  toolStatuses: ToolStatuses;
+  isLoading: boolean;
+  needsProfileCompletion: boolean;
+  error: string | null;
+  timedOut: boolean;
+}
 
 export function useGuestProfile() {
   const { user } = useAuth();
-  const { toast } = useToast();
   
-  const [profile, setProfile] = useState<GuestProfile | null>(null);
-  const [toolStatuses, setToolStatuses] = useState<ToolStatuses>({
-    roomSetup: 'not_set',
-    transportation: 'not_set',
-    food: 'not_set',
-    documentation: false,
+  const [state, setState] = useState<ProfileLoadState>({
+    profile: null,
+    toolStatuses: {
+      roomSetup: 'not_set',
+      transportation: 'not_set',
+      food: 'not_set',
+      documentation: false,
+    },
+    isLoading: true,
+    needsProfileCompletion: false,
+    error: null,
+    timedOut: false,
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [needsProfileCompletion, setNeedsProfileCompletion] = useState(false);
-  
-  // Track if we're currently creating a profile to prevent duplicate attempts
-  const isCreatingProfile = useRef(false);
 
-  // Ensure profile exists - use upsert for idempotency
-  const ensureProfileExists = useCallback(async (userId: string, email: string, metadata?: Record<string, any>) => {
-    if (isCreatingProfile.current) return null;
-    isCreatingProfile.current = true;
-    
+  // Guard to prevent multiple concurrent loads
+  const loadingRef = useRef(false);
+  const hasLoadedRef = useRef(false);
+  const currentUserIdRef = useRef<string | null>(null);
+
+  // Ensure profile exists via server-side edge function
+  const ensureProfileOnServer = useCallback(async (userId: string, metadata?: Record<string, any>) => {
     try {
-      // First try to get existing profile
-      const { data: existingProfile, error: selectError } = await supabase
-        .from('guest_profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-      
-      if (selectError) {
-        console.error('Error checking for existing profile:', selectError);
-      }
-      
-      if (existingProfile) {
-        isCreatingProfile.current = false;
-        return existingProfile;
-      }
-      
-      // Profile doesn't exist, create one using upsert (safe to repeat)
-      const firstName = metadata?.first_name || '';
-      const lastName = metadata?.last_name || '';
-      const fullName = metadata?.full_name || 
-        (firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName || '');
-      
-      const { data: newProfile, error: upsertError } = await supabase
-        .from('guest_profiles')
-        .upsert({
-          user_id: userId,
-          email: email,
-          full_name: fullName || '',
-          first_name: firstName || null,
-          last_name: lastName || null,
-          guests_count: 1,
-        }, {
-          onConflict: 'user_id',
-          ignoreDuplicates: false,
-        })
-        .select()
-        .single();
-      
-      if (upsertError) {
-        console.error('Error creating profile:', upsertError);
-        // Try one more time to fetch - maybe another process created it
-        const { data: retryProfile } = await supabase
-          .from('guest_profiles')
-          .select('*')
-          .eq('user_id', userId)
-          .maybeSingle();
-        
-        if (retryProfile) {
-          isCreatingProfile.current = false;
-          return retryProfile;
-        }
-        
-        isCreatingProfile.current = false;
+      const response = await supabase.functions.invoke('ensure-guest-profile', {
+        body: { metadata },
+      });
+
+      if (response.error) {
+        console.error('Error from ensure-guest-profile:', response.error);
         return null;
       }
-      
-      isCreatingProfile.current = false;
-      return newProfile;
+
+      return response.data?.profile || null;
     } catch (error) {
-      console.error('Error in ensureProfileExists:', error);
-      isCreatingProfile.current = false;
+      console.error('Failed to call ensure-guest-profile:', error);
       return null;
     }
   }, []);
 
-  // Load guest profile and tool statuses
+  // Fetch profile from database (after ensuring it exists)
+  const fetchProfile = useCallback(async (userId: string) => {
+    const { data, error } = await supabase
+      .from('guest_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching profile:', error);
+      return null;
+    }
+
+    return data;
+  }, []);
+
+  // Load tool statuses
+  const loadToolStatuses = useCallback(async (userId: string, profileStatus: 'draft' | 'submitted') => {
+    const isSubmitted = profileStatus === 'submitted';
+
+    // Fetch room setup status
+    const { data: roomData } = await supabase
+      .from('room_setups')
+      .select('status')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    // Fetch transportation trips
+    const { data: tripData } = await supabase
+      .from('transportation_trips')
+      .select('id')
+      .eq('user_id', userId);
+
+    // Fetch food plan
+    const { data: foodData } = await supabase
+      .from('food_plans')
+      .select('selections')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    // Check if food has any selections
+    const hasFood = foodData?.selections && Array.isArray(foodData.selections) &&
+      (foodData.selections as any[]).some((sel: any) =>
+        sel.fullBoard || sel.breakfast || sel.lunch || sel.dinner
+      );
+
+    // Fetch docs ack
+    const { data: docsData } = await supabase
+      .from('docs_ack')
+      .select('last_viewed_at')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    return {
+      roomSetup: roomData ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
+      transportation: tripData && tripData.length > 0 ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
+      food: hasFood ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
+      documentation: !!docsData,
+    } as ToolStatuses;
+  }, []);
+
+  // Main load function
   const loadProfile = useCallback(async () => {
     if (!user) {
-      setIsLoading(false);
+      setState(prev => ({ ...prev, isLoading: false, profile: null }));
       return;
     }
-    
-    setIsLoading(true);
-    
-    try {
-      // Ensure profile exists (upsert is idempotent)
-      const profileData = await ensureProfileExists(
-        user.id, 
-        user.email || '', 
-        user.user_metadata
-      );
-      
-      if (!profileData) {
-        // Silent retry after a short delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const retryData = await ensureProfileExists(
-          user.id, 
-          user.email || '', 
-          user.user_metadata
-        );
-        
-        if (!retryData) {
-          console.error('Failed to create or load profile after retry');
-          setIsLoading(false);
-          // Don't show error toast - just show loading state and allow retry
-          return;
-        }
-        
-        processProfileData(retryData);
-      } else {
-        processProfileData(profileData);
-      }
-      
-    } catch (error: any) {
-      console.error('Error loading profile:', error);
-      // Don't show error toast - profile will be created on next attempt
-      setIsLoading(false);
-    }
-  }, [user, ensureProfileExists]);
 
-  // Process profile data and load tool statuses
-  const processProfileData = useCallback(async (profileData: any) => {
-    if (!user) return;
-    
+    // Prevent concurrent loads
+    if (loadingRef.current) {
+      console.log('Profile load already in progress, skipping');
+      return;
+    }
+
+    // Check if we already loaded for this user
+    if (hasLoadedRef.current && currentUserIdRef.current === user.id && state.profile) {
+      console.log('Profile already loaded for this user');
+      return;
+    }
+
+    loadingRef.current = true;
+    currentUserIdRef.current = user.id;
+
+    setState(prev => ({ ...prev, isLoading: true, error: null, timedOut: false }));
+
+    // Set up timeout
+    const timeoutId = setTimeout(() => {
+      if (loadingRef.current) {
+        console.error('Profile loading timed out after', PROFILE_LOAD_TIMEOUT, 'ms');
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
+          timedOut: true,
+          error: 'Profile loading timed out. Please try again.',
+        }));
+        loadingRef.current = false;
+      }
+    }, PROFILE_LOAD_TIMEOUT);
+
     try {
+      // Step 1: Ensure profile exists on server (idempotent)
+      console.log('Ensuring profile exists for user:', user.id);
+      const serverProfile = await ensureProfileOnServer(user.id, user.user_metadata);
+
+      // Step 2: Fetch profile from database (uses user's RLS context)
+      let profileData = serverProfile;
+      if (!profileData) {
+        console.log('Server returned no profile, fetching directly...');
+        profileData = await fetchProfile(user.id);
+      }
+
+      if (!profileData) {
+        throw new Error('Failed to create or load profile');
+      }
+
+      // Clear timeout since we succeeded
+      clearTimeout(timeoutId);
+
       const typedProfile: GuestProfile = {
         id: profileData.id,
         user_id: profileData.user_id,
@@ -157,201 +189,193 @@ export function useGuestProfile() {
         created_at: profileData.created_at,
         updated_at: profileData.updated_at,
       };
-      
-      setProfile(typedProfile);
-      
-      // Check if profile needs completion (no first/last name)
-      setNeedsProfileCompletion(!typedProfile.first_name || !typedProfile.last_name);
-      
-      // Fetch room setup status
-      const { data: roomData } = await supabase
-        .from('room_setups')
-        .select('status')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      // Fetch transportation trips count (if any trips exist, consider it set)
-      const { data: tripData } = await supabase
-        .from('transportation_trips')
-        .select('id')
-        .eq('user_id', user.id);
-      
-      // Fetch food plan
-      const { data: foodData } = await supabase
-        .from('food_plans')
-        .select('selections')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      // Check if food has any selections
-      const hasFood = foodData?.selections && Array.isArray(foodData.selections) && 
-        (foodData.selections as any[]).some((sel: any) => 
-          sel.fullBoard || sel.breakfast || sel.lunch || sel.dinner
-        );
-      
-      // Fetch docs ack
-      const { data: docsData } = await supabase
-        .from('docs_ack')
-        .select('last_viewed_at')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      // Determine tool statuses - show "submitted" if overall is submitted
-      const isSubmitted = typedProfile.status_overall === 'submitted';
-      
-      setToolStatuses({
-        roomSetup: roomData ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
-        transportation: tripData && tripData.length > 0 ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
-        food: hasFood ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
-        documentation: !!docsData,
-      });
-      
-    } catch (error: any) {
-      console.error('Error processing profile data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user]);
 
+      // Step 3: Load tool statuses
+      const toolStatuses = await loadToolStatuses(user.id, typedProfile.status_overall);
+
+      // Mark as loaded
+      hasLoadedRef.current = true;
+      loadingRef.current = false;
+
+      setState({
+        profile: typedProfile,
+        toolStatuses,
+        isLoading: false,
+        needsProfileCompletion: !typedProfile.first_name || !typedProfile.last_name,
+        error: null,
+        timedOut: false,
+      });
+
+      console.log('Profile loaded successfully');
+
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      console.error('Error loading profile:', error);
+      loadingRef.current = false;
+
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error.message || 'Failed to load profile',
+        timedOut: false,
+      }));
+    }
+  }, [user, ensureProfileOnServer, fetchProfile, loadToolStatuses, state.profile]);
+
+  // Initial load effect - runs once per user
   useEffect(() => {
-    if (user) {
+    // Reset when user changes
+    if (user?.id !== currentUserIdRef.current) {
+      hasLoadedRef.current = false;
+      loadingRef.current = false;
+    }
+
+    if (user && !hasLoadedRef.current) {
       loadProfile();
-    } else {
-      setProfile(null);
-      setIsLoading(false);
+    } else if (!user) {
+      setState({
+        profile: null,
+        toolStatuses: {
+          roomSetup: 'not_set',
+          transportation: 'not_set',
+          food: 'not_set',
+          documentation: false,
+        },
+        isLoading: false,
+        needsProfileCompletion: false,
+        error: null,
+        timedOut: false,
+      });
+      hasLoadedRef.current = false;
+      currentUserIdRef.current = null;
     }
   }, [user, loadProfile]);
 
   // Complete profile with first/last name
   const completeProfile = useCallback(async (firstName: string, lastName: string) => {
     if (!user) return false;
-    
+
     try {
       const fullName = `${firstName} ${lastName}`;
-      
-      // Use upsert to ensure profile exists and update it
+
       const { error } = await supabase
         .from('guest_profiles')
-        .upsert({
-          user_id: user.id,
-          email: user.email || '',
+        .update({
           first_name: firstName,
           last_name: lastName,
           full_name: fullName,
-          guests_count: profile?.guests_count || 1,
-        }, {
-          onConflict: 'user_id',
-        });
-      
+        })
+        .eq('user_id', user.id);
+
       if (error) throw error;
-      
-      setProfile(prev => prev ? {
+
+      setState(prev => ({
         ...prev,
-        first_name: firstName,
-        last_name: lastName,
-        full_name: fullName,
-      } : {
-        id: '',
-        user_id: user.id,
-        first_name: firstName,
-        last_name: lastName,
-        full_name: fullName,
-        email: user.email || '',
-        check_in_date: null,
-        check_out_date: null,
-        guests_count: 1,
-        submitted_at: null,
-        status_overall: 'draft',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-      
-      setNeedsProfileCompletion(false);
+        profile: prev.profile ? {
+          ...prev.profile,
+          first_name: firstName,
+          last_name: lastName,
+          full_name: fullName,
+        } : null,
+        needsProfileCompletion: false,
+      }));
+
       return true;
     } catch (error: any) {
       console.error('Error completing profile:', error);
       return false;
     }
-  }, [user, profile]);
+  }, [user]);
 
-  // Update individual field - patch update
+  // Update check-in date
   const updateCheckInDate = useCallback(async (checkIn: Date | null) => {
-    if (!user || !profile) return false;
-    
+    if (!user || !state.profile) return false;
+
     try {
       const { error } = await supabase
         .from('guest_profiles')
         .update({ check_in_date: checkIn?.toISOString().split('T')[0] || null })
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
-      
-      setProfile(prev => prev ? {
+
+      setState(prev => ({
         ...prev,
-        check_in_date: checkIn?.toISOString().split('T')[0] || null,
-      } : null);
-      
+        profile: prev.profile ? {
+          ...prev.profile,
+          check_in_date: checkIn?.toISOString().split('T')[0] || null,
+        } : null,
+      }));
+
       return true;
     } catch (error: any) {
       console.error('Error updating check-in date:', error);
       return false;
     }
-  }, [user, profile]);
+  }, [user, state.profile]);
 
+  // Update check-out date
   const updateCheckOutDate = useCallback(async (checkOut: Date | null) => {
-    if (!user || !profile) return false;
-    
+    if (!user || !state.profile) return false;
+
     try {
       const { error } = await supabase
         .from('guest_profiles')
         .update({ check_out_date: checkOut?.toISOString().split('T')[0] || null })
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
-      
-      setProfile(prev => prev ? {
+
+      setState(prev => ({
         ...prev,
-        check_out_date: checkOut?.toISOString().split('T')[0] || null,
-      } : null);
-      
+        profile: prev.profile ? {
+          ...prev.profile,
+          check_out_date: checkOut?.toISOString().split('T')[0] || null,
+        } : null,
+      }));
+
       return true;
     } catch (error: any) {
       console.error('Error updating check-out date:', error);
       return false;
     }
-  }, [user, profile]);
+  }, [user, state.profile]);
 
+  // Update guests count
   const updateGuestsCount = useCallback(async (guestsCount: number) => {
-    if (!user || !profile) return false;
-    
+    if (!user || !state.profile) return false;
+
     try {
       const { error } = await supabase
         .from('guest_profiles')
         .update({ guests_count: guestsCount })
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
-      
-      setProfile(prev => prev ? {
+
+      setState(prev => ({
         ...prev,
-        guests_count: guestsCount,
-      } : null);
-      
+        profile: prev.profile ? {
+          ...prev.profile,
+          guests_count: guestsCount,
+        } : null,
+      }));
+
       return true;
     } catch (error: any) {
       console.error('Error updating guests count:', error);
       return false;
     }
-  }, [user, profile]);
+  }, [user, state.profile]);
 
-  // Legacy combined update (still used for save button)
+  // Update stay info (combined)
   const updateStayInfo = useCallback(async (
-    checkIn: Date | null, 
+    checkIn: Date | null,
     checkOut: Date | null,
     guestsCount: number
   ) => {
-    if (!user || !profile) return false;
-    
+    if (!user || !state.profile) return false;
+
     try {
       const { error } = await supabase
         .from('guest_profiles')
@@ -361,37 +385,30 @@ export function useGuestProfile() {
           guests_count: guestsCount,
         })
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
-      
-      setProfile(prev => prev ? {
+
+      setState(prev => ({
         ...prev,
-        check_in_date: checkIn?.toISOString().split('T')[0] || null,
-        check_out_date: checkOut?.toISOString().split('T')[0] || null,
-        guests_count: guestsCount,
-      } : null);
-      
-      toast({
-        title: 'Saved',
-        description: 'Your stay information has been updated.',
-      });
-      
+        profile: prev.profile ? {
+          ...prev.profile,
+          check_in_date: checkIn?.toISOString().split('T')[0] || null,
+          check_out_date: checkOut?.toISOString().split('T')[0] || null,
+          guests_count: guestsCount,
+        } : null,
+      }));
+
       return true;
     } catch (error: any) {
       console.error('Error updating stay info:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to save.',
-        variant: 'destructive',
-      });
       return false;
     }
-  }, [user, profile, toast]);
+  }, [user, state.profile]);
 
-  // Submit overall profile
+  // Submit profile
   const submitProfile = useCallback(async () => {
-    if (!user || !profile) return false;
-    
+    if (!user || !state.profile) return false;
+
     try {
       const { error } = await supabase
         .from('guest_profiles')
@@ -400,55 +417,66 @@ export function useGuestProfile() {
           submitted_at: new Date().toISOString(),
         })
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
-      
-      setProfile(prev => prev ? {
+
+      setState(prev => ({
         ...prev,
-        status_overall: 'submitted',
-        submitted_at: new Date().toISOString(),
-      } : null);
-      
+        profile: prev.profile ? {
+          ...prev.profile,
+          status_overall: 'submitted',
+          submitted_at: new Date().toISOString(),
+        } : null,
+      }));
+
       return true;
     } catch (error: any) {
       console.error('Error submitting profile:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to submit.',
-        variant: 'destructive',
-      });
       return false;
     }
-  }, [user, profile, toast]);
+  }, [user, state.profile]);
 
   // Update profile name
   const updateProfile = useCallback(async (fullName: string) => {
-    if (!user || !profile) return false;
-    
+    if (!user || !state.profile) return false;
+
     try {
       const { error } = await supabase
         .from('guest_profiles')
         .update({ full_name: fullName })
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
-      
-      setProfile(prev => prev ? { ...prev, full_name: fullName } : null);
+
+      setState(prev => ({
+        ...prev,
+        profile: prev.profile ? { ...prev.profile, full_name: fullName } : null,
+      }));
+
       return true;
     } catch (error: any) {
       console.error('Error updating profile:', error);
       return false;
     }
-  }, [user, profile]);
+  }, [user, state.profile]);
 
-  const hasDatesSet = !!(profile?.check_in_date && profile?.check_out_date);
+  // Retry loading
+  const retryLoad = useCallback(() => {
+    hasLoadedRef.current = false;
+    loadingRef.current = false;
+    loadProfile();
+  }, [loadProfile]);
+
+  const hasDatesSet = !!(state.profile?.check_in_date && state.profile?.check_out_date);
 
   return {
-    profile,
-    toolStatuses,
-    isLoading,
+    profile: state.profile,
+    toolStatuses: state.toolStatuses,
+    isLoading: state.isLoading,
     hasDatesSet,
-    needsProfileCompletion,
+    needsProfileCompletion: state.needsProfileCompletion,
+    error: state.error,
+    timedOut: state.timedOut,
     updateStayInfo,
     updateCheckInDate,
     updateCheckOutDate,
@@ -456,6 +484,7 @@ export function useGuestProfile() {
     updateProfile,
     completeProfile,
     submitProfile,
-    refreshProfile: loadProfile,
+    refreshProfile: retryLoad,
+    retryLoad,
   };
 }

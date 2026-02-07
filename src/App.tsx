@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -25,13 +26,34 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
+            {/* Protected routes - require authentication */}
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/room-setup" element={<RoomSetup />} />
-            <Route path="/transportation" element={<Transportation />} />
-            <Route path="/food" element={<Food />} />
-            <Route path="/documentation" element={<Documentation />} />
+            <Route path="/room-setup" element={
+              <ProtectedRoute>
+                <RoomSetup />
+              </ProtectedRoute>
+            } />
+            <Route path="/transportation" element={
+              <ProtectedRoute>
+                <Transportation />
+              </ProtectedRoute>
+            } />
+            <Route path="/food" element={
+              <ProtectedRoute>
+                <Food />
+              </ProtectedRoute>
+            } />
+            <Route path="/documentation" element={
+              <ProtectedRoute>
+                <Documentation />
+              </ProtectedRoute>
+            } />
             {/* Legacy route redirect */}
-            <Route path="/setup" element={<RoomSetup />} />
+            <Route path="/setup" element={
+              <ProtectedRoute>
+                <RoomSetup />
+              </ProtectedRoute>
+            } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

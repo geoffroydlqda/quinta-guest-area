@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.send-guest-summary]
 verify_jwt = false
+
+[functions.ensure-guest-profile]
+verify_jwt = false

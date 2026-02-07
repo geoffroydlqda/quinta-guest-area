@@ -177,12 +177,7 @@ const Documentation = () => {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/');
-    }
-  }, [user, authLoading, navigate]);
+  // Note: Auth redirect is handled by ProtectedRoute in App.tsx
 
   // Mark as viewed
   useEffect(() => {

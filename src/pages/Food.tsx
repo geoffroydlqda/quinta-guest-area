@@ -49,12 +49,7 @@ const Food = () => {
     );
   }, [foodPlan?.selections, foodPlan?.diet_preference, profile?.guests_count]);
 
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/');
-    }
-  }, [user, authLoading, navigate]);
+  // Note: Auth redirect is handled by ProtectedRoute in App.tsx
 
   // Trigger auto-save when selections change
   useEffect(() => {
