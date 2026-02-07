@@ -144,7 +144,7 @@ export function RoomConfiguration({
 
         {/* Card 4: Queen size with en-suite bathroom (NEW) */}
         <RoomTypeCard 
-          title="Queen size with en-suite bathroom" 
+          title="Queen size (en-suite bathroom)" 
           description="Queen size bed in a room with private en-suite bathroom." 
           image={roomQueenImage} 
           quantity={roomSelection.queenEnsuiteQty} 
