@@ -133,7 +133,7 @@ export function RoomConfiguration({
         
         {/* Card 3: Twin beds rooms (shared bathroom) */}
         <RoomTypeCard 
-          title="Twin beds rooms" 
+          title="Twins (shared bathroom)" 
           description="Two single beds in a room with shared bathroom." 
           image={roomTwinsImage} 
           quantity={roomSelection.twinsSharedQty} 
