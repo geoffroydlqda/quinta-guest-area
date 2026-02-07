@@ -8,7 +8,7 @@ import { isEditingLocked } from '@/lib/editLock';
 import { calculateTransportationCost } from '@/lib/transportationPricing';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
-import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
+
 import { TransportationCostSummaryCard } from '@/components/guest-area/TransportationCostSummary';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -146,9 +146,9 @@ const Transportation = () => {
     <ToolPageLayout
       title="Transportation"
       description="Arrange taxi transfers to and from Quinta do Amor"
+      isLocked={isLocked}
     >
       <div className="max-w-3xl mx-auto space-y-6">
-        {isLocked && <EditLockBanner />}
 
         {/* Auto-save indicator */}
         <div className="flex justify-end">

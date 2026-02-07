@@ -2,14 +2,16 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GuestAreaHeader } from './GuestAreaHeader';
+import { EditLockBanner } from './EditLockBanner';
 
 interface ToolPageLayoutProps {
   title: string;
   description?: string;
+  isLocked?: boolean;
   children: React.ReactNode;
 }
 
-export function ToolPageLayout({ title, description, children }: ToolPageLayoutProps) {
+export function ToolPageLayout({ title, description, isLocked = false, children }: ToolPageLayoutProps) {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Sticky header with back button */}
@@ -32,6 +34,8 @@ export function ToolPageLayout({ title, description, children }: ToolPageLayoutP
             <p className="text-muted-foreground">{description}</p>
           )}
         </div>
+        
+        {isLocked && <EditLockBanner variant="tool" />}
         
         {children}
       </main>

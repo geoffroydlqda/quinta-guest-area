@@ -8,7 +8,7 @@ import { isEditingLocked } from '@/lib/editLock';
 import { calculateFoodCost, DIET_OPTIONS_WITH_PRICES, BREAKFAST_PRICE, getLunchPrice, getDinnerPrice, getFullBoardPrice } from '@/lib/foodPricing';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
-import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
+
 import { FoodCostSummaryCard } from '@/components/guest-area/FoodCostSummary';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -100,9 +100,8 @@ const Food = () => {
   }
 
   return (
-    <ToolPageLayout title="Food" description="Plan your meals during your stay">
+    <ToolPageLayout title="Food" description="Plan your meals during your stay" isLocked={isLocked}>
       <div className="max-w-4xl mx-auto space-y-6">
-        {isLocked && <EditLockBanner />}
 
         {/* Auto-save indicator */}
         <div className="flex justify-end">

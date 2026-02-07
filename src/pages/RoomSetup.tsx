@@ -7,7 +7,7 @@ import { useAutoSave } from '@/hooks/useAutoSave';
 import { isEditingLocked } from '@/lib/editLock';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
-import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
+
 import { RoomConfigWarning } from '@/components/guest-area/RoomConfigWarning';
 import { RoomTypeCard } from '@/components/room-planner/RoomTypeCard';
 import { RoomStats } from '@/components/room-planner/RoomStats';
@@ -83,9 +83,9 @@ const RoomSetup = () => {
     <ToolPageLayout
       title="Room Setup"
       description="Configure the bed types for your group's stay"
+      isLocked={isLocked}
     >
       <div className="max-w-4xl mx-auto space-y-6">
-        {isLocked && <EditLockBanner />}
 
         {/* Room Configuration Warning Banner */}
         <RoomConfigWarning totalConfigured={totalConfigured} targetTotal={TOTAL_ROOMS} />
