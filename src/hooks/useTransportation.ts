@@ -256,81 +256,30 @@ export function useTransportation() {
     }
   }, [user]);
 
-  // Save as draft
-  const saveDraft = useCallback(async (notes?: string): Promise<boolean> => {
-    if (!user) return false;
-    
-    setIsSaving(true);
-    
-    try {
-      const { error } = await supabase
-        .from('transportation_requests')
-        .update({
-          status_transportation: 'draft',
-          notes_transportation: notes || null,
-        })
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
-      
-      setRequest(prev => prev ? { ...prev, status_transportation: 'draft', notes_transportation: notes || null } : null);
-      
-      toast({
-        title: 'Saved',
-        description: 'Your transportation request has been saved.',
-      });
-      
-      return true;
-    } catch (error: any) {
-      console.error('Error saving draft:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to save.',
-        variant: 'destructive',
-      });
-      return false;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [user, toast]);
+  // Update notes
+  const updateNotes = useCallback((notes: string) => {
+    setRequest(prev => prev ? { ...prev, notes_transportation: notes } : null);
+  }, []);
 
-  // Submit transportation request
-  const submitRequest = useCallback(async (notes?: string): Promise<boolean> => {
-    if (!user) return false;
-    
-    setIsSaving(true);
+  // Auto-save function (used by useAutoSave hook)
+  const autoSave = useCallback(async (): Promise<boolean> => {
+    if (!user || !request) return false;
     
     try {
       const { error } = await supabase
         .from('transportation_requests')
         .update({
-          status_transportation: 'submitted',
-          notes_transportation: notes || null,
+          notes_transportation: request.notes_transportation || null,
         })
         .eq('user_id', user.id);
       
       if (error) throw error;
-      
-      setRequest(prev => prev ? { ...prev, status_transportation: 'submitted', notes_transportation: notes || null } : null);
-      
-      toast({
-        title: 'Submitted',
-        description: 'Your transportation request has been submitted.',
-      });
-      
       return true;
     } catch (error: any) {
-      console.error('Error submitting:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to submit.',
-        variant: 'destructive',
-      });
+      console.error('Error auto-saving transportation:', error);
       return false;
-    } finally {
-      setIsSaving(false);
     }
-  }, [user, toast]);
+  }, [user, request]);
 
   return {
     request,
@@ -342,8 +291,8 @@ export function useTransportation() {
     deleteTrip,
     addPassenger,
     removePassenger,
-    saveDraft,
-    submitRequest,
+    updateNotes,
+    autoSave,
     refresh: loadData,
   };
 }

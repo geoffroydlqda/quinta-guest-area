@@ -17,6 +17,7 @@ interface GuestSummaryPayload {
   email: string;
   checkInDate: string | null;
   checkOutDate: string | null;
+  guestsCount: number;
   roomSetup: {
     queenSharedCount: number;
     twinsSharedCount: number;
@@ -25,11 +26,14 @@ interface GuestSummaryPayload {
   } | null;
   transportation: {
     tripCount: number;
+    totalPrice: number;
+    customOfferCount: number;
   } | null;
   food: {
     fullBoardDays: number;
     breakfastOnlyDays: number;
     customDays: number;
+    dietPreference?: string | null;
   } | null;
 }
 
@@ -40,7 +44,7 @@ function formatDate(dateStr: string | null): string {
 }
 
 function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): string {
-  const { fullName, email, checkInDate, checkOutDate, roomSetup, transportation, food } = payload;
+  const { fullName, email, checkInDate, checkOutDate, guestsCount, roomSetup, transportation, food } = payload;
   
   return `
     <!DOCTYPE html>
@@ -74,11 +78,11 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
           <strong>Guest:</strong> ${fullName}<br>
           <strong>Email:</strong> ${email}
         </div>
-        ` : `<p>Hello ${fullName},</p><p>Here's a summary of your Guest Area selections:</p>`}
+        ` : `<p>Hello ${fullName || 'Guest'},</p><p>Here's a summary of your Guest Area selections:</p>`}
         
-        <!-- Stay Dates -->
+        <!-- Stay Dates & Guests -->
         <div class="section">
-          <div class="section-title">Stay Dates</div>
+          <div class="section-title">Stay Information</div>
           <div class="row">
             <span class="label">Check-in</span>
             <span class="value">${formatDate(checkInDate)}</span>
@@ -86,6 +90,10 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
           <div class="row">
             <span class="label">Check-out</span>
             <span class="value">${formatDate(checkOutDate)}</span>
+          </div>
+          <div class="row">
+            <span class="label">Number of guests</span>
+            <span class="value">${guestsCount || 1}</span>
           </div>
         </div>
 
@@ -119,11 +127,23 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
         <!-- Transportation -->
         <div class="section">
           <div class="section-title">Transportation</div>
-          ${transportation ? `
+          ${transportation && transportation.tripCount > 0 ? `
           <div class="row">
             <span class="label">Trips scheduled</span>
             <span class="value">${transportation.tripCount}</span>
           </div>
+          ${transportation.totalPrice > 0 ? `
+          <div class="row">
+            <span class="label">Estimated total</span>
+            <span class="value">€${transportation.totalPrice}</span>
+          </div>
+          ` : ''}
+          ${transportation.customOfferCount > 0 ? `
+          <div class="row">
+            <span class="label">Custom pricing</span>
+            <span class="value">${transportation.customOfferCount} trip${transportation.customOfferCount !== 1 ? 's' : ''}</span>
+          </div>
+          ` : ''}
           ` : '<p class="not-set">Not set</p>'}
         </div>
 
@@ -131,6 +151,12 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
         <div class="section">
           <div class="section-title">Food</div>
           ${food ? `
+          ${food.dietPreference ? `
+          <div class="row">
+            <span class="label">Diet preference</span>
+            <span class="value">${food.dietPreference}</span>
+          </div>
+          ` : ''}
           ${food.fullBoardDays > 0 ? `
           <div class="row">
             <span class="label">Full board</span>
@@ -149,18 +175,19 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
             <span class="value">${food.customDays} day${food.customDays !== 1 ? 's' : ''}</span>
           </div>
           ` : ''}
-          ${food.fullBoardDays === 0 && food.breakfastOnlyDays === 0 && food.customDays === 0 ? '<p class="not-set">No meals selected</p>' : ''}
+          ${!food.dietPreference && food.fullBoardDays === 0 && food.breakfastOnlyDays === 0 && food.customDays === 0 ? '<p class="not-set">No selections made</p>' : ''}
           ` : '<p class="not-set">Not set</p>'}
         </div>
 
         ${!isAdmin ? `
         <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
-          You can log in to your account anytime to view or update your selections.
+          Your information can still be edited until 5 days before check-in date.
+          Log in to your account anytime to view or update your selections.
         </p>
         ` : ''}
       </div>
       <div class="footer">
-        <p>Sent: ${new Date().toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })}</p>
+        <p>Submitted: ${new Date().toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })}</p>
         <p>Quinta do Amor © ${new Date().getFullYear()}</p>
       </div>
     </body>
@@ -178,8 +205,8 @@ const handler = async (req: Request): Promise<Response> => {
     const payload: GuestSummaryPayload = await req.json();
 
     // Validate required fields
-    if (!payload.fullName || !payload.email) {
-      throw new Error("Missing required fields: fullName, email");
+    if (!payload.email) {
+      throw new Error("Missing required field: email");
     }
 
     const emailPromises: Promise<any>[] = [];
@@ -199,7 +226,7 @@ const handler = async (req: Request): Promise<Response> => {
       resend.emails.send({
         from: FROM_EMAIL,
         to: [ADMIN_EMAIL],
-        subject: `Guest Area Summary — ${payload.fullName}`,
+        subject: `Guest Area Summary — ${payload.fullName || 'Guest'}`,
         html: generateSummaryHtml(payload, true),
       })
     );

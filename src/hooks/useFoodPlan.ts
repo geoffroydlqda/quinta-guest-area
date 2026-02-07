@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import type { FoodPlan, FoodDaySelection } from '@/types/guest';
+import type { FoodPlan, FoodDaySelection, DietPreference } from '@/types/guest';
 import { addDays, format, parseISO, differenceInDays } from 'date-fns';
 
 export function useFoodPlan(checkInDate: string | null, checkOutDate: string | null) {
@@ -84,8 +84,13 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
         : initializeSelections();
       
       const typedPlan: FoodPlan = {
-        ...data,
+        id: data.id,
+        user_id: data.user_id,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+        notes_food: data.notes_food,
         status_food: data.status_food as 'draft' | 'submitted',
+        diet_preference: data.diet_preference as DietPreference | null,
         selections: parsedSelections,
       };
       
@@ -133,6 +138,11 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     });
   }, []);
 
+  // Update diet preference
+  const updateDietPreference = useCallback((preference: DietPreference | null) => {
+    setFoodPlan(prev => prev ? { ...prev, diet_preference: preference } : null);
+  }, []);
+
   // Sync selections with current days (when dates change)
   const syncSelectionsWithDays = useCallback(() => {
     if (!foodPlan || days.length === 0) return;
@@ -158,83 +168,32 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     }
   }, [days.length]);
 
-  // Save as draft
-  const saveDraft = useCallback(async (notes?: string): Promise<boolean> => {
+  // Auto-save function (used by useAutoSave hook)
+  const autoSave = useCallback(async (): Promise<boolean> => {
     if (!user || !foodPlan) return false;
-    
-    setIsSaving(true);
     
     try {
       const { error } = await supabase
         .from('food_plans')
         .update({
-          status_food: 'draft',
-          notes_food: notes || null,
+          notes_food: foodPlan.notes_food || null,
+          diet_preference: foodPlan.diet_preference || null,
           selections: JSON.parse(JSON.stringify(foodPlan.selections)),
         })
         .eq('user_id', user.id);
       
       if (error) throw error;
-      
-      setFoodPlan(prev => prev ? { ...prev, status_food: 'draft', notes_food: notes || null } : null);
-      
-      toast({
-        title: 'Saved',
-        description: 'Your food plan has been saved.',
-      });
-      
       return true;
     } catch (error: any) {
-      console.error('Error saving food plan:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to save.',
-        variant: 'destructive',
-      });
+      console.error('Error auto-saving food plan:', error);
       return false;
-    } finally {
-      setIsSaving(false);
     }
-  }, [user, foodPlan, toast]);
+  }, [user, foodPlan]);
 
-  // Submit food plan
-  const submitPlan = useCallback(async (notes?: string): Promise<boolean> => {
-    if (!user || !foodPlan) return false;
-    
-    setIsSaving(true);
-    
-    try {
-      const { error } = await supabase
-        .from('food_plans')
-        .update({
-          status_food: 'submitted',
-          notes_food: notes || null,
-          selections: JSON.parse(JSON.stringify(foodPlan.selections)),
-        })
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
-      
-      setFoodPlan(prev => prev ? { ...prev, status_food: 'submitted', notes_food: notes || null } : null);
-      
-      toast({
-        title: 'Submitted',
-        description: 'Your food plan has been submitted.',
-      });
-      
-      return true;
-    } catch (error: any) {
-      console.error('Error submitting food plan:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to submit.',
-        variant: 'destructive',
-      });
-      return false;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [user, foodPlan, toast]);
+  // Update notes
+  const updateNotes = useCallback((notes: string) => {
+    setFoodPlan(prev => prev ? { ...prev, notes_food: notes } : null);
+  }, []);
 
   // Calculate summary
   const summary = useMemo(() => {
@@ -263,8 +222,9 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     isLoading,
     isSaving,
     updateDaySelection,
-    saveDraft,
-    submitPlan,
+    updateDietPreference,
+    updateNotes,
+    autoSave,
     summary,
     refresh: loadFoodPlan,
   };

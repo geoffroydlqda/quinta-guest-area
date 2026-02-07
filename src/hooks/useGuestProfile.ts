@@ -41,6 +41,7 @@ export function useGuestProfile() {
             user_id: user.id,
             full_name: user.user_metadata?.full_name || '',
             email: user.email || '',
+            guests_count: 1,
           })
           .select()
           .single();
@@ -49,7 +50,21 @@ export function useGuestProfile() {
         profileData = newProfile;
       }
       
-      setProfile(profileData as GuestProfile);
+      const typedProfile: GuestProfile = {
+        id: profileData.id,
+        user_id: profileData.user_id,
+        full_name: profileData.full_name,
+        email: profileData.email,
+        check_in_date: profileData.check_in_date,
+        check_out_date: profileData.check_out_date,
+        guests_count: profileData.guests_count ?? 1,
+        submitted_at: profileData.submitted_at,
+        status_overall: (profileData.status_overall as 'draft' | 'submitted') || 'draft',
+        created_at: profileData.created_at,
+        updated_at: profileData.updated_at,
+      };
+      
+      setProfile(typedProfile);
       
       // Fetch room setup status
       const { data: roomData } = await supabase
@@ -58,19 +73,24 @@ export function useGuestProfile() {
         .eq('user_id', user.id)
         .maybeSingle();
       
-      // Fetch transportation status
-      const { data: transportData } = await supabase
-        .from('transportation_requests')
-        .select('status_transportation')
+      // Fetch transportation trips count (if any trips exist, consider it set)
+      const { data: tripData } = await supabase
+        .from('transportation_trips')
+        .select('id')
+        .eq('user_id', user.id);
+      
+      // Fetch food plan
+      const { data: foodData } = await supabase
+        .from('food_plans')
+        .select('selections')
         .eq('user_id', user.id)
         .maybeSingle();
       
-      // Fetch food plan status
-      const { data: foodData } = await supabase
-        .from('food_plans')
-        .select('status_food')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // Check if food has any selections
+      const hasFood = foodData?.selections && Array.isArray(foodData.selections) && 
+        (foodData.selections as any[]).some((sel: any) => 
+          sel.fullBoard || sel.breakfast || sel.lunch || sel.dinner
+        );
       
       // Fetch docs ack
       const { data: docsData } = await supabase
@@ -80,9 +100,9 @@ export function useGuestProfile() {
         .maybeSingle();
       
       setToolStatuses({
-        roomSetup: roomData?.status as 'draft' | 'submitted' || 'not_set',
-        transportation: transportData?.status_transportation as 'draft' | 'submitted' || 'not_set',
-        food: foodData?.status_food as 'draft' | 'submitted' || 'not_set',
+        roomSetup: roomData ? 'draft' : 'not_set',
+        transportation: tripData && tripData.length > 0 ? 'draft' : 'not_set',
+        food: hasFood ? 'draft' : 'not_set',
         documentation: !!docsData,
       });
       
@@ -104,8 +124,12 @@ export function useGuestProfile() {
     }
   }, [user, loadProfile]);
 
-  // Update stay dates
-  const updateStayDates = useCallback(async (checkIn: Date | null, checkOut: Date | null) => {
+  // Update stay dates and guests count
+  const updateStayInfo = useCallback(async (
+    checkIn: Date | null, 
+    checkOut: Date | null,
+    guestsCount: number
+  ) => {
     if (!user || !profile) return false;
     
     try {
@@ -114,6 +138,7 @@ export function useGuestProfile() {
         .update({
           check_in_date: checkIn?.toISOString().split('T')[0] || null,
           check_out_date: checkOut?.toISOString().split('T')[0] || null,
+          guests_count: guestsCount,
         })
         .eq('user_id', user.id);
       
@@ -123,19 +148,53 @@ export function useGuestProfile() {
         ...prev,
         check_in_date: checkIn?.toISOString().split('T')[0] || null,
         check_out_date: checkOut?.toISOString().split('T')[0] || null,
+        guests_count: guestsCount,
       } : null);
       
       toast({
-        title: 'Dates saved',
-        description: 'Your stay dates have been updated.',
+        title: 'Saved',
+        description: 'Your stay information has been updated.',
       });
       
       return true;
     } catch (error: any) {
-      console.error('Error updating dates:', error);
+      console.error('Error updating stay info:', error);
       toast({
         title: 'Error',
-        description: 'Failed to save dates.',
+        description: 'Failed to save.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  }, [user, profile, toast]);
+
+  // Submit overall profile
+  const submitProfile = useCallback(async () => {
+    if (!user || !profile) return false;
+    
+    try {
+      const { error } = await supabase
+        .from('guest_profiles')
+        .update({
+          status_overall: 'submitted',
+          submitted_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      
+      setProfile(prev => prev ? {
+        ...prev,
+        status_overall: 'submitted',
+        submitted_at: new Date().toISOString(),
+      } : null);
+      
+      return true;
+    } catch (error: any) {
+      console.error('Error submitting profile:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to submit.',
         variant: 'destructive',
       });
       return false;
@@ -169,8 +228,9 @@ export function useGuestProfile() {
     toolStatuses,
     isLoading,
     hasDatesSet,
-    updateStayDates,
+    updateStayInfo,
     updateProfile,
+    submitProfile,
     refreshProfile: loadProfile,
   };
 }

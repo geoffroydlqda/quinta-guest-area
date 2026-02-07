@@ -12,17 +12,21 @@ interface ToolPageLayoutProps {
 export function ToolPageLayout({ title, description, children }: ToolPageLayoutProps) {
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <GuestAreaHeader />
-      
-      <main className="container mx-auto px-4 py-8 flex-1">
-        <div className="mb-6">
-          <Button asChild variant="ghost" size="sm" className="gap-2 mb-4">
+      {/* Sticky header with back button */}
+      <div className="sticky top-0 z-50 bg-background border-b border-border">
+        <GuestAreaHeader />
+        <div className="container mx-auto px-4 py-3">
+          <Button asChild variant="ghost" size="sm" className="gap-2">
             <Link to="/dashboard">
               <ArrowLeft className="w-4 h-4" />
               Back to Dashboard
             </Link>
           </Button>
-          
+        </div>
+      </div>
+      
+      <main className="container mx-auto px-4 py-8 flex-1">
+        <div className="mb-6">
           <h1 className="text-3xl md:text-4xl mb-2">{title}</h1>
           {description && (
             <p className="text-muted-foreground">{description}</p>

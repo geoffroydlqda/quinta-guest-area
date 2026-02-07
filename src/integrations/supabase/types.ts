@@ -35,6 +35,7 @@ export type Database = {
       food_plans: {
         Row: {
           created_at: string
+          diet_preference: string | null
           id: string
           notes_food: string | null
           selections: Json
@@ -44,6 +45,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          diet_preference?: string | null
           id?: string
           notes_food?: string | null
           selections?: Json
@@ -53,6 +55,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          diet_preference?: string | null
           id?: string
           notes_food?: string | null
           selections?: Json
@@ -69,7 +72,10 @@ export type Database = {
           created_at: string
           email: string
           full_name: string
+          guests_count: number | null
           id: string
+          status_overall: string
+          submitted_at: string | null
           updated_at: string
           user_id: string
         }
@@ -79,7 +85,10 @@ export type Database = {
           created_at?: string
           email: string
           full_name: string
+          guests_count?: number | null
           id?: string
+          status_overall?: string
+          submitted_at?: string | null
           updated_at?: string
           user_id: string
         }
@@ -89,7 +98,10 @@ export type Database = {
           created_at?: string
           email?: string
           full_name?: string
+          guests_count?: number | null
           id?: string
+          status_overall?: string
+          submitted_at?: string | null
           updated_at?: string
           user_id?: string
         }

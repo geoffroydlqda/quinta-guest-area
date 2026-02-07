@@ -7,6 +7,9 @@ export interface GuestProfile {
   email: string;
   check_in_date: string | null;
   check_out_date: string | null;
+  guests_count: number;
+  submitted_at: string | null;
+  status_overall: 'draft' | 'submitted';
   created_at: string;
   updated_at: string;
 }
@@ -46,11 +49,14 @@ export interface TransportationPassenger {
   created_at: string;
 }
 
+export type DietPreference = 'Vegetarian' | 'Meat or fish for dinner' | 'Meat or fish for dinner and lunch';
+
 export interface FoodPlan {
   id: string;
   user_id: string;
   status_food: 'draft' | 'submitted';
   notes_food: string | null;
+  diet_preference: DietPreference | null;
   selections: FoodDaySelection[];
   created_at: string;
   updated_at: string;
@@ -81,7 +87,8 @@ export interface ToolStatuses {
 }
 
 // Price calculation helpers
-export const STANDARD_TAXI_PRICE = 60;
+export const STANDARD_TAXI_PRICE_4_SEATS = 60;
+export const STANDARD_TAXI_PRICE_6_SEATS = 80;
 export const CUSTOM_OFFER_TEXT = 'Custom offer';
 
 export function calculateTripPrice(
@@ -95,8 +102,12 @@ export function calculateTripPrice(
     standardLocations.includes(dropoffLocation) &&
     pickupLocation !== dropoffLocation;
   
-  if (taxiSize === '4 seats' && isStandardRoute) {
-    return `€${STANDARD_TAXI_PRICE}`;
+  if (isStandardRoute) {
+    if (taxiSize === '4 seats') {
+      return `€${STANDARD_TAXI_PRICE_4_SEATS}`;
+    } else {
+      return `€${STANDARD_TAXI_PRICE_6_SEATS}`;
+    }
   }
   
   return CUSTOM_OFFER_TEXT;
