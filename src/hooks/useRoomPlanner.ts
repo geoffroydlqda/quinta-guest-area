@@ -3,11 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
-  UserInfo, 
   RoomSelection, 
   RoomStats, 
   RoomPlan,
-  initialUserInfo, 
   initialRoomSelection,
   generateRoomPlan,
   MAX_SHARED_ROOMS,
@@ -18,14 +16,10 @@ export function useRoomPlanner() {
   const { user } = useAuth();
   const { toast } = useToast();
   
-  const [currentStep, setCurrentStep] = useState<'form' | 'rooms' | 'summary'>('form');
-  const [userInfo, setUserInfo] = useState<UserInfo>(initialUserInfo);
   const [roomSelection, setRoomSelection] = useState<RoomSelection>(initialRoomSelection);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
+  const [remarks, setRemarks] = useState('');
   const [recordId, setRecordId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingRecord, setIsLoadingRecord] = useState(false);
+  const [isLoadingRecord, setIsLoadingRecord] = useState(true);
 
   // Calculate room statistics
   const stats: RoomStats = useMemo(() => {
@@ -50,16 +44,6 @@ export function useRoomPlanner() {
     return generateRoomPlan(roomSelection);
   }, [roomSelection]);
 
-  // Validation
-  const isEmailValid = useMemo(() => {
-    // Email comes from auth, always valid if user exists
-    return !!user?.email;
-  }, [user]);
-
-  const isNameValid = useMemo(() => {
-    return userInfo.fullName.trim().length >= 2;
-  }, [userInfo.fullName]);
-
   // Shared bathroom constraint: max 6
   const isSharedValid = useMemo(() => {
     return roomSelection.queenSharedQty + roomSelection.twinsSharedQty <= MAX_SHARED_ROOMS;
@@ -71,9 +55,6 @@ export function useRoomPlanner() {
   }, [roomSelection]);
 
   const isSelectionValid = isSharedValid && isEnsuiteValid;
-
-  const canProceed = isEmailValid && isNameValid;
-  const canSubmit = canProceed && isSelectionValid;
 
   // Update room selection - Shared rooms
   const setQueenShared = useCallback((qty: number) => {
@@ -105,96 +86,6 @@ export function useRoomPlanner() {
     }));
   }, []);
 
-  // Save to database (upsert for logged-in user)
-  const saveToDatabase = useCallback(async (status: 'draft' | 'submitted') => {
-    if (!user) throw new Error('User not authenticated');
-    
-    // Convert room plan to JSON-compatible format
-    const roomPlanJson = roomPlan.map(room => ({
-      roomId: room.roomId,
-      bedType: room.bedType,
-      bathroomType: room.bathroomType,
-      isFixed: room.isFixed,
-      note: room.note,
-    }));
-    
-    const recordData = {
-      user_id: user.id,
-      email: user.email || '',
-      full_name: userInfo.fullName.trim(),
-      remarks: userInfo.remarks.trim() || null,
-      queen_shared_qty: roomSelection.queenSharedQty,
-      twins_shared_qty: roomSelection.twinsSharedQty,
-      queen_ensuite_qty: roomSelection.queenEnsuiteQty,
-      twins_ensuite_qty: roomSelection.twinsEnsuiteQty,
-      room_plan: roomPlanJson,
-      status,
-      edit_token: `user-${user.id}`, // Legacy field, use user_id for lookup
-    };
-
-    let result;
-    
-    if (recordId) {
-      // Update existing record
-      const { data, error } = await supabase
-        .from('room_setups')
-        .update(recordData)
-        .eq('id', recordId)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      result = data;
-    } else {
-      // Insert new record
-      const { data, error } = await supabase
-        .from('room_setups')
-        .insert([recordData])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      result = data;
-    }
-
-    setRecordId(result.id);
-    return { record: result };
-  }, [user, recordId, userInfo, roomSelection, roomPlan]);
-
-  // Send emails via edge function (only on submit, no edit links)
-  const sendEmails = useCallback(async () => {
-    if (!user) return;
-    
-    try {
-      const payload = {
-        action: 'submit',
-        fullName: userInfo.fullName.trim(),
-        email: user.email || '',
-        remarks: userInfo.remarks.trim() || undefined,
-        stats: {
-          kingsFixed: stats.kingsFixed,
-          queenSharedCount: stats.queenSharedCount,
-          twinsSharedCount: stats.twinsSharedCount,
-          queenEnsuiteCount: stats.queenEnsuiteCount,
-          twinsEnsuiteCount: stats.twinsEnsuiteCount,
-          notSetCount: stats.notSetCount,
-        },
-      };
-
-      const response = await supabase.functions.invoke('send-room-setup-emails', {
-        body: payload,
-      });
-
-      if (response.error) {
-        console.error('Email sending error:', response.error);
-      } else {
-        console.log('Emails sent successfully:', response.data);
-      }
-    } catch (error) {
-      console.error('Failed to send emails:', error);
-    }
-  }, [user, userInfo, stats]);
-
   // Load existing record for logged-in user
   const loadUserRecord = useCallback(async () => {
     if (!user) return;
@@ -211,13 +102,6 @@ export function useRoomPlanner() {
       if (error) throw error;
 
       if (data) {
-        // Populate form with saved data
-        setUserInfo({
-          fullName: data.full_name,
-          email: data.email,
-          remarks: data.remarks || '',
-        });
-
         setRoomSelection({
           kingRoomsQty: 2,
           queenSharedQty: data.queen_shared_qty,
@@ -225,18 +109,8 @@ export function useRoomPlanner() {
           queenEnsuiteQty: data.queen_ensuite_qty,
           twinsEnsuiteQty: data.twins_ensuite_qty,
         });
-
+        setRemarks(data.remarks_roomsetup || data.remarks || '');
         setRecordId(data.id);
-        setIsSubmitted(data.status === 'submitted');
-        setIsSaved(true);
-
-        // If already submitted, show summary; otherwise start at form
-        if (data.status === 'submitted') {
-          setCurrentStep('summary');
-        }
-      } else {
-        // Pre-fill email from user
-        setUserInfo(prev => ({ ...prev, email: user.email || '' }));
       }
     } catch (error: any) {
       console.error('Error loading record:', error);
@@ -257,99 +131,78 @@ export function useRoomPlanner() {
     }
   }, [user, loadUserRecord]);
 
-  // Handle save (draft)
-  const handleSave = useCallback(async () => {
-    if (!canSubmit || isLoading) return;
-    
-    setIsLoading(true);
+  // Auto-save function (used by useAutoSave hook)
+  const autoSave = useCallback(async (): Promise<boolean> => {
+    if (!user || !isSelectionValid) return false;
     
     try {
-      await saveToDatabase('draft');
-      setIsSaved(true);
+      // Convert room plan to JSON-compatible format
+      const roomPlanJson = roomPlan.map(room => ({
+        roomId: room.roomId,
+        bedType: room.bedType,
+        bathroomType: room.bathroomType,
+        isFixed: room.isFixed,
+        note: room.note,
+      }));
       
-      toast({
-        title: 'Saved',
-        description: 'You can come back anytime by logging in.',
-      });
-    } catch (error: any) {
-      console.error('Save error:', error);
-      toast({
-        title: 'Save failed',
-        description: error.message || 'Something went wrong. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [canSubmit, isLoading, saveToDatabase, toast]);
+      const recordData = {
+        user_id: user.id,
+        email: user.email || '',
+        full_name: '', // No longer collecting from room setup
+        remarks_roomsetup: remarks.trim() || null,
+        queen_shared_qty: roomSelection.queenSharedQty,
+        twins_shared_qty: roomSelection.twinsSharedQty,
+        queen_ensuite_qty: roomSelection.queenEnsuiteQty,
+        twins_ensuite_qty: roomSelection.twinsEnsuiteQty,
+        room_plan: roomPlanJson,
+        status: 'draft',
+        edit_token: `user-${user.id}`,
+      };
 
-  // Submit handler
-  const handleSubmit = useCallback(async () => {
-    if (!canSubmit || isLoading) return;
-    
-    setIsLoading(true);
-    
-    try {
-      await saveToDatabase('submitted');
-      await sendEmails();
-      setIsSubmitted(true);
-      
-      toast({
-        title: 'Setup submitted successfully',
-        description: 'Confirmation emails have been sent.',
-      });
-    } catch (error: any) {
-      console.error('Submit error:', error);
-      toast({
-        title: 'Submission failed',
-        description: error.message || 'Something went wrong. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [canSubmit, isLoading, saveToDatabase, sendEmails, toast]);
+      if (recordId) {
+        const { error } = await supabase
+          .from('room_setups')
+          .update(recordData)
+          .eq('id', recordId);
+        
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from('room_setups')
+          .insert([recordData])
+          .select()
+          .single();
+        
+        if (error) throw error;
+        setRecordId(data.id);
+      }
 
-  // Reset everything
-  const resetAll = useCallback(() => {
-    setCurrentStep('form');
-    setUserInfo(prev => ({ ...prev, fullName: '', remarks: '' }));
-    setRoomSelection(initialRoomSelection);
-    setIsSubmitted(false);
-    setIsSaved(false);
-    setRecordId(null);
-  }, []);
+      return true;
+    } catch (error: any) {
+      console.error('Auto-save error:', error);
+      return false;
+    }
+  }, [user, recordId, roomSelection, roomPlan, remarks, isSelectionValid]);
 
   return {
     // State
-    currentStep,
-    setCurrentStep,
-    userInfo,
-    setUserInfo,
     roomSelection,
     roomPlan,
-    isSubmitted,
-    isSaved,
     stats,
-    isLoading,
+    remarks,
+    setRemarks,
     isLoadingRecord,
     
     // Validation
-    isEmailValid,
-    isNameValid,
     isSharedValid,
     isEnsuiteValid,
     isSelectionValid,
-    canProceed,
-    canSubmit,
     
     // Actions
     setQueenShared,
     setTwinsShared,
     setQueenEnsuite,
     setTwinsEnsuite,
-    handleSave,
-    handleSubmit,
-    resetAll,
+    autoSave,
   };
 }

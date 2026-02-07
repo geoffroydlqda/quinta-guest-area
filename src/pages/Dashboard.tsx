@@ -4,11 +4,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { isEditingLocked } from '@/lib/editLock';
 import { GuestAreaHeader } from '@/components/guest-area/GuestAreaHeader';
 import { StayDatesPicker } from '@/components/guest-area/StayDatesPicker';
 import { ToolTile } from '@/components/guest-area/ToolTile';
 import { GlobalSummary } from '@/components/guest-area/GlobalSummary';
-import { Loader2 } from 'lucide-react';
+import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
+import { Button } from '@/components/ui/button';
+import { Loader2, Send } from 'lucide-react';
+import { CUSTOM_OFFER_TEXT } from '@/types/guest';
 
 const Dashboard = () => {
   const { user, isLoading: authLoading } = useAuth();
@@ -20,14 +24,17 @@ const Dashboard = () => {
     toolStatuses, 
     isLoading, 
     hasDatesSet,
-    updateStayDates,
+    updateStayInfo,
+    submitProfile,
     refreshProfile,
   } = useGuestProfile();
 
   const [roomSetupData, setRoomSetupData] = useState<any>(null);
   const [transportationData, setTransportationData] = useState<any>(null);
   const [foodData, setFoodData] = useState<any>(null);
-  const [isEmailSending, setIsEmailSending] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isLocked = isEditingLocked(profile?.check_in_date || null);
 
   // Redirect if not logged in
   useEffect(() => {
@@ -36,105 +43,136 @@ const Dashboard = () => {
     }
   }, [user, authLoading, navigate]);
 
-  // Fetch summary data for submitted tools
+  // Fetch summary data for tools
   useEffect(() => {
     const fetchSummaryData = async () => {
       if (!user) return;
 
       // Fetch room setup data
-      if (toolStatuses.roomSetup === 'submitted') {
-        const { data } = await supabase
-          .from('room_setups')
-          .select('queen_shared_qty, twins_shared_qty, queen_ensuite_qty, twins_ensuite_qty')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (data) {
-          setRoomSetupData({
-            queenSharedCount: data.queen_shared_qty,
-            twinsSharedCount: data.twins_shared_qty,
-            queenEnsuiteCount: data.queen_ensuite_qty,
-            twinsEnsuiteCount: data.twins_ensuite_qty,
-          });
-        }
+      const { data: roomData } = await supabase
+        .from('room_setups')
+        .select('queen_shared_qty, twins_shared_qty, queen_ensuite_qty, twins_ensuite_qty')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (roomData) {
+        setRoomSetupData({
+          queenSharedCount: roomData.queen_shared_qty,
+          twinsSharedCount: roomData.twins_shared_qty,
+          queenEnsuiteCount: roomData.queen_ensuite_qty,
+          twinsEnsuiteCount: roomData.twins_ensuite_qty,
+        });
       }
 
-      // Fetch transportation data
-      if (toolStatuses.transportation === 'submitted') {
-        const { data } = await supabase
-          .from('transportation_trips')
-          .select('id')
-          .eq('user_id', user.id);
+      // Fetch transportation data with trip details
+      const { data: tripData } = await supabase
+        .from('transportation_trips')
+        .select('id, price_estimate')
+        .eq('user_id', user.id);
+      
+      if (tripData && tripData.length > 0) {
+        let totalPrice = 0;
+        let customOfferCount = 0;
+        
+        tripData.forEach(trip => {
+          if (trip.price_estimate === CUSTOM_OFFER_TEXT) {
+            customOfferCount++;
+          } else {
+            const priceMatch = trip.price_estimate.match(/€(\d+)/);
+            if (priceMatch) {
+              totalPrice += parseInt(priceMatch[1]);
+            }
+          }
+        });
         
         setTransportationData({
-          tripCount: data?.length || 0,
+          tripCount: tripData.length,
+          totalPrice,
+          customOfferCount,
         });
       }
 
       // Fetch food data
-      if (toolStatuses.food === 'submitted') {
-        const { data } = await supabase
-          .from('food_plans')
-          .select('selections')
-          .eq('user_id', user.id)
-          .single();
+      const { data: foodPlanData } = await supabase
+        .from('food_plans')
+        .select('selections, diet_preference')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (foodPlanData?.selections && Array.isArray(foodPlanData.selections)) {
+        let fullBoardDays = 0;
+        let breakfastOnlyDays = 0;
+        let customDays = 0;
         
-        if (data?.selections && Array.isArray(data.selections)) {
-          let fullBoardDays = 0;
-          let breakfastOnlyDays = 0;
-          let customDays = 0;
-          
-          (data.selections as any[]).forEach((sel: any) => {
-            if (sel.fullBoard) {
-              fullBoardDays++;
-            } else if (sel.breakfast && !sel.lunch && !sel.dinner) {
-              breakfastOnlyDays++;
-            } else if (sel.breakfast || sel.lunch || sel.dinner) {
-              customDays++;
-            }
-          });
-          
-          setFoodData({ fullBoardDays, breakfastOnlyDays, customDays });
-        }
+        (foodPlanData.selections as any[]).forEach((sel: any) => {
+          if (sel.fullBoard) {
+            fullBoardDays++;
+          } else if (sel.breakfast && !sel.lunch && !sel.dinner) {
+            breakfastOnlyDays++;
+          } else if (sel.breakfast || sel.lunch || sel.dinner) {
+            customDays++;
+          }
+        });
+        
+        setFoodData({ 
+          fullBoardDays, 
+          breakfastOnlyDays, 
+          customDays,
+          dietPreference: foodPlanData.diet_preference,
+        });
       }
     };
 
     fetchSummaryData();
   }, [user, toolStatuses]);
 
-  const handleEmailSummary = async () => {
-    if (!profile || !hasDatesSet) return;
+  const handleSubmitInformation = async () => {
+    if (!profile || !hasDatesSet) {
+      toast({
+        title: 'Missing information',
+        description: 'Please set your check-in and check-out dates before submitting.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    setIsEmailSending(true);
+    setIsSubmitting(true);
 
     try {
+      // Submit the profile
+      await submitProfile();
+
+      // Send summary email via edge function
       const response = await supabase.functions.invoke('send-guest-summary', {
         body: {
           fullName: profile.full_name,
           email: profile.email,
           checkInDate: profile.check_in_date,
           checkOutDate: profile.check_out_date,
-          roomSetup: toolStatuses.roomSetup === 'submitted' ? roomSetupData : null,
-          transportation: toolStatuses.transportation === 'submitted' ? transportationData : null,
-          food: toolStatuses.food === 'submitted' ? foodData : null,
+          guestsCount: profile.guests_count,
+          roomSetup: roomSetupData,
+          transportation: transportationData,
+          food: foodData,
         },
       });
 
       if (response.error) throw response.error;
 
       toast({
-        title: 'Email sent',
-        description: 'A copy of your summary has been sent to your email.',
+        title: 'Information submitted',
+        description: 'A confirmation email has been sent to you.',
       });
+
+      refreshProfile();
     } catch (error: any) {
-      console.error('Error sending email:', error);
+      console.error('Error submitting:', error);
       toast({
         title: 'Error',
-        description: 'Failed to send email. Please try again.',
+        description: 'Failed to submit. Please try again.',
         variant: 'destructive',
       });
     } finally {
-      setIsEmailSending(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -170,12 +208,16 @@ const Dashboard = () => {
             </p>
           </div>
 
+          {/* Edit Lock Banner */}
+          {isLocked && <EditLockBanner />}
+
           {/* Section 1: Stay Dates */}
           <StayDatesPicker
             checkInDate={profile.check_in_date}
             checkOutDate={profile.check_out_date}
-            onSave={async (checkIn, checkOut) => {
-              const success = await updateStayDates(checkIn, checkOut);
+            guestsCount={profile.guests_count}
+            onSave={async (checkIn, checkOut, guests) => {
+              const success = await updateStayInfo(checkIn, checkOut, guests);
               return success;
             }}
           />
@@ -190,6 +232,7 @@ const Dashboard = () => {
                 icon="room"
                 status={toolStatuses.roomSetup}
                 href="/room-setup"
+                disabled={isLocked}
               />
               <ToolTile
                 title="Transportation"
@@ -197,6 +240,7 @@ const Dashboard = () => {
                 icon="transport"
                 status={toolStatuses.transportation}
                 href="/transportation"
+                disabled={isLocked}
               />
               <ToolTile
                 title="Food"
@@ -204,7 +248,7 @@ const Dashboard = () => {
                 icon="food"
                 status={toolStatuses.food}
                 href="/food"
-                disabled={!hasDatesSet}
+                disabled={!hasDatesSet || isLocked}
               />
               <ToolTile
                 title="Documentation"
@@ -223,9 +267,27 @@ const Dashboard = () => {
             roomSetupData={roomSetupData}
             transportationData={transportationData}
             foodData={foodData}
-            onEmailSummary={handleEmailSummary}
-            isEmailSending={isEmailSending}
           />
+
+          {/* Submit Button */}
+          <div className="bg-card rounded-2xl border border-border p-6">
+            <Button
+              onClick={handleSubmitInformation}
+              disabled={isSubmitting || !hasDatesSet || isLocked}
+              size="lg"
+              className="w-full sm:w-auto gap-2"
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+              Submit information
+            </Button>
+            <p className="text-sm text-muted-foreground mt-3">
+              Your information can still be edited until 5 days before check-in date.
+            </p>
+          </div>
         </div>
       </main>
 

@@ -1,26 +1,39 @@
 import { useState, useEffect } from 'react';
-import { format, parseISO } from 'date-fns';
-import { Calendar as CalendarIcon, AlertCircle, Check } from 'lucide-react';
+import { format, parseISO, isAfter } from 'date-fns';
+import { Calendar as CalendarIcon, AlertCircle, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { isEditingLocked } from '@/lib/editLock';
 
 interface StayDatesPickerProps {
   checkInDate: string | null;
   checkOutDate: string | null;
-  onSave: (checkIn: Date | null, checkOut: Date | null) => Promise<boolean>;
+  guestsCount: number;
+  onSave: (checkIn: Date | null, checkOut: Date | null, guestsCount: number) => Promise<boolean>;
 }
 
-export function StayDatesPicker({ checkInDate, checkOutDate, onSave }: StayDatesPickerProps) {
+export function StayDatesPicker({ checkInDate, checkOutDate, guestsCount, onSave }: StayDatesPickerProps) {
   const [checkIn, setCheckIn] = useState<Date | undefined>(
     checkInDate ? parseISO(checkInDate) : undefined
   );
   const [checkOut, setCheckOut] = useState<Date | undefined>(
     checkOutDate ? parseISO(checkOutDate) : undefined
   );
+  const [guests, setGuests] = useState(guestsCount || 1);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const isLocked = isEditingLocked(checkInDate);
+
+  useEffect(() => {
+    if (checkInDate) setCheckIn(parseISO(checkInDate));
+    if (checkOutDate) setCheckOut(parseISO(checkOutDate));
+    if (guestsCount) setGuests(guestsCount);
+  }, [checkInDate, checkOutDate, guestsCount]);
 
   useEffect(() => {
     const currentCheckIn = checkInDate ? parseISO(checkInDate) : undefined;
@@ -28,18 +41,19 @@ export function StayDatesPicker({ checkInDate, checkOutDate, onSave }: StayDates
     
     const changed = 
       (checkIn?.toISOString() !== currentCheckIn?.toISOString()) ||
-      (checkOut?.toISOString() !== currentCheckOut?.toISOString());
+      (checkOut?.toISOString() !== currentCheckOut?.toISOString()) ||
+      (guests !== guestsCount);
     
     setHasChanges(changed);
-  }, [checkIn, checkOut, checkInDate, checkOutDate]);
+  }, [checkIn, checkOut, guests, checkInDate, checkOutDate, guestsCount]);
 
-  const isValid = checkIn && checkOut && checkOut > checkIn;
+  const isValid = checkIn && checkOut && isAfter(checkOut, checkIn) && guests >= 1 && guests <= 21;
   const hasDates = !!(checkInDate && checkOutDate);
 
   const handleSave = async () => {
-    if (!checkIn || !checkOut) return;
+    if (!checkIn || !checkOut || isLocked) return;
     setIsSaving(true);
-    const success = await onSave(checkIn, checkOut);
+    const success = await onSave(checkIn, checkOut, guests);
     if (success) {
       setHasChanges(false);
     }
@@ -63,16 +77,37 @@ export function StayDatesPicker({ checkInDate, checkOutDate, onSave }: StayDates
         )}
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4 mb-4">
+      {isLocked && (
+        <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-destructive">Edits are locked</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Edits are locked within 5 days of check-in. Please contact{' '}
+                <a href="mailto:hello@quintamor.com" className="text-primary hover:underline">
+                  hello@quintamor.com
+                </a>
+                .
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid sm:grid-cols-3 gap-4 mb-4">
         {/* Check-in Date */}
         <div>
-          <label className="text-sm text-muted-foreground mb-2 block">Check-in</label>
+          <Label className="text-sm text-muted-foreground mb-2 block">
+            Check-in <span className="text-destructive">*</span>
+          </Label>
           <Popover>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
+                disabled={isLocked}
                 className={cn(
-                  "w-full justify-start text-left font-normal",
+                  "w-full justify-start text-left font-normal h-11",
                   !checkIn && "text-muted-foreground"
                 )}
               >
@@ -86,11 +121,11 @@ export function StayDatesPicker({ checkInDate, checkOutDate, onSave }: StayDates
                 selected={checkIn}
                 onSelect={(date) => {
                   setCheckIn(date);
-                  // Reset checkout if it's before or same as checkin
                   if (date && checkOut && checkOut <= date) {
                     setCheckOut(undefined);
                   }
                 }}
+                disabled={(date) => date < new Date()}
                 initialFocus
                 className="p-3 pointer-events-auto"
               />
@@ -100,13 +135,16 @@ export function StayDatesPicker({ checkInDate, checkOutDate, onSave }: StayDates
 
         {/* Check-out Date */}
         <div>
-          <label className="text-sm text-muted-foreground mb-2 block">Check-out</label>
+          <Label className="text-sm text-muted-foreground mb-2 block">
+            Check-out <span className="text-destructive">*</span>
+          </Label>
           <Popover>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
+                disabled={isLocked}
                 className={cn(
-                  "w-full justify-start text-left font-normal",
+                  "w-full justify-start text-left font-normal h-11",
                   !checkOut && "text-muted-foreground"
                 )}
               >
@@ -119,23 +157,41 @@ export function StayDatesPicker({ checkInDate, checkOutDate, onSave }: StayDates
                 mode="single"
                 selected={checkOut}
                 onSelect={setCheckOut}
-                disabled={(date) => (checkIn ? date <= checkIn : false)}
+                disabled={(date) => (checkIn ? date <= checkIn : date < new Date())}
                 initialFocus
                 className="p-3 pointer-events-auto"
               />
             </PopoverContent>
           </Popover>
         </div>
+
+        {/* Number of Guests */}
+        <div>
+          <Label className="text-sm text-muted-foreground mb-2 block">
+            Guests <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            type="number"
+            min={1}
+            max={21}
+            value={guests}
+            onChange={(e) => setGuests(Math.min(21, Math.max(1, parseInt(e.target.value) || 1)))}
+            disabled={isLocked}
+            className="h-11"
+            placeholder="Number of guests"
+          />
+        </div>
       </div>
 
       {/* Validation / Save */}
-      {hasChanges && isValid && (
+      {hasChanges && isValid && !isLocked && (
         <Button onClick={handleSave} disabled={isSaving} className="w-full sm:w-auto">
+          {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
           {isSaving ? 'Saving...' : 'Save dates'}
         </Button>
       )}
 
-      {checkIn && checkOut && checkOut <= checkIn && (
+      {checkIn && checkOut && !isAfter(checkOut, checkIn) && (
         <div className="flex items-center gap-2 text-destructive text-sm mt-2">
           <AlertCircle className="w-4 h-4" />
           Check-out must be after check-in

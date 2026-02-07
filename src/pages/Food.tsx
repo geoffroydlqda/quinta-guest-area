@@ -3,13 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { useFoodPlan } from '@/hooks/useFoodPlan';
+import { useAutoSave } from '@/hooks/useAutoSave';
+import { isEditingLocked } from '@/lib/editLock';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
-import { Button } from '@/components/ui/button';
+import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
+import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, AlertCircle, Utensils, Check } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Loader2, AlertCircle, Check } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+import type { DietPreference } from '@/types/guest';
+
+const DIET_OPTIONS: { value: DietPreference; label: string }[] = [
+  { value: 'Vegetarian', label: 'Vegetarian' },
+  { value: 'Meat or fish for dinner', label: 'Meat or fish for dinner' },
+  { value: 'Meat or fish for dinner and lunch', label: 'Meat or fish for dinner and lunch' },
+];
 
 const Food = () => {
   const { user, isLoading: authLoading } = useAuth();
@@ -20,14 +32,15 @@ const Food = () => {
     foodPlan,
     days,
     isLoading: foodLoading,
-    isSaving,
     updateDaySelection,
-    saveDraft,
-    submitPlan,
+    updateDietPreference,
+    updateNotes,
+    autoSave,
     summary,
   } = useFoodPlan(profile?.check_in_date || null, profile?.check_out_date || null);
 
-  const [notes, setNotes] = useState('');
+  const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
+  const isLocked = isEditingLocked(profile?.check_in_date || null);
 
   // Redirect if not logged in
   useEffect(() => {
@@ -36,25 +49,12 @@ const Food = () => {
     }
   }, [user, authLoading, navigate]);
 
+  // Trigger auto-save when selections change
   useEffect(() => {
-    if (foodPlan?.notes_food) {
-      setNotes(foodPlan.notes_food);
+    if (foodPlan && !isLocked) {
+      triggerSave();
     }
-  }, [foodPlan]);
-
-  const handleSave = async () => {
-    const success = await saveDraft(notes);
-    if (success) {
-      navigate('/dashboard');
-    }
-  };
-
-  const handleSubmit = async () => {
-    const success = await submitPlan(notes);
-    if (success) {
-      navigate('/dashboard');
-    }
-  };
+  }, [foodPlan?.selections, foodPlan?.diet_preference, foodPlan?.notes_food]);
 
   if (authLoading || profileLoading) {
     return (
@@ -76,7 +76,7 @@ const Food = () => {
               Please set your check-in and check-out dates on the dashboard before planning your meals.
             </p>
             <Button onClick={() => navigate('/dashboard')}>
-              Set dates on Dashboard
+              Go to Dashboard
             </Button>
           </div>
         </div>
@@ -92,11 +92,36 @@ const Food = () => {
     );
   }
 
-  const isSubmitted = foodPlan.status_food === 'submitted';
-
   return (
     <ToolPageLayout title="Food" description="Plan your meals during your stay">
       <div className="max-w-4xl mx-auto space-y-6">
+        {isLocked && <EditLockBanner />}
+
+        {/* Auto-save indicator */}
+        <div className="flex justify-end">
+          <AutoSaveIndicator status={saveStatus} />
+        </div>
+
+        {/* Diet Preference */}
+        <div className="bg-card rounded-2xl border border-border p-6">
+          <Label className="text-base font-medium mb-4 block">Diet preference</Label>
+          <RadioGroup
+            value={foodPlan.diet_preference || ''}
+            onValueChange={(value) => !isLocked && updateDietPreference(value as DietPreference)}
+            disabled={isLocked}
+            className="space-y-3"
+          >
+            {DIET_OPTIONS.map((option) => (
+              <div key={option.value} className="flex items-center space-x-3">
+                <RadioGroupItem value={option.value} id={option.value} disabled={isLocked} />
+                <Label htmlFor={option.value} className="font-normal cursor-pointer">
+                  {option.label}
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
+        </div>
+
         {/* Summary Stats */}
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-card rounded-xl border border-border p-4 text-center">
@@ -151,28 +176,28 @@ const Food = () => {
                       <td className="text-center p-4">
                         <MealToggle
                           selected={selection.fullBoard}
-                          disabled={isSubmitted || isCheckIn || isCheckOut || selection.breakfast || selection.lunch || selection.dinner}
+                          disabled={isLocked || isCheckIn || isCheckOut || selection.breakfast || selection.lunch || selection.dinner}
                           onClick={() => updateDaySelection(day.date, { fullBoard: !selection.fullBoard })}
                         />
                       </td>
                       <td className="text-center p-4">
                         <MealToggle
                           selected={selection.breakfast}
-                          disabled={isSubmitted || selection.fullBoard || (isCheckIn && !isCheckOut)}
+                          disabled={isLocked || selection.fullBoard || (isCheckIn && !isCheckOut)}
                           onClick={() => updateDaySelection(day.date, { breakfast: !selection.breakfast })}
                         />
                       </td>
                       <td className="text-center p-4">
                         <MealToggle
                           selected={selection.lunch}
-                          disabled={isSubmitted || selection.fullBoard || isCheckIn || isCheckOut}
+                          disabled={isLocked || selection.fullBoard || isCheckIn || isCheckOut}
                           onClick={() => updateDaySelection(day.date, { lunch: !selection.lunch })}
                         />
                       </td>
                       <td className="text-center p-4">
                         <MealToggle
                           selected={selection.dinner}
-                          disabled={isSubmitted || selection.fullBoard || isCheckOut}
+                          disabled={isLocked || selection.fullBoard || isCheckOut}
                           onClick={() => updateDaySelection(day.date, { dinner: !selection.dinner })}
                         />
                       </td>
@@ -196,44 +221,12 @@ const Food = () => {
           <Label>Notes (optional)</Label>
           <Textarea
             placeholder="Dietary requirements, allergies, or preferences..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            disabled={isSubmitted}
+            value={foodPlan.notes_food || ''}
+            onChange={(e) => !isLocked && updateNotes(e.target.value)}
+            disabled={isLocked}
             rows={3}
           />
         </div>
-
-        {/* Actions */}
-        {!isSubmitted && (
-          <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-border">
-            <Button
-              variant="outline"
-              onClick={handleSave}
-              disabled={isSaving}
-              className="gap-2"
-            >
-              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Save Draft
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSaving}
-              className="gap-2"
-            >
-              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              Submit Food Plan
-            </Button>
-          </div>
-        )}
-
-        {isSubmitted && (
-          <div className="rounded-xl bg-success/10 border border-success/30 p-4">
-            <p className="text-success font-medium">Food plan submitted</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Your food plan has been submitted. Changes can no longer be made.
-            </p>
-          </div>
-        )}
       </div>
     </ToolPageLayout>
   );

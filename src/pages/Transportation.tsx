@@ -1,17 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { useTransportation } from '@/hooks/useTransportation';
+import { useAutoSave } from '@/hooks/useAutoSave';
+import { isEditingLocked } from '@/lib/editLock';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
+import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
+import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Plus, Trash2, UserPlus, X, Save, Send, Car, Info } from 'lucide-react';
+import { Loader2, Plus, Trash2, UserPlus, X, Car, Info, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 import type { TransportationTrip } from '@/types/guest';
+import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS } from '@/types/guest';
+
+// Import driver image
+import driverImage from '@/assets/rooms-arrangement.png';
 
 const PICKUP_OPTIONS = ['Lisbon', 'Lisbon Airport', 'Quinta do Amor', 'Custom'];
 const DROPOFF_OPTIONS = ['Quinta do Amor', 'Lisbon', 'Lisbon Airport', 'Custom'];
@@ -19,22 +28,24 @@ const DROPOFF_OPTIONS = ['Quinta do Amor', 'Lisbon', 'Lisbon Airport', 'Custom']
 const Transportation = () => {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const { profile } = useGuestProfile();
   
   const {
     request,
     trips,
     isLoading,
-    isSaving,
     addTrip,
     updateTrip,
     deleteTrip,
     addPassenger,
     removePassenger,
-    saveDraft,
-    submitRequest,
+    updateNotes,
+    autoSave,
   } = useTransportation();
 
-  const [notes, setNotes] = useState('');
+  const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
+  const isLocked = isEditingLocked(profile?.check_in_date || null);
+
   const [showAddTrip, setShowAddTrip] = useState(false);
   const [newTrip, setNewTrip] = useState({
     trip_direction: 'To Quinta' as 'To Quinta' | 'From Quinta',
@@ -55,11 +66,12 @@ const Transportation = () => {
     }
   }, [user, authLoading, navigate]);
 
+  // Trigger auto-save when notes change
   useEffect(() => {
-    if (request?.notes_transportation) {
-      setNotes(request.notes_transportation);
+    if (request && !isLocked) {
+      triggerSave();
     }
-  }, [request]);
+  }, [request?.notes_transportation]);
 
   const handleAddTrip = async () => {
     const pickup = newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location;
@@ -93,18 +105,16 @@ const Transportation = () => {
     });
   };
 
-  const handleSave = async () => {
-    const success = await saveDraft(notes);
-    if (success) {
-      navigate('/dashboard');
-    }
-  };
-
-  const handleSubmit = async () => {
-    const success = await submitRequest(notes);
-    if (success) {
-      navigate('/dashboard');
-    }
+  const handleDuplicateTrip = async (trip: TransportationTrip) => {
+    await addTrip({
+      trip_direction: trip.trip_direction,
+      pickup_location: trip.pickup_location,
+      dropoff_location: trip.dropoff_location,
+      trip_date: trip.trip_date,
+      trip_time: trip.trip_time,
+      passengers_count: trip.passengers_count,
+      taxi_size: trip.taxi_size,
+    });
   };
 
   if (authLoading || isLoading) {
@@ -115,23 +125,57 @@ const Transportation = () => {
     );
   }
 
-  const isSubmitted = request?.status_transportation === 'submitted';
-
   return (
     <ToolPageLayout
       title="Transportation"
       description="Arrange taxi transfers to and from Quinta do Amor"
     >
       <div className="max-w-3xl mx-auto space-y-6">
-        {/* Info Box */}
-        <div className="rounded-xl bg-primary/10 border border-primary/30 p-5">
+        {isLocked && <EditLockBanner />}
+
+        {/* Auto-save indicator */}
+        <div className="flex justify-end">
+          <AutoSaveIndicator status={saveStatus} />
+        </div>
+
+        {/* Driver Intro Card */}
+        <div className="rounded-2xl bg-card border border-border p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 bg-muted">
+              <img 
+                src={driverImage} 
+                alt="Luis" 
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div>
+              <p className="text-foreground">
+                <strong>Luis</strong> and his team will take care of the transportation of your guests and yourselves during your stay.
+                They speak perfect English and will ensure you a smooth ride.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Luggage Note */}
+        <div className="rounded-xl bg-primary/10 border border-primary/30 p-4">
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+            <p className="text-sm">
+              Please consider the luggage of your guests. If you expect big suitcases, we recommend not filling the taxis.
+            </p>
+          </div>
+        </div>
+
+        {/* Pricing Info */}
+        <div className="rounded-xl bg-muted/50 border border-border p-5">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
             <div className="text-sm">
               <p className="font-medium mb-2">Taxi pricing</p>
               <ul className="space-y-1 text-muted-foreground">
-                <li>• 4-seat taxi: <strong>€60</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
-                <li>• 6-seat taxi: Custom offer</li>
+                <li>• 4-seat taxi: <strong>€{STANDARD_TAXI_PRICE_4_SEATS}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
+                <li>• 6-seat taxi: <strong>€{STANDARD_TAXI_PRICE_6_SEATS}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
                 <li>• Other routes: Custom offer</li>
               </ul>
             </div>
@@ -147,16 +191,17 @@ const Transportation = () => {
                 key={trip.id}
                 trip={trip}
                 onDelete={() => deleteTrip(trip.id)}
+                onDuplicate={() => handleDuplicateTrip(trip)}
                 onAddPassenger={(passenger) => addPassenger(trip.id, passenger)}
                 onRemovePassenger={(passengerId) => removePassenger(passengerId, trip.id)}
-                disabled={isSubmitted}
+                disabled={isLocked}
               />
             ))}
           </div>
         )}
 
         {/* Add Trip Form */}
-        {!isSubmitted && (
+        {!isLocked && (
           <>
             {showAddTrip ? (
               <Card>
@@ -309,44 +354,12 @@ const Transportation = () => {
           <Label>Notes (optional)</Label>
           <Textarea
             placeholder="Any special requirements or notes..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            disabled={isSubmitted}
+            value={request?.notes_transportation || ''}
+            onChange={(e) => !isLocked && updateNotes(e.target.value)}
+            disabled={isLocked}
             rows={3}
           />
         </div>
-
-        {/* Actions */}
-        {!isSubmitted && (
-          <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-border">
-            <Button
-              variant="outline"
-              onClick={handleSave}
-              disabled={isSaving}
-              className="gap-2"
-            >
-              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Save Draft
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSaving || trips.length === 0}
-              className="gap-2"
-            >
-              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              Submit Transportation Request
-            </Button>
-          </div>
-        )}
-
-        {isSubmitted && (
-          <div className="rounded-xl bg-success/10 border border-success/30 p-4">
-            <p className="text-success font-medium">Transportation request submitted</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Your transportation request has been submitted. We'll be in touch to confirm.
-            </p>
-          </div>
-        )}
       </div>
     </ToolPageLayout>
   );
@@ -356,12 +369,14 @@ const Transportation = () => {
 function TripCard({
   trip,
   onDelete,
+  onDuplicate,
   onAddPassenger,
   onRemovePassenger,
   disabled,
 }: {
   trip: TransportationTrip;
   onDelete: () => void;
+  onDuplicate: () => void;
   onAddPassenger: (p: { first_name: string; phone: string; flight_number?: string }) => void;
   onRemovePassenger: (id: string) => void;
   disabled?: boolean;
@@ -387,9 +402,14 @@ function TripCard({
             </p>
           </div>
           {!disabled && (
-            <Button variant="ghost" size="icon" onClick={onDelete}>
-              <Trash2 className="w-4 h-4 text-destructive" />
-            </Button>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="icon" onClick={onDuplicate} title="Duplicate trip">
+                <Copy className="w-4 h-4 text-muted-foreground" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={onDelete}>
+                <Trash2 className="w-4 h-4 text-destructive" />
+              </Button>
+            </div>
           )}
         </div>
 
