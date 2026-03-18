@@ -32,9 +32,21 @@ const RoomSetupSchema = z.object({
 
 type RoomSetupPayload = z.infer<typeof RoomSetupSchema>;
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): string {
   const { stats, fullName, firstName, email, remarks } = payload;
-  const greetingName = firstName || fullName?.split(' ')[0] || 'Guest';
+  const safeFullName = escapeHtml(fullName);
+  const safeEmail = escapeHtml(email);
+  const safeRemarks = remarks ? escapeHtml(remarks) : null;
+  const greetingName = escapeHtml(firstName || fullName?.split(' ')[0] || 'Guest');
   
   return `
     <!DOCTYPE html>
