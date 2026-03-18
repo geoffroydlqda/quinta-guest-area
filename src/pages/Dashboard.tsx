@@ -158,7 +158,10 @@ const DashboardContent = () => {
           guestsCount: profile.guests_count,
           roomSetup: roomSetupData,
           transportation: transportationData,
-          food: foodData,
+          food: foodData ? {
+            ...foodData,
+            selections: foodData.selections || [],
+          } : null,
         },
       });
 
