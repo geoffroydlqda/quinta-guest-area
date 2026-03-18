@@ -32,9 +32,21 @@ const RoomSetupSchema = z.object({
 
 type RoomSetupPayload = z.infer<typeof RoomSetupSchema>;
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): string {
   const { stats, fullName, firstName, email, remarks } = payload;
-  const greetingName = firstName || fullName?.split(' ')[0] || 'Guest';
+  const safeFullName = escapeHtml(fullName);
+  const safeEmail = escapeHtml(email);
+  const safeRemarks = remarks ? escapeHtml(remarks) : null;
+  const greetingName = escapeHtml(firstName || fullName?.split(' ')[0] || 'Guest');
   
   return `
     <!DOCTYPE html>
@@ -55,7 +67,7 @@ function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): s
                 <td style="background-color: #5e6d3f; padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
                   <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 400; letter-spacing: 1px;">Quinta do Amor</h1>
                   <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">
-                    ${isAdmin ? 'Housekeeping Setup — ' + fullName : 'Your Room Setup Confirmation'}
+                    ${isAdmin ? 'Housekeeping Setup — ' + safeFullName : 'Your Room Setup Confirmation'}
                   </p>
                 </td>
               </tr>
@@ -67,8 +79,8 @@ function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): s
                   ${isAdmin ? `
                   <table width="100%" style="background-color: #f6efea; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
                     <tr><td>
-                      <strong style="color: #000;">Guest:</strong> ${fullName}<br>
-                      <strong style="color: #000;">Email:</strong> ${email}
+                      <strong style="color: #000;">Guest:</strong> ${safeFullName}<br>
+                      <strong style="color: #000;">Email:</strong> ${safeEmail}
                     </td></tr>
                   </table>
                   ` : `
@@ -93,11 +105,11 @@ function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): s
                     </td></tr>
                   </table>
 
-                  ${remarks ? `
+                  ${safeRemarks ? `
                   <table width="100%" style="background-color: #fef9e7; border-radius: 8px; border-left: 4px solid #d4a843; margin-bottom: 24px;">
                     <tr><td style="padding: 16px;">
                       <strong style="color: #000;">Remarks:</strong><br>
-                      <span style="color: #333;">${remarks}</span>
+                      <span style="color: #333;">${safeRemarks}</span>
                     </td></tr>
                   </table>
                   ` : ''}
@@ -219,9 +231,9 @@ const handler = async (req: Request): Promise<Response> => {
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   } catch (error: any) {
-    console.error("Error:", error);
+    console.error("Unhandled error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   }

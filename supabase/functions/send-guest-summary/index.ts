@@ -145,9 +145,21 @@ function generateTransportationTripsHtml(trips: z.infer<typeof TripSchema>[]): s
   }).join('');
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): string {
   const { fullName, firstName, email, checkInDate, checkOutDate, guestsCount, roomSetup, transportation, food } = payload;
-  const greetingName = firstName || fullName?.split(' ')[0] || 'Guest';
+  const safeFullName = escapeHtml(fullName);
+  const safeEmail = escapeHtml(email);
+  const greetingName = escapeHtml(firstName || fullName?.split(' ')[0] || 'Guest');
+  const safeDietPreference = food?.dietPreference ? escapeHtml(food.dietPreference) : null;
   
   const foodTotal = food?.totalCost || 0;
   const transportTotal = transportation?.totalPrice || 0;
@@ -173,7 +185,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                 <td style="background-color: #5e6d3f; padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
                   <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 400; letter-spacing: 1px;">Quinta do Amor</h1>
                   <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">
-                    ${isAdmin ? 'Guest Area Summary — ' + fullName : 'Guest Area Summary'}
+                    ${isAdmin ? 'Guest Area Summary — ' + safeFullName : 'Guest Area Summary'}
                   </p>
                 </td>
               </tr>
@@ -194,8 +206,8 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                   ${isAdmin ? `
                   <table width="100%" style="background-color: #f6efea; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
                     <tr><td>
-                      <strong style="color: #000;">Guest:</strong> ${fullName}<br>
-                      <strong style="color: #000;">Email:</strong> ${email}
+                      <strong style="color: #000;">Guest:</strong> ${safeFullName}<br>
+                      <strong style="color: #000;">Email:</strong> ${safeEmail}
                     </td></tr>
                   </table>
                   ` : `
@@ -263,7 +275,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                     </td></tr>
                     <tr><td style="padding: 12px 0;">
                       ${food ? `
-                      ${food.dietPreference ? `<p style="margin: 0 0 12px 0; color: #333;"><strong>Diet preference:</strong> ${food.dietPreference}</p>` : ''}
+                      ${safeDietPreference ? `<p style="margin: 0 0 12px 0; color: #333;"><strong>Diet preference:</strong> ${safeDietPreference}</p>` : ''}
                       
                       <!-- Daily Breakdown -->
                       ${food.selections && food.selections.length > 0 ? `
@@ -412,9 +424,9 @@ const handler = async (req: Request): Promise<Response> => {
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   } catch (error: any) {
-    console.error("Error:", error);
+    console.error("Unhandled error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   }
