@@ -19,17 +19,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Set up auth state listener BEFORE checking session
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+      async (event, newSession) => {
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
         setIsLoading(false);
+
+        // On sign-in (including OAuth callback), ensure profile exists
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          // Use setTimeout to avoid blocking the auth state change
+          setTimeout(async () => {
+            try {
+              await supabase.functions.invoke('ensure-guest-profile', {
+                body: { metadata: newSession.user.user_metadata },
+              });
+            } catch (err) {
+              console.error('Failed to ensure profile on sign-in:', err);
+            }
+          }, 0);
+        }
       }
     );
 
     // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+      setSession(existingSession);
+      setUser(existingSession?.user ?? null);
       setIsLoading(false);
     });
 

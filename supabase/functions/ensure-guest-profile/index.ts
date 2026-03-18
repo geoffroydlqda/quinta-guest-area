@@ -21,24 +21,24 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Create client with user's token to get their identity
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: claimsData, error: authError } = await supabaseClient.auth.getClaims(token);
+    const { data: { user: authUser }, error: authError } = await supabaseClient.auth.getUser();
 
-    if (authError || !claimsData?.claims) {
+    if (authError || !authUser) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
 
-    const userId = claimsData.claims.sub as string;
-    const userEmail = claimsData.claims.email as string;
+    const userId = authUser.id;
+    const userEmail = authUser.email ?? '';
 
     // Get metadata from request body (optional)
     let metadata: Record<string, any> = {};
@@ -48,6 +48,9 @@ const handler = async (req: Request): Promise<Response> => {
     } catch {
       // No body or invalid JSON
     }
+
+    // Merge auth user metadata with request metadata
+    const allMetadata = { ...authUser.user_metadata, ...metadata };
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -73,9 +76,9 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Extract name from metadata - support both email/password signup and Google OAuth
-    const firstName = metadata.first_name || metadata.given_name || '';
-    const lastName = metadata.last_name || metadata.family_name || '';
-    const fullName = metadata.full_name || metadata.name ||
+    const firstName = allMetadata.first_name || allMetadata.given_name || '';
+    const lastName = allMetadata.last_name || allMetadata.family_name || '';
+    const fullName = allMetadata.full_name || allMetadata.name ||
       (firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName || '');
 
     const { data: newProfile, error: insertError } = await supabaseAdmin
@@ -92,6 +95,7 @@ const handler = async (req: Request): Promise<Response> => {
       .single();
 
     if (insertError) {
+      // Handle race condition - profile was created between our check and insert
       if (insertError.code === '23505') {
         const { data: retryProfile } = await supabaseAdmin
           .from('guest_profiles')

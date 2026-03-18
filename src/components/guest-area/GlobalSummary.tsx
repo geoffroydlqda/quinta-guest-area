@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ChevronRight, BedDouble, Car, Utensils, Users, Euro } from 'lucide-react';
+import { format } from 'date-fns';
 import type { ToolStatuses, GuestProfile } from '@/types/guest';
 
 interface GlobalSummaryProps {
@@ -26,6 +27,17 @@ interface GlobalSummaryProps {
   };
 }
 
+// Parse YYYY-MM-DD as local date to avoid timezone shifts
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatDateLocal(dateStr: string, options: Intl.DateTimeFormatOptions): string {
+  const date = parseLocalDate(dateStr);
+  return date.toLocaleDateString('en-GB', options);
+}
+
 export function GlobalSummary({
   profile,
   toolStatuses,
@@ -49,7 +61,7 @@ export function GlobalSummary({
           <span className="text-muted-foreground font-medium">Stay dates</span>
           {hasDates ? (
             <span className="font-semibold">
-              {new Date(profile.check_in_date!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — {new Date(profile.check_out_date!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              {formatDateLocal(profile.check_in_date!, { day: 'numeric', month: 'short' })} — {formatDateLocal(profile.check_out_date!, { day: 'numeric', month: 'short', year: 'numeric' })}
             </span>
           ) : (
             <span className="text-muted-foreground italic">Not set</span>

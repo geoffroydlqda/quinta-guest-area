@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -12,6 +12,10 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
   const [foodPlan, setFoodPlan] = useState<FoodPlan | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Track the dates we last synced with to avoid re-syncing unnecessarily
+  const lastSyncedDatesRef = useRef<string>('');
+  const hasLoadedRef = useRef(false);
 
   // Generate days array based on check-in/out dates
   const days = useMemo(() => {
@@ -36,6 +40,11 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     
     return daysArray;
   }, [checkInDate, checkOutDate]);
+
+  // Build a stable key for the current date range
+  const datesKey = useMemo(() => {
+    return days.map(d => d.date).join(',');
+  }, [days]);
 
   // Initialize selections for all days
   const initializeSelections = useCallback((): FoodDaySelection[] => {
@@ -64,12 +73,12 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
       if (error) throw error;
       
       if (!data) {
-        // Create new food plan
+        const newSelections = initializeSelections();
         const { data: newPlan, error: createError } = await supabase
           .from('food_plans')
           .insert([{
             user_id: user.id,
-            selections: JSON.parse(JSON.stringify(initializeSelections())),
+            selections: JSON.parse(JSON.stringify(newSelections)),
           }])
           .select()
           .single();
@@ -78,10 +87,13 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
         data = newPlan;
       }
       
-      // Ensure selections are properly typed
-      const parsedSelections = Array.isArray(data.selections) 
+      // Parse selections from DB
+      const dbSelections = Array.isArray(data.selections) 
         ? (data.selections as unknown as FoodDaySelection[]) 
-        : initializeSelections();
+        : [];
+      
+      // Immediately sync with current date range
+      const syncedSelections = syncSelectionsToDateRange(dbSelections, days);
       
       const typedPlan: FoodPlan = {
         id: data.id,
@@ -91,10 +103,12 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
         notes_food: data.notes_food,
         status_food: data.status_food as 'draft' | 'submitted',
         diet_preference: data.diet_preference as DietPreference | null,
-        selections: parsedSelections,
+        selections: syncedSelections,
       };
       
       setFoodPlan(typedPlan);
+      lastSyncedDatesRef.current = datesKey;
+      hasLoadedRef.current = true;
       
     } catch (error: any) {
       console.error('Error loading food plan:', error);
@@ -106,13 +120,48 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast, initializeSelections]);
+  }, [user, toast, initializeSelections, days, datesKey]);
 
+  // Pure function: sync selections array to match current days
+  function syncSelectionsToDateRange(
+    existingSelections: FoodDaySelection[],
+    currentDays: { date: string }[]
+  ): FoodDaySelection[] {
+    if (currentDays.length === 0) return [];
+    
+    const existingByDate = new Map(existingSelections.map(s => [s.date, s]));
+    
+    return currentDays.map(day => {
+      return existingByDate.get(day.date) || {
+        date: day.date,
+        fullBoard: false,
+        breakfast: false,
+        lunch: false,
+        dinner: false,
+      };
+    });
+  }
+
+  // Initial load
   useEffect(() => {
     if (user && days.length > 0) {
       loadFoodPlan();
+    } else if (days.length === 0) {
+      setIsLoading(false);
     }
-  }, [user, days.length, loadFoodPlan]);
+  }, [user?.id, datesKey]); // Only re-load when user or date range changes
+
+  // Sync selections when dates change AFTER initial load
+  useEffect(() => {
+    if (!foodPlan || !hasLoadedRef.current || days.length === 0) return;
+    if (lastSyncedDatesRef.current === datesKey) return; // Already synced
+    
+    // Dates changed - re-sync selections preserving valid ones
+    const synced = syncSelectionsToDateRange(foodPlan.selections, days);
+    lastSyncedDatesRef.current = datesKey;
+    
+    setFoodPlan(prev => prev ? { ...prev, selections: synced } : prev);
+  }, [datesKey, days]); // Deliberately exclude foodPlan to avoid loop
 
   // Update selection for a specific day
   const updateDaySelection = useCallback((date: string, updates: Partial<FoodDaySelection>) => {
@@ -127,7 +176,11 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
           return { ...sel, fullBoard: true, breakfast: false, lunch: false, dinner: false };
         }
         
-        if (updates.breakfast || updates.lunch || updates.dinner) {
+        if (updates.fullBoard === false) {
+          return { ...sel, fullBoard: false };
+        }
+        
+        if (updates.breakfast !== undefined || updates.lunch !== undefined || updates.dinner !== undefined) {
           return { ...sel, ...updates, fullBoard: false };
         }
         
@@ -143,32 +196,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     setFoodPlan(prev => prev ? { ...prev, diet_preference: preference } : null);
   }, []);
 
-  // Sync selections with current days (when dates change)
-  const syncSelectionsWithDays = useCallback(() => {
-    if (!foodPlan || days.length === 0) return;
-    
-    const existingByDate = new Map(foodPlan.selections.map(s => [s.date, s]));
-    
-    const syncedSelections: FoodDaySelection[] = days.map(day => {
-      return existingByDate.get(day.date) || {
-        date: day.date,
-        fullBoard: false,
-        breakfast: false,
-        lunch: false,
-        dinner: false,
-      };
-    });
-    
-    setFoodPlan(prev => prev ? { ...prev, selections: syncedSelections } : prev);
-  }, [foodPlan, days]);
-
-  useEffect(() => {
-    if (foodPlan && days.length > 0) {
-      syncSelectionsWithDays();
-    }
-  }, [days.length]);
-
-  // Auto-save function (used by useAutoSave hook)
+  // Auto-save function
   const autoSave = useCallback(async (): Promise<boolean> => {
     if (!user || !foodPlan) return false;
     

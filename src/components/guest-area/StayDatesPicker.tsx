@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { format, parseISO, isAfter } from 'date-fns';
+import { format, isAfter } from 'date-fns';
 import { Calendar as CalendarIcon, AlertCircle, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -18,10 +18,9 @@ interface StayDatesPickerProps {
   onGuestsCountChange: (count: number) => Promise<boolean>;
 }
 
-// Parse date string to Date object, handling timezone correctly
+// Parse YYYY-MM-DD string to local Date, avoiding timezone shifts
 function parseLocalDate(dateStr: string | null): Date | undefined {
   if (!dateStr) return undefined;
-  // Parse as local date by adding time component
   const [year, month, day] = dateStr.split('-').map(Number);
   return new Date(year, month - 1, day);
 }
@@ -34,20 +33,22 @@ export function StayDatesPicker({
   onCheckOutChange,
   onGuestsCountChange,
 }: StayDatesPickerProps) {
-  // Local state for UI - INDEPENDENT of each other
+  // Local state - single source of truth for UI
   const [localCheckIn, setLocalCheckIn] = useState<Date | undefined>(() => parseLocalDate(checkInDate));
   const [localCheckOut, setLocalCheckOut] = useState<Date | undefined>(() => parseLocalDate(checkOutDate));
-  const [localGuests, setLocalGuests] = useState(guestsCount || 1);
+  const [localGuestsStr, setLocalGuestsStr] = useState(() => 
+    guestsCount ? String(guestsCount) : ''
+  );
+  const [guestsError, setGuestsError] = useState<string | null>(null);
   
   const [isSavingCheckIn, setIsSavingCheckIn] = useState(false);
   const [isSavingCheckOut, setIsSavingCheckOut] = useState(false);
   const [isSavingGuests, setIsSavingGuests] = useState(false);
   
   const guestsDebounceRef = useRef<NodeJS.Timeout>();
-  
-  // Track if we're in the middle of a user-initiated change
   const isUserEditingCheckIn = useRef(false);
   const isUserEditingCheckOut = useRef(false);
+  const isUserEditingGuests = useRef(false);
 
   const isLocked = isEditingLocked(checkInDate);
   const hasDates = !!(checkInDate && checkOutDate);
@@ -57,9 +58,6 @@ export function StayDatesPicker({
     if (!isUserEditingCheckIn.current && checkInDate) {
       const parsed = parseLocalDate(checkInDate);
       if (parsed && (!localCheckIn || parsed.getTime() !== localCheckIn.getTime())) {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[StayDatesPicker] Syncing checkIn from props:', checkInDate);
-        }
         setLocalCheckIn(parsed);
       }
     }
@@ -70,33 +68,28 @@ export function StayDatesPicker({
     if (!isUserEditingCheckOut.current && checkOutDate) {
       const parsed = parseLocalDate(checkOutDate);
       if (parsed && (!localCheckOut || parsed.getTime() !== localCheckOut.getTime())) {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[StayDatesPicker] Syncing checkOut from props:', checkOutDate);
-        }
         setLocalCheckOut(parsed);
       }
     }
   }, [checkOutDate]);
 
-  // Sync guests count from props
+  // Sync guests from props ONLY when not editing
   useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[StayDatesPicker] guestsCount prop changed:', guestsCount, 'localGuests:', localGuests);
-    }
-    // Only update if significantly different and not during a debounce
-    if (guestsCount !== localGuests && !guestsDebounceRef.current) {
-      setLocalGuests(guestsCount || 1);
+    if (!isUserEditingGuests.current && !guestsDebounceRef.current) {
+      const propStr = guestsCount ? String(guestsCount) : '';
+      if (propStr !== localGuestsStr) {
+        setLocalGuestsStr(propStr);
+      }
     }
   }, [guestsCount]);
 
-  // Handle check-in date change - dates always editable (even when locked)
+  // Handle check-in date change
   const handleCheckInSelect = useCallback(async (date: Date | undefined) => {
     if (!date) return;
     
     isUserEditingCheckIn.current = true;
     setLocalCheckIn(date);
     
-    // If checkout is before or on the new checkin, clear it
     if (localCheckOut && localCheckOut <= date) {
       setLocalCheckOut(undefined);
     }
@@ -105,13 +98,10 @@ export function StayDatesPicker({
     await onCheckInChange(date);
     setIsSavingCheckIn(false);
     
-    // Allow prop sync again after a short delay
-    setTimeout(() => {
-      isUserEditingCheckIn.current = false;
-    }, 500);
+    setTimeout(() => { isUserEditingCheckIn.current = false; }, 500);
   }, [localCheckOut, onCheckInChange]);
 
-  // Handle check-out date change - dates always editable (even when locked)
+  // Handle check-out date change
   const handleCheckOutSelect = useCallback(async (date: Date | undefined) => {
     if (!date) return;
     
@@ -122,45 +112,57 @@ export function StayDatesPicker({
     await onCheckOutChange(date);
     setIsSavingCheckOut(false);
     
-    // Allow prop sync again after a short delay
-    setTimeout(() => {
-      isUserEditingCheckOut.current = false;
-    }, 500);
+    setTimeout(() => { isUserEditingCheckOut.current = false; }, 500);
   }, [onCheckOutChange]);
 
-
-  // Handle guests count change with debounce - DOES NOT touch date state
-  const handleGuestsChange = useCallback((value: number) => {
+  // Handle guests count change - fully controlled, no auto-clamping
+  const handleGuestsChange = useCallback((rawValue: string) => {
     if (isLocked) return;
     
-    const clampedValue = Math.min(21, Math.max(1, value));
+    isUserEditingGuests.current = true;
+    setLocalGuestsStr(rawValue);
     
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[StayDatesPicker] handleGuestsChange:', value, '-> clamped:', clampedValue);
-      console.log('[StayDatesPicker] Current dates - checkIn:', localCheckIn, 'checkOut:', localCheckOut);
+    // Validate
+    const numValue = parseInt(rawValue, 10);
+    if (rawValue === '' || isNaN(numValue)) {
+      setGuestsError(null);
+      // Clear existing timeout
+      if (guestsDebounceRef.current) clearTimeout(guestsDebounceRef.current);
+      guestsDebounceRef.current = undefined;
+      isUserEditingGuests.current = false;
+      return;
     }
     
-    setLocalGuests(clampedValue);
+    if (numValue < 1) {
+      setGuestsError('Minimum 1 guest');
+      isUserEditingGuests.current = false;
+      return;
+    }
+    
+    if (numValue > 21) {
+      setGuestsError('Maximum 21 guests');
+      isUserEditingGuests.current = false;
+      return;
+    }
+    
+    setGuestsError(null);
     
     // Clear existing timeout
-    if (guestsDebounceRef.current) {
-      clearTimeout(guestsDebounceRef.current);
-    }
+    if (guestsDebounceRef.current) clearTimeout(guestsDebounceRef.current);
     
-    // Debounce the save
+    // Debounce the save - PATCH only guests_count
     guestsDebounceRef.current = setTimeout(async () => {
       setIsSavingGuests(true);
-      await onGuestsCountChange(clampedValue);
+      await onGuestsCountChange(numValue);
       setIsSavingGuests(false);
       guestsDebounceRef.current = undefined;
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[StayDatesPicker] After guests save - checkIn:', localCheckIn, 'checkOut:', localCheckOut);
-      }
+      isUserEditingGuests.current = false;
     }, 800);
-  }, [isLocked, onGuestsCountChange, localCheckIn, localCheckOut]);
+  }, [isLocked, onGuestsCountChange]);
 
-  const isValid = localCheckIn && localCheckOut && isAfter(localCheckOut, localCheckIn) && localGuests >= 1 && localGuests <= 21;
+  const localGuestsNum = parseInt(localGuestsStr, 10);
+  const isValid = localCheckIn && localCheckOut && isAfter(localCheckOut, localCheckIn) && 
+    !isNaN(localGuestsNum) && localGuestsNum >= 1 && localGuestsNum <= 21;
 
   return (
     <div className="bg-card rounded-2xl border border-border p-6">
@@ -265,12 +267,15 @@ export function StayDatesPicker({
             type="number"
             min={1}
             max={21}
-            value={localGuests}
-            onChange={(e) => handleGuestsChange(parseInt(e.target.value) || 1)}
+            value={localGuestsStr}
+            onChange={(e) => handleGuestsChange(e.target.value)}
             disabled={isLocked}
-            className="h-11"
+            className={cn("h-11", guestsError && "border-destructive")}
             placeholder="Number of guests"
           />
+          {guestsError && (
+            <p className="text-xs text-destructive mt-1">{guestsError}</p>
+          )}
         </div>
       </div>
 
