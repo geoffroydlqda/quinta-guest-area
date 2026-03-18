@@ -282,7 +282,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                       <!-- Food Subtotal -->
                       ${food.totalCost !== undefined && food.totalCost > 0 ? `
                       <table width="100%" style="margin-top: 12px; border-top: 1px solid #e8ddd6;">
-                        <tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Food subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">€${food.totalCost}</td></tr>
+                        <tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Food subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">${food.totalCost}€</td></tr>
                       </table>
                       ` : ''}
                       ${!food.dietPreference && food.fullBoardDays === 0 && food.breakfastOnlyDays === 0 && food.customDays === 0 && (!food.selections || food.selections.length === 0) ? '<p style="color: #999; font-style: italic;">No selections made</p>' : ''}
