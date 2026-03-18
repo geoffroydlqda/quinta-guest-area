@@ -101,7 +101,21 @@ const DashboardContent = () => {
           customDays: costSummary.lunchCount + costSummary.dinnerCount > 0 ? 1 : 0,
           dietPreference: foodPlanData.diet_preference,
           totalCost: costSummary.grandTotal,
+          selections: selections,
         });
+      }
+
+      // Fetch full trip data for email
+      const { data: fullTripData } = await supabase
+        .from('transportation_trips')
+        .select('*')
+        .eq('user_id', user.id);
+      
+      if (fullTripData && fullTripData.length > 0) {
+        setTransportationData(prev => ({
+          ...prev,
+          trips: fullTripData,
+        }));
       }
     };
 
