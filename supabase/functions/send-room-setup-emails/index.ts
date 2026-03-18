@@ -67,7 +67,7 @@ function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): s
                 <td style="background-color: #5e6d3f; padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
                   <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 400; letter-spacing: 1px;">Quinta do Amor</h1>
                   <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">
-                    ${isAdmin ? 'Housekeeping Setup — ' + fullName : 'Your Room Setup Confirmation'}
+                    ${isAdmin ? 'Housekeeping Setup — ' + safeFullName : 'Your Room Setup Confirmation'}
                   </p>
                 </td>
               </tr>
