@@ -182,11 +182,13 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
               <tr>
                 <td style="background-color: #ffffff; padding: 32px; border-left: 1px solid #e8ddd6; border-right: 1px solid #e8ddd6;">
                   
-                  <!-- CTA Button -->
+                   <!-- CTA Button -->
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                    <tr><td style="padding: 0 0 8px 0; font-size: 14px; color: #333; text-align: center;">You can edit your information anytime in your Guest Area.</td></tr>
                     <tr><td align="center">
                       <a href="${GUEST_AREA_URL}" style="display: inline-block; background-color: #5e6d3f; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Go to Guest Area</a>
                     </td></tr>
+                    <tr><td style="padding: 8px 0 0 0; font-size: 12px; color: #999; text-align: center;"><a href="${GUEST_AREA_URL}" style="color: #5e6d3f; text-decoration: underline;">${GUEST_AREA_URL}</a></td></tr>
                   </table>
 
                   ${isAdmin ? `
