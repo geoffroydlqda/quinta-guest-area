@@ -295,7 +295,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 8px; margin-bottom: 24px; background-color: #f0f7e6; border-radius: 8px;">
                     <tr>
                       <td style="padding: 16px; font-weight: 700; font-size: 16px; color: #000;">Estimated total (Food + Transportation)</td>
-                      <td style="padding: 16px; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 20px;">€${grandTotal}</td>
+                      <td style="padding: 16px; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 20px;">${grandTotal}€</td>
                     </tr>
                     ${hasCustomOffers ? `<tr><td colspan="2" style="padding: 0 16px 12px; color: #666; font-size: 13px; font-style: italic;">* Excludes custom offer trips, which will be quoted separately.</td></tr>` : ''}
                   </table>
