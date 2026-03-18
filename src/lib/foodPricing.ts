@@ -3,7 +3,7 @@ import type { DietPreference, FoodDaySelection } from '@/types/guest';
 // Full board prices per day per person
 export const FULL_BOARD_PRICES: Record<DietPreference, number> = {
   'Vegetarian': 70,
-  'Meat or fish for dinner': 80,
+  'Meat or fish for dinner': 78,
   'Meat or fish for dinner and lunch': 85,
 };
 
@@ -92,6 +92,6 @@ export function calculateFoodCost(
 // Diet option labels with prices
 export const DIET_OPTIONS_WITH_PRICES: { value: DietPreference; label: string; price: number }[] = [
   { value: 'Vegetarian', label: 'Vegetarian', price: 70 },
-  { value: 'Meat or fish for dinner', label: 'Meat or fish for dinner', price: 80 },
-  { value: 'Meat or fish for dinner and lunch', label: 'Meat or fish for dinner and lunch', price: 85 },
+  { value: 'Meat or fish for dinner', label: 'Meat or fish for dinner', price: 78 },
+  { value: 'Meat or fish for dinner and lunch', label: 'Meat or fish for lunch and dinner', price: 85 },
 ];

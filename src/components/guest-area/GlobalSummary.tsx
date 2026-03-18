@@ -41,14 +41,14 @@ export function GlobalSummary({
 
   return (
     <div className="bg-card rounded-2xl border border-border p-6">
-      <h2 className="text-xl font-medium mb-6">Summary</h2>
+      <h2 className="text-xl font-semibold mb-6">Summary</h2>
 
       <div className="space-y-4">
         {/* Stay Dates & Guests */}
         <div className="flex items-center justify-between py-3 border-b border-border">
-          <span className="text-muted-foreground">Stay dates</span>
+          <span className="text-muted-foreground font-medium">Stay dates</span>
           {hasDates ? (
-            <span className="font-medium">
+            <span className="font-semibold">
               {new Date(profile.check_in_date!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — {new Date(profile.check_out_date!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
             </span>
           ) : (
@@ -60,38 +60,38 @@ export function GlobalSummary({
         <div className="flex items-center justify-between py-3 border-b border-border">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-primary" />
-            <span className="text-muted-foreground">Guests</span>
+            <span className="text-muted-foreground font-medium">Guests</span>
           </div>
-          <span className="font-medium">{profile.guests_count}</span>
+          <span className="font-semibold">{profile.guests_count}</span>
         </div>
 
         {/* Room Setup */}
         <div className="py-3 border-b border-border">
           <div className="flex items-center gap-2 mb-2">
             <BedDouble className="w-4 h-4 text-primary" />
-            <span className="font-medium">Room Setup</span>
+            <span className="font-semibold">Room Setup</span>
           </div>
           {hasRoomSetup ? (
             <div className="text-sm text-muted-foreground space-y-1 pl-6">
               <div className="flex justify-between">
-                <span>King (en-suite) — fixed</span>
-                <span className="font-medium text-foreground">2</span>
+                <span>King (en-suite bathroom) — fixed</span>
+                <span className="font-semibold text-foreground">2</span>
               </div>
               <div className="flex justify-between">
-                <span>Queen (shared)</span>
-                <span className="font-medium text-foreground">{roomSetupData!.queenSharedCount}</span>
+                <span>Queen (shared bathroom)</span>
+                <span className="font-semibold text-foreground">{roomSetupData!.queenSharedCount}</span>
               </div>
               <div className="flex justify-between">
-                <span>Twins (shared)</span>
-                <span className="font-medium text-foreground">{roomSetupData!.twinsSharedCount}</span>
+                <span>Twins (shared bathroom)</span>
+                <span className="font-semibold text-foreground">{roomSetupData!.twinsSharedCount}</span>
               </div>
               <div className="flex justify-between">
-                <span>Queen (en-suite)</span>
-                <span className="font-medium text-foreground">{roomSetupData!.queenEnsuiteCount}</span>
+                <span>Queen (en-suite bathroom)</span>
+                <span className="font-semibold text-foreground">{roomSetupData!.queenEnsuiteCount}</span>
               </div>
               <div className="flex justify-between">
-                <span>Twins (en-suite)</span>
-                <span className="font-medium text-foreground">{roomSetupData!.twinsEnsuiteCount}</span>
+                <span>Twins (en-suite bathroom)</span>
+                <span className="font-semibold text-foreground">{roomSetupData!.twinsEnsuiteCount}</span>
               </div>
             </div>
           ) : (
@@ -107,7 +107,7 @@ export function GlobalSummary({
         <div className="py-3 border-b border-border">
           <div className="flex items-center gap-2 mb-2">
             <Car className="w-4 h-4 text-primary" />
-            <span className="font-medium">Transportation</span>
+            <span className="font-semibold">Transportation</span>
           </div>
           {hasTransportation ? (
             <div className="text-sm text-muted-foreground pl-6 space-y-1">
@@ -120,13 +120,13 @@ export function GlobalSummary({
                     <Euro className="w-3 h-3" />
                     Estimated total (fixed-price)
                   </span>
-                  <span className="font-medium text-foreground">€{transportationData!.totalPrice}</span>
+                  <span className="font-semibold text-foreground">€{transportationData!.totalPrice}</span>
                 </div>
               )}
               {transportationData!.customOfferCount > 0 && (
                 <div className="flex justify-between">
                   <span>Custom offer trips</span>
-                  <span className="font-medium text-foreground">{transportationData!.customOfferCount}</span>
+                  <span className="font-semibold text-foreground">{transportationData!.customOfferCount}</span>
                 </div>
               )}
             </div>
@@ -143,12 +143,12 @@ export function GlobalSummary({
         <div className="py-3">
           <div className="flex items-center gap-2 mb-2">
             <Utensils className="w-4 h-4 text-primary" />
-            <span className="font-medium">Food</span>
+            <span className="font-semibold">Food</span>
           </div>
           {hasFood ? (
             <div className="text-sm text-muted-foreground space-y-1 pl-6">
               {foodData!.dietPreference && (
-                <div className="font-medium text-foreground">{foodData!.dietPreference}</div>
+                <div className="font-semibold text-foreground">{foodData!.dietPreference}</div>
               )}
               {foodData!.fullBoardDays > 0 && (
                 <div>Full board: {foodData!.fullBoardDays} day{foodData!.fullBoardDays !== 1 ? 's' : ''}</div>
@@ -165,7 +165,7 @@ export function GlobalSummary({
                     <Euro className="w-3 h-3" />
                     Estimated total
                   </span>
-                  <span className="font-medium text-foreground">€{foodData!.totalCost}</span>
+                  <span className="font-semibold text-foreground">€{foodData!.totalCost}</span>
                 </div>
               )}
             </div>

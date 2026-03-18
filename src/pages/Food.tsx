@@ -49,8 +49,6 @@ const Food = () => {
     );
   }, [foodPlan?.selections, foodPlan?.diet_preference, profile?.guests_count]);
 
-  // Note: Auth redirect is handled by ProtectedRoute in App.tsx
-
   // Trigger auto-save when selections change
   useEffect(() => {
     if (foodPlan && !isLocked) {
@@ -73,7 +71,7 @@ const Food = () => {
         <div className="max-w-2xl mx-auto">
           <div className="rounded-2xl bg-destructive/10 border border-destructive/30 p-8 text-center">
             <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
-            <h2 className="text-xl font-medium mb-2">Stay dates required</h2>
+            <h2 className="text-xl font-semibold mb-2">Stay dates required</h2>
             <p className="text-muted-foreground mb-6">
               Please set your check-in and check-out dates on the dashboard before planning your meals.
             </p>
@@ -105,8 +103,8 @@ const Food = () => {
 
         {/* Diet Preference with Prices */}
         <div className="bg-card rounded-2xl border border-border p-6">
-          <Label className="text-base font-medium mb-2 block">Diet preference</Label>
-          <p className="text-sm text-muted-foreground mb-4">Prices are per day per person.</p>
+          <Label className="text-base font-semibold mb-2 block">Diet preference</Label>
+          <p className="text-sm text-muted-foreground mb-4">Prices are per day per person (full board).</p>
           <RadioGroup
             value={foodPlan.diet_preference || ''}
             onValueChange={(value) => !isLocked && updateDietPreference(value as DietPreference)}
@@ -121,7 +119,7 @@ const Food = () => {
                     {option.label}
                   </Label>
                 </div>
-                <span className="text-sm font-medium text-primary">€{option.price}/day</span>
+                <span className="text-sm font-semibold text-primary">€{option.price}/day</span>
               </div>
             ))}
           </RadioGroup>
@@ -130,16 +128,16 @@ const Food = () => {
         {/* Summary Stats */}
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-card rounded-xl border border-border p-4 text-center">
-            <p className="text-2xl font-medium">{costSummary.fullBoardDays}</p>
-            <p className="text-sm text-muted-foreground">Full board days</p>
+            <p className="text-2xl font-semibold">{costSummary.fullBoardDays}</p>
+            <p className="text-sm text-muted-foreground font-medium">Full board days</p>
           </div>
           <div className="bg-card rounded-xl border border-border p-4 text-center">
-            <p className="text-2xl font-medium">{costSummary.breakfastCount}</p>
-            <p className="text-sm text-muted-foreground">Breakfast only</p>
+            <p className="text-2xl font-semibold">{costSummary.breakfastCount}</p>
+            <p className="text-sm text-muted-foreground font-medium">Breakfast only</p>
           </div>
           <div className="bg-card rounded-xl border border-border p-4 text-center">
-            <p className="text-2xl font-medium">{costSummary.lunchCount + costSummary.dinnerCount}</p>
-            <p className="text-sm text-muted-foreground">Other meals</p>
+            <p className="text-2xl font-semibold">{costSummary.lunchCount + costSummary.dinnerCount}</p>
+            <p className="text-sm text-muted-foreground font-medium">Other meals</p>
           </div>
         </div>
 
@@ -149,25 +147,25 @@ const Food = () => {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left p-4 font-medium">Date</th>
-                  <th className="text-center p-4 font-medium">
+                  <th className="text-left p-4 font-semibold">Date</th>
+                  <th className="text-center p-4 font-semibold">
                     <div>Full Board</div>
                     <div className="text-xs font-normal text-muted-foreground">
                       €{getFullBoardPrice(foodPlan.diet_preference)}
                     </div>
                   </th>
-                  <th className="text-center p-4 font-medium">
+                  <th className="text-center p-4 font-semibold">
                     <div>Breakfast</div>
                     <div className="text-xs font-normal text-muted-foreground">€{BREAKFAST_PRICE}</div>
                   </th>
-                  <th className="text-center p-4 font-medium">
+                  <th className="text-center p-4 font-semibold">
                     <div>Lunch</div>
                     <div className="text-xs font-normal text-muted-foreground">
                       €{getLunchPrice(foodPlan.diet_preference)}
                     </div>
                   </th>
-                  <th className="text-center p-4 font-medium">
-                    <div>Dinner</div>
+                  <th className="text-center p-4 font-semibold">
+                    <div>Dinner (+ dessert)</div>
                     <div className="text-xs font-normal text-muted-foreground">
                       €{getDinnerPrice(foodPlan.diet_preference)}
                     </div>
@@ -191,9 +189,9 @@ const Food = () => {
                     <tr key={day.date} className={cn("border-b border-border", index % 2 === 0 && "bg-muted/30")}>
                       <td className="p-4">
                         <div>
-                          <p className="font-medium">{format(parseISO(day.date), 'EEE, dd MMM')}</p>
-                          {isCheckIn && <span className="text-xs text-primary">Check-in</span>}
-                          {isCheckOut && <span className="text-xs text-primary">Check-out</span>}
+                          <p className="font-semibold">{format(parseISO(day.date), 'EEE, dd MMM')}</p>
+                          {isCheckIn && <span className="text-xs text-primary font-medium">Check-in</span>}
+                          {isCheckOut && <span className="text-xs text-primary font-medium">Check-out</span>}
                         </div>
                       </td>
                       <td className="text-center p-4">
@@ -234,7 +232,7 @@ const Food = () => {
 
         {/* Legend */}
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-          <span>• Check-in day: only dinner available</span>
+          <span>• Check-in day: only dinner (+ dessert) available</span>
           <span>• Check-out day: only breakfast available</span>
           <span>• Full board = all 3 meals</span>
         </div>
@@ -243,7 +241,7 @@ const Food = () => {
         <div className="rounded-xl bg-primary/10 border border-primary/30 p-4">
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-            <p className="text-sm">
+            <p className="text-sm font-medium">
               A sweet treat is always served after dinner.
             </p>
           </div>
@@ -251,7 +249,7 @@ const Food = () => {
 
         {/* Notes */}
         <div>
-          <Label>Notes (optional)</Label>
+          <Label className="font-semibold">Notes (optional)</Label>
           <Textarea
             placeholder="Dietary requirements, allergies, or preferences..."
             value={foodPlan.notes_food || ''}

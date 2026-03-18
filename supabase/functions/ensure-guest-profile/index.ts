@@ -8,35 +8,31 @@ const corsHeaders = {
 };
 
 const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Authentication: Extract and validate JWT from Authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized - missing auth header' }),
+        JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
 
-    // Create Supabase client with user's JWT for auth validation
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Validate JWT and get authenticated user
     const token = authHeader.replace('Bearer ', '');
     const { data: claimsData, error: authError } = await supabaseClient.auth.getClaims(token);
 
     if (authError || !claimsData?.claims) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized - invalid token' }),
+        JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
@@ -45,15 +41,14 @@ const handler = async (req: Request): Promise<Response> => {
     const userEmail = claimsData.claims.email as string;
 
     // Get metadata from request body (optional)
-    let metadata: { first_name?: string; last_name?: string; full_name?: string } = {};
+    let metadata: Record<string, any> = {};
     try {
       const body = await req.json();
       metadata = body.metadata || {};
     } catch {
-      // No body or invalid JSON, that's fine
+      // No body or invalid JSON
     }
 
-    // Use service role client for upsert to bypass RLS
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -67,22 +62,20 @@ const handler = async (req: Request): Promise<Response> => {
       .maybeSingle();
 
     if (selectError) {
-      console.error('Error checking existing profile:', selectError);
+      console.error('Error checking profile:', selectError);
     }
 
     if (existingProfile) {
-      // Profile exists, return it
-      console.log('Profile already exists for user:', userId);
       return new Response(
         JSON.stringify({ success: true, profile: existingProfile, created: false }),
         { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
 
-    // Profile doesn't exist, create one
-    const firstName = metadata.first_name || '';
-    const lastName = metadata.last_name || '';
-    const fullName = metadata.full_name || 
+    // Extract name from metadata - support both email/password signup and Google OAuth
+    const firstName = metadata.first_name || metadata.given_name || '';
+    const lastName = metadata.last_name || metadata.family_name || '';
+    const fullName = metadata.full_name || metadata.name ||
       (firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName || '');
 
     const { data: newProfile, error: insertError } = await supabaseAdmin
@@ -99,9 +92,7 @@ const handler = async (req: Request): Promise<Response> => {
       .single();
 
     if (insertError) {
-      // Check if it's a unique constraint violation (profile was created by another process)
       if (insertError.code === '23505') {
-        // Fetch the existing profile
         const { data: retryProfile } = await supabaseAdmin
           .from('guest_profiles')
           .select('*')
@@ -109,7 +100,6 @@ const handler = async (req: Request): Promise<Response> => {
           .single();
 
         if (retryProfile) {
-          console.log('Profile created by concurrent process for user:', userId);
           return new Response(
             JSON.stringify({ success: true, profile: retryProfile, created: false }),
             { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
@@ -131,7 +121,7 @@ const handler = async (req: Request): Promise<Response> => {
     );
 
   } catch (error: any) {
-    console.error("Error in ensure-guest-profile function:", error);
+    console.error("Error:", error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }

@@ -14,14 +14,13 @@ const corsHeaders = {
 const ADMIN_EMAIL = "hello@quintamor.com";
 const FROM_EMAIL = "Quinta do Amor <noreply@quintamor.com>";
 
-// Input validation schema
 const GuestSummarySchema = z.object({
-  fullName: z.string().min(1, "Name required").max(200, "Name too long").trim(),
+  fullName: z.string().min(1).max(200).trim(),
   firstName: z.string().max(100).optional().nullable(),
-  email: z.string().email("Invalid email").max(254, "Email too long"),
+  email: z.string().email().max(254),
   checkInDate: z.string().nullable().refine(
     (val) => !val || /^\d{4}-\d{2}-\d{2}$/.test(val),
-    "Invalid date format (expected YYYY-MM-DD)"
+    "Invalid date format"
   ),
   checkOutDate: z.string().nullable().refine(
     (val) => !val || /^\d{4}-\d{2}-\d{2}$/.test(val),
@@ -58,8 +57,6 @@ function formatDate(dateStr: string | null): string {
 
 function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): string {
   const { fullName, firstName, email, checkInDate, checkOutDate, guestsCount, roomSetup, transportation, food } = payload;
-  
-  // Use first name only for greeting, fallback to full name or 'Guest'
   const greetingName = firstName || fullName?.split(' ')[0] || 'Guest';
   
   return `
@@ -67,197 +64,170 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
     <html>
     <head>
       <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Guest Area Summary</title>
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #6d7855; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-        .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
-        .section { background: white; border-radius: 8px; padding: 16px; margin: 12px 0; border: 1px solid #e5e7eb; }
-        .section-title { font-weight: 600; color: #6d7855; margin-bottom: 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
-        .row:last-child { border-bottom: none; }
-        .label { color: #6b7280; }
-        .value { font-weight: 500; }
-        .not-set { color: #9ca3af; font-style: italic; }
-        .footer { text-align: center; color: #6b7280; font-size: 12px; padding: 20px; }
-        .guest-info { background: #f6efea; padding: 12px; border-radius: 6px; margin-bottom: 16px; }
-        .cost-highlight { background: #f0fdf4; padding: 8px 12px; border-radius: 6px; margin-top: 8px; }
-        .cost-value { color: #16a34a; font-weight: 600; }
-      </style>
     </head>
-    <body>
-      <div class="header">
-        <h1 style="margin: 0;">Quinta do Amor</h1>
-        <p style="margin: 8px 0 0 0; opacity: 0.9;">${isAdmin ? 'Guest Area Summary — ' + fullName : 'Your Guest Area Summary'}</p>
-      </div>
-      <div class="content">
-        ${isAdmin ? `
-        <div class="guest-info">
-          <strong>Guest:</strong> ${fullName}<br>
-          <strong>Email:</strong> ${email}
-        </div>
-        ` : `<p>Hi ${greetingName},</p><p>Here's a summary of your Guest Area selections:</p>`}
-        
-        <!-- Stay Dates & Guests -->
-        <div class="section">
-          <div class="section-title">Stay Information</div>
-          <div class="row">
-            <span class="label">Check-in</span>
-            <span class="value">${formatDate(checkInDate)}</span>
-          </div>
-          <div class="row">
-            <span class="label">Check-out</span>
-            <span class="value">${formatDate(checkOutDate)}</span>
-          </div>
-          <div class="row">
-            <span class="label">Number of guests</span>
-            <span class="value">${guestsCount || 1}</span>
-          </div>
-        </div>
+    <body style="margin: 0; padding: 0; font-family: Georgia, 'Times New Roman', serif; line-height: 1.6; color: #000000; background-color: #f6efea;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f6efea; padding: 32px 16px;">
+        <tr>
+          <td align="center">
+            <table width="600" cellpadding="0" cellspacing="0" style="max-width: 600px; width: 100%;">
+              
+              <!-- Header -->
+              <tr>
+                <td style="background-color: #5e6d3f; padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
+                  <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 400; letter-spacing: 1px;">Quinta do Amor</h1>
+                  <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">
+                    ${isAdmin ? 'Guest Area Summary — ' + fullName : 'Guest Area Summary'}
+                  </p>
+                </td>
+              </tr>
 
-        <!-- Room Setup -->
-        <div class="section">
-          <div class="section-title">Room Setup</div>
-          ${roomSetup ? `
-          <div class="row">
-            <span class="label">King (en-suite) — fixed</span>
-            <span class="value">2</span>
-          </div>
-          <div class="row">
-            <span class="label">Queen (shared bathroom)</span>
-            <span class="value">${roomSetup.queenSharedCount}</span>
-          </div>
-          <div class="row">
-            <span class="label">Twins (shared bathroom)</span>
-            <span class="value">${roomSetup.twinsSharedCount}</span>
-          </div>
-          <div class="row">
-            <span class="label">Queen (en-suite)</span>
-            <span class="value">${roomSetup.queenEnsuiteCount}</span>
-          </div>
-          <div class="row">
-            <span class="label">Twins (en-suite)</span>
-            <span class="value">${roomSetup.twinsEnsuiteCount}</span>
-          </div>
-          ` : '<p class="not-set">Not set</p>'}
-        </div>
+              <!-- Body -->
+              <tr>
+                <td style="background-color: #ffffff; padding: 32px; border-left: 1px solid #e8ddd6; border-right: 1px solid #e8ddd6;">
+                  
+                  ${isAdmin ? `
+                  <table width="100%" style="background-color: #f6efea; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                    <tr><td>
+                      <strong style="color: #000;">Guest:</strong> ${fullName}<br>
+                      <strong style="color: #000;">Email:</strong> ${email}
+                    </td></tr>
+                  </table>
+                  ` : `
+                  <p style="margin: 0 0 16px 0; font-size: 16px;">Hi ${greetingName},</p>
+                  <p style="margin: 0 0 24px 0; color: #333;">Here's a summary of your Guest Area selections:</p>
+                  `}
 
-        <!-- Transportation -->
-        <div class="section">
-          <div class="section-title">Transportation</div>
-          ${transportation && transportation.tripCount > 0 ? `
-          <div class="row">
-            <span class="label">Trips scheduled</span>
-            <span class="value">${transportation.tripCount}</span>
-          </div>
-          ${transportation.totalPrice > 0 ? `
-          <div class="row">
-            <span class="label">Estimated total (fixed-price)</span>
-            <span class="value cost-value">€${transportation.totalPrice}</span>
-          </div>
-          ` : ''}
-          ${transportation.customOfferCount > 0 ? `
-          <div class="row">
-            <span class="label">Custom offer trips</span>
-            <span class="value">${transportation.customOfferCount}</span>
-          </div>
-          ` : ''}
-          ` : '<p class="not-set">Not set</p>'}
-        </div>
+                  <!-- Stay Information -->
+                  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #5e6d3f;">
+                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #5e6d3f; font-weight: 600;">Stay Information</h2>
+                    </td></tr>
+                    <tr><td style="padding: 12px 0;">
+                      <table width="100%">
+                        <tr><td style="padding: 8px 0; color: #333;">Check-in</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${formatDate(checkInDate)}</td></tr>
+                        <tr><td style="padding: 8px 0; color: #333;">Check-out</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${formatDate(checkOutDate)}</td></tr>
+                        <tr><td style="padding: 8px 0; color: #333;">Number of guests</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${guestsCount || 1}</td></tr>
+                      </table>
+                    </td></tr>
+                  </table>
 
-        <!-- Food -->
-        <div class="section">
-          <div class="section-title">Food</div>
-          ${food ? `
-          ${food.dietPreference ? `
-          <div class="row">
-            <span class="label">Diet preference</span>
-            <span class="value">${food.dietPreference}</span>
-          </div>
-          ` : ''}
-          ${food.fullBoardDays > 0 ? `
-          <div class="row">
-            <span class="label">Full board</span>
-            <span class="value">${food.fullBoardDays} day${food.fullBoardDays !== 1 ? 's' : ''}</span>
-          </div>
-          ` : ''}
-          ${food.breakfastOnlyDays > 0 ? `
-          <div class="row">
-            <span class="label">Breakfast only</span>
-            <span class="value">${food.breakfastOnlyDays} day${food.breakfastOnlyDays !== 1 ? 's' : ''}</span>
-          </div>
-          ` : ''}
-          ${food.customDays > 0 ? `
-          <div class="row">
-            <span class="label">Custom selection</span>
-            <span class="value">${food.customDays} day${food.customDays !== 1 ? 's' : ''}</span>
-          </div>
-          ` : ''}
-          ${food.totalCost !== undefined && food.totalCost > 0 ? `
-          <div class="cost-highlight">
-            <div class="row" style="border: none; padding: 0;">
-              <span class="label"><strong>Estimated total food cost</strong></span>
-              <span class="value cost-value">€${food.totalCost}</span>
-            </div>
-          </div>
-          ` : ''}
-          ${!food.dietPreference && food.fullBoardDays === 0 && food.breakfastOnlyDays === 0 && food.customDays === 0 ? '<p class="not-set">No selections made</p>' : ''}
-          ` : '<p class="not-set">Not set</p>'}
-        </div>
+                  <!-- Room Setup -->
+                  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #5e6d3f;">
+                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #5e6d3f; font-weight: 600;">Room Setup</h2>
+                    </td></tr>
+                    <tr><td style="padding: 12px 0;">
+                      ${roomSetup ? `
+                      <table width="100%">
+                        <tr><td style="padding: 8px 0; color: #333;">King (en-suite bathroom) — fixed</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">2</td></tr>
+                        <tr><td style="padding: 8px 0; color: #333;">Queen (shared bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${roomSetup.queenSharedCount}</td></tr>
+                        <tr><td style="padding: 8px 0; color: #333;">Twins (shared bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${roomSetup.twinsSharedCount}</td></tr>
+                        <tr><td style="padding: 8px 0; color: #333;">Queen (en-suite bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${roomSetup.queenEnsuiteCount}</td></tr>
+                        <tr><td style="padding: 8px 0; color: #333;">Twins (en-suite bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${roomSetup.twinsEnsuiteCount}</td></tr>
+                      </table>
+                      ` : '<p style="color: #999; font-style: italic;">Not set</p>'}
+                    </td></tr>
+                  </table>
 
-        ${!isAdmin ? `
-        <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
-          Your information can still be edited until 5 days before check-in date.
-          Log in to your account anytime to view or update your selections.
-        </p>
-        ` : ''}
-      </div>
-      <div class="footer">
-        <p>Submitted: ${new Date().toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })}</p>
-        <p>Quinta do Amor © ${new Date().getFullYear()}</p>
-      </div>
+                  <!-- Transportation -->
+                  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #5e6d3f;">
+                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #5e6d3f; font-weight: 600;">Transportation</h2>
+                    </td></tr>
+                    <tr><td style="padding: 12px 0;">
+                      ${transportation && transportation.tripCount > 0 ? `
+                      <table width="100%">
+                        <tr><td style="padding: 8px 0; color: #333;">Trips scheduled</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${transportation.tripCount}</td></tr>
+                        ${transportation.totalPrice > 0 ? `<tr><td style="padding: 8px 0; color: #333;">Estimated total (fixed-price)</td><td style="padding: 8px 0; text-align: right; font-weight: 600; color: #5e6d3f;">€${transportation.totalPrice}</td></tr>` : ''}
+                        ${transportation.customOfferCount > 0 ? `<tr><td style="padding: 8px 0; color: #333;">Custom offer trips</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${transportation.customOfferCount}</td></tr>` : ''}
+                      </table>
+                      ` : '<p style="color: #999; font-style: italic;">Not set</p>'}
+                    </td></tr>
+                  </table>
+
+                  <!-- Food -->
+                  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #5e6d3f;">
+                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #5e6d3f; font-weight: 600;">Food</h2>
+                    </td></tr>
+                    <tr><td style="padding: 12px 0;">
+                      ${food ? `
+                      <table width="100%">
+                        ${food.dietPreference ? `<tr><td style="padding: 8px 0; color: #333;">Diet preference</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${food.dietPreference}</td></tr>` : ''}
+                        ${food.fullBoardDays > 0 ? `<tr><td style="padding: 8px 0; color: #333;">Full board</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${food.fullBoardDays} day${food.fullBoardDays !== 1 ? 's' : ''}</td></tr>` : ''}
+                        ${food.breakfastOnlyDays > 0 ? `<tr><td style="padding: 8px 0; color: #333;">Breakfast only</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${food.breakfastOnlyDays} day${food.breakfastOnlyDays !== 1 ? 's' : ''}</td></tr>` : ''}
+                        ${food.customDays > 0 ? `<tr><td style="padding: 8px 0; color: #333;">Custom selection</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${food.customDays} day${food.customDays !== 1 ? 's' : ''}</td></tr>` : ''}
+                      </table>
+                      ${food.totalCost !== undefined && food.totalCost > 0 ? `
+                      <table width="100%" style="background-color: #f0f7e6; border-radius: 8px; margin-top: 12px;">
+                        <tr><td style="padding: 12px; color: #333; font-weight: 600;">Estimated total food cost</td><td style="padding: 12px; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 18px;">€${food.totalCost}</td></tr>
+                      </table>
+                      ` : ''}
+                      ${!food.dietPreference && food.fullBoardDays === 0 && food.breakfastOnlyDays === 0 && food.customDays === 0 ? '<p style="color: #999; font-style: italic;">No selections made</p>' : ''}
+                      ` : '<p style="color: #999; font-style: italic;">Not set</p>'}
+                    </td></tr>
+                  </table>
+
+                  ${!isAdmin ? `
+                  <p style="margin-top: 24px; font-size: 14px; color: #333; background-color: #f6efea; padding: 16px; border-radius: 8px;">
+                    Your information can still be edited until 5 days before check-in date.
+                    Log in to your account anytime to view or update your selections.
+                  </p>
+                  ` : ''}
+                </td>
+              </tr>
+
+              <!-- Footer -->
+              <tr>
+                <td style="background-color: #f6efea; padding: 24px 32px; text-align: center; border-radius: 0 0 12px 12px; border-left: 1px solid #e8ddd6; border-right: 1px solid #e8ddd6; border-bottom: 1px solid #e8ddd6;">
+                  <p style="margin: 0 0 4px 0; font-size: 12px; color: #333;">Submitted: ${new Date().toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })}</p>
+                  <p style="margin: 0 0 8px 0; font-size: 12px; color: #666;">Quinta do Amor © ${new Date().getFullYear()}</p>
+                  <p style="margin: 0; font-size: 12px; color: #5e6d3f;">hello@quintamor.com</p>
+                </td>
+              </tr>
+
+            </table>
+          </td>
+        </tr>
+      </table>
     </body>
     </html>
   `;
 }
 
 const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Authentication: Extract and validate JWT from Authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized - missing auth header' }),
+        JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
 
-    // Create Supabase client with user's JWT
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Validate JWT and get authenticated user
     const token = authHeader.replace('Bearer ', '');
     const { data: claimsData, error: authError } = await supabaseClient.auth.getClaims(token);
 
     if (authError || !claimsData?.claims) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized - invalid token' }),
+        JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
 
     const userEmail = claimsData.claims.email as string;
-
-    // Parse and validate input
     const rawPayload = await req.json();
     
     let payload: GuestSummaryPayload;
@@ -266,27 +236,22 @@ const handler = async (req: Request): Promise<Response> => {
     } catch (validationError) {
       if (validationError instanceof z.ZodError) {
         return new Response(
-          JSON.stringify({
-            error: 'Invalid input',
-            details: validationError.errors.map(e => `${e.path.join('.')}: ${e.message}`)
-          }),
+          JSON.stringify({ error: 'Invalid input', details: validationError.errors.map(e => `${e.path.join('.')}: ${e.message}`) }),
           { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
         );
       }
       throw validationError;
     }
 
-    // Verify the email in payload belongs to the authenticated user
     if (payload.email.toLowerCase() !== userEmail?.toLowerCase()) {
       return new Response(
-        JSON.stringify({ error: 'Forbidden - email mismatch' }),
+        JSON.stringify({ error: 'Forbidden' }),
         { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
 
     const emailPromises: Promise<any>[] = [];
 
-    // Send to guest
     emailPromises.push(
       resend.emails.send({
         from: FROM_EMAIL,
@@ -296,7 +261,6 @@ const handler = async (req: Request): Promise<Response> => {
       })
     );
 
-    // Send to admin
     emailPromises.push(
       resend.emails.send({
         from: FROM_EMAIL,
@@ -307,34 +271,20 @@ const handler = async (req: Request): Promise<Response> => {
     );
 
     const results = await Promise.allSettled(emailPromises);
-    
     const failedEmails = results.filter(r => r.status === 'rejected');
-    if (failedEmails.length > 0) {
-      console.error("Some emails failed to send:", failedEmails);
-    }
-
     const successfulEmails = results.filter(r => r.status === 'fulfilled');
-    console.log(`Successfully sent ${successfulEmails.length}/${results.length} emails`);
+
+    if (failedEmails.length > 0) console.error("Some emails failed:", failedEmails);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        emailsSent: successfulEmails.length,
-        emailsFailed: failedEmails.length 
-      }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
+      JSON.stringify({ success: true, emailsSent: successfulEmails.length, emailsFailed: failedEmails.length }),
+      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   } catch (error: any) {
-    console.error("Error in send-guest-summary function:", error);
+    console.error("Error:", error);
     return new Response(
       JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
+      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   }
 };
