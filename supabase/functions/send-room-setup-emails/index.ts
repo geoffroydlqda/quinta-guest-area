@@ -109,7 +109,7 @@ function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): s
                   <table width="100%" style="background-color: #fef9e7; border-radius: 8px; border-left: 4px solid #d4a843; margin-bottom: 24px;">
                     <tr><td style="padding: 16px;">
                       <strong style="color: #000;">Remarks:</strong><br>
-                      <span style="color: #333;">${remarks}</span>
+                      <span style="color: #333;">${safeRemarks}</span>
                     </td></tr>
                   </table>
                   ` : ''}
