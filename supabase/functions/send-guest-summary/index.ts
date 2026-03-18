@@ -145,9 +145,21 @@ function generateTransportationTripsHtml(trips: z.infer<typeof TripSchema>[]): s
   }).join('');
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): string {
   const { fullName, firstName, email, checkInDate, checkOutDate, guestsCount, roomSetup, transportation, food } = payload;
-  const greetingName = firstName || fullName?.split(' ')[0] || 'Guest';
+  const safeFullName = escapeHtml(fullName);
+  const safeEmail = escapeHtml(email);
+  const greetingName = escapeHtml(firstName || fullName?.split(' ')[0] || 'Guest');
+  const safeDietPreference = food?.dietPreference ? escapeHtml(food.dietPreference) : null;
   
   const foodTotal = food?.totalCost || 0;
   const transportTotal = transportation?.totalPrice || 0;
