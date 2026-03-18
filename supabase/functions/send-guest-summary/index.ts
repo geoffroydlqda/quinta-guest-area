@@ -249,8 +249,8 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                       </table>
                       <!-- Transportation Subtotal -->
                       <table width="100%" style="margin-top: 12px; border-top: 1px solid #e8ddd6;">
-                        ${transportation.totalPrice > 0 ? `<tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Transportation subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">€${transportation.totalPrice}</td></tr>` : ''}
-                        ${hasCustomOffers ? `<tr><td colspan="2" style="padding: 4px 0; color: #666; font-size: 13px; font-style: italic;">Transportation custom offers will be quoted separately.</td></tr>` : ''}
+                         ${transportation.totalPrice > 0 ? `<tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Transportation subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">${transportation.totalPrice}€</td></tr>` : ''}
+                         ${hasCustomOffers ? `<tr><td colspan="2" style="padding: 4px 0; color: #666; font-size: 13px; font-style: italic;">Custom transportation offers will be quoted separately.</td></tr>` : ''}
                       </table>
                       ` : '<p style="color: #999; font-style: italic;">Not set</p>'}
                     </td></tr>
