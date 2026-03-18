@@ -144,89 +144,93 @@ const Food = () => {
         {/* Food Table */}
         <div className="bg-card rounded-2xl border border-border overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left p-4 font-semibold">Date</th>
-                  <th className="text-center p-4 font-semibold">
-                    <div>Full Board</div>
-                    <div className="text-xs font-normal text-muted-foreground">
-                      €{getFullBoardPrice(foodPlan.diet_preference)}
-                    </div>
-                  </th>
-                  <th className="text-center p-4 font-semibold">
-                    <div>Breakfast</div>
-                    <div className="text-xs font-normal text-muted-foreground">€{BREAKFAST_PRICE}</div>
-                  </th>
-                  <th className="text-center p-4 font-semibold">
-                    <div>Lunch</div>
-                    <div className="text-xs font-normal text-muted-foreground">
-                      €{getLunchPrice(foodPlan.diet_preference)}
-                    </div>
-                  </th>
-                  <th className="text-center p-4 font-semibold">
-                    <div>Dinner (+ dessert)</div>
-                    <div className="text-xs font-normal text-muted-foreground">
-                      €{getDinnerPrice(foodPlan.diet_preference)}
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {days.map((day, index) => {
-                  const selection = foodPlan.selections.find(s => s.date === day.date) || {
-                    date: day.date,
-                    fullBoard: false,
-                    breakfast: false,
-                    lunch: false,
-                    dinner: false,
-                  };
+            <div style={{ minWidth: '640px' }}>
+              {/* Header */}
+              <div
+                className="border-b border-border"
+                style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr 1fr 1fr' }}
+              >
+                <div className="p-4 font-semibold text-left">Date</div>
+                <div className="p-4 font-semibold text-center border-l border-border">
+                  <div>Full Board</div>
+                  <div className="text-xs font-normal text-muted-foreground">
+                    €{getFullBoardPrice(foodPlan.diet_preference)}
+                  </div>
+                </div>
+                <div className="p-4 font-semibold text-center border-l border-border">
+                  <div>Breakfast</div>
+                  <div className="text-xs font-normal text-muted-foreground">€{BREAKFAST_PRICE}</div>
+                </div>
+                <div className="p-4 font-semibold text-center border-l border-border">
+                  <div>Lunch</div>
+                  <div className="text-xs font-normal text-muted-foreground">
+                    €{getLunchPrice(foodPlan.diet_preference)}
+                  </div>
+                </div>
+                <div className="p-4 font-semibold text-center border-l border-border">
+                  <div>Dinner (+ dessert)</div>
+                  <div className="text-xs font-normal text-muted-foreground">
+                    €{getDinnerPrice(foodPlan.diet_preference)}
+                  </div>
+                </div>
+              </div>
 
-                  const isCheckIn = day.isCheckIn;
-                  const isCheckOut = day.isCheckOut;
+              {/* Rows */}
+              {days.map((day, index) => {
+                const selection = foodPlan.selections.find(s => s.date === day.date) || {
+                  date: day.date,
+                  fullBoard: false,
+                  breakfast: false,
+                  lunch: false,
+                  dinner: false,
+                };
 
-                  return (
-                    <tr key={day.date} className={cn("border-b border-border", index % 2 === 0 && "bg-muted/30")}>
-                      <td className="p-4">
-                        <div>
-                          <p className="font-semibold">{format(parseISO(day.date), 'EEE, dd MMM')}</p>
-                          {isCheckIn && <span className="text-xs text-primary font-medium">Check-in</span>}
-                          {isCheckOut && <span className="text-xs text-primary font-medium">Check-out</span>}
-                        </div>
-                      </td>
-                      <td className="text-center p-4">
-                        <MealToggle
-                          selected={selection.fullBoard}
-                          disabled={isLocked || isCheckIn || isCheckOut || selection.breakfast || selection.lunch || selection.dinner}
-                          onClick={() => updateDaySelection(day.date, { fullBoard: !selection.fullBoard })}
-                        />
-                      </td>
-                      <td className="text-center p-4">
-                        <MealToggle
-                          selected={selection.breakfast}
-                          disabled={isLocked || selection.fullBoard || (isCheckIn && !isCheckOut)}
-                          onClick={() => updateDaySelection(day.date, { breakfast: !selection.breakfast })}
-                        />
-                      </td>
-                      <td className="text-center p-4">
-                        <MealToggle
-                          selected={selection.lunch}
-                          disabled={isLocked || selection.fullBoard || isCheckIn || isCheckOut}
-                          onClick={() => updateDaySelection(day.date, { lunch: !selection.lunch })}
-                        />
-                      </td>
-                      <td className="text-center p-4">
-                        <MealToggle
-                          selected={selection.dinner}
-                          disabled={isLocked || selection.fullBoard || isCheckOut}
-                          onClick={() => updateDaySelection(day.date, { dinner: !selection.dinner })}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                const isCheckIn = day.isCheckIn;
+                const isCheckOut = day.isCheckOut;
+
+                return (
+                  <div
+                    key={day.date}
+                    className={cn("border-b border-border", index % 2 === 0 && "bg-muted/30")}
+                    style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr 1fr 1fr' }}
+                  >
+                    <div className="p-4">
+                      <p className="font-semibold">{format(parseISO(day.date), 'EEE, dd MMM')}</p>
+                      {isCheckIn && <span className="text-xs text-primary font-medium">Check-in</span>}
+                      {isCheckOut && <span className="text-xs text-primary font-medium">Check-out</span>}
+                    </div>
+                    <div className="p-4 flex items-center justify-center border-l border-border">
+                      <MealToggle
+                        selected={selection.fullBoard}
+                        disabled={isLocked || isCheckIn || isCheckOut || selection.breakfast || selection.lunch || selection.dinner}
+                        onClick={() => updateDaySelection(day.date, { fullBoard: !selection.fullBoard })}
+                      />
+                    </div>
+                    <div className="p-4 flex items-center justify-center border-l border-border">
+                      <MealToggle
+                        selected={selection.breakfast}
+                        disabled={isLocked || selection.fullBoard || (isCheckIn && !isCheckOut)}
+                        onClick={() => updateDaySelection(day.date, { breakfast: !selection.breakfast })}
+                      />
+                    </div>
+                    <div className="p-4 flex items-center justify-center border-l border-border">
+                      <MealToggle
+                        selected={selection.lunch}
+                        disabled={isLocked || selection.fullBoard || isCheckIn || isCheckOut}
+                        onClick={() => updateDaySelection(day.date, { lunch: !selection.lunch })}
+                      />
+                    </div>
+                    <div className="p-4 flex items-center justify-center border-l border-border">
+                      <MealToggle
+                        selected={selection.dinner}
+                        disabled={isLocked || selection.fullBoard || isCheckOut}
+                        onClick={() => updateDaySelection(day.date, { dinner: !selection.dinner })}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
