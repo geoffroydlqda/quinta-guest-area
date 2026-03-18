@@ -79,8 +79,8 @@ function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): s
                   ${isAdmin ? `
                   <table width="100%" style="background-color: #f6efea; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
                     <tr><td>
-                      <strong style="color: #000;">Guest:</strong> ${fullName}<br>
-                      <strong style="color: #000;">Email:</strong> ${email}
+                      <strong style="color: #000;">Guest:</strong> ${safeFullName}<br>
+                      <strong style="color: #000;">Email:</strong> ${safeEmail}
                     </td></tr>
                   </table>
                   ` : `
