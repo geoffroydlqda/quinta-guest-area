@@ -13,6 +13,26 @@ const corsHeaders = {
 
 const ADMIN_EMAIL = "hello@quintamor.com";
 const FROM_EMAIL = "Quinta do Amor <noreply@quintamor.com>";
+const GUEST_AREA_URL = "https://quinta-guest-area.lovable.app/dashboard";
+
+const FoodSelectionSchema = z.object({
+  date: z.string(),
+  fullBoard: z.boolean(),
+  breakfast: z.boolean(),
+  lunch: z.boolean(),
+  dinner: z.boolean(),
+});
+
+const TripSchema = z.object({
+  trip_direction: z.string(),
+  pickup_location: z.string(),
+  dropoff_location: z.string(),
+  trip_date: z.string(),
+  trip_time: z.string(),
+  passengers_count: z.number(),
+  taxi_size: z.string(),
+  price_estimate: z.string(),
+}).passthrough();
 
 const GuestSummarySchema = z.object({
   fullName: z.string().min(1).max(200).trim(),
@@ -37,6 +57,7 @@ const GuestSummarySchema = z.object({
     tripCount: z.number().int().min(0).max(50),
     totalPrice: z.number().min(0).max(10000),
     customOfferCount: z.number().int().min(0).max(50),
+    trips: z.array(TripSchema).optional(),
   }).nullable(),
   food: z.object({
     fullBoardDays: z.number().int().min(0).max(365),
@@ -44,6 +65,7 @@ const GuestSummarySchema = z.object({
     customDays: z.number().int().min(0).max(365),
     dietPreference: z.string().max(100).nullable().optional(),
     totalCost: z.number().min(0).max(100000).optional(),
+    selections: z.array(FoodSelectionSchema).optional(),
   }).nullable(),
 });
 
@@ -51,14 +73,66 @@ type GuestSummaryPayload = z.infer<typeof GuestSummarySchema>;
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return 'Not set';
-  const date = new Date(dateStr);
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatDateShort(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+function generateFoodBreakdownHtml(selections: z.infer<typeof FoodSelectionSchema>[]): string {
+  if (!selections || selections.length === 0) return '';
+
+  const activeDays = selections.filter(s => s.fullBoard || s.breakfast || s.lunch || s.dinner);
+  if (activeDays.length === 0) return '';
+
+  let html = '';
+  for (const sel of activeDays) {
+    const meals: string[] = [];
+    if (sel.fullBoard) {
+      meals.push('Full board');
+    } else {
+      if (sel.breakfast) meals.push('Breakfast');
+      if (sel.lunch) meals.push('Lunch');
+      if (sel.dinner) meals.push('Dinner (+ dessert)');
+    }
+    if (meals.length === 0) continue;
+
+    html += `
+      <tr><td style="padding: 8px 0 2px 0; font-weight: 700; color: #000;">${formatDateShort(sel.date)}</td></tr>
+      ${meals.map(m => `<tr><td style="padding: 2px 0 2px 16px; color: #333;">• ${m}</td></tr>`).join('')}
+    `;
+  }
+  return html;
+}
+
+function generateTransportationTripsHtml(trips: z.infer<typeof TripSchema>[]): string {
+  if (!trips || trips.length === 0) return '';
+
+  return trips.map(trip => `
+    <tr><td style="padding: 6px 0;">
+      <table width="100%" style="background-color: #f6efea; border-radius: 6px; padding: 10px;">
+        <tr><td style="padding: 4px 10px; color: #333; font-weight: 600;">${trip.trip_direction} — ${formatDateShort(trip.trip_date)} at ${trip.trip_time}</td></tr>
+        <tr><td style="padding: 2px 10px; color: #555; font-size: 13px;">${trip.pickup_location} → ${trip.dropoff_location}</td></tr>
+        <tr><td style="padding: 2px 10px; color: #555; font-size: 13px;">${trip.taxi_size} · ${trip.passengers_count} passenger${trip.passengers_count !== 1 ? 's' : ''} · ${trip.price_estimate}</td></tr>
+      </table>
+    </td></tr>
+  `).join('');
 }
 
 function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): string {
   const { fullName, firstName, email, checkInDate, checkOutDate, guestsCount, roomSetup, transportation, food } = payload;
   const greetingName = firstName || fullName?.split(' ')[0] || 'Guest';
   
+  const foodTotal = food?.totalCost || 0;
+  const transportTotal = transportation?.totalPrice || 0;
+  const grandTotal = foodTotal + transportTotal;
+  const hasCustomOffers = (transportation?.customOfferCount || 0) > 0;
+
   return `
     <!DOCTYPE html>
     <html>
@@ -87,6 +161,13 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
               <tr>
                 <td style="background-color: #ffffff; padding: 32px; border-left: 1px solid #e8ddd6; border-right: 1px solid #e8ddd6;">
                   
+                  <!-- CTA Button -->
+                  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                    <tr><td align="center">
+                      <a href="${GUEST_AREA_URL}" style="display: inline-block; background-color: #5e6d3f; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Go to Guest Area</a>
+                    </td></tr>
+                  </table>
+
                   ${isAdmin ? `
                   <table width="100%" style="background-color: #f6efea; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
                     <tr><td>
@@ -139,9 +220,14 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                     <tr><td style="padding: 12px 0;">
                       ${transportation && transportation.tripCount > 0 ? `
                       <table width="100%">
+                        ${transportation.trips ? generateTransportationTripsHtml(transportation.trips) : `
                         <tr><td style="padding: 8px 0; color: #333;">Trips scheduled</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${transportation.tripCount}</td></tr>
-                        ${transportation.totalPrice > 0 ? `<tr><td style="padding: 8px 0; color: #333;">Estimated total (fixed-price)</td><td style="padding: 8px 0; text-align: right; font-weight: 600; color: #5e6d3f;">€${transportation.totalPrice}</td></tr>` : ''}
-                        ${transportation.customOfferCount > 0 ? `<tr><td style="padding: 8px 0; color: #333;">Custom offer trips</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${transportation.customOfferCount}</td></tr>` : ''}
+                        `}
+                      </table>
+                      <!-- Transportation Subtotal -->
+                      <table width="100%" style="margin-top: 12px; border-top: 1px solid #e8ddd6;">
+                        ${transportation.totalPrice > 0 ? `<tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Transportation subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">€${transportation.totalPrice}</td></tr>` : ''}
+                        ${hasCustomOffers ? `<tr><td colspan="2" style="padding: 4px 0; color: #666; font-size: 13px; font-style: italic;">Transportation custom offers will be quoted separately.</td></tr>` : ''}
                       </table>
                       ` : '<p style="color: #999; font-style: italic;">Not set</p>'}
                     </td></tr>
@@ -154,21 +240,43 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                     </td></tr>
                     <tr><td style="padding: 12px 0;">
                       ${food ? `
+                      ${food.dietPreference ? `<p style="margin: 0 0 12px 0; color: #333;"><strong>Diet preference:</strong> ${food.dietPreference}</p>` : ''}
+                      
+                      <!-- Daily Breakdown -->
+                      ${food.selections && food.selections.length > 0 ? `
+                      <p style="margin: 0 0 8px 0; color: #333; font-weight: 600;">Food plan:</p>
                       <table width="100%">
-                        ${food.dietPreference ? `<tr><td style="padding: 8px 0; color: #333;">Diet preference</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${food.dietPreference}</td></tr>` : ''}
+                        ${generateFoodBreakdownHtml(food.selections)}
+                      </table>
+                      ` : `
+                      <table width="100%">
                         ${food.fullBoardDays > 0 ? `<tr><td style="padding: 8px 0; color: #333;">Full board</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${food.fullBoardDays} day${food.fullBoardDays !== 1 ? 's' : ''}</td></tr>` : ''}
                         ${food.breakfastOnlyDays > 0 ? `<tr><td style="padding: 8px 0; color: #333;">Breakfast only</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${food.breakfastOnlyDays} day${food.breakfastOnlyDays !== 1 ? 's' : ''}</td></tr>` : ''}
                         ${food.customDays > 0 ? `<tr><td style="padding: 8px 0; color: #333;">Custom selection</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${food.customDays} day${food.customDays !== 1 ? 's' : ''}</td></tr>` : ''}
                       </table>
+                      `}
+
+                      <!-- Food Subtotal -->
                       ${food.totalCost !== undefined && food.totalCost > 0 ? `
-                      <table width="100%" style="background-color: #f0f7e6; border-radius: 8px; margin-top: 12px;">
-                        <tr><td style="padding: 12px; color: #333; font-weight: 600;">Estimated total food cost</td><td style="padding: 12px; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 18px;">€${food.totalCost}</td></tr>
+                      <table width="100%" style="margin-top: 12px; border-top: 1px solid #e8ddd6;">
+                        <tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Food subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">€${food.totalCost}</td></tr>
                       </table>
                       ` : ''}
-                      ${!food.dietPreference && food.fullBoardDays === 0 && food.breakfastOnlyDays === 0 && food.customDays === 0 ? '<p style="color: #999; font-style: italic;">No selections made</p>' : ''}
+                      ${!food.dietPreference && food.fullBoardDays === 0 && food.breakfastOnlyDays === 0 && food.customDays === 0 && (!food.selections || food.selections.length === 0) ? '<p style="color: #999; font-style: italic;">No selections made</p>' : ''}
                       ` : '<p style="color: #999; font-style: italic;">Not set</p>'}
                     </td></tr>
                   </table>
+
+                  <!-- Grand Total -->
+                  ${grandTotal > 0 ? `
+                  <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 8px; margin-bottom: 24px; background-color: #f0f7e6; border-radius: 8px;">
+                    <tr>
+                      <td style="padding: 16px; font-weight: 700; font-size: 16px; color: #000;">Estimated total (Food + Transportation)</td>
+                      <td style="padding: 16px; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 20px;">€${grandTotal}</td>
+                    </tr>
+                    ${hasCustomOffers ? `<tr><td colspan="2" style="padding: 0 16px 12px; color: #666; font-size: 13px; font-style: italic;">* Excludes custom offer trips, which will be quoted separately.</td></tr>` : ''}
+                  </table>
+                  ` : ''}
 
                   ${!isAdmin ? `
                   <p style="margin-top: 24px; font-size: 14px; color: #333; background-color: #f6efea; padding: 16px; border-radius: 8px;">
