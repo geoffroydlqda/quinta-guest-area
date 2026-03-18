@@ -126,13 +126,11 @@ export function useGuestProfile() {
 
     // Prevent concurrent loads
     if (loadingRef.current) {
-      console.log('Profile load already in progress, skipping');
       return;
     }
 
     // Check if we already loaded for this user
-    if (hasLoadedRef.current && currentUserIdRef.current === user.id && state.profile) {
-      console.log('Profile already loaded for this user');
+    if (hasLoadedRef.current && currentUserIdRef.current === user.id) {
       return;
     }
 
