@@ -218,7 +218,7 @@ export function useGuestProfile() {
         timedOut: false,
       }));
     }
-  }, [user, ensureProfileOnServer, fetchProfile, loadToolStatuses, state.profile]);
+  }, [user, ensureProfileOnServer, fetchProfile, loadToolStatuses]);
 
   // Initial load effect - runs once per user
   useEffect(() => {
