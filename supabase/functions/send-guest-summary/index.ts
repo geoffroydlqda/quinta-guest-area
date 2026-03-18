@@ -78,16 +78,25 @@ function formatDate(dateStr: string | null): string {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function formatDateShort(dateStr: string): string {
+function getOrdinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function formatDateLong(dateStr: string): string {
   const [year, month, day] = dateStr.split('-').map(Number);
   const date = new Date(year, month - 1, day);
-  return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  const weekday = date.toLocaleDateString('en-GB', { weekday: 'long' });
+  const monthName = date.toLocaleDateString('en-GB', { month: 'long' });
+  return `${weekday} ${getOrdinal(day)} of ${monthName}`;
 }
 
 function generateFoodBreakdownHtml(selections: z.infer<typeof FoodSelectionSchema>[]): string {
   if (!selections || selections.length === 0) return '';
 
-  const activeDays = selections.filter(s => s.fullBoard || s.breakfast || s.lunch || s.dinner);
+  const sorted = [...selections].sort((a, b) => a.date.localeCompare(b.date));
+  const activeDays = sorted.filter(s => s.fullBoard || s.breakfast || s.lunch || s.dinner);
   if (activeDays.length === 0) return '';
 
   let html = '';
@@ -102,10 +111,9 @@ function generateFoodBreakdownHtml(selections: z.infer<typeof FoodSelectionSchem
     }
     if (meals.length === 0) continue;
 
-    html += `
-      <tr><td style="padding: 8px 0 2px 0; font-weight: 700; color: #000;">${formatDateShort(sel.date)}</td></tr>
-      ${meals.map(m => `<tr><td style="padding: 2px 0 2px 16px; color: #333;">• ${m}</td></tr>`).join('')}
-    `;
+    const dateLabel = formatDateLong(sel.date);
+    const mealsLabel = meals.join(' + ');
+    html += `<tr><td style="padding: 6px 0; color: #333;"><strong style="color: #000;">${dateLabel}</strong> : ${mealsLabel}</td></tr>`;
   }
   return html;
 }
@@ -113,15 +121,28 @@ function generateFoodBreakdownHtml(selections: z.infer<typeof FoodSelectionSchem
 function generateTransportationTripsHtml(trips: z.infer<typeof TripSchema>[]): string {
   if (!trips || trips.length === 0) return '';
 
-  return trips.map(trip => `
-    <tr><td style="padding: 6px 0;">
-      <table width="100%" style="background-color: #f6efea; border-radius: 6px; padding: 10px;">
-        <tr><td style="padding: 4px 10px; color: #333; font-weight: 600;">${trip.trip_direction} — ${formatDateShort(trip.trip_date)} at ${trip.trip_time}</td></tr>
-        <tr><td style="padding: 2px 10px; color: #555; font-size: 13px;">${trip.pickup_location} → ${trip.dropoff_location}</td></tr>
-        <tr><td style="padding: 2px 10px; color: #555; font-size: 13px;">${trip.taxi_size} · ${trip.passengers_count} passenger${trip.passengers_count !== 1 ? 's' : ''} · ${trip.price_estimate}</td></tr>
+  const sorted = [...trips].sort((a, b) => {
+    const dateCompare = a.trip_date.localeCompare(b.trip_date);
+    return dateCompare !== 0 ? dateCompare : a.trip_time.localeCompare(b.trip_time);
+  });
+
+  return sorted.map((trip, i) => {
+    const taxiLabel = trip.taxi_size === '4 seats' ? '4-seat taxi' : trip.taxi_size === '6 seats' ? '6-seat taxi' : trip.taxi_size;
+    const priceLabel = trip.price_estimate;
+    return `
+    <tr><td style="padding: 8px 0;">
+      <table width="100%" style="background-color: #f6efea; border-radius: 8px;">
+        <tr><td style="padding: 10px 14px 4px; color: #000; font-weight: 700; font-size: 14px;">Trip ${i + 1}</td></tr>
+        <tr><td style="padding: 2px 14px; color: #333; font-size: 13px;">Pickup: ${trip.pickup_location}</td></tr>
+        <tr><td style="padding: 2px 14px; color: #333; font-size: 13px;">Drop-off: ${trip.dropoff_location}</td></tr>
+        <tr><td style="padding: 2px 14px; color: #333; font-size: 13px;">Date: ${formatDateLong(trip.trip_date)}</td></tr>
+        <tr><td style="padding: 2px 14px; color: #333; font-size: 13px;">Time: ${trip.trip_time}</td></tr>
+        <tr><td style="padding: 2px 14px; color: #333; font-size: 13px;">Vehicle: ${taxiLabel}</td></tr>
+        <tr><td style="padding: 2px 14px 10px; color: #333; font-size: 13px;">Price: ${priceLabel}</td></tr>
       </table>
     </td></tr>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): string {
@@ -161,11 +182,13 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
               <tr>
                 <td style="background-color: #ffffff; padding: 32px; border-left: 1px solid #e8ddd6; border-right: 1px solid #e8ddd6;">
                   
-                  <!-- CTA Button -->
+                   <!-- CTA Button -->
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                    <tr><td style="padding: 0 0 8px 0; font-size: 14px; color: #333; text-align: center;">You can edit your information anytime in your Guest Area.</td></tr>
                     <tr><td align="center">
                       <a href="${GUEST_AREA_URL}" style="display: inline-block; background-color: #5e6d3f; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Go to Guest Area</a>
                     </td></tr>
+                    <tr><td style="padding: 8px 0 0 0; font-size: 12px; color: #999; text-align: center;"><a href="${GUEST_AREA_URL}" style="color: #5e6d3f; text-decoration: underline;">${GUEST_AREA_URL}</a></td></tr>
                   </table>
 
                   ${isAdmin ? `
@@ -226,8 +249,8 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                       </table>
                       <!-- Transportation Subtotal -->
                       <table width="100%" style="margin-top: 12px; border-top: 1px solid #e8ddd6;">
-                        ${transportation.totalPrice > 0 ? `<tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Transportation subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">€${transportation.totalPrice}</td></tr>` : ''}
-                        ${hasCustomOffers ? `<tr><td colspan="2" style="padding: 4px 0; color: #666; font-size: 13px; font-style: italic;">Transportation custom offers will be quoted separately.</td></tr>` : ''}
+                         ${transportation.totalPrice > 0 ? `<tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Transportation subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">${transportation.totalPrice}€</td></tr>` : ''}
+                         ${hasCustomOffers ? `<tr><td colspan="2" style="padding: 4px 0; color: #666; font-size: 13px; font-style: italic;">Custom transportation offers will be quoted separately.</td></tr>` : ''}
                       </table>
                       ` : '<p style="color: #999; font-style: italic;">Not set</p>'}
                     </td></tr>
@@ -259,7 +282,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                       <!-- Food Subtotal -->
                       ${food.totalCost !== undefined && food.totalCost > 0 ? `
                       <table width="100%" style="margin-top: 12px; border-top: 1px solid #e8ddd6;">
-                        <tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Food subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">€${food.totalCost}</td></tr>
+                        <tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Food subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">${food.totalCost}€</td></tr>
                       </table>
                       ` : ''}
                       ${!food.dietPreference && food.fullBoardDays === 0 && food.breakfastOnlyDays === 0 && food.customDays === 0 && (!food.selections || food.selections.length === 0) ? '<p style="color: #999; font-style: italic;">No selections made</p>' : ''}
@@ -272,7 +295,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 8px; margin-bottom: 24px; background-color: #f0f7e6; border-radius: 8px;">
                     <tr>
                       <td style="padding: 16px; font-weight: 700; font-size: 16px; color: #000;">Estimated total (Food + Transportation)</td>
-                      <td style="padding: 16px; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 20px;">€${grandTotal}</td>
+                      <td style="padding: 16px; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 20px;">${grandTotal}€</td>
                     </tr>
                     ${hasCustomOffers ? `<tr><td colspan="2" style="padding: 0 16px 12px; color: #666; font-size: 13px; font-style: italic;">* Excludes custom offer trips, which will be quoted separately.</td></tr>` : ''}
                   </table>
