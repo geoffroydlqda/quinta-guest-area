@@ -187,6 +187,7 @@ const Food = () => {
 
                 const isCheckIn = day.isCheckIn;
                 const isCheckOut = day.isCheckOut;
+                const hasIndividualMeal = selection.breakfast || selection.lunch || selection.dinner;
 
                 return (
                   <div
@@ -202,28 +203,28 @@ const Food = () => {
                     <div className="p-4 flex items-center justify-center border-l border-border">
                       <MealToggle
                         selected={selection.fullBoard}
-                        disabled={isLocked || isCheckIn || isCheckOut || selection.breakfast || selection.lunch || selection.dinner}
+                        disabled={isLocked || hasIndividualMeal}
                         onClick={() => updateDaySelection(day.date, { fullBoard: !selection.fullBoard })}
                       />
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
                       <MealToggle
                         selected={selection.breakfast}
-                        disabled={isLocked || selection.fullBoard || (isCheckIn && !isCheckOut)}
+                        disabled={isLocked || selection.fullBoard}
                         onClick={() => updateDaySelection(day.date, { breakfast: !selection.breakfast })}
                       />
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
                       <MealToggle
                         selected={selection.lunch}
-                        disabled={isLocked || selection.fullBoard || isCheckIn || isCheckOut}
+                        disabled={isLocked || selection.fullBoard}
                         onClick={() => updateDaySelection(day.date, { lunch: !selection.lunch })}
                       />
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
                       <MealToggle
                         selected={selection.dinner}
-                        disabled={isLocked || selection.fullBoard || isCheckOut}
+                        disabled={isLocked || selection.fullBoard}
                         onClick={() => updateDaySelection(day.date, { dinner: !selection.dinner })}
                       />
                     </div>
@@ -236,9 +237,8 @@ const Food = () => {
 
         {/* Legend */}
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-          <span>• Check-in day: only dinner (+ dessert) available</span>
-          <span>• Check-out day: only breakfast available</span>
           <span>• Full board = all 3 meals</span>
+          <span>• Selecting Full board disables individual meal toggles</span>
         </div>
 
         {/* Dinner Note */}
