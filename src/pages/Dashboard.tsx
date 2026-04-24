@@ -13,6 +13,7 @@ import { GlobalSummary } from '@/components/guest-area/GlobalSummary';
 import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
 import { ProfileCompletionModal } from '@/components/guest-area/ProfileCompletionModal';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { featureFlags } from '@/lib/featureFlags';
 import { Button } from '@/components/ui/button';
 import { Loader2, Send, RefreshCw, LogOut } from 'lucide-react';
 import type { DietPreference, FoodDaySelection, TransportationTrip } from '@/types/guest';
