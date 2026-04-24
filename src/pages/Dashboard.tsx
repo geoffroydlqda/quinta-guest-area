@@ -288,13 +288,15 @@ const DashboardContent = () => {
                 href="/food"
                 disabled={!hasDatesSet || isLocked}
               />
-              <ToolTile
-                title="Documentation"
-                description="Property info & house rules"
-                icon="docs"
-                status={toolStatuses.documentation}
-                href="/documentation"
-              />
+              {featureFlags.showDocumentation && (
+                <ToolTile
+                  title="Documentation"
+                  description="Property info & house rules"
+                  icon="docs"
+                  status={toolStatuses.documentation}
+                  href="/documentation"
+                />
+              )}
             </div>
           </div>
 

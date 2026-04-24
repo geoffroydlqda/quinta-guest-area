@@ -2,9 +2,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { featureFlags } from "@/lib/featureFlags";
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -44,9 +45,13 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/documentation" element={
-              <ProtectedRoute>
-                <Documentation />
-              </ProtectedRoute>
+              featureFlags.showDocumentation ? (
+                <ProtectedRoute>
+                  <Documentation />
+                </ProtectedRoute>
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )
             } />
             {/* Legacy route redirect */}
             <Route path="/setup" element={
