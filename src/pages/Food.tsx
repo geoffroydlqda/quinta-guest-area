@@ -237,9 +237,8 @@ const Food = () => {
 
         {/* Legend */}
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-          <span>• Check-in day: only dinner (+ dessert) available</span>
-          <span>• Check-out day: only breakfast available</span>
           <span>• Full board = all 3 meals</span>
+          <span>• Selecting Full board disables individual meal toggles</span>
         </div>
 
         {/* Dinner Note */}
