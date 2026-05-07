@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import type { FoodPlan, FoodDaySelection, DietPreference } from '@/types/guest';
-import { addDays, format, parseISO, differenceInDays } from 'date-fns';
+import { generateDatesInclusive } from '@/lib/localDate';
 
 export function useFoodPlan(checkInDate: string | null, checkOutDate: string | null) {
   const { user } = useAuth();
@@ -19,26 +19,13 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
 
   // Generate days array based on check-in/out dates
   const days = useMemo(() => {
-    if (!checkInDate || !checkOutDate) return [];
-    
-    const start = parseISO(checkInDate);
-    const end = parseISO(checkOutDate);
-    const dayCount = differenceInDays(end, start) + 1;
-    
-    if (dayCount < 1) return [];
-    
-    const daysArray: { date: string; isCheckIn: boolean; isCheckOut: boolean }[] = [];
-    
-    for (let i = 0; i < dayCount; i++) {
-      const currentDate = addDays(start, i);
-      daysArray.push({
-        date: format(currentDate, 'yyyy-MM-dd'),
-        isCheckIn: i === 0,
-        isCheckOut: i === dayCount - 1,
-      });
-    }
-    
-    return daysArray;
+    const dates = generateDatesInclusive(checkInDate, checkOutDate);
+
+    return dates.map((date, index) => ({
+      date,
+      isCheckIn: index === 0,
+      isCheckOut: index === dates.length - 1,
+    }));
   }, [checkInDate, checkOutDate]);
 
   // Build a stable key for the current date range
@@ -201,13 +188,19 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     if (!user || !foodPlan) return false;
     
     try {
+      const payload = {
+        notes_food: foodPlan.notes_food || null,
+        diet_preference: foodPlan.diet_preference || null,
+        selections: JSON.parse(JSON.stringify(foodPlan.selections)),
+      };
+
+      if (import.meta.env.DEV) {
+        console.debug('[FoodPlan] autoSave payload', payload);
+      }
+
       const { error } = await supabase
         .from('food_plans')
-        .update({
-          notes_food: foodPlan.notes_food || null,
-          diet_preference: foodPlan.diet_preference || null,
-          selections: JSON.parse(JSON.stringify(foodPlan.selections)),
-        })
+        .update(payload)
         .eq('user_id', user.id);
       
       if (error) throw error;

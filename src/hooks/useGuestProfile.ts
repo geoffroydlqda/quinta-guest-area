@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { GuestProfile, ToolStatuses } from '@/types/guest';
+import { formatDateForDatabase } from '@/lib/localDate';
 
 // Timeout for profile loading (8 seconds)
 const PROFILE_LOAD_TIMEOUT = 8000;
@@ -36,6 +37,8 @@ export function useGuestProfile() {
   const loadingRef = useRef(false);
   const hasLoadedRef = useRef(false);
   const currentUserIdRef = useRef<string | null>(null);
+  const previousCheckOutDateRef = useRef<string | null>(null);
+  const checkOutChangeSourceRef = useRef('initial_load');
 
   // Ensure profile exists via server-side edge function
   const ensureProfileOnServer = useCallback(async (userId: string, metadata?: Record<string, any>) => {
@@ -195,6 +198,7 @@ export function useGuestProfile() {
       hasLoadedRef.current = true;
       loadingRef.current = false;
 
+      checkOutChangeSourceRef.current = 'profile_load';
       setState({
         profile: typedProfile,
         toolStatuses,
@@ -219,6 +223,25 @@ export function useGuestProfile() {
       }));
     }
   }, [user, ensureProfileOnServer, fetchProfile, loadToolStatuses]);
+
+  useEffect(() => {
+    const nextCheckOutDate = state.profile?.check_out_date ?? null;
+
+    if (
+      import.meta.env.DEV &&
+      previousCheckOutDateRef.current !== null &&
+      previousCheckOutDateRef.current !== nextCheckOutDate
+    ) {
+      console.debug('[GuestProfile] check_out_date changed', {
+        previousCheckOutDate: previousCheckOutDateRef.current,
+        nextCheckOutDate,
+        triggerSource: checkOutChangeSourceRef.current,
+      });
+    }
+
+    previousCheckOutDateRef.current = nextCheckOutDate;
+    checkOutChangeSourceRef.current = 'state_sync';
+  }, [state.profile?.check_out_date]);
 
   // Initial load effect - runs once per user
   useEffect(() => {
@@ -290,18 +313,20 @@ export function useGuestProfile() {
     if (!user || !state.profile) return false;
 
     try {
+      const nextCheckInDate = formatDateForDatabase(checkIn);
       const { error } = await supabase
         .from('guest_profiles')
-        .update({ check_in_date: checkIn?.toISOString().split('T')[0] || null })
+        .update({ check_in_date: nextCheckInDate })
         .eq('user_id', user.id);
 
       if (error) throw error;
 
+      checkOutChangeSourceRef.current = 'user_check_in_change';
       setState(prev => ({
         ...prev,
         profile: prev.profile ? {
           ...prev.profile,
-          check_in_date: checkIn?.toISOString().split('T')[0] || null,
+          check_in_date: nextCheckInDate,
         } : null,
       }));
 
@@ -317,18 +342,20 @@ export function useGuestProfile() {
     if (!user || !state.profile) return false;
 
     try {
+      const nextCheckOutDate = formatDateForDatabase(checkOut);
       const { error } = await supabase
         .from('guest_profiles')
-        .update({ check_out_date: checkOut?.toISOString().split('T')[0] || null })
+        .update({ check_out_date: nextCheckOutDate })
         .eq('user_id', user.id);
 
       if (error) throw error;
 
+      checkOutChangeSourceRef.current = 'user_check_out_change';
       setState(prev => ({
         ...prev,
         profile: prev.profile ? {
           ...prev.profile,
-          check_out_date: checkOut?.toISOString().split('T')[0] || null,
+          check_out_date: nextCheckOutDate,
         } : null,
       }));
 
@@ -375,23 +402,26 @@ export function useGuestProfile() {
     if (!user || !state.profile) return false;
 
     try {
+      const nextCheckInDate = formatDateForDatabase(checkIn);
+      const nextCheckOutDate = formatDateForDatabase(checkOut);
       const { error } = await supabase
         .from('guest_profiles')
         .update({
-          check_in_date: checkIn?.toISOString().split('T')[0] || null,
-          check_out_date: checkOut?.toISOString().split('T')[0] || null,
+          check_in_date: nextCheckInDate,
+          check_out_date: nextCheckOutDate,
           guests_count: guestsCount,
         })
         .eq('user_id', user.id);
 
       if (error) throw error;
 
+      checkOutChangeSourceRef.current = 'combined_stay_update';
       setState(prev => ({
         ...prev,
         profile: prev.profile ? {
           ...prev.profile,
-          check_in_date: checkIn?.toISOString().split('T')[0] || null,
-          check_out_date: checkOut?.toISOString().split('T')[0] || null,
+          check_in_date: nextCheckInDate,
+          check_out_date: nextCheckOutDate,
           guests_count: guestsCount,
         } : null,
       }));
