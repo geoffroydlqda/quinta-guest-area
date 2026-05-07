@@ -313,18 +313,20 @@ export function useGuestProfile() {
     if (!user || !state.profile) return false;
 
     try {
+      const nextCheckInDate = formatDateForDatabase(checkIn);
       const { error } = await supabase
         .from('guest_profiles')
-        .update({ check_in_date: checkIn?.toISOString().split('T')[0] || null })
+        .update({ check_in_date: nextCheckInDate })
         .eq('user_id', user.id);
 
       if (error) throw error;
 
+      checkOutChangeSourceRef.current = 'user_check_in_change';
       setState(prev => ({
         ...prev,
         profile: prev.profile ? {
           ...prev.profile,
-          check_in_date: checkIn?.toISOString().split('T')[0] || null,
+          check_in_date: nextCheckInDate,
         } : null,
       }));
 
@@ -340,18 +342,20 @@ export function useGuestProfile() {
     if (!user || !state.profile) return false;
 
     try {
+      const nextCheckOutDate = formatDateForDatabase(checkOut);
       const { error } = await supabase
         .from('guest_profiles')
-        .update({ check_out_date: checkOut?.toISOString().split('T')[0] || null })
+        .update({ check_out_date: nextCheckOutDate })
         .eq('user_id', user.id);
 
       if (error) throw error;
 
+      checkOutChangeSourceRef.current = 'user_check_out_change';
       setState(prev => ({
         ...prev,
         profile: prev.profile ? {
           ...prev.profile,
-          check_out_date: checkOut?.toISOString().split('T')[0] || null,
+          check_out_date: nextCheckOutDate,
         } : null,
       }));
 
@@ -398,23 +402,26 @@ export function useGuestProfile() {
     if (!user || !state.profile) return false;
 
     try {
+      const nextCheckInDate = formatDateForDatabase(checkIn);
+      const nextCheckOutDate = formatDateForDatabase(checkOut);
       const { error } = await supabase
         .from('guest_profiles')
         .update({
-          check_in_date: checkIn?.toISOString().split('T')[0] || null,
-          check_out_date: checkOut?.toISOString().split('T')[0] || null,
+          check_in_date: nextCheckInDate,
+          check_out_date: nextCheckOutDate,
           guests_count: guestsCount,
         })
         .eq('user_id', user.id);
 
       if (error) throw error;
 
+      checkOutChangeSourceRef.current = 'combined_stay_update';
       setState(prev => ({
         ...prev,
         profile: prev.profile ? {
           ...prev.profile,
-          check_in_date: checkIn?.toISOString().split('T')[0] || null,
-          check_out_date: checkOut?.toISOString().split('T')[0] || null,
+          check_in_date: nextCheckInDate,
+          check_out_date: nextCheckOutDate,
           guests_count: guestsCount,
         } : null,
       }));
