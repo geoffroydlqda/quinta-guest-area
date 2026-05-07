@@ -50,7 +50,7 @@ export function StayDatesPicker({
   // Sync check-in from props ONLY when not editing
   useEffect(() => {
     if (!isUserEditingCheckIn.current && checkInDate) {
-      const parsed = parseLocalDate(checkInDate);
+      const parsed = parseLocalDateString(checkInDate);
       if (parsed && (!localCheckIn || parsed.getTime() !== localCheckIn.getTime())) {
         setLocalCheckIn(parsed);
       }
@@ -60,7 +60,7 @@ export function StayDatesPicker({
   // Sync check-out from props ONLY when not editing
   useEffect(() => {
     if (!isUserEditingCheckOut.current && checkOutDate) {
-      const parsed = parseLocalDate(checkOutDate);
+      const parsed = parseLocalDateString(checkOutDate);
       if (parsed && (!localCheckOut || parsed.getTime() !== localCheckOut.getTime())) {
         setLocalCheckOut(parsed);
       }
