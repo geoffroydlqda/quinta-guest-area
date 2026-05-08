@@ -10,6 +10,24 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
+import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
+
+const STATUS_BADGE: Record<GuestStatusKind, { label: string; className: string }> = {
+  pending: { label: "Pending completion", className: "bg-muted text-foreground border border-border" },
+  late: { label: "Late submission", className: "bg-destructive/15 text-destructive border border-destructive/30" },
+  finalized_submitted: { label: "Finalized", className: "bg-success/15 text-success border border-success/30" },
+  finalized_in_progress: { label: "Finalized", className: "bg-success/15 text-success border border-success/30" },
+};
+
+function StatusBadge({ checkIn, statusOverall }: { checkIn: string | null; statusOverall: string }) {
+  const info = getGuestStatus(checkIn, statusOverall);
+  const cfg = STATUS_BADGE[info.status];
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${cfg.className}`}>
+      {cfg.label}
+    </span>
+  );
+}
 
 type Profile = {
   user_id: string; first_name: string | null; last_name: string | null;
