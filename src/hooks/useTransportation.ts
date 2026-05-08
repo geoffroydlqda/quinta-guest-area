@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import type { TransportationTrip, TransportationPassenger, TransportationRequest } from '@/types/guest';
 import { calculateTripPrice } from '@/types/guest';
+import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 export function useTransportation() {
   const { user } = useAuth();
@@ -127,7 +128,7 @@ export function useTransportation() {
       
       const newTrip = { ...data, passengers: [] } as TransportationTrip;
       setTrips(prev => [...prev, newTrip]);
-      
+      triggerSheetsSync();
       return newTrip;
     } catch (error: any) {
       console.error('Error adding trip:', error);
@@ -169,7 +170,7 @@ export function useTransportation() {
       setTrips(prev => prev.map(t => 
         t.id === tripId ? { ...t, ...updates, price_estimate: priceEstimate || t.price_estimate } : t
       ));
-      
+      triggerSheetsSync();
       return true;
     } catch (error: any) {
       console.error('Error updating trip:', error);
@@ -191,6 +192,7 @@ export function useTransportation() {
       if (error) throw error;
       
       setTrips(prev => prev.filter(t => t.id !== tripId));
+      triggerSheetsSync();
       return true;
     } catch (error: any) {
       console.error('Error deleting trip:', error);
