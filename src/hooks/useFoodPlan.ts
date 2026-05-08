@@ -188,9 +188,21 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     });
   }, []);
 
-  // Update diet preference
+  // Update diet preference (legacy)
   const updateDietPreference = useCallback((preference: DietPreference | null) => {
     setFoodPlan(prev => prev ? { ...prev, diet_preference: preference } : null);
+  }, []);
+
+  // Update diet config (multi-diet)
+  const updateDietConfig = useCallback((updates: Partial<DietConfig>) => {
+    setFoodPlan(prev => prev ? {
+      ...prev,
+      diet_config: {
+        vegetarian_count: Math.max(0, updates.vegetarian_count ?? prev.diet_config.vegetarian_count),
+        meat_dinner_count: Math.max(0, updates.meat_dinner_count ?? prev.diet_config.meat_dinner_count),
+        meat_lunch_dinner_count: Math.max(0, updates.meat_lunch_dinner_count ?? prev.diet_config.meat_lunch_dinner_count),
+      },
+    } : null);
   }, []);
 
   // Auto-save function
@@ -201,6 +213,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
       const payload = {
         notes_food: foodPlan.notes_food || null,
         diet_preference: foodPlan.diet_preference || null,
+        diet_config: foodPlan.diet_config as any,
         selections: JSON.parse(JSON.stringify(foodPlan.selections)),
       };
 
