@@ -46,7 +46,7 @@ const RoomSetup = () => {
   } = useRoomPlanner();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
-  const isLocked = isEditingLocked(profile?.check_in_date || null);
+  const isLocked = isEditingLocked(profile?.check_in_date || null, profile?.status_overall || "draft");
 
   // Calculate remaining capacity
   const totalShared = roomSelection.queenSharedQty + roomSelection.twinsSharedQty;

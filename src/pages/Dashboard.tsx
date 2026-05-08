@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { isEditingLocked } from '@/lib/editLock';
+import { getGuestStatus } from '@/lib/editLock';
 import { calculateFoodCostMulti } from '@/lib/foodPricing';
 import { calculateTransportationCost } from '@/lib/transportationPricing';
 import { GuestAreaHeader } from '@/components/guest-area/GuestAreaHeader';
@@ -45,7 +45,8 @@ const DashboardContent = () => {
   const [foodData, setFoodData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isLocked = isEditingLocked(profile?.check_in_date || null);
+  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || 'draft');
+  const isLocked = guestStatus.isEditingLocked;
 
   // Diet validation: total assigned guests must not exceed guests_count
   const dietConfig: DietConfig | null = foodData?.dietConfig || null;
@@ -279,14 +280,15 @@ const DashboardContent = () => {
             </p>
           </div>
 
-          {/* Edit Lock Banner */}
-          {isLocked && <EditLockBanner />}
+          {/* Status Banner */}
+          <EditLockBanner statusInfo={guestStatus} />
 
           {/* Section 1: Stay Dates */}
           <StayDatesPicker
             checkInDate={profile.check_in_date}
             checkOutDate={profile.check_out_date}
             guestsCount={profile.guests_count}
+            statusOverall={profile.status_overall}
             onCheckInChange={updateCheckInDate}
             onCheckOutChange={updateCheckOutDate}
             onGuestsCountChange={updateGuestsCount}
@@ -367,7 +369,7 @@ const DashboardContent = () => {
               Submit information
             </Button>
             <p className="text-sm text-muted-foreground mt-3">
-              Your information can still be edited until 5 days before check-in date.
+              {guestStatus.message}
             </p>
           </div>
         </div>

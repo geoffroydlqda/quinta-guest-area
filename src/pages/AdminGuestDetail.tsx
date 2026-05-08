@@ -13,6 +13,7 @@ import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 import { calculateFoodCostMulti } from "@/lib/foodPricing";
 import { calculateTransportationCost, getTripPriceNumeric } from "@/lib/transportationPricing";
 import { EMPTY_DIET_CONFIG, type DietConfig } from "@/types/guest";
+import { getGuestStatus } from "@/lib/editLock";
 
 type Profile = {
   user_id: string; first_name: string | null; last_name: string | null;
@@ -268,7 +269,7 @@ const AdminGuestDetailContent = () => {
             </div>
             <div>
               <div className="text-muted-foreground">Status</div>
-              <div className="font-medium capitalize">{profile.status_overall}</div>
+              <div className="font-medium">{getGuestStatus(profile.check_in_date, profile.status_overall).label}</div>
             </div>
           </div>
         </section>

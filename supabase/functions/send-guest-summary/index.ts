@@ -333,12 +333,23 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                   </table>
                   ` : ''}
 
-                  ${!isAdmin ? `
-                  <p style="margin-top: 24px; font-size: 14px; color: #333; background-color: #f6efea; padding: 16px; border-radius: 8px;">
-                    Your information can still be edited until 5 days before check-in date.
-                    Log in to your account anytime to view or update your selections.
-                  </p>
-                  ` : ''}
+                  ${!isAdmin ? (() => {
+                    // Compute final submission deadline (5 days before check-in)
+                    let deadlineLabel = '';
+                    let pastDeadline = false;
+                    if (checkInDate) {
+                      const [y, m, d] = checkInDate.split('-').map(Number);
+                      const deadline = new Date(y, m - 1, d);
+                      deadline.setDate(deadline.getDate() - 5);
+                      deadlineLabel = deadline.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+                      const today = new Date(); today.setHours(0,0,0,0);
+                      pastDeadline = deadline.getTime() <= today.getTime();
+                    }
+                    const note = pastDeadline
+                      ? 'Your information is now finalized. Please contact hello@quintamor.com for any changes.'
+                      : `You may edit your information until ${deadlineLabel}. Log in to your Guest Area anytime to view or update your selections.`;
+                    return `<p style="margin-top: 24px; font-size: 14px; color: #333; background-color: #f6efea; padding: 16px; border-radius: 8px;">${note}</p>`;
+                  })() : ''}
                 </td>
               </tr>
 

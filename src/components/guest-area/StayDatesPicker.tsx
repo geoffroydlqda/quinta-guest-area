@@ -14,6 +14,7 @@ interface StayDatesPickerProps {
   checkInDate: string | null;
   checkOutDate: string | null;
   guestsCount: number;
+  statusOverall?: 'draft' | 'submitted' | string;
   onCheckInChange: (date: Date | null) => Promise<boolean>;
   onCheckOutChange: (date: Date | null) => Promise<boolean>;
   onGuestsCountChange: (count: number) => Promise<boolean>;
@@ -23,6 +24,7 @@ export function StayDatesPicker({
   checkInDate, 
   checkOutDate, 
   guestsCount,
+  statusOverall = 'draft',
   onCheckInChange,
   onCheckOutChange,
   onGuestsCountChange,
@@ -44,7 +46,7 @@ export function StayDatesPicker({
   const isUserEditingCheckOut = useRef(false);
   const isUserEditingGuests = useRef(false);
 
-  const isLocked = isEditingLocked(checkInDate);
+  const isLocked = isEditingLocked(checkInDate, statusOverall);
   const hasDates = !!(checkInDate && checkOutDate);
   
   // Sync check-in from props ONLY when not editing
@@ -180,7 +182,9 @@ export function StayDatesPicker({
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
             <p className="text-sm text-muted-foreground">
-              You can still change your stay dates. Other edits are locked within 5 days of check-in.
+              Your information is finalized. Please contact{' '}
+              <a href="mailto:hello@quintamor.com" className="text-primary hover:underline">hello@quintamor.com</a>{' '}
+              for any changes.
             </p>
           </div>
         </div>
