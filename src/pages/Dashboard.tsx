@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { isEditingLocked } from '@/lib/editLock';
+import { getGuestStatus } from '@/lib/editLock';
 import { calculateFoodCostMulti } from '@/lib/foodPricing';
 import { calculateTransportationCost } from '@/lib/transportationPricing';
 import { GuestAreaHeader } from '@/components/guest-area/GuestAreaHeader';
