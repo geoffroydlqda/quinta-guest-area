@@ -439,6 +439,14 @@ const AdminGuestDetailContent = () => {
           {profile.submitted_at && <div>Submitted at: {fmtTimestamp(profile.submitted_at)}</div>}
         </section>
       </main>
+
+      <DeleteGuestDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        guestId={guestId ?? null}
+        guestLabel={fullName}
+        onDeleted={() => navigate("/admin")}
+      />
     </div>
   );
 };
