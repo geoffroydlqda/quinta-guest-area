@@ -157,6 +157,15 @@ const DashboardContent = () => {
       return;
     }
 
+    if (dietExceedsGuests) {
+      toast({
+        title: 'Invalid food preferences',
+        description: 'The total number of meal preferences exceeds the number of guests.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
