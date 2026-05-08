@@ -75,6 +75,39 @@ export interface FoodCostSummary {
   dietTotal: number; // sum of all guests assigned to a diet
 }
 
+/**
+ * Distribute a daily guest count across configured diets proportionally.
+ * Uses largest-remainder rounding so the integer parts sum exactly to dailyGuests.
+ * Returns map keyed by DietType.
+ */
+export function distributeDailyGuests(
+  dailyGuests: number,
+  diet: DietConfig
+): Record<DietType, number> {
+  const counts: Record<DietType, number> = {
+    vegetarian: 0,
+    meat_dinner: 0,
+    meat_lunch_dinner: 0,
+  };
+  const total = (diet?.vegetarian_count || 0) + (diet?.meat_dinner_count || 0) + (diet?.meat_lunch_dinner_count || 0);
+  if (dailyGuests <= 0 || total <= 0) return counts;
+
+  const raw: { type: DietType; floor: number; rem: number }[] = DIET_TYPES.map((meta) => {
+    const share = (diet[meta.countKey] || 0) / total * dailyGuests;
+    const floor = Math.floor(share);
+    return { type: meta.type, floor, rem: share - floor };
+  });
+  let assigned = raw.reduce((s, r) => s + r.floor, 0);
+  raw.forEach((r) => { counts[r.type] = r.floor; });
+  let leftover = dailyGuests - assigned;
+  // Distribute leftover by largest remainder
+  raw.sort((a, b) => b.rem - a.rem);
+  for (let i = 0; leftover > 0 && i < raw.length; i++, leftover--) {
+    counts[raw[i].type] += 1;
+  }
+  return counts;
+}
+
 export function calculateFoodCostMulti(
   selections: FoodDaySelection[],
   diet: DietConfig,
@@ -90,13 +123,26 @@ export function calculateFoodCostMulti(
     }
   });
 
+  // Aggregate cost per diet across days using per-day guest distribution
+  const dietTotals: Record<DietType, number> = { vegetarian: 0, meat_dinner: 0, meat_lunch_dinner: 0 };
+  selections.forEach((sel) => {
+    const dayGuests = typeof sel.guests_count_day === 'number' && sel.guests_count_day >= 0
+      ? sel.guests_count_day
+      : guestsCount;
+    const distribution = distributeDailyGuests(dayGuests, diet);
+    DIET_TYPES.forEach((meta) => {
+      const dayPricePerPerson = dayCostPerPerson(sel, meta.pricing);
+      dietTotals[meta.type] += dayPricePerPerson * distribution[meta.type];
+    });
+  });
+
   const dietBreakdown: DietBreakdownItem[] = DIET_TYPES.map((meta) => {
     const guests = diet?.[meta.countKey] || 0;
     const perPerson = selections.reduce((sum, sel) => sum + dayCostPerPerson(sel, meta.pricing), 0);
-    return { type: meta.type, label: meta.label, guests, perPerson, total: perPerson * guests };
+    return { type: meta.type, label: meta.label, guests, perPerson, total: Math.round(dietTotals[meta.type]) };
   });
 
-  const grandTotal = dietBreakdown.reduce((s, d) => s + d.total, 0);
+  const grandTotal = Math.round(dietBreakdown.reduce((s, d) => s + d.total, 0));
   const dietTotal = dietBreakdown.reduce((s, d) => s + d.guests, 0);
   const totalPerPerson = dietTotal > 0 ? Math.round(grandTotal / dietTotal) : 0;
 
