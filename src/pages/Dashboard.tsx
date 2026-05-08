@@ -95,8 +95,15 @@ const DashboardContent = () => {
         .maybeSingle();
 
       if (foodPlanData?.selections && Array.isArray(foodPlanData.selections)) {
-        const selections = foodPlanData.selections as unknown as FoodDaySelection[];
+        const rawSelections = foodPlanData.selections as unknown as FoodDaySelection[];
         const guestsCount = profile?.guests_count || 1;
+        // Backfill guests_count_day default for legacy records
+        const selections: FoodDaySelection[] = rawSelections.map((s) => ({
+          ...s,
+          guests_count_day: typeof s.guests_count_day === 'number' && s.guests_count_day >= 0
+            ? s.guests_count_day
+            : guestsCount,
+        }));
         const rawConfig = (foodPlanData as any).diet_config as DietConfig | null;
         const dietConfig: DietConfig = rawConfig && typeof rawConfig === 'object'
           ? {
