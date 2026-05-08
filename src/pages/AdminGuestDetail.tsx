@@ -230,6 +230,14 @@ const AdminGuestDetailContent = () => {
               Resend summary email
             </Button>
             <Button size="sm" variant="ghost" onClick={() => window.print()}>Print / PDF</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="w-4 h-4 mr-1" /> Delete guest
+            </Button>
           </div>
         </div>
       </header>
