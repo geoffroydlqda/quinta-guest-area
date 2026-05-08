@@ -288,6 +288,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     isLoading,
     isSaving,
     updateDaySelection,
+    updateDayGuests,
     updateDietPreference,
     updateDietConfig,
     updateNotes,
