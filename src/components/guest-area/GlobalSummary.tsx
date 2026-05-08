@@ -162,8 +162,17 @@ export function GlobalSummary({
           </div>
           {hasFood ? (
             <div className="text-sm text-muted-foreground space-y-1 pl-6">
-              {foodData!.dietPreference && (
-                <div className="font-semibold text-foreground">{foodData!.dietPreference}</div>
+              {activeDiets.length > 0 && (
+                <div className="space-y-1">
+                  {activeDiets.map((d) => (
+                    <div key={d.type} className="flex justify-between">
+                      <span>{d.label}</span>
+                      <span className="font-semibold text-foreground">
+                        {d.guests} guest{d.guests !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
               {foodData!.fullBoardDays > 0 && (
                 <div>Full board: {foodData!.fullBoardDays} day{foodData!.fullBoardDays !== 1 ? 's' : ''}</div>
