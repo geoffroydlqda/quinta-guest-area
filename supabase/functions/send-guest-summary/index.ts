@@ -21,6 +21,7 @@ const FoodSelectionSchema = z.object({
   breakfast: z.boolean(),
   lunch: z.boolean(),
   dinner: z.boolean(),
+  guests_count_day: z.number().int().min(0).max(1000).optional(),
 });
 
 const TripSchema = z.object({
