@@ -24,6 +24,7 @@ export function StayDatesPicker({
   checkInDate, 
   checkOutDate, 
   guestsCount,
+  statusOverall = 'draft',
   onCheckInChange,
   onCheckOutChange,
   onGuestsCountChange,
