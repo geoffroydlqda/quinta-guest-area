@@ -45,7 +45,8 @@ const DashboardContent = () => {
   const [foodData, setFoodData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isLocked = isEditingLocked(profile?.check_in_date || null);
+  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || 'draft');
+  const isLocked = guestStatus.isEditingLocked;
 
   // Diet validation: total assigned guests must not exceed guests_count
   const dietConfig: DietConfig | null = foodData?.dietConfig || null;
