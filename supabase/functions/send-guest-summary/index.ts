@@ -282,8 +282,17 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                     </td></tr>
                     <tr><td style="padding: 12px 0;">
                       ${food ? `
-                      ${safeDietPreference ? `<p style="margin: 0 0 12px 0; color: #333;"><strong>Diet preference:</strong> ${safeDietPreference}</p>` : ''}
-                      
+                      ${food.dietBreakdown && food.dietBreakdown.filter((d:any)=>d.guests>0).length > 0 ? `
+                        <p style="margin: 0 0 8px 0; color: #333; font-weight: 600;">Food preferences:</p>
+                        <table width="100%" style="margin-bottom: 12px;">
+                          ${food.dietBreakdown.filter((d:any)=>d.guests>0).map((d:any)=>`
+                            <tr>
+                              <td style="padding: 6px 0; color: #333;">${escapeHtml(d.label)}</td>
+                              <td style="padding: 6px 0; text-align: right; font-weight: 600;">${d.guests} guest${d.guests!==1?'s':''}</td>
+                            </tr>
+                          `).join('')}
+                        </table>
+                      ` : (safeDietPreference ? `<p style="margin: 0 0 12px 0; color: #333;"><strong>Diet preference:</strong> ${safeDietPreference}</p>` : '')}
                       <!-- Daily Breakdown -->
                       ${food.selections && food.selections.length > 0 ? `
                       <p style="margin: 0 0 8px 0; color: #333; font-weight: 600;">Food plan:</p>
