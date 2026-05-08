@@ -50,8 +50,9 @@ export function GlobalSummary({
   const hasDates = !!(profile.check_in_date && profile.check_out_date);
   const hasRoomSetup = toolStatuses.roomSetup !== 'not_set' && roomSetupData;
   const hasTransportation = toolStatuses.transportation !== 'not_set' && transportationData;
-  const hasFood = toolStatuses.food !== 'not_set' && foodData && 
-    (foodData.fullBoardDays > 0 || foodData.breakfastOnlyDays > 0 || foodData.customDays > 0);
+  const activeDiets = (foodData?.dietBreakdown || []).filter(d => d.guests > 0);
+  const hasFood = toolStatuses.food !== 'not_set' && foodData &&
+    (activeDiets.length > 0 || foodData.fullBoardDays > 0 || foodData.breakfastOnlyDays > 0 || foodData.customDays > 0);
 
   return (
     <div className="bg-card rounded-2xl border border-border p-6">
