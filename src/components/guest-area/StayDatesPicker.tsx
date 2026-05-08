@@ -14,6 +14,7 @@ interface StayDatesPickerProps {
   checkInDate: string | null;
   checkOutDate: string | null;
   guestsCount: number;
+  statusOverall?: 'draft' | 'submitted' | string;
   onCheckInChange: (date: Date | null) => Promise<boolean>;
   onCheckOutChange: (date: Date | null) => Promise<boolean>;
   onGuestsCountChange: (count: number) => Promise<boolean>;
