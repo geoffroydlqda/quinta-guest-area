@@ -168,8 +168,12 @@ const AdminContent = () => {
                   {filteredProfiles.map((p) => {
                     const ts = toolStatus(p.user_id);
                     return (
-                      <tr key={p.user_id} className="border-t border-border hover:bg-muted/40">
-                        <td className="px-3 py-2">{p.first_name}</td>
+                      <tr
+                        key={p.user_id}
+                        className="border-t border-border hover:bg-muted/40 cursor-pointer"
+                        onClick={() => navigate(`/admin/guest/${p.user_id}`)}
+                      >
+                        <td className="px-3 py-2 underline-offset-2 hover:underline">{p.first_name}</td>
                         <td className="px-3 py-2">{p.last_name}</td>
                         <td className="px-3 py-2">{p.email}</td>
                         <td className="px-3 py-2">{p.check_in_date}</td>
