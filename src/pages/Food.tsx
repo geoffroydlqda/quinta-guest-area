@@ -36,7 +36,7 @@ const Food = () => {
   } = useFoodPlan(profile?.check_in_date || null, profile?.check_out_date || null, guestsCount);
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
-  const isLocked = isEditingLocked(profile?.check_in_date || null);
+  const isLocked = isEditingLocked(profile?.check_in_date || null, profile?.status_overall || "draft");
 
   const dietConfig = foodPlan?.diet_config || { vegetarian_count: 0, meat_dinner_count: 0, meat_lunch_dinner_count: 0 };
   const dietTotal = dietConfigTotal(dietConfig);
