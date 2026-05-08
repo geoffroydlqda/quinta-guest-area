@@ -4,11 +4,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { isAdminEmail } from "@/lib/admin";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, LogOut } from "lucide-react";
+import { Loader2, Download, RefreshCw, LogOut, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 
 type Profile = {
   user_id: string; first_name: string | null; last_name: string | null;
@@ -47,6 +48,7 @@ const AdminContent = () => {
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted">("all");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
   if (!isAdminEmail(user?.email)) return <Navigate to="/dashboard" replace />;
 
@@ -159,14 +161,15 @@ const AdminContent = () => {
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-muted">
                   <tr className="text-left">
-                    {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status"].map((h) => (
-                      <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
+                    {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status",""].map((h, i) => (
+                      <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredProfiles.map((p) => {
                     const ts = toolStatus(p.user_id);
+                    const label = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email);
                     return (
                       <tr
                         key={p.user_id}
@@ -183,6 +186,17 @@ const AdminContent = () => {
                         <td className="px-3 py-2">{ts.food}</td>
                         <td className="px-3 py-2">{ts.trip}</td>
                         <td className="px-3 py-2">{p.status_overall}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            aria-label={`Delete ${label}`}
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: p.user_id, label }); }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -204,6 +218,22 @@ const AdminContent = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <DeleteGuestDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}
+        guestId={deleteTarget?.id ?? null}
+        guestLabel={deleteTarget?.label}
+        onDeleted={(id) => {
+          setData((d) => d ? {
+            ...d,
+            profiles: d.profiles.filter((p) => p.user_id !== id),
+            rooms: d.rooms.filter((r) => r.user_id !== id),
+            trips: d.trips.filter((t) => t.user_id !== id),
+            food: d.food.filter((f) => f.user_id !== id),
+          } : d);
+        }}
+      />
     </div>
   );
 };

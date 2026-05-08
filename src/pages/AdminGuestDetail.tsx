@@ -7,8 +7,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock,
+  ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2,
 } from "lucide-react";
+import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 import { calculateFoodCostMulti } from "@/lib/foodPricing";
 import { calculateTransportationCost, getTripPriceNumeric } from "@/lib/transportationPricing";
 import { EMPTY_DIET_CONFIG, type DietConfig } from "@/types/guest";
@@ -75,6 +76,7 @@ const AdminGuestDetailContent = () => {
   const [data, setData] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [resending, setResending] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (!isAdminEmail(user?.email)) return <Navigate to="/dashboard" replace />;
 
@@ -228,6 +230,14 @@ const AdminGuestDetailContent = () => {
               Resend summary email
             </Button>
             <Button size="sm" variant="ghost" onClick={() => window.print()}>Print / PDF</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="w-4 h-4 mr-1" /> Delete guest
+            </Button>
           </div>
         </div>
       </header>
@@ -429,6 +439,14 @@ const AdminGuestDetailContent = () => {
           {profile.submitted_at && <div>Submitted at: {fmtTimestamp(profile.submitted_at)}</div>}
         </section>
       </main>
+
+      <DeleteGuestDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        guestId={guestId ?? null}
+        guestLabel={fullName}
+        onDeleted={() => navigate("/admin")}
+      />
     </div>
   );
 };
