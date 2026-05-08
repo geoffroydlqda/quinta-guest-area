@@ -84,6 +84,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
       // Immediately sync with current date range
       const syncedSelections = syncSelectionsToDateRange(dbSelections, days);
       
+      const dbDietConfig = (data as any).diet_config as DietConfig | null;
       const typedPlan: FoodPlan = {
         id: data.id,
         user_id: data.user_id,
@@ -92,6 +93,13 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
         notes_food: data.notes_food,
         status_food: data.status_food as 'draft' | 'submitted',
         diet_preference: data.diet_preference as DietPreference | null,
+        diet_config: dbDietConfig && typeof dbDietConfig === 'object'
+          ? {
+              vegetarian_count: dbDietConfig.vegetarian_count || 0,
+              meat_dinner_count: dbDietConfig.meat_dinner_count || 0,
+              meat_lunch_dinner_count: dbDietConfig.meat_lunch_dinner_count || 0,
+            }
+          : { ...EMPTY_DIET_CONFIG },
         selections: syncedSelections,
       };
       
