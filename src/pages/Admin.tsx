@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { isAdminEmail } from "@/lib/admin";
@@ -41,6 +41,7 @@ function downloadCSV(filename: string, rows: any[][]) {
 const AdminContent = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -167,8 +168,12 @@ const AdminContent = () => {
                   {filteredProfiles.map((p) => {
                     const ts = toolStatus(p.user_id);
                     return (
-                      <tr key={p.user_id} className="border-t border-border hover:bg-muted/40">
-                        <td className="px-3 py-2">{p.first_name}</td>
+                      <tr
+                        key={p.user_id}
+                        className="border-t border-border hover:bg-muted/40 cursor-pointer"
+                        onClick={() => navigate(`/admin/guest/${p.user_id}`)}
+                      >
+                        <td className="px-3 py-2 underline-offset-2 hover:underline">{p.first_name}</td>
                         <td className="px-3 py-2">{p.last_name}</td>
                         <td className="px-3 py-2">{p.email}</td>
                         <td className="px-3 py-2">{p.check_in_date}</td>
