@@ -18,11 +18,11 @@ export interface GuestStatusInfo {
   isPastDeadline: boolean;
   /** Whether the check-in date has passed */
   isPastCheckIn: boolean;
-  /** Final submission deadline (5 days before check-in) */
+  /** Final submission deadline (14 days before check-in) */
   finalSubmissionDate: Date | null;
 }
 
-const FINAL_SUBMISSION_DAYS_BEFORE_CHECK_IN = 5;
+const FINAL_SUBMISSION_DAYS_BEFORE_CHECK_IN = 14;
 
 function startOfToday(): Date {
   const d = new Date();

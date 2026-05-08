@@ -334,13 +334,13 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                   ` : ''}
 
                   ${!isAdmin ? (() => {
-                    // Compute final submission deadline (5 days before check-in)
+                    // Compute final submission deadline (14 days before check-in)
                     let deadlineLabel = '';
                     let pastDeadline = false;
                     if (checkInDate) {
                       const [y, m, d] = checkInDate.split('-').map(Number);
                       const deadline = new Date(y, m - 1, d);
-                      deadline.setDate(deadline.getDate() - 5);
+                      deadline.setDate(deadline.getDate() - 14);
                       deadlineLabel = deadline.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
                       const today = new Date(); today.setHours(0,0,0,0);
                       pastDeadline = deadline.getTime() <= today.getTime();
