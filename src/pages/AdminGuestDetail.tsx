@@ -13,6 +13,7 @@ import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 import { calculateFoodCostMulti } from "@/lib/foodPricing";
 import { calculateTransportationCost, getTripPriceNumeric } from "@/lib/transportationPricing";
 import { EMPTY_DIET_CONFIG, type DietConfig } from "@/types/guest";
+import { getGuestStatus } from "@/lib/editLock";
 
 type Profile = {
   user_id: string; first_name: string | null; last_name: string | null;
