@@ -48,6 +48,7 @@ const AdminContent = () => {
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted">("all");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
   if (!isAdminEmail(user?.email)) return <Navigate to="/dashboard" replace />;
 
