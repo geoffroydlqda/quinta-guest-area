@@ -47,6 +47,10 @@ const DashboardContent = () => {
 
   const isLocked = isEditingLocked(profile?.check_in_date || null);
 
+  // Diet validation: total assigned guests must not exceed guests_count
+  const dietConfig: DietConfig | null = foodData?.dietConfig || null;
+  const dietExceedsGuests = !!dietConfig && dietConfigTotal(dietConfig) > (profile?.guests_count || 0);
+
   // Fetch summary data for tools
   useEffect(() => {
     const fetchSummaryData = async () => {
