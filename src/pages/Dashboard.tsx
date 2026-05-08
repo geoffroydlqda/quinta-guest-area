@@ -280,8 +280,8 @@ const DashboardContent = () => {
             </p>
           </div>
 
-          {/* Edit Lock Banner */}
-          {isLocked && <EditLockBanner />}
+          {/* Status Banner */}
+          <EditLockBanner statusInfo={guestStatus} />
 
           {/* Section 1: Stay Dates */}
           <StayDatesPicker
