@@ -4,11 +4,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { isAdminEmail } from "@/lib/admin";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, LogOut } from "lucide-react";
+import { Loader2, Download, RefreshCw, LogOut, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 
 type Profile = {
   user_id: string; first_name: string | null; last_name: string | null;
