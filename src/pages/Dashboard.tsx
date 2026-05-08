@@ -288,6 +288,7 @@ const DashboardContent = () => {
             checkInDate={profile.check_in_date}
             checkOutDate={profile.check_out_date}
             guestsCount={profile.guests_count}
+            statusOverall={profile.status_overall}
             onCheckInChange={updateCheckInDate}
             onCheckOutChange={updateCheckOutDate}
             onGuestsCountChange={updateGuestsCount}
