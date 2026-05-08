@@ -203,7 +203,7 @@ const AdminContent = () => {
                         <td className="px-3 py-2">{ts.room}</td>
                         <td className="px-3 py-2">{ts.food}</td>
                         <td className="px-3 py-2">{ts.trip}</td>
-                        <td className="px-3 py-2">{p.status_overall}</td>
+                        <td className="px-3 py-2"><StatusBadge checkIn={p.check_in_date} statusOverall={p.status_overall} /></td>
                         <td className="px-3 py-2 text-right">
                           <Button
                             size="icon"
