@@ -181,15 +181,47 @@ export function GlobalSummary({
                   ))}
                 </div>
               )}
-              {foodData!.fullBoardDays > 0 && (
-                <div>Full board: {foodData!.fullBoardDays} day{foodData!.fullBoardDays !== 1 ? 's' : ''}</div>
-              )}
-              {foodData!.breakfastOnlyDays > 0 && (
-                <div>Breakfast only: {foodData!.breakfastOnlyDays} day{foodData!.breakfastOnlyDays !== 1 ? 's' : ''}</div>
-              )}
-              {foodData!.customDays > 0 && (
-                <div>Custom selection: {foodData!.customDays} day{foodData!.customDays !== 1 ? 's' : ''}</div>
-              )}
+              {(() => {
+                const activeDays = (foodData!.selections || [])
+                  .filter(s => s.fullBoard || s.breakfast || s.lunch || s.dinner)
+                  .sort((a, b) => a.date.localeCompare(b.date));
+                if (activeDays.length === 0) {
+                  return (
+                    <>
+                      {foodData!.fullBoardDays > 0 && (
+                        <div>Full board: {foodData!.fullBoardDays} day{foodData!.fullBoardDays !== 1 ? 's' : ''}</div>
+                      )}
+                      {foodData!.breakfastOnlyDays > 0 && (
+                        <div>Breakfast only: {foodData!.breakfastOnlyDays} day{foodData!.breakfastOnlyDays !== 1 ? 's' : ''}</div>
+                      )}
+                      {foodData!.customDays > 0 && (
+                        <div>Custom selection: {foodData!.customDays} day{foodData!.customDays !== 1 ? 's' : ''}</div>
+                      )}
+                    </>
+                  );
+                }
+                return (
+                  <div className="mt-2 space-y-1">
+                    {activeDays.map((s) => {
+                      const meals: string[] = [];
+                      if (s.fullBoard) meals.push('Full board');
+                      else {
+                        if (s.breakfast) meals.push('Breakfast');
+                        if (s.lunch) meals.push('Lunch');
+                        if (s.dinner) meals.push('Dinner (+ dessert)');
+                      }
+                      const guestsLabel = typeof s.guests_count_day === 'number'
+                        ? ` — ${s.guests_count_day} guest${s.guests_count_day !== 1 ? 's' : ''}`
+                        : '';
+                      return (
+                        <div key={s.date} className="text-xs">
+                          <span className="font-medium text-foreground">{parseLocalDateLong(s.date)}{guestsLabel}</span>: {meals.join(' + ')}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
               {foodData!.totalCost !== undefined && foodData!.totalCost > 0 && (
                 <div className="flex justify-between items-center mt-2 pt-2 border-t border-border">
                   <span className="flex items-center gap-1">
