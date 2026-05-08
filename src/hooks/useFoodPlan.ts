@@ -43,8 +43,9 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
       breakfast: false,
       lunch: false,
       dinner: false,
+      guests_count_day: defaultGuestsCount,
     }));
-  }, [days]);
+  }, [days, defaultGuestsCount]);
 
   // Load food plan
   const loadFoodPlan = useCallback(async () => {
