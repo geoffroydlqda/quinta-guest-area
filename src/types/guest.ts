@@ -90,6 +90,8 @@ export interface FoodDaySelection {
   breakfast: boolean;
   lunch: boolean;
   dinner: boolean;
+  /** Number of guests eating on this specific day. Defaults to profile.guests_count when not set. */
+  guests_count_day?: number;
 }
 
 export interface DocsAck {
