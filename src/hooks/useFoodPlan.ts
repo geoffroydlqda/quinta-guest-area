@@ -7,7 +7,7 @@ import { EMPTY_DIET_CONFIG } from '@/types/guest';
 import { generateDatesInclusive } from '@/lib/localDate';
 import { triggerSheetsSync } from '@/lib/sheetsSync';
 
-export function useFoodPlan(checkInDate: string | null, checkOutDate: string | null) {
+export function useFoodPlan(checkInDate: string | null, checkOutDate: string | null, defaultGuestsCount: number = 1) {
   const { user } = useAuth();
   const { toast } = useToast();
   
