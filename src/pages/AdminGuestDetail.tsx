@@ -268,7 +268,7 @@ const AdminGuestDetailContent = () => {
             </div>
             <div>
               <div className="text-muted-foreground">Status</div>
-              <div className="font-medium capitalize">{profile.status_overall}</div>
+              <div className="font-medium">{getGuestStatus(profile.check_in_date, profile.status_overall).label}</div>
             </div>
           </div>
         </section>
