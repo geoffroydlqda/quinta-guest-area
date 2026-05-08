@@ -86,24 +86,34 @@ const DashboardContent = () => {
       // Fetch food data
       const { data: foodPlanData } = await supabase
         .from('food_plans')
-        .select('selections, diet_preference')
+        .select('selections, diet_preference, diet_config')
         .eq('user_id', user.id)
         .maybeSingle();
-      
+
       if (foodPlanData?.selections && Array.isArray(foodPlanData.selections)) {
         const selections = foodPlanData.selections as unknown as FoodDaySelection[];
-        const diet = foodPlanData.diet_preference as DietPreference | null;
         const guestsCount = profile?.guests_count || 1;
-        
-        const costSummary = calculateFoodCost(selections, diet, guestsCount);
-        
-        setFoodData({ 
-          fullBoardDays: costSummary.fullBoardDays, 
+        const rawConfig = (foodPlanData as any).diet_config as DietConfig | null;
+        const dietConfig: DietConfig = rawConfig && typeof rawConfig === 'object'
+          ? {
+              vegetarian_count: rawConfig.vegetarian_count || 0,
+              meat_dinner_count: rawConfig.meat_dinner_count || 0,
+              meat_lunch_dinner_count: rawConfig.meat_lunch_dinner_count || 0,
+            }
+          : { ...EMPTY_DIET_CONFIG };
+
+        const costSummary = calculateFoodCostMulti(selections, dietConfig, guestsCount);
+
+        setFoodData({
+          fullBoardDays: costSummary.fullBoardDays,
           breakfastOnlyDays: costSummary.breakfastCount,
           customDays: costSummary.lunchCount + costSummary.dinnerCount > 0 ? 1 : 0,
           dietPreference: foodPlanData.diet_preference,
+          dietConfig,
+          dietBreakdown: costSummary.dietBreakdown,
+          dietTotal: costSummary.dietTotal,
           totalCost: costSummary.grandTotal,
-          selections: selections,
+          selections,
         });
       }
 
