@@ -24,6 +24,8 @@ interface GlobalSummaryProps {
     customDays: number;
     dietPreference?: string | null;
     totalCost?: number;
+    dietBreakdown?: { type: string; label: string; guests: number; total: number }[];
+    dietTotal?: number;
   };
 }
 
