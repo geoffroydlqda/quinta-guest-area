@@ -1,0 +1,1 @@
+ALTER TABLE public.food_plans ADD COLUMN IF NOT EXISTS diet_config jsonb NOT NULL DEFAULT '{"vegetarian_count":0,"meat_dinner_count":0,"meat_lunch_dinner_count":0}'::jsonb;
