@@ -108,8 +108,15 @@ const AdminGuestDetailContent = () => {
   }, [data]);
 
   const foodCost = useMemo(() => {
-    const sels = Array.isArray(data?.food?.selections) ? data!.food!.selections : [];
-    return calculateFoodCostMulti(sels as any, dietConfig, data?.profile?.guests_count || 1);
+    const rawSels = Array.isArray(data?.food?.selections) ? data!.food!.selections : [];
+    const guestsCount = data?.profile?.guests_count || 1;
+    const sels = rawSels.map((s: any) => ({
+      ...s,
+      guests_count_day: typeof s?.guests_count_day === 'number' && s.guests_count_day >= 0
+        ? s.guests_count_day
+        : guestsCount,
+    }));
+    return calculateFoodCostMulti(sels as any, dietConfig, guestsCount);
   }, [data, dietConfig]);
 
   const transportCost = useMemo(() => calculateTransportationCost((data?.trips || []) as any), [data]);
