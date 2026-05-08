@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      deleted_entries_log: {
+        Row: {
+          also_deleted_auth_user: boolean
+          deleted_at: string
+          deleted_by_admin: string
+          deleted_guest_email: string | null
+          deleted_guest_id: string
+          id: string
+        }
+        Insert: {
+          also_deleted_auth_user?: boolean
+          deleted_at?: string
+          deleted_by_admin: string
+          deleted_guest_email?: string | null
+          deleted_guest_id: string
+          id?: string
+        }
+        Update: {
+          also_deleted_auth_user?: boolean
+          deleted_at?: string
+          deleted_by_admin?: string
+          deleted_guest_email?: string | null
+          deleted_guest_id?: string
+          id?: string
+        }
+        Relationships: []
+      }
       docs_ack: {
         Row: {
           id: string
