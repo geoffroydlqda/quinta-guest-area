@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import type { FoodPlan, FoodDaySelection, DietPreference } from '@/types/guest';
+import type { FoodPlan, FoodDaySelection, DietPreference, DietConfig } from '@/types/guest';
+import { EMPTY_DIET_CONFIG } from '@/types/guest';
 import { generateDatesInclusive } from '@/lib/localDate';
 import { triggerSheetsSync } from '@/lib/sheetsSync';
 
@@ -83,6 +84,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
       // Immediately sync with current date range
       const syncedSelections = syncSelectionsToDateRange(dbSelections, days);
       
+      const dbDietConfig = (data as any).diet_config as DietConfig | null;
       const typedPlan: FoodPlan = {
         id: data.id,
         user_id: data.user_id,
@@ -91,6 +93,13 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
         notes_food: data.notes_food,
         status_food: data.status_food as 'draft' | 'submitted',
         diet_preference: data.diet_preference as DietPreference | null,
+        diet_config: dbDietConfig && typeof dbDietConfig === 'object'
+          ? {
+              vegetarian_count: dbDietConfig.vegetarian_count || 0,
+              meat_dinner_count: dbDietConfig.meat_dinner_count || 0,
+              meat_lunch_dinner_count: dbDietConfig.meat_lunch_dinner_count || 0,
+            }
+          : { ...EMPTY_DIET_CONFIG },
         selections: syncedSelections,
       };
       
@@ -179,9 +188,21 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     });
   }, []);
 
-  // Update diet preference
+  // Update diet preference (legacy)
   const updateDietPreference = useCallback((preference: DietPreference | null) => {
     setFoodPlan(prev => prev ? { ...prev, diet_preference: preference } : null);
+  }, []);
+
+  // Update diet config (multi-diet)
+  const updateDietConfig = useCallback((updates: Partial<DietConfig>) => {
+    setFoodPlan(prev => prev ? {
+      ...prev,
+      diet_config: {
+        vegetarian_count: Math.max(0, updates.vegetarian_count ?? prev.diet_config.vegetarian_count),
+        meat_dinner_count: Math.max(0, updates.meat_dinner_count ?? prev.diet_config.meat_dinner_count),
+        meat_lunch_dinner_count: Math.max(0, updates.meat_lunch_dinner_count ?? prev.diet_config.meat_lunch_dinner_count),
+      },
+    } : null);
   }, []);
 
   // Auto-save function
@@ -192,6 +213,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
       const payload = {
         notes_food: foodPlan.notes_food || null,
         diet_preference: foodPlan.diet_preference || null,
+        diet_config: foodPlan.diet_config as any,
         selections: JSON.parse(JSON.stringify(foodPlan.selections)),
       };
 
@@ -246,6 +268,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     isSaving,
     updateDaySelection,
     updateDietPreference,
+    updateDietConfig,
     updateNotes,
     autoSave,
     summary,

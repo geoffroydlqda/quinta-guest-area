@@ -5,56 +5,52 @@ import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { useFoodPlan } from '@/hooks/useFoodPlan';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { isEditingLocked } from '@/lib/editLock';
-import { calculateFoodCost, DIET_OPTIONS_WITH_PRICES, BREAKFAST_PRICE, getLunchPrice, getDinnerPrice, getFullBoardPrice } from '@/lib/foodPricing';
+import { calculateFoodCostMulti, DIET_TYPES } from '@/lib/foodPricing';
+import { dietConfigTotal } from '@/types/guest';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
-
 import { FoodCostSummaryCard } from '@/components/guest-area/FoodCostSummary';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Loader2, AlertCircle, Check, Info } from 'lucide-react';
+import { Loader2, AlertCircle, Check, Info, Minus, Plus } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
-import type { DietPreference } from '@/types/guest';
 
 const Food = () => {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
-  
+
   const { profile, hasDatesSet, isLoading: profileLoading } = useGuestProfile();
   const {
     foodPlan,
     days,
     isLoading: foodLoading,
     updateDaySelection,
-    updateDietPreference,
+    updateDietConfig,
     updateNotes,
     autoSave,
   } = useFoodPlan(profile?.check_in_date || null, profile?.check_out_date || null);
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
   const isLocked = isEditingLocked(profile?.check_in_date || null);
+  const guestsCount = profile?.guests_count || 1;
 
-  // Calculate cost summary
+  const dietConfig = foodPlan?.diet_config || { vegetarian_count: 0, meat_dinner_count: 0, meat_lunch_dinner_count: 0 };
+  const dietTotal = dietConfigTotal(dietConfig);
+  const overLimit = dietTotal > guestsCount;
+
   const costSummary = useMemo(() => {
     if (!foodPlan) {
-      return { totalPerPerson: 0, grandTotal: 0, fullBoardDays: 0, breakfastCount: 0, lunchCount: 0, dinnerCount: 0, guestsCount: 1 };
+      return calculateFoodCostMulti([], dietConfig, guestsCount);
     }
-    return calculateFoodCost(
-      foodPlan.selections,
-      foodPlan.diet_preference,
-      profile?.guests_count || 1
-    );
-  }, [foodPlan?.selections, foodPlan?.diet_preference, profile?.guests_count]);
+    return calculateFoodCostMulti(foodPlan.selections, foodPlan.diet_config, guestsCount);
+  }, [foodPlan?.selections, foodPlan?.diet_config, guestsCount]);
 
-  // Trigger auto-save when selections change
+  // Trigger auto-save
   useEffect(() => {
-    if (foodPlan && !isLocked) {
-      triggerSave();
-    }
-  }, [foodPlan?.selections, foodPlan?.diet_preference, foodPlan?.notes_food]);
+    if (foodPlan && !isLocked) triggerSave();
+  }, [foodPlan?.selections, foodPlan?.diet_config, foodPlan?.notes_food]);
 
   if (authLoading || profileLoading) {
     return (
@@ -64,7 +60,6 @@ const Food = () => {
     );
   }
 
-  // Dates not set - show warning
   if (!hasDatesSet) {
     return (
       <ToolPageLayout title="Food" description="Plan your meals during your stay">
@@ -75,9 +70,7 @@ const Food = () => {
             <p className="text-muted-foreground mb-6">
               Please set your check-in and check-out dates on the dashboard before planning your meals.
             </p>
-            <Button onClick={() => navigate('/dashboard')}>
-              Go to Dashboard
-            </Button>
+            <Button onClick={() => navigate('/dashboard')}>Go to Dashboard</Button>
           </div>
         </div>
       </ToolPageLayout>
@@ -95,34 +88,78 @@ const Food = () => {
   return (
     <ToolPageLayout title="Food" description="Plan your meals during your stay" isLocked={isLocked}>
       <div className="max-w-4xl mx-auto space-y-6">
-
-        {/* Auto-save indicator */}
         <div className="flex justify-end">
           <AutoSaveIndicator status={saveStatus} />
         </div>
 
-        {/* Diet Preference with Prices */}
+        {/* Food Preferences (multi-diet) */}
         <div className="bg-card rounded-2xl border border-border p-6">
-          <Label className="text-base font-semibold mb-2 block">Diet preference</Label>
-          <p className="text-sm text-muted-foreground mb-4">Prices are per day per person (full board).</p>
-          <RadioGroup
-            value={foodPlan.diet_preference || ''}
-            onValueChange={(value) => !isLocked && updateDietPreference(value as DietPreference)}
-            disabled={isLocked}
-            className="space-y-3"
-          >
-            {DIET_OPTIONS_WITH_PRICES.map((option) => (
-              <div key={option.value} className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <RadioGroupItem value={option.value} id={option.value} disabled={isLocked} />
-                  <Label htmlFor={option.value} className="font-normal cursor-pointer">
-                    {option.label}
-                  </Label>
+          <Label className="text-base font-semibold mb-1 block">Food preferences</Label>
+          <p className="text-sm text-muted-foreground mb-4">
+            Assign the number of guests to each diet type. Some guests may have no food plan.
+          </p>
+
+          <div className="space-y-3">
+            {DIET_TYPES.map((meta) => {
+              const value = dietConfig[meta.countKey] || 0;
+              const setValue = (next: number) =>
+                updateDietConfig({ [meta.countKey]: Math.max(0, next) } as any);
+              return (
+                <div
+                  key={meta.type}
+                  className={cn(
+                    "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg border",
+                    overLimit && value > 0 ? "border-destructive/60 bg-destructive/5" : "border-border"
+                  )}
+                >
+                  <div>
+                    <div className="font-medium">{meta.label}</div>
+                    <div className="text-xs text-muted-foreground">
+                      €{meta.pricing.fullBoard} / full board / person / day
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={isLocked || value <= 0}
+                      onClick={() => setValue(value - 1)}
+                      aria-label={`Decrease ${meta.label}`}
+                    >
+                      <Minus className="w-4 h-4" />
+                    </Button>
+                    <span className="w-8 text-center font-semibold tabular-nums">{value}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={isLocked}
+                      onClick={() => setValue(value + 1)}
+                      aria-label={`Increase ${meta.label}`}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
-                <span className="text-sm font-semibold text-primary">€{option.price}/day</span>
-              </div>
-            ))}
-          </RadioGroup>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              Assigned: <strong className="text-foreground">{dietTotal}</strong> / {guestsCount} guest{guestsCount !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          {overLimit && (
+            <div className="mt-3 rounded-lg bg-destructive/10 border border-destructive/30 p-3 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-destructive font-medium">
+                The total number of meal preferences exceeds the number of guests.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Summary Stats */}
@@ -145,48 +182,21 @@ const Food = () => {
         <div className="bg-card rounded-2xl border border-border overflow-hidden">
           <div className="overflow-x-auto">
             <div style={{ minWidth: '640px' }}>
-              {/* Header */}
               <div
                 className="border-b border-border"
                 style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr 1fr 1fr' }}
               >
                 <div className="p-4 font-semibold text-left">Date</div>
-                <div className="p-4 font-semibold text-center border-l border-border">
-                  <div>Full Board</div>
-                  <div className="text-xs font-normal text-muted-foreground">
-                    €{getFullBoardPrice(foodPlan.diet_preference)}
-                  </div>
-                </div>
-                <div className="p-4 font-semibold text-center border-l border-border">
-                  <div>Breakfast</div>
-                  <div className="text-xs font-normal text-muted-foreground">€{BREAKFAST_PRICE}</div>
-                </div>
-                <div className="p-4 font-semibold text-center border-l border-border">
-                  <div>Lunch</div>
-                  <div className="text-xs font-normal text-muted-foreground">
-                    €{getLunchPrice(foodPlan.diet_preference)}
-                  </div>
-                </div>
-                <div className="p-4 font-semibold text-center border-l border-border">
-                  <div>Dinner (+ dessert)</div>
-                  <div className="text-xs font-normal text-muted-foreground">
-                    €{getDinnerPrice(foodPlan.diet_preference)}
-                  </div>
-                </div>
+                <div className="p-4 font-semibold text-center border-l border-border">Full Board</div>
+                <div className="p-4 font-semibold text-center border-l border-border">Breakfast</div>
+                <div className="p-4 font-semibold text-center border-l border-border">Lunch</div>
+                <div className="p-4 font-semibold text-center border-l border-border">Dinner (+ dessert)</div>
               </div>
 
-              {/* Rows */}
               {days.map((day, index) => {
                 const selection = foodPlan.selections.find(s => s.date === day.date) || {
-                  date: day.date,
-                  fullBoard: false,
-                  breakfast: false,
-                  lunch: false,
-                  dinner: false,
+                  date: day.date, fullBoard: false, breakfast: false, lunch: false, dinner: false,
                 };
-
-                const isCheckIn = day.isCheckIn;
-                const isCheckOut = day.isCheckOut;
                 const hasIndividualMeal = selection.breakfast || selection.lunch || selection.dinner;
 
                 return (
@@ -197,36 +207,24 @@ const Food = () => {
                   >
                     <div className="p-4">
                       <p className="font-semibold">{format(parseISO(day.date), 'EEE, dd MMM')}</p>
-                      {isCheckIn && <span className="text-xs text-primary font-medium">Check-in</span>}
-                      {isCheckOut && <span className="text-xs text-primary font-medium">Check-out</span>}
+                      {day.isCheckIn && <span className="text-xs text-primary font-medium">Check-in</span>}
+                      {day.isCheckOut && <span className="text-xs text-primary font-medium">Check-out</span>}
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
-                      <MealToggle
-                        selected={selection.fullBoard}
-                        disabled={isLocked || hasIndividualMeal}
-                        onClick={() => updateDaySelection(day.date, { fullBoard: !selection.fullBoard })}
-                      />
+                      <MealToggle selected={selection.fullBoard} disabled={isLocked || hasIndividualMeal}
+                        onClick={() => updateDaySelection(day.date, { fullBoard: !selection.fullBoard })} />
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
-                      <MealToggle
-                        selected={selection.breakfast}
-                        disabled={isLocked || selection.fullBoard}
-                        onClick={() => updateDaySelection(day.date, { breakfast: !selection.breakfast })}
-                      />
+                      <MealToggle selected={selection.breakfast} disabled={isLocked || selection.fullBoard}
+                        onClick={() => updateDaySelection(day.date, { breakfast: !selection.breakfast })} />
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
-                      <MealToggle
-                        selected={selection.lunch}
-                        disabled={isLocked || selection.fullBoard}
-                        onClick={() => updateDaySelection(day.date, { lunch: !selection.lunch })}
-                      />
+                      <MealToggle selected={selection.lunch} disabled={isLocked || selection.fullBoard}
+                        onClick={() => updateDaySelection(day.date, { lunch: !selection.lunch })} />
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
-                      <MealToggle
-                        selected={selection.dinner}
-                        disabled={isLocked || selection.fullBoard}
-                        onClick={() => updateDaySelection(day.date, { dinner: !selection.dinner })}
-                      />
+                      <MealToggle selected={selection.dinner} disabled={isLocked || selection.fullBoard}
+                        onClick={() => updateDaySelection(day.date, { dinner: !selection.dinner })} />
                     </div>
                   </div>
                 );
@@ -235,23 +233,18 @@ const Food = () => {
           </div>
         </div>
 
-        {/* Legend */}
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
           <span>• Full board = all 3 meals</span>
           <span>• Selecting Full board disables individual meal toggles</span>
         </div>
 
-        {/* Dinner Note */}
         <div className="rounded-xl bg-primary/10 border border-primary/30 p-4">
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-            <p className="text-sm font-medium">
-              A sweet treat is always served after dinner.
-            </p>
+            <p className="text-sm font-medium">A sweet treat is always served after dinner.</p>
           </div>
         </div>
 
-        {/* Notes */}
         <div>
           <Label className="font-semibold">Notes (optional)</Label>
           <Textarea
@@ -263,23 +256,13 @@ const Food = () => {
           />
         </div>
 
-        {/* Cost Summary */}
         <FoodCostSummaryCard summary={costSummary} />
       </div>
     </ToolPageLayout>
   );
 };
 
-// Meal Toggle Component
-function MealToggle({
-  selected,
-  disabled,
-  onClick,
-}: {
-  selected: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
+function MealToggle({ selected, disabled, onClick }: { selected: boolean; disabled?: boolean; onClick: () => void; }) {
   return (
     <button
       type="button"

@@ -4,7 +4,7 @@ import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { isEditingLocked } from '@/lib/editLock';
-import { calculateFoodCost } from '@/lib/foodPricing';
+import { calculateFoodCostMulti } from '@/lib/foodPricing';
 import { calculateTransportationCost } from '@/lib/transportationPricing';
 import { GuestAreaHeader } from '@/components/guest-area/GuestAreaHeader';
 import { StayDatesPicker } from '@/components/guest-area/StayDatesPicker';
@@ -15,8 +15,9 @@ import { ProfileCompletionModal } from '@/components/guest-area/ProfileCompletio
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { featureFlags } from '@/lib/featureFlags';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, RefreshCw, LogOut } from 'lucide-react';
-import type { DietPreference, FoodDaySelection, TransportationTrip } from '@/types/guest';
+import { Loader2, Send, RefreshCw, LogOut, AlertCircle } from 'lucide-react';
+import type { FoodDaySelection, TransportationTrip, DietConfig } from '@/types/guest';
+import { dietConfigTotal, EMPTY_DIET_CONFIG } from '@/types/guest';
 
 const DashboardContent = () => {
   const { user, signOut } = useAuth();
@@ -45,6 +46,10 @@ const DashboardContent = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isLocked = isEditingLocked(profile?.check_in_date || null);
+
+  // Diet validation: total assigned guests must not exceed guests_count
+  const dietConfig: DietConfig | null = foodData?.dietConfig || null;
+  const dietExceedsGuests = !!dietConfig && dietConfigTotal(dietConfig) > (profile?.guests_count || 0);
 
   // Fetch summary data for tools
   useEffect(() => {
@@ -85,24 +90,34 @@ const DashboardContent = () => {
       // Fetch food data
       const { data: foodPlanData } = await supabase
         .from('food_plans')
-        .select('selections, diet_preference')
+        .select('selections, diet_preference, diet_config')
         .eq('user_id', user.id)
         .maybeSingle();
-      
+
       if (foodPlanData?.selections && Array.isArray(foodPlanData.selections)) {
         const selections = foodPlanData.selections as unknown as FoodDaySelection[];
-        const diet = foodPlanData.diet_preference as DietPreference | null;
         const guestsCount = profile?.guests_count || 1;
-        
-        const costSummary = calculateFoodCost(selections, diet, guestsCount);
-        
-        setFoodData({ 
-          fullBoardDays: costSummary.fullBoardDays, 
+        const rawConfig = (foodPlanData as any).diet_config as DietConfig | null;
+        const dietConfig: DietConfig = rawConfig && typeof rawConfig === 'object'
+          ? {
+              vegetarian_count: rawConfig.vegetarian_count || 0,
+              meat_dinner_count: rawConfig.meat_dinner_count || 0,
+              meat_lunch_dinner_count: rawConfig.meat_lunch_dinner_count || 0,
+            }
+          : { ...EMPTY_DIET_CONFIG };
+
+        const costSummary = calculateFoodCostMulti(selections, dietConfig, guestsCount);
+
+        setFoodData({
+          fullBoardDays: costSummary.fullBoardDays,
           breakfastOnlyDays: costSummary.breakfastCount,
           customDays: costSummary.lunchCount + costSummary.dinnerCount > 0 ? 1 : 0,
           dietPreference: foodPlanData.diet_preference,
+          dietConfig,
+          dietBreakdown: costSummary.dietBreakdown,
+          dietTotal: costSummary.dietTotal,
           totalCost: costSummary.grandTotal,
-          selections: selections,
+          selections,
         });
       }
 
@@ -137,6 +152,15 @@ const DashboardContent = () => {
       toast({
         title: 'Missing information',
         description: 'Please specify the number of guests.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (dietExceedsGuests) {
+      toast({
+        title: 'Invalid food preferences',
+        description: 'The total number of meal preferences exceeds the number of guests.',
         variant: 'destructive',
       });
       return;
@@ -310,11 +334,21 @@ const DashboardContent = () => {
             foodData={foodData}
           />
 
+          {/* Diet validation banner */}
+          {dietExceedsGuests && (
+            <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-4 flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-destructive font-medium">
+                The total number of meal preferences exceeds the number of guests. Please adjust them in the Food tool before submitting.
+              </p>
+            </div>
+          )}
+
           {/* Submit Button */}
           <div className="bg-card rounded-2xl border border-border p-6">
             <Button
               onClick={handleSubmitInformation}
-              disabled={isSubmitting || !hasDatesSet || isLocked}
+              disabled={isSubmitting || !hasDatesSet || isLocked || dietExceedsGuests}
               size="lg"
               className="w-full sm:w-auto gap-2"
             >

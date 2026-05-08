@@ -53,12 +53,32 @@ export interface TransportationPassenger {
 
 export type DietPreference = 'Vegetarian' | 'Meat or fish for dinner' | 'Meat or fish for dinner and lunch';
 
+export type DietType = 'vegetarian' | 'meat_dinner' | 'meat_lunch_dinner';
+
+export interface DietConfig {
+  vegetarian_count: number;
+  meat_dinner_count: number;
+  meat_lunch_dinner_count: number;
+}
+
+export const EMPTY_DIET_CONFIG: DietConfig = {
+  vegetarian_count: 0,
+  meat_dinner_count: 0,
+  meat_lunch_dinner_count: 0,
+};
+
+export function dietConfigTotal(c: DietConfig | null | undefined): number {
+  if (!c) return 0;
+  return (c.vegetarian_count || 0) + (c.meat_dinner_count || 0) + (c.meat_lunch_dinner_count || 0);
+}
+
 export interface FoodPlan {
   id: string;
   user_id: string;
   status_food: 'draft' | 'submitted';
   notes_food: string | null;
   diet_preference: DietPreference | null;
+  diet_config: DietConfig;
   selections: FoodDaySelection[];
   created_at: string;
   updated_at: string;
