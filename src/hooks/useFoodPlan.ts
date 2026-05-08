@@ -199,7 +199,17 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     });
   }, []);
 
-  // Update diet preference (legacy)
+  // Update daily guests count for a specific day
+  const updateDayGuests = useCallback((date: string, guestsCountDay: number) => {
+    setFoodPlan(prev => {
+      if (!prev) return prev;
+      const safe = Math.max(0, Math.floor(guestsCountDay || 0));
+      const newSelections = prev.selections.map(sel =>
+        sel.date === date ? { ...sel, guests_count_day: safe } : sel
+      );
+      return { ...prev, selections: newSelections };
+    });
+  }, []);
   const updateDietPreference = useCallback((preference: DietPreference | null) => {
     setFoodPlan(prev => prev ? { ...prev, diet_preference: preference } : null);
   }, []);
