@@ -161,14 +161,15 @@ const AdminContent = () => {
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-muted">
                   <tr className="text-left">
-                    {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status"].map((h) => (
-                      <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
+                    {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status",""].map((h, i) => (
+                      <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredProfiles.map((p) => {
                     const ts = toolStatus(p.user_id);
+                    const label = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email);
                     return (
                       <tr
                         key={p.user_id}
@@ -185,6 +186,17 @@ const AdminContent = () => {
                         <td className="px-3 py-2">{ts.food}</td>
                         <td className="px-3 py-2">{ts.trip}</td>
                         <td className="px-3 py-2">{p.status_overall}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            aria-label={`Delete ${label}`}
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: p.user_id, label }); }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </td>
                       </tr>
                     );
                   })}
