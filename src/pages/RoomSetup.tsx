@@ -166,7 +166,7 @@ const RoomSetup = () => {
           
           <RoomTypeCard 
             title="Twins (shared bathroom)" 
-            description="Two single beds in a room with shared bathroom." 
+            description="Rooms 2, 3, 4, 5, 7 or 8. Two single beds in a room with shared bathroom." 
             image={roomTwinsImage} 
             quantity={roomSelection.twinsSharedQty} 
             maxQuantity={remainingShared + roomSelection.twinsSharedQty} 
