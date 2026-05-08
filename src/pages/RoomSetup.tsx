@@ -188,7 +188,7 @@ const RoomSetup = () => {
 
           <RoomTypeCard 
             title="Twins (en-suite bathroom)" 
-            description="Two single beds in a room with private en-suite bathroom." 
+            description="Rooms 9, 10 or 11. Two single beds in a room with private en-suite bathroom." 
             image={roomTwinsImage} 
             quantity={roomSelection.twinsEnsuiteQty} 
             maxQuantity={remainingEnsuite + roomSelection.twinsEnsuiteQty} 
