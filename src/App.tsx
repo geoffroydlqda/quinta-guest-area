@@ -13,6 +13,7 @@ import RoomSetup from "./pages/RoomSetup";
 import Transportation from "./pages/Transportation";
 import Food from "./pages/Food";
 import Documentation from "./pages/Documentation";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const App = () => (
                 <Navigate to="/dashboard" replace />
               )
             } />
+            <Route path="/admin" element={<Admin />} />
             {/* Legacy route redirect */}
             <Route path="/setup" element={
               <ProtectedRoute>
