@@ -11,6 +11,7 @@ import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 import { FoodCostSummaryCard } from '@/components/guest-area/FoodCostSummary';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, Check, Info, Minus, Plus } from 'lucide-react';
