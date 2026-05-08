@@ -4,7 +4,7 @@ import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { isEditingLocked } from '@/lib/editLock';
-import { calculateFoodCost } from '@/lib/foodPricing';
+import { calculateFoodCostMulti } from '@/lib/foodPricing';
 import { calculateTransportationCost } from '@/lib/transportationPricing';
 import { GuestAreaHeader } from '@/components/guest-area/GuestAreaHeader';
 import { StayDatesPicker } from '@/components/guest-area/StayDatesPicker';
@@ -15,8 +15,9 @@ import { ProfileCompletionModal } from '@/components/guest-area/ProfileCompletio
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { featureFlags } from '@/lib/featureFlags';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, RefreshCw, LogOut } from 'lucide-react';
-import type { DietPreference, FoodDaySelection, TransportationTrip } from '@/types/guest';
+import { Loader2, Send, RefreshCw, LogOut, AlertCircle } from 'lucide-react';
+import type { FoodDaySelection, TransportationTrip, DietConfig } from '@/types/guest';
+import { dietConfigTotal, EMPTY_DIET_CONFIG } from '@/types/guest';
 
 const DashboardContent = () => {
   const { user, signOut } = useAuth();
