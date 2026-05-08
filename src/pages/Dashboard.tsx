@@ -368,7 +368,7 @@ const DashboardContent = () => {
               Submit information
             </Button>
             <p className="text-sm text-muted-foreground mt-3">
-              Your information can still be edited until 5 days before check-in date.
+              {guestStatus.message}
             </p>
           </div>
         </div>
