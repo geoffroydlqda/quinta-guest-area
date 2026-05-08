@@ -11,6 +11,7 @@ import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 import { FoodCostSummaryCard } from '@/components/guest-area/FoodCostSummary';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, Check, Info, Minus, Plus } from 'lucide-react';
@@ -22,19 +23,20 @@ const Food = () => {
   const navigate = useNavigate();
 
   const { profile, hasDatesSet, isLoading: profileLoading } = useGuestProfile();
+  const guestsCount = profile?.guests_count || 1;
   const {
     foodPlan,
     days,
     isLoading: foodLoading,
     updateDaySelection,
+    updateDayGuests,
     updateDietConfig,
     updateNotes,
     autoSave,
-  } = useFoodPlan(profile?.check_in_date || null, profile?.check_out_date || null);
+  } = useFoodPlan(profile?.check_in_date || null, profile?.check_out_date || null, guestsCount);
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
   const isLocked = isEditingLocked(profile?.check_in_date || null);
-  const guestsCount = profile?.guests_count || 1;
 
   const dietConfig = foodPlan?.diet_config || { vegetarian_count: 0, meat_dinner_count: 0, meat_lunch_dinner_count: 0 };
   const dietTotal = dietConfigTotal(dietConfig);
@@ -181,12 +183,13 @@ const Food = () => {
         {/* Food Table */}
         <div className="bg-card rounded-2xl border border-border overflow-hidden">
           <div className="overflow-x-auto">
-            <div style={{ minWidth: '640px' }}>
+            <div style={{ minWidth: '760px' }}>
               <div
                 className="border-b border-border"
-                style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr 1fr 1fr' }}
+                style={{ display: 'grid', gridTemplateColumns: '180px 100px 1fr 1fr 1fr 1fr' }}
               >
                 <div className="p-4 font-semibold text-left">Date</div>
+                <div className="p-4 font-semibold text-center border-l border-border">Guests</div>
                 <div className="p-4 font-semibold text-center border-l border-border">Full Board</div>
                 <div className="p-4 font-semibold text-center border-l border-border">Breakfast</div>
                 <div className="p-4 font-semibold text-center border-l border-border">Lunch</div>
@@ -196,19 +199,38 @@ const Food = () => {
               {days.map((day, index) => {
                 const selection = foodPlan.selections.find(s => s.date === day.date) || {
                   date: day.date, fullBoard: false, breakfast: false, lunch: false, dinner: false,
+                  guests_count_day: guestsCount,
                 };
+                const dayGuests = typeof selection.guests_count_day === 'number'
+                  ? selection.guests_count_day
+                  : guestsCount;
                 const hasIndividualMeal = selection.breakfast || selection.lunch || selection.dinner;
 
                 return (
                   <div
                     key={day.date}
                     className={cn("border-b border-border", index % 2 === 0 && "bg-muted/30")}
-                    style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr 1fr 1fr' }}
+                    style={{ display: 'grid', gridTemplateColumns: '180px 100px 1fr 1fr 1fr 1fr' }}
                   >
                     <div className="p-4">
                       <p className="font-semibold">{format(parseISO(day.date), 'EEE, dd MMM')}</p>
                       {day.isCheckIn && <span className="text-xs text-primary font-medium">Check-in</span>}
                       {day.isCheckOut && <span className="text-xs text-primary font-medium">Check-out</span>}
+                    </div>
+                    <div className="p-3 flex items-center justify-center border-l border-border">
+                      <Input
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        disabled={isLocked}
+                        value={dayGuests}
+                        onChange={(e) => {
+                          const v = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                          if (!Number.isNaN(v)) updateDayGuests(day.date, v);
+                        }}
+                        className="h-9 w-16 text-center px-1"
+                        aria-label={`Guests on ${day.date}`}
+                      />
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
                       <MealToggle selected={selection.fullBoard} disabled={isLocked || hasIndividualMeal}

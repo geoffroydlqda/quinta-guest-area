@@ -108,8 +108,15 @@ const AdminGuestDetailContent = () => {
   }, [data]);
 
   const foodCost = useMemo(() => {
-    const sels = Array.isArray(data?.food?.selections) ? data!.food!.selections : [];
-    return calculateFoodCostMulti(sels as any, dietConfig, data?.profile?.guests_count || 1);
+    const rawSels = Array.isArray(data?.food?.selections) ? data!.food!.selections : [];
+    const guestsCount = data?.profile?.guests_count || 1;
+    const sels = rawSels.map((s: any) => ({
+      ...s,
+      guests_count_day: typeof s?.guests_count_day === 'number' && s.guests_count_day >= 0
+        ? s.guests_count_day
+        : guestsCount,
+    }));
+    return calculateFoodCostMulti(sels as any, dietConfig, guestsCount);
   }, [data, dietConfig]);
 
   const transportCost = useMemo(() => calculateTransportationCost((data?.trips || []) as any), [data]);
@@ -316,7 +323,12 @@ const AdminGuestDetailContent = () => {
                       }
                       return (
                         <li key={s.date}>
-                          <div className="font-medium">{fmtDateLong(s.date)}</div>
+                          <div className="font-medium">
+                            {fmtDateLong(s.date)}
+                            {typeof s.guests_count_day === 'number' && (
+                              <span className="text-muted-foreground font-normal"> — {s.guests_count_day} guest{s.guests_count_day !== 1 ? 's' : ''}</span>
+                            )}
+                          </div>
                           <ul className="list-disc list-inside text-muted-foreground">
                             {meals.map((m) => <li key={m}>{m}</li>)}
                           </ul>

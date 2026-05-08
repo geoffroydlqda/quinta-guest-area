@@ -7,7 +7,7 @@ import { EMPTY_DIET_CONFIG } from '@/types/guest';
 import { generateDatesInclusive } from '@/lib/localDate';
 import { triggerSheetsSync } from '@/lib/sheetsSync';
 
-export function useFoodPlan(checkInDate: string | null, checkOutDate: string | null) {
+export function useFoodPlan(checkInDate: string | null, checkOutDate: string | null, defaultGuestsCount: number = 1) {
   const { user } = useAuth();
   const { toast } = useToast();
   
@@ -43,8 +43,9 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
       breakfast: false,
       lunch: false,
       dinner: false,
+      guests_count_day: defaultGuestsCount,
     }));
-  }, [days]);
+  }, [days, defaultGuestsCount]);
 
   // Load food plan
   const loadFoodPlan = useCallback(async () => {
@@ -129,12 +130,22 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     const existingByDate = new Map(existingSelections.map(s => [s.date, s]));
     
     return currentDays.map(day => {
-      return existingByDate.get(day.date) || {
+      const found = existingByDate.get(day.date);
+      if (found) {
+        return {
+          ...found,
+          guests_count_day: typeof found.guests_count_day === 'number' && found.guests_count_day >= 0
+            ? found.guests_count_day
+            : defaultGuestsCount,
+        };
+      }
+      return {
         date: day.date,
         fullBoard: false,
         breakfast: false,
         lunch: false,
         dinner: false,
+        guests_count_day: defaultGuestsCount,
       };
     });
   }
@@ -188,7 +199,17 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     });
   }, []);
 
-  // Update diet preference (legacy)
+  // Update daily guests count for a specific day
+  const updateDayGuests = useCallback((date: string, guestsCountDay: number) => {
+    setFoodPlan(prev => {
+      if (!prev) return prev;
+      const safe = Math.max(0, Math.floor(guestsCountDay || 0));
+      const newSelections = prev.selections.map(sel =>
+        sel.date === date ? { ...sel, guests_count_day: safe } : sel
+      );
+      return { ...prev, selections: newSelections };
+    });
+  }, []);
   const updateDietPreference = useCallback((preference: DietPreference | null) => {
     setFoodPlan(prev => prev ? { ...prev, diet_preference: preference } : null);
   }, []);
@@ -267,6 +288,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     isLoading,
     isSaving,
     updateDaySelection,
+    updateDayGuests,
     updateDietPreference,
     updateDietConfig,
     updateNotes,
