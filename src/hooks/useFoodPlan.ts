@@ -130,12 +130,22 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     const existingByDate = new Map(existingSelections.map(s => [s.date, s]));
     
     return currentDays.map(day => {
-      return existingByDate.get(day.date) || {
+      const found = existingByDate.get(day.date);
+      if (found) {
+        return {
+          ...found,
+          guests_count_day: typeof found.guests_count_day === 'number' && found.guests_count_day >= 0
+            ? found.guests_count_day
+            : defaultGuestsCount,
+        };
+      }
+      return {
         date: day.date,
         fullBoard: false,
         breakfast: false,
         lunch: false,
         dinner: false,
+        guests_count_day: defaultGuestsCount,
       };
     });
   }
