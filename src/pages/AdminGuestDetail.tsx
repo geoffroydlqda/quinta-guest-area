@@ -323,7 +323,12 @@ const AdminGuestDetailContent = () => {
                       }
                       return (
                         <li key={s.date}>
-                          <div className="font-medium">{fmtDateLong(s.date)}</div>
+                          <div className="font-medium">
+                            {fmtDateLong(s.date)}
+                            {typeof s.guests_count_day === 'number' && (
+                              <span className="text-muted-foreground font-normal"> — {s.guests_count_day} guest{s.guests_count_day !== 1 ? 's' : ''}</span>
+                            )}
+                          </div>
                           <ul className="list-disc list-inside text-muted-foreground">
                             {meals.map((m) => <li key={m}>{m}</li>)}
                           </ul>
