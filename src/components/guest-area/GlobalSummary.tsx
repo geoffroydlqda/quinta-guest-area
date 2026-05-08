@@ -26,7 +26,14 @@ interface GlobalSummaryProps {
     totalCost?: number;
     dietBreakdown?: { type: string; label: string; guests: number; total: number }[];
     dietTotal?: number;
+    selections?: { date: string; fullBoard: boolean; breakfast: boolean; lunch: boolean; dinner: boolean; guests_count_day?: number }[];
   };
+}
+
+function parseLocalDateLong(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 // Parse YYYY-MM-DD as local date to avoid timezone shifts
