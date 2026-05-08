@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { GuestProfile, ToolStatuses } from '@/types/guest';
 import { formatDateForDatabase } from '@/lib/localDate';
+import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 // Timeout for profile loading (8 seconds)
 const PROFILE_LOAD_TIMEOUT = 8000;
