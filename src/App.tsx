@@ -14,6 +14,7 @@ import Transportation from "./pages/Transportation";
 import Food from "./pages/Food";
 import Documentation from "./pages/Documentation";
 import Admin from "./pages/Admin";
+import AdminGuestDetail from "./pages/AdminGuestDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
