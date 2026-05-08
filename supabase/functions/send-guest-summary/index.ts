@@ -64,8 +64,15 @@ const GuestSummarySchema = z.object({
     breakfastOnlyDays: z.number().int().min(0).max(365),
     customDays: z.number().int().min(0).max(365),
     dietPreference: z.string().max(100).nullable().optional(),
-    totalCost: z.number().min(0).max(100000).optional(),
+    totalCost: z.number().min(0).max(1000000).optional(),
     selections: z.array(FoodSelectionSchema).optional(),
+    dietBreakdown: z.array(z.object({
+      type: z.string(),
+      label: z.string(),
+      guests: z.number().int().min(0).max(100),
+      total: z.number().min(0).max(1000000).optional(),
+    })).optional(),
+    dietTotal: z.number().int().min(0).max(100).optional(),
   }).nullable(),
 });
 
