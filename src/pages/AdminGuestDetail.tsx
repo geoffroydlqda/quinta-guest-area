@@ -76,6 +76,7 @@ const AdminGuestDetailContent = () => {
   const [data, setData] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [resending, setResending] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (!isAdminEmail(user?.email)) return <Navigate to="/dashboard" replace />;
 
