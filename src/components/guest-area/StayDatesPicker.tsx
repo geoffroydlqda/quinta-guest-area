@@ -182,7 +182,9 @@ export function StayDatesPicker({
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
             <p className="text-sm text-muted-foreground">
-              You can still change your stay dates. Other edits are locked within 5 days of check-in.
+              Your information is finalized. Please contact{' '}
+              <a href="mailto:hello@quintamor.com" className="text-primary hover:underline">hello@quintamor.com</a>{' '}
+              for any changes.
             </p>
           </div>
         </div>
