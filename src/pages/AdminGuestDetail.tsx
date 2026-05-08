@@ -7,8 +7,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock,
+  ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2,
 } from "lucide-react";
+import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 import { calculateFoodCostMulti } from "@/lib/foodPricing";
 import { calculateTransportationCost, getTripPriceNumeric } from "@/lib/transportationPricing";
 import { EMPTY_DIET_CONFIG, type DietConfig } from "@/types/guest";
