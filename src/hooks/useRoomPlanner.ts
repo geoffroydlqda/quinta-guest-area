@@ -11,6 +11,7 @@ import {
   MAX_SHARED_ROOMS,
   MAX_ENSUITE_ROOMS
 } from '@/types/room';
+import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 export function useRoomPlanner() {
   const { user } = useAuth();
@@ -177,6 +178,7 @@ export function useRoomPlanner() {
         setRecordId(data.id);
       }
 
+      triggerSheetsSync();
       return true;
     } catch (error: any) {
       console.error('Auto-save error:', error);

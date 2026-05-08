@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import type { FoodPlan, FoodDaySelection, DietPreference } from '@/types/guest';
 import { generateDatesInclusive } from '@/lib/localDate';
+import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 export function useFoodPlan(checkInDate: string | null, checkOutDate: string | null) {
   const { user } = useAuth();
@@ -204,6 +205,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
         .eq('user_id', user.id);
       
       if (error) throw error;
+      triggerSheetsSync();
       return true;
     } catch (error: any) {
       console.error('Error auto-saving food plan:', error);
