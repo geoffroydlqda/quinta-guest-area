@@ -121,7 +121,10 @@ function generateFoodBreakdownHtml(selections: z.infer<typeof FoodSelectionSchem
 
     const dateLabel = formatDateLong(sel.date);
     const mealsLabel = meals.join(' + ');
-    html += `<tr><td style="padding: 6px 0; color: #333;"><strong style="color: #000;">${dateLabel}</strong> : ${mealsLabel}</td></tr>`;
+    const guestsLabel = typeof sel.guests_count_day === 'number'
+      ? ` — ${sel.guests_count_day} guest${sel.guests_count_day !== 1 ? 's' : ''}`
+      : '';
+    html += `<tr><td style="padding: 6px 0; color: #333;"><strong style="color: #000;">${dateLabel}${guestsLabel}</strong> : ${mealsLabel}</td></tr>`;
   }
   return html;
 }
