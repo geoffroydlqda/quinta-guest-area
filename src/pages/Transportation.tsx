@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { useTransportation } from '@/hooks/useTransportation';
 import { useAutoSave } from '@/hooks/useAutoSave';
-import { isEditingLocked } from '@/lib/editLock';
+import { getGuestStatus } from '@/lib/editLock';
 import { calculateTransportationCost } from '@/lib/transportationPricing';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
@@ -46,7 +46,8 @@ const Transportation = () => {
   } = useTransportation();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
-  const isLocked = isEditingLocked(profile?.check_in_date || null, profile?.status_overall || "draft");
+  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft");
+  const isLocked = guestStatus.isEditingLocked;
 
   // Calculate cost summary
   const costSummary = useMemo(() => {
@@ -158,6 +159,7 @@ const Transportation = () => {
       title="Transportation"
       description="Arrange taxi transfers to and from Quinta do Amor"
       isLocked={isLocked}
+      statusInfo={guestStatus}
     >
       <div className="max-w-3xl mx-auto space-y-6">
 

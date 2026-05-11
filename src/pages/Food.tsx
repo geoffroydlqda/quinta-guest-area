@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { useFoodPlan } from '@/hooks/useFoodPlan';
 import { useAutoSave } from '@/hooks/useAutoSave';
-import { isEditingLocked } from '@/lib/editLock';
+import { getGuestStatus } from '@/lib/editLock';
 import { calculateFoodCostMulti, DIET_TYPES } from '@/lib/foodPricing';
 import { dietConfigTotal } from '@/types/guest';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
@@ -36,7 +36,8 @@ const Food = () => {
   } = useFoodPlan(profile?.check_in_date || null, profile?.check_out_date || null, guestsCount);
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
-  const isLocked = isEditingLocked(profile?.check_in_date || null, profile?.status_overall || "draft");
+  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft");
+  const isLocked = guestStatus.isEditingLocked;
 
   const dietConfig = foodPlan?.diet_config || { vegetarian_count: 0, meat_dinner_count: 0, meat_lunch_dinner_count: 0 };
   const dietTotal = dietConfigTotal(dietConfig);
@@ -88,7 +89,7 @@ const Food = () => {
   }
 
   return (
-    <ToolPageLayout title="Food" description="Plan your meals during your stay" isLocked={isLocked}>
+    <ToolPageLayout title="Food" description="Plan your meals during your stay" isLocked={isLocked} statusInfo={guestStatus}>
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex justify-end">
           <AutoSaveIndicator status={saveStatus} />

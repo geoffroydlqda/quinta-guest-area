@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { useRoomPlanner } from '@/hooks/useRoomPlanner';
 import { useAutoSave } from '@/hooks/useAutoSave';
-import { isEditingLocked } from '@/lib/editLock';
+import { getGuestStatus } from '@/lib/editLock';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 
@@ -46,7 +46,8 @@ const RoomSetup = () => {
   } = useRoomPlanner();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
-  const isLocked = isEditingLocked(profile?.check_in_date || null, profile?.status_overall || "draft");
+  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft");
+  const isLocked = guestStatus.isEditingLocked;
 
   // Calculate remaining capacity
   const totalShared = roomSelection.queenSharedQty + roomSelection.twinsSharedQty;
@@ -79,6 +80,7 @@ const RoomSetup = () => {
       title="Room Setup"
       description="Configure the bed types for your group's stay"
       isLocked={isLocked}
+      statusInfo={guestStatus}
     >
       <div className="max-w-4xl mx-auto space-y-6">
 
