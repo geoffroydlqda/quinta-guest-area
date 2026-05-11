@@ -14,9 +14,9 @@ import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 
 const STATUS_BADGE: Record<GuestStatusKind, { label: string; className: string }> = {
   pending: { label: "Pending completion", className: "bg-muted text-foreground border border-border" },
-  late: { label: "Late submission", className: "bg-destructive/15 text-destructive border border-destructive/30" },
-  finalized_submitted: { label: "Finalized", className: "bg-success/15 text-success border border-success/30" },
-  finalized_in_progress: { label: "Finalized", className: "bg-success/15 text-success border border-success/30" },
+  late_updates: { label: "Late updates", className: "bg-yellow-100 text-yellow-900 border border-yellow-400" },
+  finalized: { label: "Finalized", className: "bg-destructive/15 text-destructive border border-destructive/30" },
+  finalized_in_progress: { label: "Finalized", className: "bg-muted text-muted-foreground border border-border" },
 };
 
 function StatusBadge({ checkIn, statusOverall }: { checkIn: string | null; statusOverall: string }) {

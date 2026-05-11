@@ -3,16 +3,19 @@ import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GuestAreaHeader } from './GuestAreaHeader';
 import { EditLockBanner } from './EditLockBanner';
+import type { GuestStatusInfo } from '@/lib/editLock';
 
 interface ToolPageLayoutProps {
   title: string;
   description?: string;
+  /** @deprecated Prefer passing statusInfo. Still honored as a fallback when statusInfo is omitted. */
   isLocked?: boolean;
+  statusInfo?: GuestStatusInfo;
   showOkButton?: boolean;
   children: React.ReactNode;
 }
 
-export function ToolPageLayout({ title, description, isLocked = false, showOkButton = true, children }: ToolPageLayoutProps) {
+export function ToolPageLayout({ title, description, isLocked = false, statusInfo, showOkButton = true, children }: ToolPageLayoutProps) {
   const navigate = useNavigate();
   
   return (
@@ -38,7 +41,9 @@ export function ToolPageLayout({ title, description, isLocked = false, showOkBut
           )}
         </div>
         
-        {isLocked && <EditLockBanner variant="tool" />}
+        {statusInfo
+          ? <EditLockBanner variant="tool" statusInfo={statusInfo} />
+          : (isLocked && <EditLockBanner variant="tool" />)}
         
         {children}
         
