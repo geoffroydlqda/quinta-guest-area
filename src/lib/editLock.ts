@@ -2,8 +2,8 @@ import { differenceInCalendarDays, parseISO } from 'date-fns';
 
 export type GuestStatusKind =
   | 'pending'
-  | 'late'
-  | 'finalized_submitted'
+  | 'late_updates'
+  | 'finalized'
   | 'finalized_in_progress';
 
 export interface GuestStatusInfo {
@@ -14,15 +14,20 @@ export interface GuestStatusInfo {
   message: string;
   /** Whether tools, autosave and submit should be blocked */
   isEditingLocked: boolean;
-  /** Whether the final submission deadline has passed */
-  isPastDeadline: boolean;
+  /** Whether the final lock date has passed */
+  isPastFinalLock: boolean;
+  /** Whether we are within the late-updates window (between 14 and 3 days) */
+  isInLateUpdatesWindow: boolean;
   /** Whether the check-in date has passed */
   isPastCheckIn: boolean;
-  /** Final submission deadline (14 days before check-in) */
-  finalSubmissionDate: Date | null;
+  /** Late updates start date (14 days before check-in) */
+  lateUpdateDate: Date | null;
+  /** Final lock date (3 days before check-in) — after this all editing is blocked */
+  finalLockDate: Date | null;
 }
 
-const FINAL_SUBMISSION_DAYS_BEFORE_CHECK_IN = 14;
+const LATE_UPDATE_DAYS_BEFORE_CHECK_IN = 14;
+const FINAL_LOCK_DAYS_BEFORE_CHECK_IN = 3;
 
 function startOfToday(): Date {
   const d = new Date();
@@ -39,16 +44,29 @@ function safeParse(dateStr: string | null): Date | null {
   }
 }
 
-export function getFinalSubmissionDate(checkInDate: string | null): Date | null {
+function subtractDays(checkInDate: string | null, days: number): Date | null {
   const checkIn = safeParse(checkInDate);
   if (!checkIn) return null;
-  const deadline = new Date(checkIn);
-  deadline.setHours(0, 0, 0, 0);
-  deadline.setDate(deadline.getDate() - FINAL_SUBMISSION_DAYS_BEFORE_CHECK_IN);
-  return deadline;
+  const d = new Date(checkIn);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - days);
+  return d;
 }
 
-export function formatFinalSubmissionDate(date: Date | null): string {
+export function getLateUpdateDate(checkInDate: string | null): Date | null {
+  return subtractDays(checkInDate, LATE_UPDATE_DAYS_BEFORE_CHECK_IN);
+}
+
+export function getFinalLockDate(checkInDate: string | null): Date | null {
+  return subtractDays(checkInDate, FINAL_LOCK_DAYS_BEFORE_CHECK_IN);
+}
+
+/** @deprecated Kept for backward compatibility — now returns the final lock date (3 days before check-in). */
+export function getFinalSubmissionDate(checkInDate: string | null): Date | null {
+  return getFinalLockDate(checkInDate);
+}
+
+export function formatHumanDate(date: Date | null): string {
   if (!date) return '';
   return date.toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -57,17 +75,21 @@ export function formatFinalSubmissionDate(date: Date | null): string {
   });
 }
 
+export const formatFinalSubmissionDate = formatHumanDate;
+
 export function getGuestStatus(
   checkInDate: string | null,
-  statusOverall: 'draft' | 'submitted' | string = 'draft',
+  _statusOverall: 'draft' | 'submitted' | string = 'draft',
 ): GuestStatusInfo {
   const today = startOfToday();
   const checkIn = safeParse(checkInDate);
-  const deadline = getFinalSubmissionDate(checkInDate);
+  const lateUpdateDate = getLateUpdateDate(checkInDate);
+  const finalLockDate = getFinalLockDate(checkInDate);
 
   const isPastCheckIn = !!checkIn && differenceInCalendarDays(checkIn, today) <= 0;
-  const isPastDeadline = !!deadline && differenceInCalendarDays(deadline, today) <= 0;
-  const submitted = statusOverall === 'submitted';
+  const isPastFinalLock = !!finalLockDate && differenceInCalendarDays(finalLockDate, today) <= 0;
+  const isPastLateStart = !!lateUpdateDate && differenceInCalendarDays(lateUpdateDate, today) <= 0;
+  const isInLateUpdatesWindow = isPastLateStart && !isPastFinalLock;
 
   if (isPastCheckIn) {
     return {
@@ -75,54 +97,60 @@ export function getGuestStatus(
       label: 'Finalized',
       message: 'Your stay is currently in progress.',
       isEditingLocked: true,
-      isPastDeadline: true,
+      isPastFinalLock: true,
+      isInLateUpdatesWindow: false,
       isPastCheckIn: true,
-      finalSubmissionDate: deadline,
+      lateUpdateDate,
+      finalLockDate,
     };
   }
 
-  if (isPastDeadline) {
-    if (submitted) {
-      return {
-        status: 'finalized_submitted',
-        label: 'Finalized',
-        message:
-          'Your information is now finalized. Please contact hello@quintamor.com for any changes.',
-        isEditingLocked: true,
-        isPastDeadline: true,
-        isPastCheckIn: false,
-        finalSubmissionDate: deadline,
-      };
-    }
+  if (isPastFinalLock) {
     return {
-      status: 'late',
-      label: 'Late submission',
+      status: 'finalized',
+      label: 'Finalized',
       message:
-        'Your Guest Area information is overdue. Please complete and submit your information as soon as possible.',
-      isEditingLocked: false,
-      isPastDeadline: true,
+        'Your information is now locked. Please contact hello@quintamor.com for any changes.',
+      isEditingLocked: true,
+      isPastFinalLock: true,
+      isInLateUpdatesWindow: false,
       isPastCheckIn: false,
-      finalSubmissionDate: deadline,
+      lateUpdateDate,
+      finalLockDate,
     };
   }
 
-  const deadlineLabel = formatFinalSubmissionDate(deadline);
+  if (isInLateUpdatesWindow) {
+    return {
+      status: 'late_updates',
+      label: 'Late updates',
+      message:
+        'Your stay is approaching. Please finalize your information as soon as possible. Modifications will no longer be possible 3 days before your arrival.',
+      isEditingLocked: false,
+      isPastFinalLock: false,
+      isInLateUpdatesWindow: true,
+      isPastCheckIn: false,
+      lateUpdateDate,
+      finalLockDate,
+    };
+  }
+
   return {
     status: 'pending',
     label: 'Pending completion',
-    message: deadlineLabel
-      ? `You may still edit and submit your Guest Area information until ${deadlineLabel}.`
-      : 'You may still edit and submit your Guest Area information.',
+    message: 'You may still edit and submit your Guest Area information until 3 days before your arrival.',
     isEditingLocked: false,
-    isPastDeadline: false,
+    isPastFinalLock: false,
+    isInLateUpdatesWindow: false,
     isPastCheckIn: false,
-    finalSubmissionDate: deadline,
+    lateUpdateDate,
+    finalLockDate,
   };
 }
 
 /**
  * Returns true when tools, autosave and submission should be blocked.
- * Late guests (past deadline, not submitted) remain editable.
+ * Editing is only locked within the final 3 days before check-in or after check-in.
  */
 export function isEditingLocked(
   checkInDate: string | null,
