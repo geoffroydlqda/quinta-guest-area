@@ -334,21 +334,24 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                   ` : ''}
 
                   ${!isAdmin ? (() => {
-                    // Compute final submission deadline (14 days before check-in)
-                    let deadlineLabel = '';
-                    let pastDeadline = false;
-                    if (checkInDate) {
-                      const [y, m, d] = checkInDate.split('-').map(Number);
-                      const deadline = new Date(y, m - 1, d);
-                      deadline.setDate(deadline.getDate() - 14);
-                      deadlineLabel = deadline.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-                      const today = new Date(); today.setHours(0,0,0,0);
-                      pastDeadline = deadline.getTime() <= today.getTime();
+                    // Compute late-update (14 days) and final lock (3 days) windows
+                    let html = '';
+                    if (!checkInDate) return '';
+                    const [y, m, d] = checkInDate.split('-').map(Number);
+                    const today = new Date(); today.setHours(0,0,0,0);
+                    const lateStart = new Date(y, m - 1, d); lateStart.setDate(lateStart.getDate() - 14);
+                    const finalLock = new Date(y, m - 1, d); finalLock.setDate(finalLock.getDate() - 3);
+                    const pastFinalLock = finalLock.getTime() <= today.getTime();
+                    const inLateWindow = lateStart.getTime() <= today.getTime() && !pastFinalLock;
+
+                    if (pastFinalLock) {
+                      html = `<p style="margin-top: 24px; font-size: 14px; color: #ffffff; background-color: #b91c1c; padding: 16px; border-radius: 8px; font-weight: 600;">Your information is now finalized. Please contact hello@quintamor.com for any changes.</p>`;
+                    } else if (inLateWindow) {
+                      html = `<p style="margin-top: 24px; font-size: 14px; color: #78350f; background-color: #fde68a; border: 1px solid #f59e0b; padding: 16px; border-radius: 8px;"><strong>Your stay is approaching.</strong> Please finalize your information as soon as possible. Modifications will no longer be possible 3 days before your arrival.</p>`;
+                    } else {
+                      html = `<p style="margin-top: 24px; font-size: 14px; color: #333; background-color: #f6efea; padding: 16px; border-radius: 8px;">You may edit your information until 3 days before your arrival. Log in to your Guest Area anytime to view or update your selections.</p>`;
                     }
-                    const note = pastDeadline
-                      ? 'Your information is now finalized. Please contact hello@quintamor.com for any changes.'
-                      : `You may edit your information until ${deadlineLabel}. Log in to your Guest Area anytime to view or update your selections.`;
-                    return `<p style="margin-top: 24px; font-size: 14px; color: #333; background-color: #f6efea; padding: 16px; border-radius: 8px;">${note}</p>`;
+                    return html;
                   })() : ''}
                 </td>
               </tr>
