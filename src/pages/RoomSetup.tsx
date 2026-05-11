@@ -80,6 +80,7 @@ const RoomSetup = () => {
       title="Room Setup"
       description="Configure the bed types for your group's stay"
       isLocked={isLocked}
+      statusInfo={guestStatus}
     >
       <div className="max-w-4xl mx-auto space-y-6">
 
