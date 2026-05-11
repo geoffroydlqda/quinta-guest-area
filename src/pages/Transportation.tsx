@@ -159,6 +159,7 @@ const Transportation = () => {
       title="Transportation"
       description="Arrange taxi transfers to and from Quinta do Amor"
       isLocked={isLocked}
+      statusInfo={guestStatus}
     >
       <div className="max-w-3xl mx-auto space-y-6">
 
