@@ -1,4 +1,5 @@
-import { differenceInCalendarDays, parseISO } from 'date-fns';
+import { differenceInCalendarDays } from 'date-fns';
+import { parseLocalDateString } from './localDate';
 
 export type GuestStatusKind =
   | 'pending'
