@@ -1,4 +1,5 @@
-import { differenceInCalendarDays, parseISO } from 'date-fns';
+import { differenceInCalendarDays } from 'date-fns';
+import { parseLocalDateString } from './localDate';
 
 export type GuestStatusKind =
   | 'pending'
@@ -37,11 +38,10 @@ function startOfToday(): Date {
 
 function safeParse(dateStr: string | null): Date | null {
   if (!dateStr) return null;
-  try {
-    return parseISO(dateStr);
-  } catch {
-    return null;
-  }
+  const d = parseLocalDateString(dateStr);
+  if (!d) return null;
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 function subtractDays(checkInDate: string | null, days: number): Date | null {
