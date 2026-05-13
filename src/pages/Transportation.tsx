@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Plus, Trash2, UserPlus, X, Car, Info, Copy, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import type { TransportationTrip } from '@/types/guest';
-import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS } from '@/types/guest';
+import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS, STANDARD_TAXI_PRICE_8_SEATS } from '@/types/guest';
 
 // Import driver image
 import driverImage from '@/assets/driver-luis.jpeg';
