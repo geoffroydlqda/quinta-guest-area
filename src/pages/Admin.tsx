@@ -38,7 +38,8 @@ type Profile = {
 };
 
 type Room = { user_id: string; email: string; queen_shared_qty: number; twins_shared_qty: number; queen_ensuite_qty: number; twins_ensuite_qty: number; remarks_roomsetup: string | null; remarks: string | null; status_roomsetup: string };
-type Trip = { user_id: string; trip_direction: string; pickup_location: string; dropoff_location: string; trip_date: string; trip_time: string; passengers_count: number; taxi_size: string; price_estimate: string };
+type Passenger = { id: string; first_name: string; last_name?: string | null; phone: string | null; flight_number: string | null };
+type Trip = { id: string; user_id: string; trip_direction: string; pickup_location: string; dropoff_location: string; trip_date: string; trip_time: string; passengers_count: number; taxi_size: string; price_estimate: string; passengers?: Passenger[] };
 type FoodPlan = { user_id: string; selections: any; diet_preference: string | null; status_food: string };
 
 interface Data {
