@@ -34,7 +34,7 @@ export interface TransportationTrip {
   trip_date: string;
   trip_time: string;
   passengers_count: number;
-  taxi_size: '4 seats' | '6 seats';
+  taxi_size: '4 seats' | '6 seats' | '8 seats';
   price_estimate: string;
   /** Admin-defined custom price for custom-offer trips (null until admin sets it). */
   custom_price: number | null;
