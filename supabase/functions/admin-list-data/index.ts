@@ -42,10 +42,11 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const [profiles, rooms, trips, food] = await Promise.all([
+    const [profiles, rooms, trips, passengers, food] = await Promise.all([
       admin.from("guest_profiles").select("*"),
       admin.from("room_setups").select("*"),
       admin.from("transportation_trips").select("*"),
+      admin.from("transportation_passengers").select("*"),
       admin.from("food_plans").select("*"),
     ]);
 
@@ -56,8 +57,23 @@ serve(async (req) => {
     );
     const filteredProfiles = allProfiles.filter((p: any) => !adminUserIds.has(p.user_id));
     const filteredRooms = (rooms.data || []).filter((r: any) => !adminUserIds.has(r.user_id));
-    const filteredTrips = (trips.data || []).filter((t: any) => !adminUserIds.has(t.user_id));
+    const filteredTripsRaw = (trips.data || []).filter((t: any) => !adminUserIds.has(t.user_id));
+    const filteredPassengers = (passengers.data || []).filter((p: any) => !adminUserIds.has(p.user_id));
     const filteredFood = (food.data || []).filter((f: any) => !adminUserIds.has(f.user_id));
+
+    // Attach passengers to their trips (preserve creation order)
+    const paxByTrip = new Map<string, any[]>();
+    for (const p of [...filteredPassengers].sort((a: any, b: any) =>
+      String(a.created_at || "").localeCompare(String(b.created_at || ""))
+    )) {
+      const list = paxByTrip.get(p.trip_id) || [];
+      list.push(p);
+      paxByTrip.set(p.trip_id, list);
+    }
+    const filteredTrips = filteredTripsRaw.map((t: any) => ({
+      ...t,
+      passengers: paxByTrip.get(t.id) || [],
+    }));
 
     return new Response(JSON.stringify({
       profiles: filteredProfiles,

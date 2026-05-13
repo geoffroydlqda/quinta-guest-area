@@ -5,7 +5,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown } from "lucide-react";
-import { generateAirportSignPdf, resolveAirportSignName } from "@/lib/airportSignPdf";
+import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -38,7 +38,8 @@ type Profile = {
 };
 
 type Room = { user_id: string; email: string; queen_shared_qty: number; twins_shared_qty: number; queen_ensuite_qty: number; twins_ensuite_qty: number; remarks_roomsetup: string | null; remarks: string | null; status_roomsetup: string };
-type Trip = { user_id: string; trip_direction: string; pickup_location: string; dropoff_location: string; trip_date: string; trip_time: string; passengers_count: number; taxi_size: string; price_estimate: string };
+type Passenger = { id: string; first_name: string; last_name?: string | null; phone: string | null; flight_number: string | null };
+type Trip = { id: string; user_id: string; trip_direction: string; pickup_location: string; dropoff_location: string; trip_date: string; trip_time: string; passengers_count: number; taxi_size: string; price_estimate: string; passengers?: Passenger[] };
 type FoodPlan = { user_id: string; selections: any; diet_preference: string | null; status_food: string };
 
 interface Data {
@@ -358,9 +359,9 @@ function TransportView({ data, guestName }: { data: Data; guestName: (u: string)
             {rows.map((t, i) => {
               const gName = guestName(t.user_id);
               const handleSign = () => {
-                const name = resolveAirportSignName({ guestFullName: gName });
-                if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: (t as any).id, name });
-                const ok = generateAirportSignPdf(name);
+                const names = resolveAirportSignNames({ passengers: t.passengers, guestFullName: gName });
+                if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, names });
+                const ok = generateAirportSignPdf(names);
                 if (!ok) {
                   import("sonner").then(({ toast }) => toast.error("Unable to generate airport sign PDF."));
                 }

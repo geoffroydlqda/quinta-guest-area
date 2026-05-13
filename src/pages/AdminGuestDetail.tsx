@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
 } from "lucide-react";
-import { generateAirportSignPdf, resolveAirportSignName } from "@/lib/airportSignPdf";
+import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 import { calculateFoodCostMulti } from "@/lib/foodPricing";
 import { calculateTransportationCost, getTripPriceNumeric } from "@/lib/transportationPricing";
@@ -410,12 +410,12 @@ const AdminGuestDetailContent = () => {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          const name = resolveAirportSignName({
-                            firstPassenger: pax[0]?.first_name,
+                          const names = resolveAirportSignNames({
+                            passengers: pax,
                             guestFullName: fullName,
                           });
-                          if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, name });
-                          const ok = generateAirportSignPdf(name);
+                          if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, names });
+                          const ok = generateAirportSignPdf(names);
                           if (!ok) toast({ title: "Unable to generate airport sign PDF.", variant: "destructive" });
                         }}
                       >
