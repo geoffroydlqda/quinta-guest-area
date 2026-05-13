@@ -395,8 +395,9 @@ const Transportation = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="4 seats">4 seats</SelectItem>
-                          <SelectItem value="6 seats">6 seats</SelectItem>
+                          <SelectItem value="4 seats">4-seat taxi</SelectItem>
+                          <SelectItem value="6 seats">6-seat taxi</SelectItem>
+                          <SelectItem value="8 seats">8-seat taxi</SelectItem>
                         </SelectContent>
                       </Select>
                       {validationErrors.includes('taxi_size') && (
