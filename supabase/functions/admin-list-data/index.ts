@@ -49,11 +49,21 @@ serve(async (req) => {
       admin.from("food_plans").select("*"),
     ]);
 
+    // Filter out admin user profiles and their related rows
+    const allProfiles = profiles.data || [];
+    const adminUserIds = new Set(
+      allProfiles.filter((p: any) => isAdmin(p.email)).map((p: any) => p.user_id)
+    );
+    const filteredProfiles = allProfiles.filter((p: any) => !adminUserIds.has(p.user_id));
+    const filteredRooms = (rooms.data || []).filter((r: any) => !adminUserIds.has(r.user_id));
+    const filteredTrips = (trips.data || []).filter((t: any) => !adminUserIds.has(t.user_id));
+    const filteredFood = (food.data || []).filter((f: any) => !adminUserIds.has(f.user_id));
+
     return new Response(JSON.stringify({
-      profiles: profiles.data || [],
-      rooms: rooms.data || [],
-      trips: trips.data || [],
-      food: food.data || [],
+      profiles: filteredProfiles,
+      rooms: filteredRooms,
+      trips: filteredTrips,
+      food: filteredFood,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e: any) {
     console.error(e);

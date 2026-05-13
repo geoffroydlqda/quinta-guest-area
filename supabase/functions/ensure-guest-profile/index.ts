@@ -40,6 +40,18 @@ const handler = async (req: Request): Promise<Response> => {
     const userId = authUser.id;
     const userEmail = authUser.email ?? '';
 
+    // Skip guest profile creation for admin users
+    const ADMIN_EMAILS = ['hello@quintamor.com', 'loïs@quintamor.com', 'lois@quintamor.com', '977luisferreira@gmail.com']
+      .map((e) => e.normalize('NFC').toLowerCase().trim());
+    const normalizedEmail = userEmail.normalize('NFC').toLowerCase().trim();
+    if (ADMIN_EMAILS.includes(normalizedEmail)) {
+      console.log('Skipping guest profile creation for admin:', userEmail);
+      return new Response(
+        JSON.stringify({ success: true, profile: null, created: false, isAdmin: true }),
+        { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
+
     // Get metadata from request body (optional)
     let metadata: Record<string, any> = {};
     try {
