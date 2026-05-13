@@ -264,7 +264,7 @@ export function StayDatesPicker({
           <Input
             type="number"
             min={1}
-            max={21}
+            max={22}
             value={localGuestsStr}
             onChange={(e) => handleGuestsChange(e.target.value)}
             disabled={isLocked}
