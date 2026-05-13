@@ -76,7 +76,7 @@ const DashboardContent = () => {
       // Fetch transportation data with trip details
       const { data: tripData } = await supabase
         .from('transportation_trips')
-        .select('id, price_estimate, pickup_location, dropoff_location, taxi_size')
+        .select('id, price_estimate, pickup_location, dropoff_location, taxi_size, custom_price')
         .eq('user_id', user.id);
       
       if (tripData && tripData.length > 0) {
