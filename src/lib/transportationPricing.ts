@@ -1,5 +1,5 @@
 import type { TransportationTrip } from '@/types/guest';
-import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS, CUSTOM_OFFER_TEXT } from '@/types/guest';
+import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS, STANDARD_TAXI_PRICE_8_SEATS, CUSTOM_OFFER_TEXT, type TaxiSize } from '@/types/guest';
 
 export interface TransportationCostSummary {
   /** Total of all confirmed prices: fixed-route trips + custom-offer trips with admin-set custom_price. */
@@ -31,10 +31,12 @@ export function isFixedRoute(pickupLocation: string, dropoffLocation: string): b
 export function getFixedTripPriceNumeric(
   pickupLocation: string,
   dropoffLocation: string,
-  taxiSize: '4 seats' | '6 seats'
+  taxiSize: TaxiSize
 ): number | null {
   if (isFixedRoute(pickupLocation, dropoffLocation)) {
-    return taxiSize === '4 seats' ? STANDARD_TAXI_PRICE_4_SEATS : STANDARD_TAXI_PRICE_6_SEATS;
+    if (taxiSize === '4 seats') return STANDARD_TAXI_PRICE_4_SEATS;
+    if (taxiSize === '6 seats') return STANDARD_TAXI_PRICE_6_SEATS;
+    if (taxiSize === '8 seats') return STANDARD_TAXI_PRICE_8_SEATS;
   }
   return null;
 }
@@ -42,7 +44,7 @@ export function getFixedTripPriceNumeric(
 export function getTripPrice(
   pickupLocation: string,
   dropoffLocation: string,
-  taxiSize: '4 seats' | '6 seats'
+  taxiSize: TaxiSize
 ): string {
   const p = getFixedTripPriceNumeric(pickupLocation, dropoffLocation, taxiSize);
   return p !== null ? `€${p}` : CUSTOM_OFFER_TEXT;
@@ -67,7 +69,7 @@ export function getEffectiveTripPrice(trip: Pick<TransportationTrip, 'pickup_loc
 export function getTripPriceNumeric(
   pickupLocation: string,
   dropoffLocation: string,
-  taxiSize: '4 seats' | '6 seats'
+  taxiSize: TaxiSize
 ): number | null {
   return getFixedTripPriceNumeric(pickupLocation, dropoffLocation, taxiSize);
 }

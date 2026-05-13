@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Plus, Trash2, UserPlus, X, Car, Info, Copy, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import type { TransportationTrip } from '@/types/guest';
-import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS } from '@/types/guest';
+import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS, STANDARD_TAXI_PRICE_8_SEATS } from '@/types/guest';
 
 // Import driver image
 import driverImage from '@/assets/driver-luis.jpeg';
@@ -68,7 +68,7 @@ const Transportation = () => {
     trip_date: defaultTripDate,
     trip_time: '',
     passengers_count: 1,
-    taxi_size: '4 seats' as '4 seats' | '6 seats',
+    taxi_size: '4 seats' as '4 seats' | '6 seats' | '8 seats',
   });
 
   // Note: Auth redirect is handled by ProtectedRoute in App.tsx
@@ -206,6 +206,7 @@ const Transportation = () => {
               <ul className="space-y-1 text-muted-foreground">
                 <li>• 4-seat taxi: <strong>€{STANDARD_TAXI_PRICE_4_SEATS}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
                 <li>• 6-seat taxi: <strong>€{STANDARD_TAXI_PRICE_6_SEATS}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
+                <li>• 8-seat taxi: <strong>€{STANDARD_TAXI_PRICE_8_SEATS}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
                 <li>• Other routes: Custom offer</li>
               </ul>
             </div>
@@ -394,8 +395,9 @@ const Transportation = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="4 seats">4 seats</SelectItem>
-                          <SelectItem value="6 seats">6 seats</SelectItem>
+                          <SelectItem value="4 seats">4-seat taxi</SelectItem>
+                          <SelectItem value="6 seats">6-seat taxi</SelectItem>
+                          <SelectItem value="8 seats">8-seat taxi</SelectItem>
                         </SelectContent>
                       </Select>
                       {validationErrors.includes('taxi_size') && (
