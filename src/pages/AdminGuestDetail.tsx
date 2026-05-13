@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
@@ -70,7 +69,6 @@ function fmtTimestamp(t?: string | null): string {
 }
 
 const AdminGuestDetailContent = () => {
-  const { user, signOut } = useAuth();
   const { guestId } = useParams<{ guestId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();

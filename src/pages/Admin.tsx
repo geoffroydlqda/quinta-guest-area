@@ -58,7 +58,7 @@ function downloadCSV(filename: string, rows: any[][]) {
 }
 
 const AdminContent = () => {
-  const { user, signOut } = useAuth();
+  const { signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [data, setData] = useState<Data | null>(null);
