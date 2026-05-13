@@ -68,7 +68,7 @@ const Transportation = () => {
     trip_date: defaultTripDate,
     trip_time: '',
     passengers_count: 1,
-    taxi_size: '4 seats' as '4 seats' | '6 seats',
+    taxi_size: '4 seats' as '4 seats' | '6 seats' | '8 seats',
   });
 
   // Note: Auth redirect is handled by ProtectedRoute in App.tsx
