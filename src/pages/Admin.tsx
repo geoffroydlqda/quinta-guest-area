@@ -352,22 +352,38 @@ function TransportView({ data, guestName }: { data: Data; guestName: (u: string)
       <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-muted"><tr className="text-left">
-            {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
+            {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Sign"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
           </tr></thead>
           <tbody>
-            {rows.map((t, i) => (
-              <tr key={i} className="border-t border-border">
-                <td className="px-3 py-2">{t.trip_date}</td>
-                <td className="px-3 py-2">{t.trip_time}</td>
-                <td className="px-3 py-2">{guestName(t.user_id)}</td>
-                <td className="px-3 py-2">{t.trip_direction}</td>
-                <td className="px-3 py-2">{t.pickup_location}</td>
-                <td className="px-3 py-2">{t.dropoff_location}</td>
-                <td className="px-3 py-2">{t.taxi_size}</td>
-                <td className="px-3 py-2">{t.passengers_count}</td>
-                <td className="px-3 py-2">{t.price_estimate}</td>
-              </tr>
-            ))}
+            {rows.map((t, i) => {
+              const gName = guestName(t.user_id);
+              const handleSign = () => {
+                const name = resolveAirportSignName({ guestFullName: gName });
+                if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: (t as any).id, name });
+                const ok = generateAirportSignPdf(name);
+                if (!ok) {
+                  import("sonner").then(({ toast }) => toast.error("Unable to generate airport sign PDF."));
+                }
+              };
+              return (
+                <tr key={i} className="border-t border-border">
+                  <td className="px-3 py-2">{t.trip_date}</td>
+                  <td className="px-3 py-2">{t.trip_time}</td>
+                  <td className="px-3 py-2">{gName}</td>
+                  <td className="px-3 py-2">{t.trip_direction}</td>
+                  <td className="px-3 py-2">{t.pickup_location}</td>
+                  <td className="px-3 py-2">{t.dropoff_location}</td>
+                  <td className="px-3 py-2">{t.taxi_size}</td>
+                  <td className="px-3 py-2">{t.passengers_count}</td>
+                  <td className="px-3 py-2">{t.price_estimate}</td>
+                  <td className="px-3 py-2">
+                    <Button size="sm" variant="outline" onClick={handleSign}>
+                      <FileDown className="w-4 h-4 mr-1" />Airport sign
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
