@@ -139,7 +139,9 @@ function generateTransportationTripsHtml(trips: z.infer<typeof TripSchema>[]): s
 
   return sorted.map((trip, i) => {
     const taxiLabel = trip.taxi_size === '4 seats' ? '4-seat taxi' : trip.taxi_size === '6 seats' ? '6-seat taxi' : trip.taxi_size;
-    const priceLabel = trip.price_estimate;
+    const cp = (trip as any).custom_price;
+    const hasCustomPrice = cp !== null && cp !== undefined && !Number.isNaN(Number(cp));
+    const priceLabel = hasCustomPrice ? `${Number(cp)}€` : trip.price_estimate;
     return `
     <tr><td style="padding: 8px 0;">
       <table width="100%" style="background-color: #f6efea; border-radius: 8px;">
