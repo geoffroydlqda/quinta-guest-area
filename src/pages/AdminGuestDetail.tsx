@@ -11,7 +11,8 @@ import {
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 import { calculateFoodCostMulti } from "@/lib/foodPricing";
-import { calculateTransportationCost, getTripPriceNumeric } from "@/lib/transportationPricing";
+import { calculateTransportationCost, getFixedTripPriceNumeric, getEffectiveTripPrice } from "@/lib/transportationPricing";
+import { CustomPriceEditor } from "@/pages/Admin";
 import { EMPTY_DIET_CONFIG, type DietConfig } from "@/types/guest";
 import { getGuestStatus } from "@/lib/editLock";
 
@@ -34,6 +35,7 @@ type Trip = {
   trip_date: string; trip_time: string;
   passengers_count: number; taxi_size: "4 seats" | "6 seats";
   price_estimate: string;
+  custom_price: number | null;
 };
 type Passenger = {
   id: string; user_id: string; trip_id: string;
@@ -375,7 +377,8 @@ const AdminGuestDetailContent = () => {
             <div className="space-y-3 text-sm">
               {sortedTrips.map((t, i) => {
                 const pax = passengersByTrip.get(t.id) || [];
-                const isCustom = getTripPriceNumeric(t.pickup_location, t.dropoff_location, t.taxi_size) === null;
+                const isCustom = getFixedTripPriceNumeric(t.pickup_location, t.dropoff_location, t.taxi_size) === null;
+                const effective = getEffectiveTripPrice(t as any);
                 return (
                   <div key={t.id} className="rounded-lg border border-border p-3">
                     <div className="flex justify-between items-start gap-2 mb-1">
@@ -389,7 +392,24 @@ const AdminGuestDetailContent = () => {
                     <Row label="Drop-off" value={t.dropoff_location} />
                     <Row label="Vehicle" value={t.taxi_size} />
                     <Row label="Passengers" value={t.passengers_count} />
-                    <Row label="Price" value={t.price_estimate} />
+                    <Row
+                      label="Price"
+                      value={effective !== null ? `€${effective}` : t.price_estimate}
+                    />
+                    {isCustom && (
+                      <div className="mt-2 pt-2 border-t border-border">
+                        <div className="text-xs uppercase text-muted-foreground mb-1">Custom price (admin)</div>
+                        <CustomPriceEditor
+                          trip={{ id: t.id, custom_price: t.custom_price }}
+                          onSaved={(v) => {
+                            setData((d) => d ? {
+                              ...d,
+                              trips: d.trips.map((x) => x.id === t.id ? { ...x, custom_price: v } : x),
+                            } : d);
+                          }}
+                        />
+                      </div>
+                    )}
                     {pax.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-border">
                         <div className="text-xs uppercase text-muted-foreground mb-1">Passengers</div>
@@ -404,7 +424,9 @@ const AdminGuestDetailContent = () => {
                         </ul>
                       </div>
                     )}
-                    {isCustom && <p className="text-xs italic text-muted-foreground mt-1">Custom offer — quoted separately.</p>}
+                    {isCustom && effective === null && (
+                      <p className="text-xs italic text-muted-foreground mt-1">Custom offer — no price set yet.</p>
+                    )}
                     <div className="mt-3 pt-3 border-t border-border flex justify-end">
                       <Button
                         size="sm"

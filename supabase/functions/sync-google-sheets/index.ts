@@ -135,13 +135,19 @@ serve(async (req) => {
 
     // Transport
     const transportRows: any[][] = [
-      ["Date", "Time", "Guest", "Direction", "Pickup", "Dropoff", "Taxi", "Passengers", "Price"],
+      ["Date", "Time", "Guest", "Direction", "Pickup", "Dropoff", "Taxi", "Passengers", "Price", "Custom price (€)"],
       ...trips
         .sort((a: any, b: any) => `${a.trip_date} ${a.trip_time}`.localeCompare(`${b.trip_date} ${b.trip_time}`))
-        .map((t: any) => [
-          t.trip_date, t.trip_time, guestName(t.user_id), t.trip_direction,
-          t.pickup_location, t.dropoff_location, t.taxi_size, t.passengers_count, t.price_estimate,
-        ]),
+        .map((t: any) => {
+          const cp = t.custom_price;
+          const hasCp = cp !== null && cp !== undefined && !Number.isNaN(Number(cp));
+          const priceLabel = hasCp ? `${Number(cp)}€` : t.price_estimate;
+          return [
+            t.trip_date, t.trip_time, guestName(t.user_id), t.trip_direction,
+            t.pickup_location, t.dropoff_location, t.taxi_size, t.passengers_count, priceLabel,
+            hasCp ? Number(cp) : "",
+          ];
+        }),
     ];
 
     // Rooms

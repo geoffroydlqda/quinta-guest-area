@@ -39,7 +39,7 @@ type Profile = {
 
 type Room = { user_id: string; email: string; queen_shared_qty: number; twins_shared_qty: number; queen_ensuite_qty: number; twins_ensuite_qty: number; remarks_roomsetup: string | null; remarks: string | null; status_roomsetup: string };
 type Passenger = { id: string; first_name: string; last_name?: string | null; phone: string | null; flight_number: string | null };
-type Trip = { id: string; user_id: string; trip_direction: string; pickup_location: string; dropoff_location: string; trip_date: string; trip_time: string; passengers_count: number; taxi_size: string; price_estimate: string; passengers?: Passenger[] };
+type Trip = { id: string; user_id: string; trip_direction: string; pickup_location: string; dropoff_location: string; trip_date: string; trip_time: string; passengers_count: number; taxi_size: string; price_estimate: string; custom_price: number | null; passengers?: Passenger[] };
 type FoodPlan = { user_id: string; selections: any; diet_preference: string | null; status_food: string };
 
 interface Data {
@@ -346,18 +346,22 @@ function TransportView({ data, guestName }: { data: Data; guestName: (u: string)
     <div className="space-y-3">
       <div className="flex justify-end">
         <Button size="sm" variant="outline" onClick={() => downloadCSV("transport.csv", [
-          ["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Passengers","Price","Custom"],
-          ...rows.map((t) => [t.trip_date, t.trip_time, guestName(t.user_id), t.trip_direction, t.pickup_location, t.dropoff_location, t.taxi_size, t.passengers_count, t.price_estimate, t.price_estimate?.toLowerCase().includes("custom") ? "yes" : ""]),
+          ["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Passengers","Price","Custom price (€)","Custom"],
+          ...rows.map((t) => {
+            const isCustom = t.price_estimate?.toLowerCase().includes("custom");
+            return [t.trip_date, t.trip_time, guestName(t.user_id), t.trip_direction, t.pickup_location, t.dropoff_location, t.taxi_size, t.passengers_count, t.price_estimate, t.custom_price ?? "", isCustom ? "yes" : ""];
+          }),
         ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
       </div>
       <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-muted"><tr className="text-left">
-            {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Sign"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
+            {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Custom €","Sign"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.map((t, i) => {
               const gName = guestName(t.user_id);
+              const isCustom = (t.price_estimate || "").toLowerCase().includes("custom");
               const handleSign = () => {
                 const names = resolveAirportSignNames({ passengers: t.passengers, guestFullName: gName });
                 if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, names });
@@ -376,7 +380,14 @@ function TransportView({ data, guestName }: { data: Data; guestName: (u: string)
                   <td className="px-3 py-2">{t.dropoff_location}</td>
                   <td className="px-3 py-2">{t.taxi_size}</td>
                   <td className="px-3 py-2">{t.passengers_count}</td>
-                  <td className="px-3 py-2">{t.price_estimate}</td>
+                  <td className="px-3 py-2">
+                    {isCustom && t.custom_price !== null && t.custom_price !== undefined
+                      ? `${Number(t.custom_price)}€`
+                      : t.price_estimate}
+                  </td>
+                  <td className="px-3 py-2">
+                    {isCustom ? <CustomPriceEditor trip={t} /> : <span className="text-muted-foreground">—</span>}
+                  </td>
                   <td className="px-3 py-2">
                     <Button size="sm" variant="outline" onClick={handleSign}>
                       <FileDown className="w-4 h-4 mr-1" />Airport sign
@@ -391,6 +402,69 @@ function TransportView({ data, guestName }: { data: Data; guestName: (u: string)
     </div>
   );
 }
+
+function CustomPriceEditor({ trip, onSaved }: { trip: { id: string; custom_price: number | null }; onSaved?: (v: number | null) => void }) {
+  const [value, setValue] = useState<string>(
+    trip.custom_price !== null && trip.custom_price !== undefined ? String(trip.custom_price) : ""
+  );
+  const [saving, setSaving] = useState(false);
+  const [savedValue, setSavedValue] = useState<number | null>(trip.custom_price);
+  const { toast } = useToast();
+
+  const dirty = (value === "" ? null : Number(value)) !== savedValue;
+  const isMissing = savedValue === null || savedValue === undefined;
+
+  const save = async () => {
+    const trimmed = value.trim();
+    let next: number | null = null;
+    if (trimmed !== "") {
+      const n = Number(trimmed);
+      if (!Number.isFinite(n) || n < 0 || n > 100000) {
+        toast({ title: "Invalid price", description: "Enter a number between 0 and 100000.", variant: "destructive" });
+        return;
+      }
+      next = Math.round(n * 100) / 100;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from("transportation_trips")
+      .update({ custom_price: next })
+      .eq("id", trip.id);
+    setSaving(false);
+    if (error) {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    setSavedValue(next);
+    onSaved?.(next);
+    toast({ title: next === null ? "Custom price cleared" : `Custom price set to €${next}` });
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        type="number"
+        inputMode="decimal"
+        min={0}
+        step="1"
+        placeholder="€"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="h-8 w-24"
+      />
+      <Button size="sm" variant={dirty ? "default" : "outline"} disabled={saving || !dirty} onClick={save}>
+        {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+      </Button>
+      {isMissing && (
+        <span className="inline-flex items-center rounded-full border border-yellow-400 bg-yellow-100 text-yellow-900 px-2 py-0.5 text-[10px] font-medium whitespace-nowrap">
+          Price missing
+        </span>
+      )}
+    </div>
+  );
+}
+
+export { CustomPriceEditor };
 
 function RoomsView({ data, guestName }: { data: Data; guestName: (u: string) => string }) {
   return (

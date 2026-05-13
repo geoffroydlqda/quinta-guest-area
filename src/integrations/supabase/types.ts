@@ -268,6 +268,7 @@ export type Database = {
       transportation_trips: {
         Row: {
           created_at: string
+          custom_price: number | null
           dropoff_location: string
           id: string
           passengers_count: number
@@ -282,6 +283,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          custom_price?: number | null
           dropoff_location: string
           id?: string
           passengers_count?: number
@@ -296,6 +298,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          custom_price?: number | null
           dropoff_location?: string
           id?: string
           passengers_count?: number

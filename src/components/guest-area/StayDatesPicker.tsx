@@ -135,8 +135,8 @@ export function StayDatesPicker({
       return;
     }
     
-    if (numValue > 21) {
-      setGuestsError('Maximum 21 guests');
+    if (numValue > 22) {
+      setGuestsError('Maximum 22 guests');
       isUserEditingGuests.current = false;
       return;
     }
@@ -158,7 +158,7 @@ export function StayDatesPicker({
 
   const localGuestsNum = parseInt(localGuestsStr, 10);
   const isValid = localCheckIn && localCheckOut && isAfter(localCheckOut, localCheckIn) && 
-    !isNaN(localGuestsNum) && localGuestsNum >= 1 && localGuestsNum <= 21;
+    !isNaN(localGuestsNum) && localGuestsNum >= 1 && localGuestsNum <= 22;
 
   return (
     <div className="bg-card rounded-2xl border border-border p-6">
@@ -264,7 +264,7 @@ export function StayDatesPicker({
           <Input
             type="number"
             min={1}
-            max={21}
+            max={22}
             value={localGuestsStr}
             onChange={(e) => handleGuestsChange(e.target.value)}
             disabled={isLocked}
