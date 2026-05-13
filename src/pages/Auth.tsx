@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { lovable } from '@/integrations/lovable/index';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,11 +9,13 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Loader2, Mail } from 'lucide-react';
 import qdaLogo from '@/assets/qda-logo.png';
+import { isAdminEmail } from '@/lib/admin';
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
   const mode = searchParams.get('mode') || 'login';
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
@@ -26,9 +28,12 @@ const Auth = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && user) {
-      navigate('/dashboard');
+      const next = searchParams.get('redirectTo');
+      const fallback = isAdminEmail(user.email) ? '/admin' : '/dashboard';
+      const target = next && next.startsWith('/') ? next : fallback;
+      navigate(target, { replace: true, state: { from: location.pathname } });
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, searchParams, location.pathname]);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -252,6 +257,13 @@ const Auth = () => {
                   autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                   disabled={isLoading}
                 />
+                {mode === 'login' && (
+                  <div className="flex justify-end">
+                    <Link to="/forgot-password" className="text-sm text-primary hover:underline font-medium">
+                      Forgot your password?
+                    </Link>
+                  </div>
+                )}
               </div>
 
               <Button

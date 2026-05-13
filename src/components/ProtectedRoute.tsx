@@ -1,5 +1,5 @@
 import { ReactNode, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
 
@@ -10,13 +10,15 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     // Only redirect when we're sure there's no user (not during loading)
     if (!isLoading && !user) {
-      navigate('/auth?mode=login', { replace: true });
+      const redirectTo = `${location.pathname}${location.search}`;
+      navigate(`/auth?mode=login&redirectTo=${encodeURIComponent(redirectTo)}`, { replace: true });
     }
-  }, [user, isLoading, navigate]);
+  }, [user, isLoading, navigate, location.pathname, location.search]);
 
   // Show loading while checking auth
   if (isLoading) {
