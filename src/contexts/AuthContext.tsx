@@ -15,6 +15,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasResolvedInitialSession, setHasResolvedInitialSession] = useState(false);
 
   useEffect(() => {
     // Set up auth state listener BEFORE checking session
@@ -22,7 +23,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, newSession) => {
         setSession(newSession);
         setUser(newSession?.user ?? null);
-        setIsLoading(false);
+
+        if (event !== 'INITIAL_SESSION' || hasResolvedInitialSession) {
+          setIsLoading(false);
+        }
 
         // On sign-in (including OAuth callback), ensure profile exists
         if (event === 'SIGNED_IN' && newSession?.user) {
@@ -44,13 +48,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
       setSession(existingSession);
       setUser(existingSession?.user ?? null);
+      setHasResolvedInitialSession(true);
       setIsLoading(false);
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [hasResolvedInitialSession]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
