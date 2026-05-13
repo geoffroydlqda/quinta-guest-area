@@ -505,7 +505,11 @@ function TripCard({
           </div>
           <div>
             <span className="text-muted-foreground">Price: </span>
-            <span className="font-medium">{trip.price_estimate}</span>
+            <span className="font-medium">
+              {trip.custom_price !== null && trip.custom_price !== undefined
+                ? `${Number(trip.custom_price)}€`
+                : trip.price_estimate}
+            </span>
           </div>
         </div>
 
