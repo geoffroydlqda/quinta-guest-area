@@ -1,0 +1,2 @@
+ALTER TABLE public.transportation_trips DROP CONSTRAINT IF EXISTS transportation_trips_taxi_size_check;
+ALTER TABLE public.transportation_trips ADD CONSTRAINT transportation_trips_taxi_size_check CHECK (taxi_size IN ('4 seats', '6 seats', '8 seats'));
