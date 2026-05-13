@@ -158,7 +158,7 @@ export function StayDatesPicker({
 
   const localGuestsNum = parseInt(localGuestsStr, 10);
   const isValid = localCheckIn && localCheckOut && isAfter(localCheckOut, localCheckIn) && 
-    !isNaN(localGuestsNum) && localGuestsNum >= 1 && localGuestsNum <= 21;
+    !isNaN(localGuestsNum) && localGuestsNum >= 1 && localGuestsNum <= 22;
 
   return (
     <div className="bg-card rounded-2xl border border-border p-6">
