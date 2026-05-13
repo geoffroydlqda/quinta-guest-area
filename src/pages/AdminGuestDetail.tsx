@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { isAdminEmail } from "@/lib/admin";
+import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -78,8 +78,6 @@ const AdminGuestDetailContent = () => {
   const [loading, setLoading] = useState(true);
   const [resending, setResending] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-
-  if (!isAdminEmail(user?.email)) return <Navigate to="/dashboard" replace />;
 
   const load = async () => {
     if (!guestId) return;
@@ -463,7 +461,9 @@ function Row({ label, value }: { label: string; value: any }) {
 
 const AdminGuestDetail = () => (
   <ProtectedRoute>
-    <AdminGuestDetailContent />
+    <AdminGuard>
+      <AdminGuestDetailContent />
+    </AdminGuard>
   </ProtectedRoute>
 );
 
