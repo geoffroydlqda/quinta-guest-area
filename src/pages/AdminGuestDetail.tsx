@@ -33,7 +33,7 @@ type Trip = {
   id: string; user_id: string; trip_direction: string;
   pickup_location: string; dropoff_location: string;
   trip_date: string; trip_time: string;
-  passengers_count: number; taxi_size: "4 seats" | "6 seats";
+  passengers_count: number; taxi_size: "4 seats" | "6 seats" | "8 seats";
   price_estimate: string;
   custom_price: number | null;
 };
