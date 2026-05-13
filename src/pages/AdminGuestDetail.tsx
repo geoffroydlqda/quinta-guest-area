@@ -11,7 +11,8 @@ import {
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 import { calculateFoodCostMulti } from "@/lib/foodPricing";
-import { calculateTransportationCost, getTripPriceNumeric } from "@/lib/transportationPricing";
+import { calculateTransportationCost, getFixedTripPriceNumeric, getEffectiveTripPrice } from "@/lib/transportationPricing";
+import { CustomPriceEditor } from "@/pages/Admin";
 import { EMPTY_DIET_CONFIG, type DietConfig } from "@/types/guest";
 import { getGuestStatus } from "@/lib/editLock";
 
