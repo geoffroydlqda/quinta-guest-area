@@ -7,7 +7,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const ADMIN_EMAILS = ["hello@quintamor.com"];
+const ADMIN_EMAILS = ["hello@quintamor.com", "loïs@quintamor.com"].map((e) =>
+  e.normalize("NFC").toLowerCase().trim()
+);
+const isAdmin = (email?: string | null) =>
+  !!email && ADMIN_EMAILS.includes(email.normalize("NFC").toLowerCase().trim());
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -27,7 +31,7 @@ serve(async (req) => {
     );
 
     const { data: { user }, error: authErr } = await userClient.auth.getUser();
-    if (authErr || !user || !ADMIN_EMAILS.includes((user.email || "").toLowerCase())) {
+    if (authErr || !user || !isAdmin(user.email)) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

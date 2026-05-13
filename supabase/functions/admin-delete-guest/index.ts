@@ -8,7 +8,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const ADMIN_EMAILS = ["hello@quintamor.com"];
+const ADMIN_EMAILS = ["hello@quintamor.com", "loïs@quintamor.com"].map((e) =>
+  e.normalize("NFC").toLowerCase().trim()
+);
+const isAdmin = (email?: string | null) =>
+  !!email && ADMIN_EMAILS.includes(email.normalize("NFC").toLowerCase().trim());
 
 const BodySchema = z.object({
   guest_id: z.string().uuid(),
@@ -30,8 +34,8 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
     const { data: { user }, error: authErr } = await userClient.auth.getUser();
-    const adminEmail = (user?.email || "").toLowerCase();
-    if (authErr || !user || !ADMIN_EMAILS.includes(adminEmail)) {
+    const adminEmail = (user?.email || "").normalize("NFC").toLowerCase().trim();
+    if (authErr || !user || !isAdmin(adminEmail)) {
       return json({ error: "Forbidden" }, 403);
     }
 
