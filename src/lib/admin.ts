@@ -1,13 +1,12 @@
-const normalize = (e: string) => e.normalize('NFC').toLowerCase().trim();
+export const normalizeEmail = (email?: string | null) => email?.normalize('NFC').toLowerCase().trim() ?? '';
 
 export const ADMIN_EMAILS = [
   'hello@quintamor.com',
   'loïs@quintamor.com',
   'lois@quintamor.com',
   '977luisferreira@gmail.com',
-].map(normalize);
+].map(normalizeEmail);
 
 export function isAdminEmail(email?: string | null): boolean {
-  if (!email) return false;
-  return ADMIN_EMAILS.includes(normalize(email));
+  return ADMIN_EMAILS.includes(normalizeEmail(email));
 }
