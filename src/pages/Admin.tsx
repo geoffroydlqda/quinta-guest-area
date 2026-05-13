@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { isAdminEmail } from "@/lib/admin";
+import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Download, RefreshCw, LogOut, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,7 +58,7 @@ function downloadCSV(filename: string, rows: any[][]) {
 }
 
 const AdminContent = () => {
-  const { user, isLoading: authLoading, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [data, setData] = useState<Data | null>(null);
@@ -67,29 +67,6 @@ const AdminContent = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted">("all");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
-
-  const adminMatch = isAdminEmail(user?.email);
-
-  if (import.meta.env.DEV) {
-    console.log('[Admin guard]', {
-      authLoading,
-      email: user?.email ?? null,
-      adminMatch,
-      isMobile: typeof navigator !== 'undefined' ? /Mobi|Android/i.test(navigator.userAgent) : false,
-    });
-  }
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Loading admin access…</p>
-      </div>
-    );
-  }
-
-  if (!user) return <Navigate to="/auth?mode=login" replace />;
-  if (!adminMatch) return <Navigate to="/dashboard" replace />;
 
   const load = async () => {
     setLoading(true);
@@ -431,7 +408,9 @@ function RoomsView({ data, guestName }: { data: Data; guestName: (u: string) => 
 
 const Admin = () => (
   <ProtectedRoute>
-    <AdminContent />
+    <AdminGuard>
+      <AdminContent />
+    </AdminGuard>
   </ProtectedRoute>
 );
 
