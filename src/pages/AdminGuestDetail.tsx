@@ -410,12 +410,12 @@ const AdminGuestDetailContent = () => {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          const name = resolveAirportSignName({
-                            firstPassenger: pax[0]?.first_name,
+                          const names = resolveAirportSignNames({
+                            passengers: pax,
                             guestFullName: fullName,
                           });
-                          if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, name });
-                          const ok = generateAirportSignPdf(name);
+                          if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, names });
+                          const ok = generateAirportSignPdf(names);
                           if (!ok) toast({ title: "Unable to generate airport sign PDF.", variant: "destructive" });
                         }}
                       >
