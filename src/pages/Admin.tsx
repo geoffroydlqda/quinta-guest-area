@@ -359,9 +359,9 @@ function TransportView({ data, guestName }: { data: Data; guestName: (u: string)
             {rows.map((t, i) => {
               const gName = guestName(t.user_id);
               const handleSign = () => {
-                const name = resolveAirportSignName({ guestFullName: gName });
-                if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: (t as any).id, name });
-                const ok = generateAirportSignPdf(name);
+                const names = resolveAirportSignNames({ passengers: t.passengers, guestFullName: gName });
+                if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, names });
+                const ok = generateAirportSignPdf(names);
                 if (!ok) {
                   import("sonner").then(({ toast }) => toast.error("Unable to generate airport sign PDF."));
                 }
