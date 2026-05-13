@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -15,7 +15,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [hasResolvedInitialSession, setHasResolvedInitialSession] = useState(false);
+  const hasResolvedInitialSession = useRef(false);
 
   useEffect(() => {
     // Set up auth state listener BEFORE checking session
@@ -24,7 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
-        if (event !== 'INITIAL_SESSION' || hasResolvedInitialSession) {
+        if (event !== 'INITIAL_SESSION' || hasResolvedInitialSession.current) {
           setIsLoading(false);
         }
 
@@ -48,14 +48,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
       setSession(existingSession);
       setUser(existingSession?.user ?? null);
-      setHasResolvedInitialSession(true);
+      hasResolvedInitialSession.current = true;
       setIsLoading(false);
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [hasResolvedInitialSession]);
+  }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
