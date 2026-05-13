@@ -8,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const ADMIN_EMAILS = ["hello@quintamor.com", "loïs@quintamor.com", "lois@quintamor.com"].map((e) =>
+const ADMIN_EMAILS = ["hello@quintamor.com", "loïs@quintamor.com", "lois@quintamor.com", "977luisferreira@gmail.com"].map((e) =>
   e.normalize("NFC").toLowerCase().trim()
 );
 const isAdmin = (email?: string | null) =>
