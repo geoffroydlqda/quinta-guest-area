@@ -8,6 +8,8 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { featureFlags } from "@/lib/featureFlags";
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import RoomSetup from "./pages/RoomSetup";
 import Transportation from "./pages/Transportation";
@@ -29,6 +31,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             {/* Protected routes - require authentication */}
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/room-setup" element={
