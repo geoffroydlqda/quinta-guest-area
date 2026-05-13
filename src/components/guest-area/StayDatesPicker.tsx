@@ -135,8 +135,8 @@ export function StayDatesPicker({
       return;
     }
     
-    if (numValue > 21) {
-      setGuestsError('Maximum 21 guests');
+    if (numValue > 22) {
+      setGuestsError('Maximum 22 guests');
       isUserEditingGuests.current = false;
       return;
     }
