@@ -58,7 +58,7 @@ function downloadCSV(filename: string, rows: any[][]) {
 }
 
 const AdminContent = () => {
-  const { user, signOut } = useAuth();
+  const { user, isLoading: authLoading, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [data, setData] = useState<Data | null>(null);
@@ -68,7 +68,28 @@ const AdminContent = () => {
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted">("all");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
-  if (!isAdminEmail(user?.email)) return <Navigate to="/dashboard" replace />;
+  const adminMatch = isAdminEmail(user?.email);
+
+  if (import.meta.env.DEV) {
+    console.log('[Admin guard]', {
+      authLoading,
+      email: user?.email ?? null,
+      adminMatch,
+      isMobile: typeof navigator !== 'undefined' ? /Mobi|Android/i.test(navigator.userAgent) : false,
+    });
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Loading admin access…</p>
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/auth?mode=login" replace />;
+  if (!adminMatch) return <Navigate to="/dashboard" replace />;
 
   const load = async () => {
     setLoading(true);
