@@ -206,6 +206,7 @@ const Transportation = () => {
               <ul className="space-y-1 text-muted-foreground">
                 <li>• 4-seat taxi: <strong>€{STANDARD_TAXI_PRICE_4_SEATS}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
                 <li>• 6-seat taxi: <strong>€{STANDARD_TAXI_PRICE_6_SEATS}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
+                <li>• 8-seat taxi: <strong>€{STANDARD_TAXI_PRICE_8_SEATS}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
                 <li>• Other routes: Custom offer</li>
               </ul>
             </div>
