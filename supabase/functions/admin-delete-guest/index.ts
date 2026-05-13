@@ -34,8 +34,8 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
     const { data: { user }, error: authErr } = await userClient.auth.getUser();
-    const adminEmail = (user?.email || "").toLowerCase();
-    if (authErr || !user || !ADMIN_EMAILS.includes(adminEmail)) {
+    const adminEmail = (user?.email || "").normalize("NFC").toLowerCase().trim();
+    if (authErr || !user || !isAdmin(adminEmail)) {
       return json({ error: "Forbidden" }, 403);
     }
 
