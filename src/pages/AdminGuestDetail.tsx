@@ -35,6 +35,7 @@ type Trip = {
   trip_date: string; trip_time: string;
   passengers_count: number; taxi_size: "4 seats" | "6 seats";
   price_estimate: string;
+  custom_price: number | null;
 };
 type Passenger = {
   id: string; user_id: string; trip_id: string;
