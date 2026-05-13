@@ -6,8 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2,
+  ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
 } from "lucide-react";
+import { generateAirportSignPdf, resolveAirportSignName } from "@/lib/airportSignPdf";
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 import { calculateFoodCostMulti } from "@/lib/foodPricing";
 import { calculateTransportationCost, getTripPriceNumeric } from "@/lib/transportationPricing";
