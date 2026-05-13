@@ -47,7 +47,7 @@ const GuestSummarySchema = z.object({
     (val) => !val || /^\d{4}-\d{2}-\d{2}$/.test(val),
     "Invalid date format"
   ),
-  guestsCount: z.number().int().min(1).max(21),
+  guestsCount: z.number().int().min(1).max(22),
   roomSetup: z.object({
     queenSharedCount: z.number().int().min(0).max(6),
     twinsSharedCount: z.number().int().min(0).max(6),
