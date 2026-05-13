@@ -31,7 +31,7 @@ serve(async (req) => {
     );
 
     const { data: { user }, error: authErr } = await userClient.auth.getUser();
-    if (authErr || !user || !ADMIN_EMAILS.includes((user.email || "").toLowerCase())) {
+    if (authErr || !user || !isAdmin(user.email)) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
