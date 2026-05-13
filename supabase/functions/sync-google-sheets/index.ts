@@ -89,10 +89,17 @@ serve(async (req) => {
       admin.from("food_plans").select("*"),
     ]);
 
-    const profiles: Profile[] = profilesRes.data || [];
-    const rooms = roomsRes.data || [];
-    const trips = tripsRes.data || [];
-    const foodPlans = foodRes.data || [];
+    const ADMIN_EMAILS = ['hello@quintamor.com', 'loïs@quintamor.com', 'lois@quintamor.com', '977luisferreira@gmail.com']
+      .map((e) => e.normalize('NFC').toLowerCase().trim());
+    const isAdminEmail = (email?: string | null) =>
+      !!email && ADMIN_EMAILS.includes(email.normalize('NFC').toLowerCase().trim());
+
+    const allProfiles: Profile[] = profilesRes.data || [];
+    const adminUserIds = new Set(allProfiles.filter((p: any) => isAdminEmail(p.email)).map((p: any) => p.user_id));
+    const profiles: Profile[] = allProfiles.filter((p: any) => !adminUserIds.has(p.user_id));
+    const rooms = (roomsRes.data || []).filter((r: any) => !adminUserIds.has(r.user_id));
+    const trips = (tripsRes.data || []).filter((t: any) => !adminUserIds.has(t.user_id));
+    const foodPlans = (foodRes.data || []).filter((f: any) => !adminUserIds.has(f.user_id));
 
     const profileById = new Map(profiles.map((p) => [p.user_id, p]));
     const guestName = (uid: string) => {

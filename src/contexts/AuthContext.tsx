@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { isAdminEmail } from '@/lib/admin';
 
 interface AuthContextType {
   user: User | null;
@@ -28,8 +29,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsLoading(false);
         }
 
-        // On sign-in (including OAuth callback), ensure profile exists
-        if (event === 'SIGNED_IN' && newSession?.user) {
+        // On sign-in (including OAuth callback), ensure profile exists — skip for admins
+        if (event === 'SIGNED_IN' && newSession?.user && !isAdminEmail(newSession.user.email)) {
           // Use setTimeout to avoid blocking the auth state change
           setTimeout(async () => {
             try {
