@@ -91,7 +91,7 @@ const DashboardContent = () => {
       // Fetch food data
       const { data: foodPlanData } = await supabase
         .from('food_plans')
-        .select('selections, diet_preference, diet_config')
+        .select('selections, diet_preference, diet_config, meal_times')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -113,6 +113,14 @@ const DashboardContent = () => {
               meat_lunch_dinner_count: rawConfig.meat_lunch_dinner_count || 0,
             }
           : { ...EMPTY_DIET_CONFIG };
+        const rawMealTimes = (foodPlanData as any).meal_times as { breakfast_time: string | null; lunch_time: string | null; dinner_time: string | null } | null;
+        const mealTimes = rawMealTimes && typeof rawMealTimes === 'object'
+          ? {
+              breakfast_time: rawMealTimes.breakfast_time || null,
+              lunch_time: rawMealTimes.lunch_time || null,
+              dinner_time: rawMealTimes.dinner_time || null,
+            }
+          : { breakfast_time: null, lunch_time: null, dinner_time: null };
 
         const costSummary = calculateFoodCostMulti(selections, dietConfig, guestsCount);
 
@@ -125,6 +133,7 @@ const DashboardContent = () => {
           dietBreakdown: costSummary.dietBreakdown,
           dietTotal: costSummary.dietTotal,
           totalCost: costSummary.grandTotal,
+          mealTimes,
           selections,
         });
       }
