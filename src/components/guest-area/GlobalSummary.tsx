@@ -26,6 +26,7 @@ interface GlobalSummaryProps {
     totalCost?: number;
     dietBreakdown?: { type: string; label: string; guests: number; total: number }[];
     dietTotal?: number;
+    mealTimes?: { breakfast_time: string | null; lunch_time: string | null; dinner_time: string | null };
     selections?: { date: string; fullBoard: boolean; breakfast: boolean; lunch: boolean; dinner: boolean; guests_count_day?: number }[];
   };
 }
