@@ -234,6 +234,18 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     } : null);
   }, []);
 
+  // Update meal times (global preferences)
+  const updateMealTimes = useCallback((updates: Partial<MealTimes>) => {
+    setFoodPlan(prev => prev ? {
+      ...prev,
+      meal_times: {
+        breakfast_time: updates.breakfast_time !== undefined ? updates.breakfast_time : prev.meal_times.breakfast_time,
+        lunch_time: updates.lunch_time !== undefined ? updates.lunch_time : prev.meal_times.lunch_time,
+        dinner_time: updates.dinner_time !== undefined ? updates.dinner_time : prev.meal_times.dinner_time,
+      },
+    } : null);
+  }, []);
+
   // Auto-save function
   const autoSave = useCallback(async (): Promise<boolean> => {
     if (!user || !foodPlan) return false;
@@ -243,6 +255,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
         notes_food: foodPlan.notes_food || null,
         diet_preference: foodPlan.diet_preference || null,
         diet_config: foodPlan.diet_config as any,
+        meal_times: foodPlan.meal_times as any,
         selections: JSON.parse(JSON.stringify(foodPlan.selections)),
       };
 
