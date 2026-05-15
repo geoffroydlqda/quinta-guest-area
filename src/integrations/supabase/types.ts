@@ -65,6 +65,7 @@ export type Database = {
           diet_config: Json
           diet_preference: string | null
           id: string
+          meal_times: Json
           notes_food: string | null
           selections: Json
           status_food: string
@@ -76,6 +77,7 @@ export type Database = {
           diet_config?: Json
           diet_preference?: string | null
           id?: string
+          meal_times?: Json
           notes_food?: string | null
           selections?: Json
           status_food?: string
@@ -87,6 +89,7 @@ export type Database = {
           diet_config?: Json
           diet_preference?: string | null
           id?: string
+          meal_times?: Json
           notes_food?: string | null
           selections?: Json
           status_food?: string
