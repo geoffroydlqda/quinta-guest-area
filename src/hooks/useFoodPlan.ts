@@ -2,8 +2,8 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import type { FoodPlan, FoodDaySelection, DietPreference, DietConfig } from '@/types/guest';
-import { EMPTY_DIET_CONFIG } from '@/types/guest';
+import type { FoodPlan, FoodDaySelection, DietPreference, DietConfig, MealTimes } from '@/types/guest';
+import { EMPTY_DIET_CONFIG, EMPTY_MEAL_TIMES } from '@/types/guest';
 import { generateDatesInclusive } from '@/lib/localDate';
 import { triggerSheetsSync } from '@/lib/sheetsSync';
 
