@@ -172,6 +172,29 @@ export function GlobalSummary({
           </div>
           {hasFood ? (
             <div className="text-sm text-muted-foreground space-y-1 pl-6">
+              {hasMealTimes && (
+                <div className="space-y-1 mb-2">
+                  <div className="font-medium text-foreground">Meal times</div>
+                  {mealTimes!.breakfast_time && (
+                    <div className="flex justify-between">
+                      <span>Breakfast</span>
+                      <span className="font-semibold text-foreground">{mealTimes!.breakfast_time}</span>
+                    </div>
+                  )}
+                  {mealTimes!.lunch_time && (
+                    <div className="flex justify-between">
+                      <span>Lunch</span>
+                      <span className="font-semibold text-foreground">{mealTimes!.lunch_time}</span>
+                    </div>
+                  )}
+                  {mealTimes!.dinner_time && (
+                    <div className="flex justify-between">
+                      <span>Dinner</span>
+                      <span className="font-semibold text-foreground">{mealTimes!.dinner_time}</span>
+                    </div>
+                  )}
+                </div>
+              )}
               {activeDiets.length > 0 && (
                 <div className="space-y-1">
                   {activeDiets.map((d) => (
