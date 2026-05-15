@@ -86,6 +86,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
       const syncedSelections = syncSelectionsToDateRange(dbSelections, days);
       
       const dbDietConfig = (data as any).diet_config as DietConfig | null;
+      const dbMealTimes = (data as any).meal_times as MealTimes | null;
       const typedPlan: FoodPlan = {
         id: data.id,
         user_id: data.user_id,
@@ -101,6 +102,13 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
               meat_lunch_dinner_count: dbDietConfig.meat_lunch_dinner_count || 0,
             }
           : { ...EMPTY_DIET_CONFIG },
+        meal_times: dbMealTimes && typeof dbMealTimes === 'object'
+          ? {
+              breakfast_time: dbMealTimes.breakfast_time || null,
+              lunch_time: dbMealTimes.lunch_time || null,
+              dinner_time: dbMealTimes.dinner_time || null,
+            }
+          : { ...EMPTY_MEAL_TIMES },
         selections: syncedSelections,
       };
       
