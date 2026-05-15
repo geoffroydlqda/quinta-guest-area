@@ -98,6 +98,40 @@ const Food = () => {
           <AutoSaveIndicator status={saveStatus} />
         </div>
 
+        {/* Meal times (global) */}
+        <div className="bg-card rounded-2xl border border-border p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="w-4 h-4 text-primary" />
+            <Label className="text-base font-semibold">Meal times</Label>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Optional. Select your preferred times for the entire stay.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <MealTimeSelect
+              label="Breakfast time"
+              value={mealTimes.breakfast_time}
+              options={BREAKFAST_TIME_OPTIONS}
+              disabled={isLocked}
+              onChange={(v) => updateMealTimes({ breakfast_time: v })}
+            />
+            <MealTimeSelect
+              label="Lunch time"
+              value={mealTimes.lunch_time}
+              options={LUNCH_TIME_OPTIONS}
+              disabled={isLocked}
+              onChange={(v) => updateMealTimes({ lunch_time: v })}
+            />
+            <MealTimeSelect
+              label="Dinner time"
+              value={mealTimes.dinner_time}
+              options={DINNER_TIME_OPTIONS}
+              disabled={isLocked}
+              onChange={(v) => updateMealTimes({ dinner_time: v })}
+            />
+          </div>
+        </div>
+
         {/* Food Preferences (multi-diet) */}
         <div className="bg-card rounded-2xl border border-border p-6">
           <Label className="text-base font-semibold mb-1 block">Food preferences</Label>
