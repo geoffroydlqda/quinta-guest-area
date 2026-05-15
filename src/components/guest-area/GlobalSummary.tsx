@@ -59,8 +59,10 @@ export function GlobalSummary({
   const hasRoomSetup = toolStatuses.roomSetup !== 'not_set' && roomSetupData;
   const hasTransportation = toolStatuses.transportation !== 'not_set' && transportationData;
   const activeDiets = (foodData?.dietBreakdown || []).filter(d => d.guests > 0);
+  const mealTimes = foodData?.mealTimes;
+  const hasMealTimes = !!(mealTimes && (mealTimes.breakfast_time || mealTimes.lunch_time || mealTimes.dinner_time));
   const hasFood = toolStatuses.food !== 'not_set' && foodData &&
-    (activeDiets.length > 0 || foodData.fullBoardDays > 0 || foodData.breakfastOnlyDays > 0 || foodData.customDays > 0);
+    (activeDiets.length > 0 || foodData.fullBoardDays > 0 || foodData.breakfastOnlyDays > 0 || foodData.customDays > 0 || hasMealTimes);
 
   return (
     <div className="bg-card rounded-2xl border border-border p-6">
