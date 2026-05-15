@@ -356,7 +356,7 @@ function TransportView({ data, guestName }: { data: Data; guestName: (u: string)
       <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-muted"><tr className="text-left">
-            {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Custom €","Sign"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
+            {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Custom €","Sign","Notify"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.map((t, i) => {
