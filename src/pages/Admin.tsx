@@ -469,6 +469,25 @@ function CustomPriceEditor({ trip, onSaved }: { trip: { id: string; custom_price
 
 export { CustomPriceEditor };
 
+function NotifyGuestButton({ userId, guestName }: { userId: string; guestName: string }) {
+  const [sending, setSending] = useState(false);
+  const { toast } = useToast();
+  const send = async () => {
+    if (!confirm(`Send updated transportation pricing email to ${guestName}?`)) return;
+    setSending(true);
+    const { error } = await supabase.functions.invoke("notify-transport-pricing", { body: { user_id: userId } });
+    setSending(false);
+    if (error) toast({ title: "Notify failed", description: error.message, variant: "destructive" });
+    else toast({ title: `Notification sent to ${guestName}` });
+  };
+  return (
+    <Button size="sm" variant="outline" onClick={send} disabled={sending}>
+      {sending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Mail className="w-4 h-4 mr-1" />}
+      Notify guest
+    </Button>
+  );
+}
+
 function RoomsView({ data, guestName }: { data: Data; guestName: (u: string) => string }) {
   return (
     <div className="space-y-3">
