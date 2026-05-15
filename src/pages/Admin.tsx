@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown } from "lucide-react";
+import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -356,7 +356,7 @@ function TransportView({ data, guestName }: { data: Data; guestName: (u: string)
       <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-muted"><tr className="text-left">
-            {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Custom €","Sign"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
+            {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Custom €","Sign","Notify"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.map((t, i) => {
@@ -392,6 +392,9 @@ function TransportView({ data, guestName }: { data: Data; guestName: (u: string)
                     <Button size="sm" variant="outline" onClick={handleSign}>
                       <FileDown className="w-4 h-4 mr-1" />Airport sign
                     </Button>
+                  </td>
+                  <td className="px-3 py-2">
+                    <NotifyGuestButton userId={t.user_id} guestName={gName} />
                   </td>
                 </tr>
               );
@@ -465,6 +468,25 @@ function CustomPriceEditor({ trip, onSaved }: { trip: { id: string; custom_price
 }
 
 export { CustomPriceEditor };
+
+function NotifyGuestButton({ userId, guestName }: { userId: string; guestName: string }) {
+  const [sending, setSending] = useState(false);
+  const { toast } = useToast();
+  const send = async () => {
+    if (!confirm(`Send updated transportation pricing email to ${guestName}?`)) return;
+    setSending(true);
+    const { error } = await supabase.functions.invoke("notify-transport-pricing", { body: { user_id: userId } });
+    setSending(false);
+    if (error) toast({ title: "Notify failed", description: error.message, variant: "destructive" });
+    else toast({ title: `Notification sent to ${guestName}` });
+  };
+  return (
+    <Button size="sm" variant="outline" onClick={send} disabled={sending}>
+      {sending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Mail className="w-4 h-4 mr-1" />}
+      Notify guest
+    </Button>
+  );
+}
 
 function RoomsView({ data, guestName }: { data: Data; guestName: (u: string) => string }) {
   return (
