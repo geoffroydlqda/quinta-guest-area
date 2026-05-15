@@ -43,7 +43,9 @@ type Passenger = {
 };
 type FoodPlan = {
   user_id: string; selections: any[]; diet_preference: string | null;
-  diet_config: DietConfig | null; notes_food: string | null; status_food: string;
+  diet_config: DietConfig | null;
+  meal_times: { breakfast_time: string | null; lunch_time: string | null; dinner_time: string | null } | null;
+  notes_food: string | null; status_food: string;
   updated_at: string;
 };
 
