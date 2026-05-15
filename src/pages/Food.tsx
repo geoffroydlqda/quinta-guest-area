@@ -353,15 +353,14 @@ function MealTimeSelect({
     <div>
       <Label className="text-sm font-medium mb-1.5 block">{label}</Label>
       <Select
-        value={value ?? '__none__'}
-        onValueChange={(v) => onChange(v === '__none__' ? null : v)}
+        value={value ?? undefined}
+        onValueChange={(v) => onChange(v || null)}
         disabled={disabled}
       >
         <SelectTrigger className="w-full">
-          <SelectValue placeholder="No preference" />
+          <SelectValue placeholder="Select" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="__none__">No preference</SelectItem>
           {options.map((opt) => (
             <SelectItem key={opt} value={opt}>{opt}</SelectItem>
           ))}
