@@ -74,6 +74,11 @@ const GuestSummarySchema = z.object({
       total: z.number().min(0).max(1000000).optional(),
     })).optional(),
     dietTotal: z.number().int().min(0).max(100).optional(),
+    mealTimes: z.object({
+      breakfast_time: z.string().max(10).nullable(),
+      lunch_time: z.string().max(10).nullable(),
+      dinner_time: z.string().max(10).nullable(),
+    }).optional().nullable(),
   }).nullable(),
 });
 
