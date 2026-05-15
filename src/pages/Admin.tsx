@@ -393,6 +393,9 @@ function TransportView({ data, guestName }: { data: Data; guestName: (u: string)
                       <FileDown className="w-4 h-4 mr-1" />Airport sign
                     </Button>
                   </td>
+                  <td className="px-3 py-2">
+                    <NotifyGuestButton userId={t.user_id} guestName={gName} />
+                  </td>
                 </tr>
               );
             })}
