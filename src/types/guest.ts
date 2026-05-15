@@ -74,6 +74,22 @@ export function dietConfigTotal(c: DietConfig | null | undefined): number {
   return (c.vegetarian_count || 0) + (c.meat_dinner_count || 0) + (c.meat_lunch_dinner_count || 0);
 }
 
+export interface MealTimes {
+  breakfast_time: string | null;
+  lunch_time: string | null;
+  dinner_time: string | null;
+}
+
+export const EMPTY_MEAL_TIMES: MealTimes = {
+  breakfast_time: null,
+  lunch_time: null,
+  dinner_time: null,
+};
+
+export const BREAKFAST_TIME_OPTIONS = ['7:30', '8:00', '8:30', '9:00', '9:30', '10:00'];
+export const LUNCH_TIME_OPTIONS = ['12:00', '12:30', '13:00', '13:30', '14:00'];
+export const DINNER_TIME_OPTIONS = ['18:30', '19:00', '19:30', '20:00', '20:30'];
+
 export interface FoodPlan {
   id: string;
   user_id: string;
@@ -81,6 +97,7 @@ export interface FoodPlan {
   notes_food: string | null;
   diet_preference: DietPreference | null;
   diet_config: DietConfig;
+  meal_times: MealTimes;
   selections: FoodDaySelection[];
   created_at: string;
   updated_at: string;

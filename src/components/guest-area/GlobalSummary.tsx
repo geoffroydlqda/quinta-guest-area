@@ -26,6 +26,7 @@ interface GlobalSummaryProps {
     totalCost?: number;
     dietBreakdown?: { type: string; label: string; guests: number; total: number }[];
     dietTotal?: number;
+    mealTimes?: { breakfast_time: string | null; lunch_time: string | null; dinner_time: string | null };
     selections?: { date: string; fullBoard: boolean; breakfast: boolean; lunch: boolean; dinner: boolean; guests_count_day?: number }[];
   };
 }
@@ -58,8 +59,10 @@ export function GlobalSummary({
   const hasRoomSetup = toolStatuses.roomSetup !== 'not_set' && roomSetupData;
   const hasTransportation = toolStatuses.transportation !== 'not_set' && transportationData;
   const activeDiets = (foodData?.dietBreakdown || []).filter(d => d.guests > 0);
+  const mealTimes = foodData?.mealTimes;
+  const hasMealTimes = !!(mealTimes && (mealTimes.breakfast_time || mealTimes.lunch_time || mealTimes.dinner_time));
   const hasFood = toolStatuses.food !== 'not_set' && foodData &&
-    (activeDiets.length > 0 || foodData.fullBoardDays > 0 || foodData.breakfastOnlyDays > 0 || foodData.customDays > 0);
+    (activeDiets.length > 0 || foodData.fullBoardDays > 0 || foodData.breakfastOnlyDays > 0 || foodData.customDays > 0 || hasMealTimes);
 
   return (
     <div className="bg-card rounded-2xl border border-border p-6">
@@ -169,6 +172,29 @@ export function GlobalSummary({
           </div>
           {hasFood ? (
             <div className="text-sm text-muted-foreground space-y-1 pl-6">
+              {hasMealTimes && (
+                <div className="space-y-1 mb-2">
+                  <div className="font-medium text-foreground">Meal times</div>
+                  {mealTimes!.breakfast_time && (
+                    <div className="flex justify-between">
+                      <span>Breakfast</span>
+                      <span className="font-semibold text-foreground">{mealTimes!.breakfast_time}</span>
+                    </div>
+                  )}
+                  {mealTimes!.lunch_time && (
+                    <div className="flex justify-between">
+                      <span>Lunch</span>
+                      <span className="font-semibold text-foreground">{mealTimes!.lunch_time}</span>
+                    </div>
+                  )}
+                  {mealTimes!.dinner_time && (
+                    <div className="flex justify-between">
+                      <span>Dinner</span>
+                      <span className="font-semibold text-foreground">{mealTimes!.dinner_time}</span>
+                    </div>
+                  )}
+                </div>
+              )}
               {activeDiets.length > 0 && (
                 <div className="space-y-1">
                   {activeDiets.map((d) => (

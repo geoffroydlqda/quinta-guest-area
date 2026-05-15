@@ -2,8 +2,8 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import type { FoodPlan, FoodDaySelection, DietPreference, DietConfig } from '@/types/guest';
-import { EMPTY_DIET_CONFIG } from '@/types/guest';
+import type { FoodPlan, FoodDaySelection, DietPreference, DietConfig, MealTimes } from '@/types/guest';
+import { EMPTY_DIET_CONFIG, EMPTY_MEAL_TIMES } from '@/types/guest';
 import { generateDatesInclusive } from '@/lib/localDate';
 import { triggerSheetsSync } from '@/lib/sheetsSync';
 
@@ -86,6 +86,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
       const syncedSelections = syncSelectionsToDateRange(dbSelections, days);
       
       const dbDietConfig = (data as any).diet_config as DietConfig | null;
+      const dbMealTimes = (data as any).meal_times as MealTimes | null;
       const typedPlan: FoodPlan = {
         id: data.id,
         user_id: data.user_id,
@@ -101,6 +102,13 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
               meat_lunch_dinner_count: dbDietConfig.meat_lunch_dinner_count || 0,
             }
           : { ...EMPTY_DIET_CONFIG },
+        meal_times: dbMealTimes && typeof dbMealTimes === 'object'
+          ? {
+              breakfast_time: dbMealTimes.breakfast_time || null,
+              lunch_time: dbMealTimes.lunch_time || null,
+              dinner_time: dbMealTimes.dinner_time || null,
+            }
+          : { ...EMPTY_MEAL_TIMES },
         selections: syncedSelections,
       };
       
@@ -226,6 +234,18 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     } : null);
   }, []);
 
+  // Update meal times (global preferences)
+  const updateMealTimes = useCallback((updates: Partial<MealTimes>) => {
+    setFoodPlan(prev => prev ? {
+      ...prev,
+      meal_times: {
+        breakfast_time: updates.breakfast_time !== undefined ? updates.breakfast_time : prev.meal_times.breakfast_time,
+        lunch_time: updates.lunch_time !== undefined ? updates.lunch_time : prev.meal_times.lunch_time,
+        dinner_time: updates.dinner_time !== undefined ? updates.dinner_time : prev.meal_times.dinner_time,
+      },
+    } : null);
+  }, []);
+
   // Auto-save function
   const autoSave = useCallback(async (): Promise<boolean> => {
     if (!user || !foodPlan) return false;
@@ -235,6 +255,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
         notes_food: foodPlan.notes_food || null,
         diet_preference: foodPlan.diet_preference || null,
         diet_config: foodPlan.diet_config as any,
+        meal_times: foodPlan.meal_times as any,
         selections: JSON.parse(JSON.stringify(foodPlan.selections)),
       };
 
@@ -291,6 +312,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     updateDayGuests,
     updateDietPreference,
     updateDietConfig,
+    updateMealTimes,
     updateNotes,
     autoSave,
     summary,

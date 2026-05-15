@@ -6,7 +6,7 @@ import { useFoodPlan } from '@/hooks/useFoodPlan';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
 import { calculateFoodCostMulti, DIET_TYPES } from '@/lib/foodPricing';
-import { dietConfigTotal } from '@/types/guest';
+import { dietConfigTotal, BREAKFAST_TIME_OPTIONS, LUNCH_TIME_OPTIONS, DINNER_TIME_OPTIONS } from '@/types/guest';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 import { FoodCostSummaryCard } from '@/components/guest-area/FoodCostSummary';
@@ -14,7 +14,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, Check, Info, Minus, Plus } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, AlertCircle, Check, Info, Minus, Plus, Clock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +32,7 @@ const Food = () => {
     updateDaySelection,
     updateDayGuests,
     updateDietConfig,
+    updateMealTimes,
     updateNotes,
     autoSave,
   } = useFoodPlan(profile?.check_in_date || null, profile?.check_out_date || null, guestsCount);
@@ -40,6 +42,7 @@ const Food = () => {
   const isLocked = guestStatus.isEditingLocked;
 
   const dietConfig = foodPlan?.diet_config || { vegetarian_count: 0, meat_dinner_count: 0, meat_lunch_dinner_count: 0 };
+  const mealTimes = foodPlan?.meal_times || { breakfast_time: null, lunch_time: null, dinner_time: null };
   const dietTotal = dietConfigTotal(dietConfig);
   const overLimit = dietTotal > guestsCount;
 
@@ -53,7 +56,7 @@ const Food = () => {
   // Trigger auto-save
   useEffect(() => {
     if (foodPlan && !isLocked) triggerSave();
-  }, [foodPlan?.selections, foodPlan?.diet_config, foodPlan?.notes_food]);
+  }, [foodPlan?.selections, foodPlan?.diet_config, foodPlan?.meal_times, foodPlan?.notes_food]);
 
   if (authLoading || profileLoading) {
     return (
@@ -93,6 +96,40 @@ const Food = () => {
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex justify-end">
           <AutoSaveIndicator status={saveStatus} />
+        </div>
+
+        {/* Meal times (global) */}
+        <div className="bg-card rounded-2xl border border-border p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="w-4 h-4 text-primary" />
+            <Label className="text-base font-semibold">Meal times</Label>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Optional. Select your preferred times for the entire stay.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <MealTimeSelect
+              label="Breakfast time"
+              value={mealTimes.breakfast_time}
+              options={BREAKFAST_TIME_OPTIONS}
+              disabled={isLocked}
+              onChange={(v) => updateMealTimes({ breakfast_time: v })}
+            />
+            <MealTimeSelect
+              label="Lunch time"
+              value={mealTimes.lunch_time}
+              options={LUNCH_TIME_OPTIONS}
+              disabled={isLocked}
+              onChange={(v) => updateMealTimes({ lunch_time: v })}
+            />
+            <MealTimeSelect
+              label="Dinner time"
+              value={mealTimes.dinner_time}
+              options={DINNER_TIME_OPTIONS}
+              disabled={isLocked}
+              onChange={(v) => updateMealTimes({ dinner_time: v })}
+            />
+          </div>
         </div>
 
         {/* Food Preferences (multi-diet) */}
@@ -300,6 +337,37 @@ function MealToggle({ selected, disabled, onClick }: { selected: boolean; disabl
     >
       {selected && <Check className="w-5 h-5" />}
     </button>
+  );
+}
+
+function MealTimeSelect({
+  label, value, options, disabled, onChange,
+}: {
+  label: string;
+  value: string | null;
+  options: string[];
+  disabled?: boolean;
+  onChange: (v: string | null) => void;
+}) {
+  return (
+    <div>
+      <Label className="text-sm font-medium mb-1.5 block">{label}</Label>
+      <Select
+        value={value ?? '__none__'}
+        onValueChange={(v) => onChange(v === '__none__' ? null : v)}
+        disabled={disabled}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="No preference" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">No preference</SelectItem>
+          {options.map((opt) => (
+            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 

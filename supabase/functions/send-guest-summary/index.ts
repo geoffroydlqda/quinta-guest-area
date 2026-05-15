@@ -74,6 +74,11 @@ const GuestSummarySchema = z.object({
       total: z.number().min(0).max(1000000).optional(),
     })).optional(),
     dietTotal: z.number().int().min(0).max(100).optional(),
+    mealTimes: z.object({
+      breakfast_time: z.string().max(10).nullable(),
+      lunch_time: z.string().max(10).nullable(),
+      dinner_time: z.string().max(10).nullable(),
+    }).optional().nullable(),
   }).nullable(),
 });
 
@@ -288,6 +293,14 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                     </td></tr>
                     <tr><td style="padding: 12px 0;">
                       ${food ? `
+                      ${food.mealTimes && (food.mealTimes.breakfast_time || food.mealTimes.lunch_time || food.mealTimes.dinner_time) ? `
+                        <p style="margin: 0 0 8px 0; color: #333; font-weight: 600;">Meal times:</p>
+                        <table width="100%" style="margin-bottom: 12px;">
+                          ${food.mealTimes.breakfast_time ? `<tr><td style="padding: 4px 0; color: #333;">Breakfast</td><td style="padding: 4px 0; text-align: right; font-weight: 600;">${escapeHtml(food.mealTimes.breakfast_time)}</td></tr>` : ''}
+                          ${food.mealTimes.lunch_time ? `<tr><td style="padding: 4px 0; color: #333;">Lunch</td><td style="padding: 4px 0; text-align: right; font-weight: 600;">${escapeHtml(food.mealTimes.lunch_time)}</td></tr>` : ''}
+                          ${food.mealTimes.dinner_time ? `<tr><td style="padding: 4px 0; color: #333;">Dinner</td><td style="padding: 4px 0; text-align: right; font-weight: 600;">${escapeHtml(food.mealTimes.dinner_time)}</td></tr>` : ''}
+                        </table>
+                      ` : ''}
                       ${food.dietBreakdown && food.dietBreakdown.filter((d:any)=>d.guests>0).length > 0 ? `
                         <p style="margin: 0 0 8px 0; color: #333; font-weight: 600;">Food preferences:</p>
                         <table width="100%" style="margin-bottom: 12px;">

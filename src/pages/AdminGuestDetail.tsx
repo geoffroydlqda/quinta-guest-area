@@ -43,7 +43,9 @@ type Passenger = {
 };
 type FoodPlan = {
   user_id: string; selections: any[]; diet_preference: string | null;
-  diet_config: DietConfig | null; notes_food: string | null; status_food: string;
+  diet_config: DietConfig | null;
+  meal_times: { breakfast_time: string | null; lunch_time: string | null; dinner_time: string | null } | null;
+  notes_food: string | null; status_food: string;
   updated_at: string;
 };
 
@@ -304,6 +306,22 @@ const AdminGuestDetailContent = () => {
           </h2>
           {food ? (
             <div className="space-y-4 text-sm">
+              {(() => {
+                const mt = food.meal_times;
+                const has = mt && (mt.breakfast_time || mt.lunch_time || mt.dinner_time);
+                if (!has) return null;
+                return (
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground mb-1">Meal times</div>
+                    <div className="space-y-1">
+                      {mt!.breakfast_time && <Row label="Breakfast" value={mt!.breakfast_time} />}
+                      {mt!.lunch_time && <Row label="Lunch" value={mt!.lunch_time} />}
+                      {mt!.dinner_time && <Row label="Dinner" value={mt!.dinner_time} />}
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div>
                 <div className="text-xs uppercase text-muted-foreground mb-1">Food preferences</div>
                 {activeDiets.length === 0 ? (
