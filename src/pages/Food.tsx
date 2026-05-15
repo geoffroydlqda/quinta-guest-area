@@ -32,6 +32,7 @@ const Food = () => {
     updateDaySelection,
     updateDayGuests,
     updateDietConfig,
+    updateMealTimes,
     updateNotes,
     autoSave,
   } = useFoodPlan(profile?.check_in_date || null, profile?.check_out_date || null, guestsCount);
@@ -41,6 +42,7 @@ const Food = () => {
   const isLocked = guestStatus.isEditingLocked;
 
   const dietConfig = foodPlan?.diet_config || { vegetarian_count: 0, meat_dinner_count: 0, meat_lunch_dinner_count: 0 };
+  const mealTimes = foodPlan?.meal_times || { breakfast_time: null, lunch_time: null, dinner_time: null };
   const dietTotal = dietConfigTotal(dietConfig);
   const overLimit = dietTotal > guestsCount;
 
@@ -54,7 +56,7 @@ const Food = () => {
   // Trigger auto-save
   useEffect(() => {
     if (foodPlan && !isLocked) triggerSave();
-  }, [foodPlan?.selections, foodPlan?.diet_config, foodPlan?.notes_food]);
+  }, [foodPlan?.selections, foodPlan?.diet_config, foodPlan?.meal_times, foodPlan?.notes_food]);
 
   if (authLoading || profileLoading) {
     return (
