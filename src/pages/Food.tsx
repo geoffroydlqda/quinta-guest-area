@@ -340,4 +340,35 @@ function MealToggle({ selected, disabled, onClick }: { selected: boolean; disabl
   );
 }
 
+function MealTimeSelect({
+  label, value, options, disabled, onChange,
+}: {
+  label: string;
+  value: string | null;
+  options: string[];
+  disabled?: boolean;
+  onChange: (v: string | null) => void;
+}) {
+  return (
+    <div>
+      <Label className="text-sm font-medium mb-1.5 block">{label}</Label>
+      <Select
+        value={value ?? '__none__'}
+        onValueChange={(v) => onChange(v === '__none__' ? null : v)}
+        disabled={disabled}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="No preference" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">No preference</SelectItem>
+          {options.map((opt) => (
+            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export default Food;
