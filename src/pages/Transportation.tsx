@@ -21,6 +21,19 @@ import { format } from 'date-fns';
 import type { TransportationTrip } from '@/types/guest';
 import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS, STANDARD_TAXI_PRICE_8_SEATS } from '@/types/guest';
 
+// Parse a YYYY-MM-DD calendar date into a local Date (no timezone shift).
+function parseLocalDate(d: string): Date {
+  const [y, m, day] = d.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, day || 1);
+}
+// Today's calendar date in local time as YYYY-MM-DD (no UTC shift).
+function todayLocalISO(): string {
+  const n = new Date();
+  const mm = String(n.getMonth() + 1).padStart(2, '0');
+  const dd = String(n.getDate()).padStart(2, '0');
+  return `${n.getFullYear()}-${mm}-${dd}`;
+}
+
 // Import driver image
 import driverImage from '@/assets/driver-luis.jpeg';
 
