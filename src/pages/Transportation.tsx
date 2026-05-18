@@ -68,7 +68,7 @@ const Transportation = () => {
   }, [trips]);
 
   // Default trip date to check-in date if available
-  const defaultTripDate = profile?.check_in_date || new Date().toISOString().split('T')[0];
+  const defaultTripDate = profile?.check_in_date || todayLocalISO();
 
   const [showAddTrip, setShowAddTrip] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
