@@ -365,14 +365,16 @@ function TransportView({ data, guestName, onTripUpdated }: { data: Data; guestNa
               const handleSign = () => {
                 const names = resolveAirportSignNames({ passengers: t.passengers, guestFullName: gName });
                 if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, names });
-                const ok = generateAirportSignPdf(names);
+                const slug = gName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "guest";
+                const filename = `airport-sign-${slug}-${t.trip_date}.pdf`;
+                const ok = generateAirportSignPdf(names, filename);
                 if (!ok) {
                   import("sonner").then(({ toast }) => toast.error("Unable to generate airport sign PDF."));
                 }
               };
               return (
                 <tr key={i} className="border-t border-border">
-                  <td className="px-3 py-2">{t.trip_date}</td>
+                  <td className="px-3 py-2"><TripDateEditor trip={t} onSaved={onTripUpdated} /></td>
                   <td className="px-3 py-2">{t.trip_time}</td>
                   <td className="px-3 py-2">{gName}</td>
                   <td className="px-3 py-2">{t.trip_direction}</td>
