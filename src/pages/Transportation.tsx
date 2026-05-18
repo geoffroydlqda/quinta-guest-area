@@ -508,7 +508,7 @@ function TripCard({
         <div className="grid grid-cols-2 gap-4 text-sm mb-4">
           <div>
             <span className="text-muted-foreground">Date: </span>
-            {format(new Date(trip.trip_date), 'dd MMM yyyy')}
+            {format(parseLocalDate(trip.trip_date), 'dd MMM yyyy')}
           </div>
           <div>
             <span className="text-muted-foreground">Time: </span>
