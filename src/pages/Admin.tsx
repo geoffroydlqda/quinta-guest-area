@@ -471,6 +471,45 @@ function CustomPriceEditor({ trip, onSaved }: { trip: { id: string; custom_price
 
 export { CustomPriceEditor };
 
+function TripDateEditor({ trip, onSaved }: { trip: { id: string; trip_date: string; user_id: string }; onSaved?: () => void }) {
+  const [value, setValue] = useState<string>(trip.trip_date || "");
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  // Check if guest has stay dates and compare
+  const save = async (next: string) => {
+    if (!next || next === trip.trip_date) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("transportation_trips")
+      .update({ trip_date: next })
+      .eq("id", trip.id);
+    setSaving(false);
+    if (error) {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      setValue(trip.trip_date);
+      return;
+    }
+    toast({ title: "Trip date updated" });
+    onSaved?.();
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="date"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => save(value)}
+        disabled={saving}
+        className="h-8 w-[150px]"
+      />
+      {saving && <Loader2 className="w-3 h-3 animate-spin" />}
+    </div>
+  );
+}
+
+
 function NotifyGuestButton({ userId, guestName }: { userId: string; guestName: string }) {
   const [sending, setSending] = useState(false);
   const { toast } = useToast();
