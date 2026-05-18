@@ -140,7 +140,7 @@ const Transportation = () => {
       pickup_custom: '',
       dropoff_location: 'Quinta do Amor',
       dropoff_custom: '',
-      trip_date: profile?.check_in_date || new Date().toISOString().split('T')[0],
+      trip_date: profile?.check_in_date || todayLocalISO(),
       trip_time: '',
       passengers_count: 1,
       taxi_size: '4 seats',
