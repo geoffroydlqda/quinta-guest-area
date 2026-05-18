@@ -228,7 +228,7 @@ const AdminContent = () => {
           </TabsContent>
 
           <TabsContent value="transport">
-            <TransportView data={data} guestName={guestName} />
+            <TransportView data={data} guestName={guestName} onTripUpdated={load} />
           </TabsContent>
 
           <TabsContent value="rooms">
@@ -337,7 +337,7 @@ function FoodView({ data, guestName }: { data: Data; guestName: (u: string) => s
   );
 }
 
-function TransportView({ data, guestName }: { data: Data; guestName: (u: string) => string }) {
+function TransportView({ data, guestName, onTripUpdated }: { data: Data; guestName: (u: string) => string; onTripUpdated?: () => void }) {
   const rows = useMemo(() =>
     [...data.trips].sort((a, b) => `${a.trip_date} ${a.trip_time}`.localeCompare(`${b.trip_date} ${b.trip_time}`)),
     [data]
@@ -365,14 +365,16 @@ function TransportView({ data, guestName }: { data: Data; guestName: (u: string)
               const handleSign = () => {
                 const names = resolveAirportSignNames({ passengers: t.passengers, guestFullName: gName });
                 if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, names });
-                const ok = generateAirportSignPdf(names);
+                const slug = gName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "guest";
+                const filename = `airport-sign-${slug}-${t.trip_date}.pdf`;
+                const ok = generateAirportSignPdf(names, filename);
                 if (!ok) {
                   import("sonner").then(({ toast }) => toast.error("Unable to generate airport sign PDF."));
                 }
               };
               return (
                 <tr key={i} className="border-t border-border">
-                  <td className="px-3 py-2">{t.trip_date}</td>
+                  <td className="px-3 py-2"><TripDateEditor trip={t} onSaved={onTripUpdated} /></td>
                   <td className="px-3 py-2">{t.trip_time}</td>
                   <td className="px-3 py-2">{gName}</td>
                   <td className="px-3 py-2">{t.trip_direction}</td>
@@ -468,6 +470,45 @@ function CustomPriceEditor({ trip, onSaved }: { trip: { id: string; custom_price
 }
 
 export { CustomPriceEditor };
+
+function TripDateEditor({ trip, onSaved }: { trip: { id: string; trip_date: string; user_id: string }; onSaved?: () => void }) {
+  const [value, setValue] = useState<string>(trip.trip_date || "");
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  // Check if guest has stay dates and compare
+  const save = async (next: string) => {
+    if (!next || next === trip.trip_date) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("transportation_trips")
+      .update({ trip_date: next })
+      .eq("id", trip.id);
+    setSaving(false);
+    if (error) {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      setValue(trip.trip_date);
+      return;
+    }
+    toast({ title: "Trip date updated" });
+    onSaved?.();
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="date"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => save(value)}
+        disabled={saving}
+        className="h-8 w-[150px]"
+      />
+      {saving && <Loader2 className="w-3 h-3 animate-spin" />}
+    </div>
+  );
+}
+
 
 function NotifyGuestButton({ userId, guestName }: { userId: string; guestName: string }) {
   const [sending, setSending] = useState(false);
