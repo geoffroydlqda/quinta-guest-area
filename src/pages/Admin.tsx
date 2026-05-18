@@ -228,7 +228,7 @@ const AdminContent = () => {
           </TabsContent>
 
           <TabsContent value="transport">
-            <TransportView data={data} guestName={guestName} />
+            <TransportView data={data} guestName={guestName} onTripUpdated={load} />
           </TabsContent>
 
           <TabsContent value="rooms">
