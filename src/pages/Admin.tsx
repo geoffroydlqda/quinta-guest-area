@@ -337,7 +337,7 @@ function FoodView({ data, guestName }: { data: Data; guestName: (u: string) => s
   );
 }
 
-function TransportView({ data, guestName }: { data: Data; guestName: (u: string) => string }) {
+function TransportView({ data, guestName, onTripUpdated }: { data: Data; guestName: (u: string) => string; onTripUpdated?: () => void }) {
   const rows = useMemo(() =>
     [...data.trips].sort((a, b) => `${a.trip_date} ${a.trip_time}`.localeCompare(`${b.trip_date} ${b.trip_time}`)),
     [data]
