@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
-import { syncTripCalendar, backfillTripCalendars } from "@/lib/calendarSync";
+import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
 import { CalendarCheck, AlertTriangle } from "lucide-react";
 
 const STATUS_BADGE: Record<GuestStatusKind, { label: string; className: string }> = {
