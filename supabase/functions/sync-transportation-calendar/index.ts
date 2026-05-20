@@ -152,7 +152,12 @@ function buildEvent(opts: { guestName: string; trip: any; durationMin: number; p
 async function syncOne(admin: any, trip: any, guestName: string): Promise<string> {
   const headers = calendarHeaders();
   const durationMin = await computeDriveMinutes(trip.pickup_location, trip.dropoff_location);
-  const body = buildEvent({ guestName, trip, durationMin });
+  const { data: passengers } = await admin
+    .from("transportation_passengers")
+    .select("first_name,phone,flight_number,created_at")
+    .eq("trip_id", trip.id)
+    .order("created_at", { ascending: true });
+  const body = buildEvent({ guestName, trip, durationMin, passengers: passengers || [] });
 
   let eventId = (trip.google_calendar_event_id as string | null) || null;
   let response: Response | null = null;
