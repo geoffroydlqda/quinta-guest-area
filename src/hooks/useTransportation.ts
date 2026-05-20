@@ -184,24 +184,29 @@ export function useTransportation() {
   // Delete a trip
   const deleteTrip = useCallback(async (tripId: string): Promise<boolean> => {
     if (!user) return false;
-    
+
     try {
+      const existing = trips.find(t => t.id === tripId);
+      const eventId = (existing as any)?.google_calendar_event_id as string | undefined;
+
       const { error } = await supabase
         .from('transportation_trips')
         .delete()
         .eq('id', tripId)
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
-      
+
       setTrips(prev => prev.filter(t => t.id !== tripId));
       triggerSheetsSync();
+      if (eventId) deleteTripCalendarEvent(eventId);
       return true;
     } catch (error: any) {
       console.error('Error deleting trip:', error);
       return false;
     }
-  }, [user]);
+  }, [user, trips]);
+
 
   // Add passenger to trip
   const addPassenger = useCallback(async (tripId: string, passenger: Partial<TransportationPassenger>): Promise<boolean> => {
