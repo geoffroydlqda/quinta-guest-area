@@ -212,6 +212,12 @@ const AdminContent = () => {
                 <option value="draft">Draft</option>
                 <option value="submitted">Submitted</option>
               </select>
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as any)} className="border border-border rounded-md px-3 py-2 text-sm bg-background">
+                <option value="all">All events</option>
+                <option value="live">Live</option>
+                <option value="upcoming">Upcoming</option>
+                <option value="past">Past</option>
+              </select>
               <Button size="sm" variant="outline" onClick={() => downloadCSV("guests.csv", [
                 ["First name","Last name","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Submitted at"],
                 ...filteredProfiles.map((p) => {
@@ -220,52 +226,63 @@ const AdminContent = () => {
                 }),
               ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
             </div>
-            <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-muted">
-                  <tr className="text-left">
-                    {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status",""].map((h, i) => (
-                      <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProfiles.map((p) => {
-                    const ts = toolStatus(p.user_id);
-                    const label = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email);
-                    return (
-                      <tr
-                        key={p.user_id}
-                        className="border-t border-border hover:bg-muted/40 cursor-pointer"
-                        onClick={() => navigate(`/admin/guest/${p.user_id}`)}
-                      >
-                        <td className="px-3 py-2 underline-offset-2 hover:underline">{p.first_name}</td>
-                        <td className="px-3 py-2">{p.last_name}</td>
-                        <td className="px-3 py-2">{p.email}</td>
-                        <td className="px-3 py-2">{p.check_in_date}</td>
-                        <td className="px-3 py-2">{p.check_out_date}</td>
-                        <td className="px-3 py-2">{p.guests_count}</td>
-                        <td className="px-3 py-2">{ts.room}</td>
-                        <td className="px-3 py-2">{ts.food}</td>
-                        <td className="px-3 py-2">{ts.trip}</td>
-                        <td className="px-3 py-2"><StatusBadge checkIn={p.check_in_date} statusOverall={p.status_overall} /></td>
-                        <td className="px-3 py-2 text-right">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            aria-label={`Delete ${label}`}
-                            onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: p.user_id, label }); }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+
+            {(categoryFilter === "all" || categoryFilter === "live" || categoryFilter === "upcoming") && (
+              <section className="mb-6">
+                <h2 className="text-base font-medium mb-2">Upcoming events <span className="text-muted-foreground text-sm font-normal">({visibleUpcoming.length})</span></h2>
+                {visibleUpcoming.length === 0 ? (
+                  <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No upcoming events.</div>
+                ) : (
+                  <ProfileTable
+                    profiles={visibleUpcoming}
+                    toolStatus={toolStatus}
+                    categoryOf={categoryOf}
+                    onRowClick={(uid) => navigate(`/admin/guest/${uid}`)}
+                    onDelete={(id, label) => setDeleteTarget({ id, label })}
+                    showLive
+                  />
+                )}
+              </section>
+            )}
+
+            {(categoryFilter === "all" || categoryFilter === "past") && (
+              <section className="mb-6">
+                <button
+                  type="button"
+                  onClick={() => setPastCollapsed((v) => !v)}
+                  className="flex items-center gap-1 text-base font-medium mb-2 hover:underline"
+                >
+                  {pastCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  Past events <span className="text-muted-foreground text-sm font-normal">({visiblePast.length})</span>
+                </button>
+                {!pastCollapsed && (
+                  visiblePast.length === 0 ? (
+                    <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No past events.</div>
+                  ) : (
+                    <ProfileTable
+                      profiles={visiblePast}
+                      toolStatus={toolStatus}
+                      categoryOf={categoryOf}
+                      onRowClick={(uid) => navigate(`/admin/guest/${uid}`)}
+                      onDelete={(id, label) => setDeleteTarget({ id, label })}
+                    />
+                  )
+                )}
+              </section>
+            )}
+
+            {visibleUnscheduled.length > 0 && (
+              <section className="mb-6">
+                <h2 className="text-base font-medium mb-2">No dates set <span className="text-muted-foreground text-sm font-normal">({visibleUnscheduled.length})</span></h2>
+                <ProfileTable
+                  profiles={visibleUnscheduled}
+                  toolStatus={toolStatus}
+                  categoryOf={categoryOf}
+                  onRowClick={(uid) => navigate(`/admin/guest/${uid}`)}
+                  onDelete={(id, label) => setDeleteTarget({ id, label })}
+                />
+              </section>
+            )}
           </TabsContent>
 
           <TabsContent value="food">
