@@ -700,3 +700,78 @@ const Admin = () => (
 );
 
 export default Admin;
+
+function ProfileTable({
+  profiles,
+  toolStatus,
+  categoryOf,
+  onRowClick,
+  onDelete,
+  showLive,
+}: {
+  profiles: Profile[];
+  toolStatus: (uid: string) => { room: string; food: string; trip: string };
+  categoryOf: (p: Profile) => "upcoming" | "past" | "live" | "none";
+  onRowClick: (uid: string) => void;
+  onDelete: (id: string, label: string) => void;
+  showLive?: boolean;
+}) {
+  return (
+    <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 bg-muted">
+          <tr className="text-left">
+            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status",""].map((h, i) => (
+              <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {profiles.map((p) => {
+            const ts = toolStatus(p.user_id);
+            const label = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email);
+            const isLive = showLive && categoryOf(p) === "live";
+            return (
+              <tr
+                key={p.user_id}
+                className="border-t border-border hover:bg-muted/40 cursor-pointer"
+                onClick={() => onRowClick(p.user_id)}
+              >
+                <td className="px-3 py-2 underline-offset-2 hover:underline">
+                  <span className="inline-flex items-center gap-2">
+                    {p.first_name}
+                    {isLive && (
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 border border-green-300">
+                        Live
+                      </span>
+                    )}
+                  </span>
+                </td>
+                <td className="px-3 py-2">{p.last_name}</td>
+                <td className="px-3 py-2">{p.email}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{p.check_in_date}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{p.check_out_date}</td>
+                <td className="px-3 py-2">{p.guests_count}</td>
+                <td className="px-3 py-2">{ts.room}</td>
+                <td className="px-3 py-2">{ts.food}</td>
+                <td className="px-3 py-2">{ts.trip}</td>
+                <td className="px-3 py-2"><StatusBadge checkIn={p.check_in_date} statusOverall={p.status_overall} /></td>
+                <td className="px-3 py-2 text-right">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={`Delete ${label}`}
+                    onClick={(e) => { e.stopPropagation(); onDelete(p.user_id, label); }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
