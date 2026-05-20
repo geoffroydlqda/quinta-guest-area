@@ -102,6 +102,18 @@ const AdminContent = () => {
     return p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email;
   };
 
+  const todayIso = useMemo(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const categoryOf = (p: Profile): "upcoming" | "past" | "live" | "none" => {
+    if (!p.check_out_date) return "none";
+    if (p.check_out_date < todayIso) return "past";
+    if (p.check_in_date && p.check_in_date <= todayIso && p.check_out_date >= todayIso) return "live";
+    return "upcoming";
+  };
+
   const filteredProfiles = useMemo(() => {
     if (!data) return [];
     const s = search.toLowerCase().trim();
@@ -116,6 +128,35 @@ const AdminContent = () => {
       );
     });
   }, [data, search, statusFilter]);
+
+  const { upcomingProfiles, pastProfiles, unscheduledProfiles } = useMemo(() => {
+    const upcoming: Profile[] = [];
+    const past: Profile[] = [];
+    const none: Profile[] = [];
+    for (const p of filteredProfiles) {
+      const c = categoryOf(p);
+      if (c === "past") past.push(p);
+      else if (c === "none") none.push(p);
+      else upcoming.push(p); // upcoming + live
+    }
+    upcoming.sort((a, b) => (a.check_out_date || "").localeCompare(b.check_out_date || ""));
+    past.sort((a, b) => (b.check_out_date || "").localeCompare(a.check_out_date || ""));
+    return { upcomingProfiles: upcoming, pastProfiles: past, unscheduledProfiles: none };
+  }, [filteredProfiles, todayIso]);
+
+  const visibleUpcoming = useMemo(() => {
+    if (categoryFilter === "past") return [];
+    if (categoryFilter === "live") return upcomingProfiles.filter((p) => categoryOf(p) === "live");
+    if (categoryFilter === "upcoming") return upcomingProfiles.filter((p) => categoryOf(p) === "upcoming");
+    return upcomingProfiles;
+  }, [upcomingProfiles, categoryFilter, todayIso]);
+
+  const visiblePast = useMemo(() => {
+    if (categoryFilter === "upcoming" || categoryFilter === "live") return [];
+    return pastProfiles;
+  }, [pastProfiles, categoryFilter]);
+
+  const visibleUnscheduled = categoryFilter === "all" ? unscheduledProfiles : [];
 
   const toolStatus = (uid: string) => {
     const room = data?.rooms.find((r) => r.user_id === uid);
