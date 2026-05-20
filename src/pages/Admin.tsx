@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail } from "lucide-react";
+import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +70,8 @@ const AdminContent = () => {
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted">("all");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | "live" | "upcoming" | "past">("all");
+  const [pastCollapsed, setPastCollapsed] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
   const load = async () => {
@@ -100,6 +102,18 @@ const AdminContent = () => {
     return p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email;
   };
 
+  const todayIso = useMemo(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const categoryOf = (p: Profile): "upcoming" | "past" | "live" | "none" => {
+    if (!p.check_out_date) return "none";
+    if (p.check_out_date < todayIso) return "past";
+    if (p.check_in_date && p.check_in_date <= todayIso && p.check_out_date >= todayIso) return "live";
+    return "upcoming";
+  };
+
   const filteredProfiles = useMemo(() => {
     if (!data) return [];
     const s = search.toLowerCase().trim();
@@ -114,6 +128,35 @@ const AdminContent = () => {
       );
     });
   }, [data, search, statusFilter]);
+
+  const { upcomingProfiles, pastProfiles, unscheduledProfiles } = useMemo(() => {
+    const upcoming: Profile[] = [];
+    const past: Profile[] = [];
+    const none: Profile[] = [];
+    for (const p of filteredProfiles) {
+      const c = categoryOf(p);
+      if (c === "past") past.push(p);
+      else if (c === "none") none.push(p);
+      else upcoming.push(p); // upcoming + live
+    }
+    upcoming.sort((a, b) => (a.check_out_date || "").localeCompare(b.check_out_date || ""));
+    past.sort((a, b) => (b.check_out_date || "").localeCompare(a.check_out_date || ""));
+    return { upcomingProfiles: upcoming, pastProfiles: past, unscheduledProfiles: none };
+  }, [filteredProfiles, todayIso]);
+
+  const visibleUpcoming = useMemo(() => {
+    if (categoryFilter === "past") return [];
+    if (categoryFilter === "live") return upcomingProfiles.filter((p) => categoryOf(p) === "live");
+    if (categoryFilter === "upcoming") return upcomingProfiles.filter((p) => categoryOf(p) === "upcoming");
+    return upcomingProfiles;
+  }, [upcomingProfiles, categoryFilter, todayIso]);
+
+  const visiblePast = useMemo(() => {
+    if (categoryFilter === "upcoming" || categoryFilter === "live") return [];
+    return pastProfiles;
+  }, [pastProfiles, categoryFilter]);
+
+  const visibleUnscheduled = categoryFilter === "all" ? unscheduledProfiles : [];
 
   const toolStatus = (uid: string) => {
     const room = data?.rooms.find((r) => r.user_id === uid);
@@ -169,6 +212,12 @@ const AdminContent = () => {
                 <option value="draft">Draft</option>
                 <option value="submitted">Submitted</option>
               </select>
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as any)} className="border border-border rounded-md px-3 py-2 text-sm bg-background">
+                <option value="all">All events</option>
+                <option value="live">Live</option>
+                <option value="upcoming">Upcoming</option>
+                <option value="past">Past</option>
+              </select>
               <Button size="sm" variant="outline" onClick={() => downloadCSV("guests.csv", [
                 ["First name","Last name","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Submitted at"],
                 ...filteredProfiles.map((p) => {
@@ -177,52 +226,63 @@ const AdminContent = () => {
                 }),
               ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
             </div>
-            <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-muted">
-                  <tr className="text-left">
-                    {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status",""].map((h, i) => (
-                      <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProfiles.map((p) => {
-                    const ts = toolStatus(p.user_id);
-                    const label = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email);
-                    return (
-                      <tr
-                        key={p.user_id}
-                        className="border-t border-border hover:bg-muted/40 cursor-pointer"
-                        onClick={() => navigate(`/admin/guest/${p.user_id}`)}
-                      >
-                        <td className="px-3 py-2 underline-offset-2 hover:underline">{p.first_name}</td>
-                        <td className="px-3 py-2">{p.last_name}</td>
-                        <td className="px-3 py-2">{p.email}</td>
-                        <td className="px-3 py-2">{p.check_in_date}</td>
-                        <td className="px-3 py-2">{p.check_out_date}</td>
-                        <td className="px-3 py-2">{p.guests_count}</td>
-                        <td className="px-3 py-2">{ts.room}</td>
-                        <td className="px-3 py-2">{ts.food}</td>
-                        <td className="px-3 py-2">{ts.trip}</td>
-                        <td className="px-3 py-2"><StatusBadge checkIn={p.check_in_date} statusOverall={p.status_overall} /></td>
-                        <td className="px-3 py-2 text-right">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            aria-label={`Delete ${label}`}
-                            onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: p.user_id, label }); }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+
+            {(categoryFilter === "all" || categoryFilter === "live" || categoryFilter === "upcoming") && (
+              <section className="mb-6">
+                <h2 className="text-base font-medium mb-2">Upcoming events <span className="text-muted-foreground text-sm font-normal">({visibleUpcoming.length})</span></h2>
+                {visibleUpcoming.length === 0 ? (
+                  <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No upcoming events.</div>
+                ) : (
+                  <ProfileTable
+                    profiles={visibleUpcoming}
+                    toolStatus={toolStatus}
+                    categoryOf={categoryOf}
+                    onRowClick={(uid) => navigate(`/admin/guest/${uid}`)}
+                    onDelete={(id, label) => setDeleteTarget({ id, label })}
+                    showLive
+                  />
+                )}
+              </section>
+            )}
+
+            {(categoryFilter === "all" || categoryFilter === "past") && (
+              <section className="mb-6">
+                <button
+                  type="button"
+                  onClick={() => setPastCollapsed((v) => !v)}
+                  className="flex items-center gap-1 text-base font-medium mb-2 hover:underline"
+                >
+                  {pastCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  Past events <span className="text-muted-foreground text-sm font-normal">({visiblePast.length})</span>
+                </button>
+                {!pastCollapsed && (
+                  visiblePast.length === 0 ? (
+                    <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No past events.</div>
+                  ) : (
+                    <ProfileTable
+                      profiles={visiblePast}
+                      toolStatus={toolStatus}
+                      categoryOf={categoryOf}
+                      onRowClick={(uid) => navigate(`/admin/guest/${uid}`)}
+                      onDelete={(id, label) => setDeleteTarget({ id, label })}
+                    />
+                  )
+                )}
+              </section>
+            )}
+
+            {visibleUnscheduled.length > 0 && (
+              <section className="mb-6">
+                <h2 className="text-base font-medium mb-2">No dates set <span className="text-muted-foreground text-sm font-normal">({visibleUnscheduled.length})</span></h2>
+                <ProfileTable
+                  profiles={visibleUnscheduled}
+                  toolStatus={toolStatus}
+                  categoryOf={categoryOf}
+                  onRowClick={(uid) => navigate(`/admin/guest/${uid}`)}
+                  onDelete={(id, label) => setDeleteTarget({ id, label })}
+                />
+              </section>
+            )}
           </TabsContent>
 
           <TabsContent value="food">
@@ -640,3 +700,78 @@ const Admin = () => (
 );
 
 export default Admin;
+
+function ProfileTable({
+  profiles,
+  toolStatus,
+  categoryOf,
+  onRowClick,
+  onDelete,
+  showLive,
+}: {
+  profiles: Profile[];
+  toolStatus: (uid: string) => { room: string; food: string; trip: string };
+  categoryOf: (p: Profile) => "upcoming" | "past" | "live" | "none";
+  onRowClick: (uid: string) => void;
+  onDelete: (id: string, label: string) => void;
+  showLive?: boolean;
+}) {
+  return (
+    <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 bg-muted">
+          <tr className="text-left">
+            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status",""].map((h, i) => (
+              <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {profiles.map((p) => {
+            const ts = toolStatus(p.user_id);
+            const label = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email);
+            const isLive = showLive && categoryOf(p) === "live";
+            return (
+              <tr
+                key={p.user_id}
+                className="border-t border-border hover:bg-muted/40 cursor-pointer"
+                onClick={() => onRowClick(p.user_id)}
+              >
+                <td className="px-3 py-2 underline-offset-2 hover:underline">
+                  <span className="inline-flex items-center gap-2">
+                    {p.first_name}
+                    {isLive && (
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 border border-green-300">
+                        Live
+                      </span>
+                    )}
+                  </span>
+                </td>
+                <td className="px-3 py-2">{p.last_name}</td>
+                <td className="px-3 py-2">{p.email}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{p.check_in_date}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{p.check_out_date}</td>
+                <td className="px-3 py-2">{p.guests_count}</td>
+                <td className="px-3 py-2">{ts.room}</td>
+                <td className="px-3 py-2">{ts.food}</td>
+                <td className="px-3 py-2">{ts.trip}</td>
+                <td className="px-3 py-2"><StatusBadge checkIn={p.check_in_date} statusOverall={p.status_overall} /></td>
+                <td className="px-3 py-2 text-right">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={`Delete ${label}`}
+                    onClick={(e) => { e.stopPropagation(); onDelete(p.user_id, label); }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
