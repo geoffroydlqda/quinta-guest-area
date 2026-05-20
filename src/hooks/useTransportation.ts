@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { TransportationTrip, TransportationPassenger, TransportationRequest } from '@/types/guest';
 import { calculateTripPrice } from '@/types/guest';
 import { triggerSheetsSync } from '@/lib/sheetsSync';
+import { syncTripCalendar, deleteTripCalendarEvent } from '@/lib/calendarSync';
 
 export function useTransportation() {
   const { user } = useAuth();
