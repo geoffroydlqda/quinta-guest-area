@@ -284,40 +284,64 @@ serve(async (req) => {
       }
     }
 
-    if (action === "backfill") {
+    if (action === "backfill" || action === "force_resync") {
       if (!userIsAdmin) {
         return new Response(JSON.stringify({ error: "Forbidden" }), {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const { data: trips } = await admin
-        .from("transportation_trips")
-        .select("*")
-        .or("google_calendar_event_id.is.null,sync_status.eq.failed");
+
+      // backfill: ALL trips missing an event id or previously failed (past + future).
+      // force_resync: ALL trips — delete existing events first, then recreate.
+      let query = admin.from("transportation_trips").select("*");
+      if (action === "backfill") {
+        query = query.or("google_calendar_event_id.is.null,sync_status.eq.failed");
+      }
+      const { data: trips } = await query;
+
       const { data: profiles } = await admin
         .from("guest_profiles")
         .select("user_id,full_name,first_name,last_name,email");
       const profMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
+
       let synced = 0, failed = 0;
+      const results: Array<{ trip_id: string; trip_date: string; guest: string; ok: boolean; event_id?: string; error?: string }> = [];
+
       for (const trip of (trips || [])) {
         const p: any = profMap.get(trip.user_id);
         const guestName =
           p?.full_name ||
           [p?.first_name, p?.last_name].filter(Boolean).join(" ") ||
           p?.email || "Guest";
+
+        // force_resync: drop the existing event so we recreate cleanly.
+        if (action === "force_resync" && trip.google_calendar_event_id) {
+          try {
+            await deleteEvent(trip.google_calendar_event_id);
+          } catch (e) {
+            console.warn(`[force_resync] delete failed for ${trip.id}:`, e);
+          }
+          trip.google_calendar_event_id = null;
+        }
+
         try {
-          await syncOne(admin, trip, guestName);
+          const newId = await syncOne(admin, trip, guestName);
           synced++;
+          console.log(`[sync] OK trip=${trip.id} date=${trip.trip_date} guest="${guestName}" event=${newId}`);
+          results.push({ trip_id: trip.id, trip_date: trip.trip_date, guest: guestName, ok: true, event_id: newId });
         } catch (e: any) {
           failed++;
+          const msg = String(e?.message || e).slice(0, 500);
+          console.error(`[sync] FAIL trip=${trip.id} date=${trip.trip_date} guest="${guestName}" err=${msg}`);
           await admin.from("transportation_trips").update({
             sync_status: "failed",
-            sync_error: String(e?.message || e).slice(0, 500),
+            sync_error: msg,
           }).eq("id", trip.id);
+          results.push({ trip_id: trip.id, trip_date: trip.trip_date, guest: guestName, ok: false, error: msg });
         }
       }
       return new Response(
-        JSON.stringify({ ok: true, synced, failed, total: (trips || []).length }),
+        JSON.stringify({ ok: true, action, synced, failed, total: (trips || []).length, results }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
