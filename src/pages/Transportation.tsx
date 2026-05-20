@@ -100,6 +100,10 @@ const Transportation = () => {
     }
   }, [request?.notes_transportation]);
 
+  const capacityOf = (size: string) => (size === '8 seats' ? 8 : size === '6 seats' ? 6 : 4);
+  const checkoutDate = profile?.check_out_date || null;
+  const MAX_CHECKOUT_TIME = '11:00';
+
   const handleAddTrip = async () => {
     const pickup = newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location;
     const dropoff = newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location;
@@ -115,6 +119,16 @@ const Transportation = () => {
     if (!newTrip.trip_time) errors.push('trip_time');
     if (!newTrip.taxi_size) errors.push('taxi_size');
     if (!newTrip.passengers_count || newTrip.passengers_count < 1) errors.push('passengers_count');
+
+    // Capacity validation
+    if (newTrip.passengers_count > capacityOf(newTrip.taxi_size)) {
+      errors.push('passengers_capacity');
+    }
+
+    // Check-out time validation
+    if (checkoutDate && newTrip.trip_date === checkoutDate && newTrip.trip_time && newTrip.trip_time > MAX_CHECKOUT_TIME) {
+      errors.push('checkout_time');
+    }
 
     if (errors.length > 0) {
       setValidationErrors(errors);
@@ -373,11 +387,15 @@ const Transportation = () => {
                       <Input
                         type="time"
                         value={newTrip.trip_time}
+                        max={checkoutDate && newTrip.trip_date === checkoutDate ? MAX_CHECKOUT_TIME : undefined}
                         onChange={(e) => setNewTrip(prev => ({ ...prev, trip_time: e.target.value }))}
-                        className={validationErrors.includes('trip_time') ? 'border-destructive' : ''}
+                        className={validationErrors.includes('trip_time') || validationErrors.includes('checkout_time') ? 'border-destructive' : ''}
                       />
                       {validationErrors.includes('trip_time') && (
                         <p className="text-xs text-destructive mt-1">Required</p>
+                      )}
+                      {validationErrors.includes('checkout_time') && (
+                        <p className="text-xs text-destructive mt-1">Pick-up time on check-out day cannot be later than 11:00 AM.</p>
                       )}
                     </div>
                   </div>
@@ -389,20 +407,30 @@ const Transportation = () => {
                       <Input
                         type="number"
                         min={1}
-                        max={6}
+                        max={capacityOf(newTrip.taxi_size)}
                         value={newTrip.passengers_count}
                         onChange={(e) => setNewTrip(prev => ({ ...prev, passengers_count: parseInt(e.target.value) || 1 }))}
-                        className={validationErrors.includes('passengers_count') ? 'border-destructive' : ''}
+                        className={validationErrors.includes('passengers_count') || validationErrors.includes('passengers_capacity') ? 'border-destructive' : ''}
                       />
                       {validationErrors.includes('passengers_count') && (
                         <p className="text-xs text-destructive mt-1">Required</p>
+                      )}
+                      {validationErrors.includes('passengers_capacity') && (
+                        <p className="text-xs text-destructive mt-1">Passenger count cannot exceed vehicle capacity.</p>
                       )}
                     </div>
                     <div>
                       <Label>Taxi size <span className="text-destructive">*</span></Label>
                       <Select
                         value={newTrip.taxi_size}
-                        onValueChange={(v) => setNewTrip(prev => ({ ...prev, taxi_size: v as any }))}
+                        onValueChange={(v) => setNewTrip(prev => {
+                          const cap = capacityOf(v);
+                          return {
+                            ...prev,
+                            taxi_size: v as any,
+                            passengers_count: prev.passengers_count > cap ? cap : prev.passengers_count,
+                          };
+                        })}
                       >
                         <SelectTrigger className={validationErrors.includes('taxi_size') ? 'border-destructive' : ''}>
                           <SelectValue />
@@ -418,6 +446,7 @@ const Transportation = () => {
                       )}
                     </div>
                   </div>
+
 
                   <div className="flex gap-2 pt-4">
                     <Button variant="outline" onClick={() => { setShowAddTrip(false); setValidationErrors([]); }}>

@@ -232,7 +232,7 @@ export function useTransportation() {
           ? { ...t, passengers: [...(t.passengers || []), data as TransportationPassenger] }
           : t
       ));
-      
+      syncTripCalendar(tripId);
       return true;
     } catch (error: any) {
       console.error('Error adding passenger:', error);
@@ -258,6 +258,8 @@ export function useTransportation() {
           ? { ...t, passengers: (t.passengers || []).filter(p => p.id !== passengerId) }
           : t
       ));
+      syncTripCalendar(tripId);
+
       
       return true;
     } catch (error: any) {

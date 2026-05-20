@@ -114,22 +114,32 @@ function effectivePriceOf(trip: any): number | null {
   return null;
 }
 
-function buildEvent(opts: { guestName: string; trip: any; durationMin: number }) {
-  const { guestName, trip, durationMin } = opts;
+function buildEvent(opts: { guestName: string; trip: any; durationMin: number; passengers: any[] }) {
+  const { guestName, trip, durationMin, passengers } = opts;
   const time = /^\d{2}:\d{2}$/.test(trip.trip_time) ? `${trip.trip_time}:00` : trip.trip_time;
   const start = `${trip.trip_date}T${time}`;
   const end = addMinutes(start, durationMin);
-  const eff = effectivePriceOf(trip);
-  const priceLabel = eff !== null ? `${eff}€` : (trip.price_estimate || "Custom offer");
-  const mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trip.dropoff_location || "")}`;
+  const pickupLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trip.pickup_location || "")}`;
+  const dropoffLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trip.dropoff_location || "")}`;
+
+  let passengerBlock = "";
+  if (passengers && passengers.length > 0) {
+    passengerBlock = "ℹ️ Passengers infos :\n\n";
+    passengers.forEach((p, i) => {
+      passengerBlock += `Passenger ${i + 1}\n- Name: ${p.first_name || ""}\n`;
+      if (p.phone) passengerBlock += `- Phone number: ${p.phone}\n`;
+      if (p.flight_number) passengerBlock += `- Flight number: ${p.flight_number}\n`;
+      passengerBlock += "\n";
+    });
+  }
+
   const description =
-    `Guest:\n${guestName}\n\n` +
-    `Passengers:\n${trip.passengers_count}\n\n` +
-    `Vehicle:\n${trip.taxi_size}\n\n` +
-    `Pickup:\n${trip.pickup_location}\n\n` +
-    `Drop-off:\n${trip.dropoff_location}\n\n` +
-    `Price:\n${priceLabel}\n\n` +
-    `Google Maps:\n${mapsLink}`;
+    passengerBlock +
+    `🔢 Passengers: ${trip.passengers_count}\n\n` +
+    `🚜 Vehicle: ${trip.taxi_size}\n\n` +
+    `📍 Pickup: ${trip.pickup_location}\n${pickupLink}\n\n` +
+    `📍 Drop-off: ${trip.dropoff_location}\n${dropoffLink}`;
+
   return {
     summary: `${guestName} — Transportation`,
     location: trip.pickup_location,
@@ -142,7 +152,12 @@ function buildEvent(opts: { guestName: string; trip: any; durationMin: number })
 async function syncOne(admin: any, trip: any, guestName: string): Promise<string> {
   const headers = calendarHeaders();
   const durationMin = await computeDriveMinutes(trip.pickup_location, trip.dropoff_location);
-  const body = buildEvent({ guestName, trip, durationMin });
+  const { data: passengers } = await admin
+    .from("transportation_passengers")
+    .select("first_name,phone,flight_number,created_at")
+    .eq("trip_id", trip.id)
+    .order("created_at", { ascending: true });
+  const body = buildEvent({ guestName, trip, durationMin, passengers: passengers || [] });
 
   let eventId = (trip.google_calendar_event_id as string | null) || null;
   let response: Response | null = null;
