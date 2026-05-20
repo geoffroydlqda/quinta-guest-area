@@ -258,6 +258,8 @@ export function useTransportation() {
           ? { ...t, passengers: (t.passengers || []).filter(p => p.id !== passengerId) }
           : t
       ));
+      syncTripCalendar(tripId);
+
       
       return true;
     } catch (error: any) {
