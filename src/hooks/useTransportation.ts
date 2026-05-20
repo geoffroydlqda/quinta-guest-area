@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { TransportationTrip, TransportationPassenger, TransportationRequest } from '@/types/guest';
 import { calculateTripPrice } from '@/types/guest';
 import { triggerSheetsSync } from '@/lib/sheetsSync';
+import { syncTripCalendar, deleteTripCalendarEvent } from '@/lib/calendarSync';
 
 export function useTransportation() {
   const { user } = useAuth();
@@ -129,6 +130,7 @@ export function useTransportation() {
       const newTrip = { ...data, passengers: [] } as TransportationTrip;
       setTrips(prev => [...prev, newTrip]);
       triggerSheetsSync();
+      syncTripCalendar(newTrip.id);
       return newTrip;
     } catch (error: any) {
       console.error('Error adding trip:', error);
@@ -171,6 +173,7 @@ export function useTransportation() {
         t.id === tripId ? { ...t, ...updates, price_estimate: priceEstimate || t.price_estimate } : t
       ));
       triggerSheetsSync();
+      syncTripCalendar(tripId);
       return true;
     } catch (error: any) {
       console.error('Error updating trip:', error);
@@ -181,24 +184,29 @@ export function useTransportation() {
   // Delete a trip
   const deleteTrip = useCallback(async (tripId: string): Promise<boolean> => {
     if (!user) return false;
-    
+
     try {
+      const existing = trips.find(t => t.id === tripId);
+      const eventId = (existing as any)?.google_calendar_event_id as string | undefined;
+
       const { error } = await supabase
         .from('transportation_trips')
         .delete()
         .eq('id', tripId)
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
-      
+
       setTrips(prev => prev.filter(t => t.id !== tripId));
       triggerSheetsSync();
+      if (eventId) deleteTripCalendarEvent(eventId);
       return true;
     } catch (error: any) {
       console.error('Error deleting trip:', error);
       return false;
     }
-  }, [user]);
+  }, [user, trips]);
+
 
   // Add passenger to trip
   const addPassenger = useCallback(async (tripId: string, passenger: Partial<TransportationPassenger>): Promise<boolean> => {

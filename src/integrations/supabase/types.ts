@@ -273,10 +273,14 @@ export type Database = {
           created_at: string
           custom_price: number | null
           dropoff_location: string
+          google_calendar_event_id: string | null
           id: string
+          last_synced_at: string | null
           passengers_count: number
           pickup_location: string
           price_estimate: string
+          sync_error: string | null
+          sync_status: string
           taxi_size: string
           trip_date: string
           trip_direction: string
@@ -288,10 +292,14 @@ export type Database = {
           created_at?: string
           custom_price?: number | null
           dropoff_location: string
+          google_calendar_event_id?: string | null
           id?: string
+          last_synced_at?: string | null
           passengers_count?: number
           pickup_location: string
           price_estimate?: string
+          sync_error?: string | null
+          sync_status?: string
           taxi_size: string
           trip_date: string
           trip_direction: string
@@ -303,10 +311,14 @@ export type Database = {
           created_at?: string
           custom_price?: number | null
           dropoff_location?: string
+          google_calendar_event_id?: string | null
           id?: string
+          last_synced_at?: string | null
           passengers_count?: number
           pickup_location?: string
           price_estimate?: string
+          sync_error?: string | null
+          sync_status?: string
           taxi_size?: string
           trip_date?: string
           trip_direction?: string
