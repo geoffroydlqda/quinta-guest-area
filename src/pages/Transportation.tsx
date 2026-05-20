@@ -387,11 +387,15 @@ const Transportation = () => {
                       <Input
                         type="time"
                         value={newTrip.trip_time}
+                        max={checkoutDate && newTrip.trip_date === checkoutDate ? MAX_CHECKOUT_TIME : undefined}
                         onChange={(e) => setNewTrip(prev => ({ ...prev, trip_time: e.target.value }))}
-                        className={validationErrors.includes('trip_time') ? 'border-destructive' : ''}
+                        className={validationErrors.includes('trip_time') || validationErrors.includes('checkout_time') ? 'border-destructive' : ''}
                       />
                       {validationErrors.includes('trip_time') && (
                         <p className="text-xs text-destructive mt-1">Required</p>
+                      )}
+                      {validationErrors.includes('checkout_time') && (
+                        <p className="text-xs text-destructive mt-1">Pick-up time on check-out day cannot be later than 11:00 AM.</p>
                       )}
                     </div>
                   </div>
@@ -403,20 +407,30 @@ const Transportation = () => {
                       <Input
                         type="number"
                         min={1}
-                        max={6}
+                        max={capacityOf(newTrip.taxi_size)}
                         value={newTrip.passengers_count}
                         onChange={(e) => setNewTrip(prev => ({ ...prev, passengers_count: parseInt(e.target.value) || 1 }))}
-                        className={validationErrors.includes('passengers_count') ? 'border-destructive' : ''}
+                        className={validationErrors.includes('passengers_count') || validationErrors.includes('passengers_capacity') ? 'border-destructive' : ''}
                       />
                       {validationErrors.includes('passengers_count') && (
                         <p className="text-xs text-destructive mt-1">Required</p>
+                      )}
+                      {validationErrors.includes('passengers_capacity') && (
+                        <p className="text-xs text-destructive mt-1">Passenger count cannot exceed vehicle capacity.</p>
                       )}
                     </div>
                     <div>
                       <Label>Taxi size <span className="text-destructive">*</span></Label>
                       <Select
                         value={newTrip.taxi_size}
-                        onValueChange={(v) => setNewTrip(prev => ({ ...prev, taxi_size: v as any }))}
+                        onValueChange={(v) => setNewTrip(prev => {
+                          const cap = capacityOf(v);
+                          return {
+                            ...prev,
+                            taxi_size: v as any,
+                            passengers_count: prev.passengers_count > cap ? cap : prev.passengers_count,
+                          };
+                        })}
                       >
                         <SelectTrigger className={validationErrors.includes('taxi_size') ? 'border-destructive' : ''}>
                           <SelectValue />
@@ -432,6 +446,7 @@ const Transportation = () => {
                       )}
                     </div>
                   </div>
+
 
                   <div className="flex gap-2 pt-4">
                     <Button variant="outline" onClick={() => { setShowAddTrip(false); setValidationErrors([]); }}>
