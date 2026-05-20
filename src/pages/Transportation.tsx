@@ -100,6 +100,10 @@ const Transportation = () => {
     }
   }, [request?.notes_transportation]);
 
+  const capacityOf = (size: string) => (size === '8 seats' ? 8 : size === '6 seats' ? 6 : 4);
+  const checkoutDate = profile?.check_out_date || null;
+  const MAX_CHECKOUT_TIME = '11:00';
+
   const handleAddTrip = async () => {
     const pickup = newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location;
     const dropoff = newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location;
@@ -115,6 +119,16 @@ const Transportation = () => {
     if (!newTrip.trip_time) errors.push('trip_time');
     if (!newTrip.taxi_size) errors.push('taxi_size');
     if (!newTrip.passengers_count || newTrip.passengers_count < 1) errors.push('passengers_count');
+
+    // Capacity validation
+    if (newTrip.passengers_count > capacityOf(newTrip.taxi_size)) {
+      errors.push('passengers_capacity');
+    }
+
+    // Check-out time validation
+    if (checkoutDate && newTrip.trip_date === checkoutDate && newTrip.trip_time && newTrip.trip_time > MAX_CHECKOUT_TIME) {
+      errors.push('checkout_time');
+    }
 
     if (errors.length > 0) {
       setValidationErrors(errors);
