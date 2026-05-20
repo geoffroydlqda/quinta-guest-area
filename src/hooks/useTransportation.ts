@@ -173,6 +173,7 @@ export function useTransportation() {
         t.id === tripId ? { ...t, ...updates, price_estimate: priceEstimate || t.price_estimate } : t
       ));
       triggerSheetsSync();
+      syncTripCalendar(tripId);
       return true;
     } catch (error: any) {
       console.error('Error updating trip:', error);
