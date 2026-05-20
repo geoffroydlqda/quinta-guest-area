@@ -488,6 +488,8 @@ function CustomPriceEditor({ trip, onSaved }: { trip: { id: string; custom_price
     }
     setSavedValue(next);
     onSaved?.(next);
+    // Push the new price to Google Calendar (fire-and-forget).
+    syncTripCalendar(trip.id);
     toast({ title: next === null ? "Custom price cleared" : `Custom price set to €${next}` });
   };
 
