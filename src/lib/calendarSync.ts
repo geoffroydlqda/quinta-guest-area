@@ -42,3 +42,23 @@ export async function backfillTripCalendars(): Promise<
     return null;
   }
 }
+
+/** Admin: delete + recreate calendar events for ALL trips. */
+export async function forceResyncTripCalendars(): Promise<
+  { synced: number; failed: number; total: number } | null
+> {
+  try {
+    const { data, error } = await supabase.functions.invoke(
+      "sync-transportation-calendar",
+      { body: { action: "force_resync" } },
+    );
+    if (error) {
+      console.warn("[calendarSync] force_resync error", error);
+      return null;
+    }
+    return data as { synced: number; failed: number; total: number };
+  } catch (e) {
+    console.warn("[calendarSync] force_resync failed", e);
+    return null;
+  }
+}
