@@ -26,7 +26,7 @@ const isAdmin = (e?: string | null) =>
   !!e && ADMIN_EMAILS.includes(e.normalize("NFC").toLowerCase().trim());
 
 const BodySchema = z.object({
-  action: z.enum(["upsert", "delete", "backfill"]),
+  action: z.enum(["upsert", "delete", "backfill", "force_resync"]),
   tripId: z.string().uuid().optional(),
   eventId: z.string().min(1).max(1024).optional(),
 });
