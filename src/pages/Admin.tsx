@@ -342,6 +342,7 @@ function FoodView({ data, guestName }: { data: Data; guestName: (u: string) => s
 function TransportView({ data, guestName, onTripUpdated }: { data: Data; guestName: (u: string) => string; onTripUpdated?: () => void }) {
   const { toast } = useToast();
   const [syncingAll, setSyncingAll] = useState(false);
+  const [forceResyncing, setForceResyncing] = useState(false);
 
   const rows = useMemo(() =>
     [...data.trips].sort((a, b) => `${a.trip_date} ${a.trip_time}`.localeCompare(`${b.trip_date} ${b.trip_time}`)),
@@ -363,12 +364,32 @@ function TransportView({ data, guestName, onTripUpdated }: { data: Data; guestNa
     onTripUpdated?.();
   };
 
+  const handleForceResync = async () => {
+    if (!confirm("Delete and recreate calendar events for ALL trips? Existing event IDs will be replaced.")) return;
+    setForceResyncing(true);
+    const res = await forceResyncTripCalendars();
+    setForceResyncing(false);
+    if (!res) {
+      toast({ title: "Force resync failed", description: "Could not reach calendar sync.", variant: "destructive" });
+      return;
+    }
+    toast({
+      title: "Force resync complete",
+      description: `${res.synced} recreated, ${res.failed} failed (out of ${res.total}).`,
+    });
+    onTripUpdated?.();
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex justify-end gap-2 flex-wrap">
-        <Button size="sm" variant="outline" onClick={handleBackfill} disabled={syncingAll}>
+        <Button size="sm" variant="outline" onClick={handleBackfill} disabled={syncingAll || forceResyncing}>
           {syncingAll ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <CalendarCheck className="w-4 h-4 mr-1" />}
-          Sync existing trips
+          Sync all existing trips
+        </Button>
+        <Button size="sm" variant="outline" onClick={handleForceResync} disabled={syncingAll || forceResyncing}>
+          {forceResyncing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <CalendarCheck className="w-4 h-4 mr-1" />}
+          Force resync all trips
         </Button>
         <Button size="sm" variant="outline" onClick={() => downloadCSV("transport.csv", [
           ["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Passengers","Price","Custom price (€)","Custom","Calendar event","Sync status"],
