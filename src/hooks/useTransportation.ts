@@ -130,6 +130,7 @@ export function useTransportation() {
       const newTrip = { ...data, passengers: [] } as TransportationTrip;
       setTrips(prev => [...prev, newTrip]);
       triggerSheetsSync();
+      syncTripCalendar(newTrip.id);
       return newTrip;
     } catch (error: any) {
       console.error('Error adding trip:', error);
