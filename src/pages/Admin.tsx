@@ -340,30 +340,55 @@ function FoodView({ data, guestName }: { data: Data; guestName: (u: string) => s
 }
 
 function TransportView({ data, guestName, onTripUpdated }: { data: Data; guestName: (u: string) => string; onTripUpdated?: () => void }) {
+  const { toast } = useToast();
+  const [syncingAll, setSyncingAll] = useState(false);
+
   const rows = useMemo(() =>
     [...data.trips].sort((a, b) => `${a.trip_date} ${a.trip_time}`.localeCompare(`${b.trip_date} ${b.trip_time}`)),
     [data]
   );
+
+  const handleBackfill = async () => {
+    setSyncingAll(true);
+    const res = await backfillTripCalendars();
+    setSyncingAll(false);
+    if (!res) {
+      toast({ title: "Sync failed", description: "Could not reach calendar sync.", variant: "destructive" });
+      return;
+    }
+    toast({
+      title: "Calendar sync complete",
+      description: `${res.synced} synced, ${res.failed} failed (out of ${res.total}).`,
+    });
+    onTripUpdated?.();
+  };
+
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2 flex-wrap">
+        <Button size="sm" variant="outline" onClick={handleBackfill} disabled={syncingAll}>
+          {syncingAll ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <CalendarCheck className="w-4 h-4 mr-1" />}
+          Sync existing trips
+        </Button>
         <Button size="sm" variant="outline" onClick={() => downloadCSV("transport.csv", [
-          ["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Passengers","Price","Custom price (€)","Custom"],
+          ["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Passengers","Price","Custom price (€)","Custom","Calendar event","Sync status"],
           ...rows.map((t) => {
             const isCustom = t.price_estimate?.toLowerCase().includes("custom");
-            return [t.trip_date, t.trip_time, guestName(t.user_id), t.trip_direction, t.pickup_location, t.dropoff_location, t.taxi_size, t.passengers_count, t.price_estimate, t.custom_price ?? "", isCustom ? "yes" : ""];
+            return [t.trip_date, t.trip_time, guestName(t.user_id), t.trip_direction, t.pickup_location, t.dropoff_location, t.taxi_size, t.passengers_count, t.price_estimate, t.custom_price ?? "", isCustom ? "yes" : "", t.google_calendar_event_id ?? "", t.sync_status ?? ""];
           }),
         ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
       </div>
       <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-muted"><tr className="text-left">
-            {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Custom €","Sign","Notify"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
+            {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Price (€)","Sign","Notify"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.map((t, i) => {
               const gName = guestName(t.user_id);
               const isCustom = (t.price_estimate || "").toLowerCase().includes("custom");
+              const hasManualPrice = t.custom_price !== null && t.custom_price !== undefined;
+              const syncFailed = t.sync_status === "failed";
               const handleSign = () => {
                 const names = resolveAirportSignNames({ passengers: t.passengers, guestFullName: gName });
                 if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, names });
@@ -378,19 +403,38 @@ function TransportView({ data, guestName, onTripUpdated }: { data: Data; guestNa
                 <tr key={i} className="border-t border-border">
                   <td className="px-3 py-2"><TripDateEditor trip={t} onSaved={onTripUpdated} /></td>
                   <td className="px-3 py-2">{t.trip_time}</td>
-                  <td className="px-3 py-2">{gName}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span>{gName}</span>
+                      {syncFailed && (
+                        <span title={t.sync_error || "Calendar sync failed"} className="inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 text-destructive px-2 py-0.5 text-[10px] font-medium whitespace-nowrap">
+                          <AlertTriangle className="w-3 h-3" />
+                          Calendar sync failed
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-3 py-2">{t.trip_direction}</td>
                   <td className="px-3 py-2">{t.pickup_location}</td>
                   <td className="px-3 py-2">{t.dropoff_location}</td>
                   <td className="px-3 py-2">{t.taxi_size}</td>
                   <td className="px-3 py-2">{t.passengers_count}</td>
                   <td className="px-3 py-2">
-                    {isCustom && t.custom_price !== null && t.custom_price !== undefined
-                      ? `${Number(t.custom_price)}€`
-                      : t.price_estimate}
+                    <div className="flex items-center gap-2">
+                      <span>
+                        {hasManualPrice
+                          ? `${Number(t.custom_price)}€`
+                          : t.price_estimate}
+                      </span>
+                      {hasManualPrice && (
+                        <span className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-medium whitespace-nowrap">
+                          Manual price
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2">
-                    {isCustom ? <CustomPriceEditor trip={t} /> : <span className="text-muted-foreground">—</span>}
+                    <CustomPriceEditor trip={t} onSaved={onTripUpdated} />
                   </td>
                   <td className="px-3 py-2">
                     <Button size="sm" variant="outline" onClick={handleSign}>
