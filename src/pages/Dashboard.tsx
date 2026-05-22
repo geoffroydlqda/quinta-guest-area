@@ -57,13 +57,16 @@ const DashboardContent = () => {
     const fetchSummaryData = async () => {
       if (!user || !profile) return;
 
+      const scope = <T extends { eq: any }>(q: T) =>
+        activeBookingId ? q.eq('booking_id', activeBookingId) : q.eq('user_id', user.id);
+
       // Fetch room setup data
-      const { data: roomData } = await supabase
-        .from('room_setups')
-        .select('queen_shared_qty, twins_shared_qty, queen_ensuite_qty, twins_ensuite_qty')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
+      const { data: roomData } = await scope(
+        supabase
+          .from('room_setups')
+          .select('queen_shared_qty, twins_shared_qty, queen_ensuite_qty, twins_ensuite_qty')
+      ).maybeSingle();
+
       if (roomData) {
         setRoomSetupData({
           queenSharedCount: roomData.queen_shared_qty,
@@ -74,11 +77,12 @@ const DashboardContent = () => {
       }
 
       // Fetch transportation data with trip details
-      const { data: tripData } = await supabase
-        .from('transportation_trips')
-        .select('id, price_estimate, pickup_location, dropoff_location, taxi_size, custom_price')
-        .eq('user_id', user.id);
-      
+      const { data: tripData } = await scope(
+        supabase
+          .from('transportation_trips')
+          .select('id, price_estimate, pickup_location, dropoff_location, taxi_size, custom_price')
+      );
+
       if (tripData && tripData.length > 0) {
         const costSummary = calculateTransportationCost(tripData as TransportationTrip[]);
         setTransportationData({
@@ -89,11 +93,11 @@ const DashboardContent = () => {
       }
 
       // Fetch food data
-      const { data: foodPlanData } = await supabase
-        .from('food_plans')
-        .select('selections, diet_preference, diet_config, meal_times')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const { data: foodPlanData } = await scope(
+        supabase
+          .from('food_plans')
+          .select('selections, diet_preference, diet_config, meal_times')
+      ).maybeSingle();
 
       if (foodPlanData?.selections && Array.isArray(foodPlanData.selections)) {
         const rawSelections = foodPlanData.selections as unknown as FoodDaySelection[];
@@ -139,11 +143,10 @@ const DashboardContent = () => {
       }
 
       // Fetch full trip data for email
-      const { data: fullTripData } = await supabase
-        .from('transportation_trips')
-        .select('*')
-        .eq('user_id', user.id);
-      
+      const { data: fullTripData } = await scope(
+        supabase.from('transportation_trips').select('*')
+      );
+
       if (fullTripData && fullTripData.length > 0) {
         setTransportationData(prev => ({
           ...prev,
@@ -153,7 +156,7 @@ const DashboardContent = () => {
     };
 
     fetchSummaryData();
-  }, [user, profile, toolStatuses]);
+  }, [user, profile, toolStatuses, activeBookingId]);
 
   const handleSubmitInformation = async () => {
     if (!profile || !hasDatesSet) {
