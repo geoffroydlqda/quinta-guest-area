@@ -1,123 +1,92 @@
+# Booking-Based Guest Area — Progressive Migration Plan
 
-# Room Setups Backend Implementation Plan
-
-## Overview
-This plan creates the complete backend infrastructure to store room configuration submissions and send email notifications. The implementation will enable the "Submit Final Setup" and "Save for Later" buttons to persist data and trigger emails.
+This is a major architectural shift. To stay safe, I'll execute it in **5 phases**, each independently shippable and backward-compatible. I recommend approving phase-by-phase so we can QA between steps rather than landing a giant rewrite at once.
 
 ---
 
-## What Will Be Built
+## Phase 1 — Foundation: `bookings` table + auto-migration
 
-### 1. Database Table: `room_setups`
-A table to store all room configuration submissions with the following structure:
+**Database**
+- Create `public.bookings`:
+  - `id`, `retreat_name`, `first_name`, `last_name`, `email`, `guest_count`, `check_in_date`, `check_out_date`, `payment_status` (enum: pending/deposit_paid/paid_in_full/overdue), `invitation_token` (unique), `invitation_claimed` (bool), `invitation_expires_at`, `user_id` (nullable, FK to auth.users), `created_by_admin` (bool), `internal_notes`, `created_at`, `updated_at`
+- RLS: users see their own bookings (`user_id = auth.uid()`); admins see all (via existing email allowlist pattern).
+- Add nullable `booking_id` column to: `food_plans`, `transportation_requests`, `transportation_trips`, `transportation_passengers`, `room_setups`, `docs_ack`.
+- One-time backfill: for every existing `guest_profiles` row, create a matching `bookings` row (claimed, linked to same `user_id`) and set `booking_id` on all child rows that belong to that user.
+- Trigger: when a new `guest_profile` is created (legacy path), auto-create a booking so old code keeps working.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | UUID | Primary key |
-| `edit_token` | TEXT | Unique token for edit URL |
-| `email` | TEXT | User's email address |
-| `full_name` | TEXT | User's full name |
-| `remarks` | TEXT | Optional notes |
-| `queen_shared_qty` | INTEGER | Queen beds with shared bathroom |
-| `twins_shared_qty` | INTEGER | Twin beds with shared bathroom |
-| `queen_ensuite_qty` | INTEGER | Queen beds with en-suite |
-| `twins_ensuite_qty` | INTEGER | Twin beds with en-suite |
-| `room_plan` | JSONB | Generated room assignments |
-| `status` | TEXT | 'draft' or 'submitted' |
-| `created_at` | TIMESTAMP | Record creation time |
-| `updated_at` | TIMESTAMP | Last modification time |
-
-Note: Participant names are not stored per project requirements.
-
-### 2. Edge Function: `send-room-setup-emails`
-A backend function that sends email notifications using Resend:
-
-- **On Save**: Sends edit link to user email
-- **On Submit**: Sends housekeeping summary to both user and admin (hello@quintamor.com)
-
-### 3. Updated Hook: `useRoomPlanner`
-Modify the existing hook to:
-- Save records to the database
-- Call the email edge function
-- Handle loading and error states
-- Support editing existing records via URL parameter
+**Outcome:** Zero user-visible change. Data is now dual-keyed (works via `user_id` *and* `booking_id`).
 
 ---
 
-## Implementation Steps
+## Phase 2 — Booking context in the app
 
-### Step 1: Create Database Table
-Create migration with:
-- Table structure as defined above
-- Row Level Security (RLS) policies for public insert/update (no auth required)
-- Unique constraint on `edit_token`
+- New `BookingContext` provider exposing `activeBookingId` (persisted in localStorage).
+- After login:
+  - 1 booking → auto-select, go to dashboard.
+  - Multiple bookings → `/bookings` selector page (cards with retreat name + dates + Open button).
+- Header **stay switcher** dropdown when user has >1 booking.
+- All hooks (`useGuestProfile`, `useFoodPlan`, `useTransportation`, `useRoomPlanner`, `useDocsAck`) updated to filter by `booking_id` instead of (or in addition to) `user_id`.
+- Summary, costs, emails, calendar sync all read from the active booking.
 
-### Step 2: Add RESEND_API_KEY Secret
-Request the Resend API key from you to enable email sending.
+**Outcome:** Single-booking users see no change. Architecture ready for multi-booking.
 
-### Step 3: Create Edge Function
-Build `send-room-setup-emails` function that:
-- Accepts room setup data as JSON payload
-- Formats housekeeping summary email
-- Sends to user and admin using Resend
-- Returns success/error response
+---
 
-### Step 4: Update useRoomPlanner Hook
-Modify to:
-- Import Supabase client
-- Add `saveToDatabase()` function
-- Add `sendEmails()` function
-- Update `handleSave` to save as 'draft' and send edit link email
-- Update `handleSubmit` to save as 'submitted' and send summary emails
-- Add loading state management
-- Add error handling with toast notifications
+## Phase 3 — Admin "Create booking"
 
-### Step 5: Support Edit URL
-Add functionality to:
-- Parse `?edit=` URL parameter on page load
-- Fetch existing record by edit token
-- Pre-populate form with saved data
+- New tab/button in Admin: **Create Booking**.
+- Form: retreat name, first/last name, email, dates, guest count, payment status, internal notes, optional predefined room setup / transportation, deposit / balance.
+- Edge function `create-booking` (admin-only): inserts booking with generated `invitation_token`, returns invitation link.
+- Admin dashboard list switches from "guests" to "bookings" (same email can appear multiple times). Existing categorization (upcoming/live/past) reused on booking dates.
+
+---
+
+## Phase 4 — Invitation flow
+
+- Public route `/invite/:token`:
+  - Edge function `get-invitation` returns booking preview (name, retreat, dates) — no auth required.
+  - "Welcome {first_name}" page → Continue with Google OR email/password signup/login.
+  - On successful auth, edge function `claim-booking` validates token, sets `booking.user_id = auth.uid()`, `invitation_claimed = true`. Rejects if already claimed or expired.
+- Optional email send via Resend with the invitation link.
+
+---
+
+## Phase 5 — Polish & payment status
+
+- Payment status badges in admin + guest dashboard.
+- Email templates reference specific booking (retreat name + dates in subject/body).
+- Calendar sync events tagged with retreat name.
+- Booking-scoped deadlines/lock dates already work since dates live on the booking.
 
 ---
 
 ## Technical Details
 
-### Database Security
-Since this app doesn't require user authentication, RLS policies will allow:
-- **INSERT**: Anyone can create new records
-- **UPDATE**: Anyone with the matching edit_token can update
-- **SELECT**: Anyone with the matching edit_token can read
+**Backward compatibility strategy**
+- `booking_id` is nullable everywhere during migration. Hooks fall back to `user_id`-only queries if no active booking is set (legacy users mid-migration).
+- The auto-created booking from `guest_profiles` backfill means every existing user immediately has exactly 1 booking → flows through the "auto-select" path → identical UX.
 
-### Email Content
-Housekeeping summary includes:
-- Room configuration totals (Queens, Twins, unset rooms)
-- Individual room assignments (Room 1-11 with bed types)
-- Timestamp
-- Edit URL
-- User remarks (if provided)
+**Security**
+- RLS on `bookings`: `user_id = auth.uid()` for select/update; insert only via admin edge function.
+- Invitation tokens: 32-byte random, unique index, single-use, optional 30-day expiry.
+- Claim endpoint validates: token exists, not claimed, not expired, email match optional (warn but allow).
 
-Does NOT include participant names per project requirements.
+**Files to add (Phase 1+2)**
+- migration: `bookings` table + backfill + `booking_id` columns
+- `src/contexts/BookingContext.tsx`
+- `src/pages/BookingSelector.tsx`
+- `src/components/guest-area/StaySwitcher.tsx`
+- updates to all hooks + `GuestAreaHeader`
 
-### Error Handling
-- Database errors show user-friendly toast messages
-- Email failures don't block submission (logged for debugging)
-- Network errors provide retry guidance
-
----
-
-## Files to Create/Modify
-
-| File | Action |
-|------|--------|
-| `supabase/migrations/xxx_create_room_setups.sql` | Create (via migration tool) |
-| `supabase/functions/send-room-setup-emails/index.ts` | Create |
-| `src/hooks/useRoomPlanner.ts` | Modify |
-| `src/pages/Index.tsx` | Modify (add edit token parsing) |
+**Files to add (Phase 3+4)**
+- `src/components/admin/CreateBookingDialog.tsx`
+- `src/pages/Invite.tsx`
+- edge functions: `create-booking`, `get-invitation`, `claim-booking`
 
 ---
 
-## Prerequisites
-Before implementation:
-1. RESEND_API_KEY must be configured (you'll be prompted)
-2. Resend domain must be verified at resend.com/domains
+## Recommendation
 
+Approve **Phase 1 only** first. It's the foundation, fully invisible to users, and lets us verify the backfill before building UI on top. I'll come back with phase 2 once phase 1 is green.
+
+Reply "approve phase 1" to proceed, or tell me to plan/execute differently (e.g., do all phases in one go, skip a phase, change field names).

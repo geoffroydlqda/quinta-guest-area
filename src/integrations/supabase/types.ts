@@ -14,6 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
+      bookings: {
+        Row: {
+          check_in_date: string | null
+          check_out_date: string | null
+          created_at: string
+          created_by_admin: boolean
+          deposit_amount: number | null
+          email: string
+          first_name: string | null
+          guest_count: number
+          id: string
+          internal_notes: string | null
+          invitation_claimed: boolean
+          invitation_expires_at: string | null
+          invitation_token: string | null
+          last_name: string | null
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          remaining_balance: number | null
+          retreat_name: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          check_in_date?: string | null
+          check_out_date?: string | null
+          created_at?: string
+          created_by_admin?: boolean
+          deposit_amount?: number | null
+          email: string
+          first_name?: string | null
+          guest_count?: number
+          id?: string
+          internal_notes?: string | null
+          invitation_claimed?: boolean
+          invitation_expires_at?: string | null
+          invitation_token?: string | null
+          last_name?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          remaining_balance?: number | null
+          retreat_name?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          check_in_date?: string | null
+          check_out_date?: string | null
+          created_at?: string
+          created_by_admin?: boolean
+          deposit_amount?: number | null
+          email?: string
+          first_name?: string | null
+          guest_count?: number
+          id?: string
+          internal_notes?: string | null
+          invitation_claimed?: boolean
+          invitation_expires_at?: string | null
+          invitation_token?: string | null
+          last_name?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          remaining_balance?: number | null
+          retreat_name?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       deleted_entries_log: {
         Row: {
           also_deleted_auth_user: boolean
@@ -43,24 +109,36 @@ export type Database = {
       }
       docs_ack: {
         Row: {
+          booking_id: string | null
           id: string
           last_viewed_at: string
           user_id: string
         }
         Insert: {
+          booking_id?: string | null
           id?: string
           last_viewed_at?: string
           user_id: string
         }
         Update: {
+          booking_id?: string | null
           id?: string
           last_viewed_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "docs_ack_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       food_plans: {
         Row: {
+          booking_id: string | null
           created_at: string
           diet_config: Json
           diet_preference: string | null
@@ -73,6 +151,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          booking_id?: string | null
           created_at?: string
           diet_config?: Json
           diet_preference?: string | null
@@ -85,6 +164,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          booking_id?: string | null
           created_at?: string
           diet_config?: Json
           diet_preference?: string | null
@@ -96,7 +176,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "food_plans_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       guest_profiles: {
         Row: {
@@ -148,6 +236,7 @@ export type Database = {
       }
       room_setups: {
         Row: {
+          booking_id: string | null
           created_at: string
           edit_token: string
           email: string
@@ -166,6 +255,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          booking_id?: string | null
           created_at?: string
           edit_token: string
           email: string
@@ -184,6 +274,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          booking_id?: string | null
           created_at?: string
           edit_token?: string
           email?: string
@@ -201,10 +292,19 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "room_setups_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transportation_passengers: {
         Row: {
+          booking_id: string | null
           created_at: string
           first_name: string
           flight_number: string | null
@@ -214,6 +314,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          booking_id?: string | null
           created_at?: string
           first_name: string
           flight_number?: string | null
@@ -223,6 +324,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          booking_id?: string | null
           created_at?: string
           first_name?: string
           flight_number?: string | null
@@ -232,6 +334,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "transportation_passengers_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "transportation_passengers_trip_id_fkey"
             columns: ["trip_id"]
@@ -243,6 +352,7 @@ export type Database = {
       }
       transportation_requests: {
         Row: {
+          booking_id: string | null
           created_at: string
           id: string
           notes_transportation: string | null
@@ -251,6 +361,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          booking_id?: string | null
           created_at?: string
           id?: string
           notes_transportation?: string | null
@@ -259,6 +370,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          booking_id?: string | null
           created_at?: string
           id?: string
           notes_transportation?: string | null
@@ -266,10 +378,19 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "transportation_requests_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transportation_trips: {
         Row: {
+          booking_id: string | null
           created_at: string
           custom_price: number | null
           dropoff_location: string
@@ -289,6 +410,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          booking_id?: string | null
           created_at?: string
           custom_price?: number | null
           dropoff_location: string
@@ -308,6 +430,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          booking_id?: string | null
           created_at?: string
           custom_price?: number | null
           dropoff_location?: string
@@ -326,17 +449,25 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "transportation_trips_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_admin_email: { Args: never; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      payment_status: "pending" | "deposit_paid" | "paid_in_full" | "overdue"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -463,6 +594,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      payment_status: ["pending", "deposit_paid", "paid_in_full", "overdue"],
+    },
   },
 } as const
