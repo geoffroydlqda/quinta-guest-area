@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import type { GuestProfile, ToolStatuses } from '@/types/guest';
 import { formatDateForDatabase } from '@/lib/localDate';
 import { triggerSheetsSync } from '@/lib/sheetsSync';
@@ -19,6 +20,7 @@ interface ProfileLoadState {
 
 export function useGuestProfile() {
   const { user } = useAuth();
+  const { activeBookingId } = useActiveBooking();
   
   const [state, setState] = useState<ProfileLoadState>({
     profile: null,
@@ -79,39 +81,29 @@ export function useGuestProfile() {
   // Load tool statuses
   const loadToolStatuses = useCallback(async (userId: string, profileStatus: 'draft' | 'submitted') => {
     const isSubmitted = profileStatus === 'submitted';
+    const scope = <T extends { eq: any }>(q: T) =>
+      activeBookingId ? q.eq('booking_id', activeBookingId) : q.eq('user_id', userId);
 
-    // Fetch room setup status
-    const { data: roomData } = await supabase
-      .from('room_setups')
-      .select('status')
-      .eq('user_id', userId)
-      .maybeSingle();
+    const { data: roomData } = await scope(
+      supabase.from('room_setups').select('status')
+    ).maybeSingle();
 
-    // Fetch transportation trips
-    const { data: tripData } = await supabase
-      .from('transportation_trips')
-      .select('id')
-      .eq('user_id', userId);
+    const { data: tripData } = await scope(
+      supabase.from('transportation_trips').select('id')
+    );
 
-    // Fetch food plan
-    const { data: foodData } = await supabase
-      .from('food_plans')
-      .select('selections')
-      .eq('user_id', userId)
-      .maybeSingle();
+    const { data: foodData } = await scope(
+      supabase.from('food_plans').select('selections')
+    ).maybeSingle();
 
-    // Check if food has any selections
     const hasFood = foodData?.selections && Array.isArray(foodData.selections) &&
       (foodData.selections as any[]).some((sel: any) =>
         sel.fullBoard || sel.breakfast || sel.lunch || sel.dinner
       );
 
-    // Fetch docs ack
-    const { data: docsData } = await supabase
-      .from('docs_ack')
-      .select('last_viewed_at')
-      .eq('user_id', userId)
-      .maybeSingle();
+    const { data: docsData } = await scope(
+      supabase.from('docs_ack').select('last_viewed_at')
+    ).maybeSingle();
 
     return {
       roomSetup: roomData ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
@@ -119,7 +111,7 @@ export function useGuestProfile() {
       food: hasFood ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
       documentation: !!docsData,
     } as ToolStatuses;
-  }, []);
+  }, [activeBookingId]);
 
   // Main load function
   const loadProfile = useCallback(async () => {
@@ -245,11 +237,17 @@ export function useGuestProfile() {
   }, [state.profile?.check_out_date]);
 
   // Initial load effect - runs once per user
+  const previousBookingIdRef = useRef<string | null>(null);
   useEffect(() => {
     // Reset when user changes
     if (user?.id !== currentUserIdRef.current) {
       hasLoadedRef.current = false;
       loadingRef.current = false;
+    }
+    // Re-load when active booking changes (tool statuses are booking-scoped)
+    if (previousBookingIdRef.current !== activeBookingId) {
+      hasLoadedRef.current = false;
+      previousBookingIdRef.current = activeBookingId;
     }
 
     if (user && !hasLoadedRef.current) {
@@ -271,7 +269,7 @@ export function useGuestProfile() {
       hasLoadedRef.current = false;
       currentUserIdRef.current = null;
     }
-  }, [user, loadProfile]);
+  }, [user, activeBookingId, loadProfile]);
 
   // Complete profile with first/last name
   const completeProfile = useCallback(async (firstName: string, lastName: string) => {

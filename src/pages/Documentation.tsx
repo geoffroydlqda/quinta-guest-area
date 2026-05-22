@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { supabase } from '@/integrations/supabase/client';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -175,6 +176,7 @@ const documentationSections = [
 
 const Documentation = () => {
   const { user, isLoading: authLoading } = useAuth();
+  const { activeBookingId } = useActiveBooking();
   const navigate = useNavigate();
 
   // Note: Auth redirect is handled by ProtectedRoute in App.tsx
@@ -183,11 +185,12 @@ const Documentation = () => {
   useEffect(() => {
     const markViewed = async () => {
       if (!user) return;
-      
+
       await supabase
         .from('docs_ack')
         .upsert({
           user_id: user.id,
+          booking_id: activeBookingId,
           last_viewed_at: new Date().toISOString(),
         }, {
           onConflict: 'user_id',
@@ -197,7 +200,7 @@ const Documentation = () => {
     if (user) {
       markViewed();
     }
-  }, [user]);
+  }, [user, activeBookingId]);
 
   if (authLoading) {
     return (

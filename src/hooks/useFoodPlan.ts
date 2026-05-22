@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { useToast } from '@/hooks/use-toast';
 import type { FoodPlan, FoodDaySelection, DietPreference, DietConfig, MealTimes } from '@/types/guest';
 import { EMPTY_DIET_CONFIG, EMPTY_MEAL_TIMES } from '@/types/guest';
@@ -9,6 +10,7 @@ import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 export function useFoodPlan(checkInDate: string | null, checkOutDate: string | null, defaultGuestsCount: number = 1) {
   const { user } = useAuth();
+  const { activeBookingId } = useActiveBooking();
   const { toast } = useToast();
   
   const [foodPlan, setFoodPlan] = useState<FoodPlan | null>(null);
@@ -54,25 +56,26 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     setIsLoading(true);
     
     try {
-      let { data, error } = await supabase
-        .from('food_plans')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
+      const baseQuery = supabase.from('food_plans').select('*');
+      const scopedQuery = activeBookingId
+        ? baseQuery.eq('booking_id', activeBookingId)
+        : baseQuery.eq('user_id', user.id);
+      let { data, error } = await scopedQuery.maybeSingle();
+
       if (error) throw error;
-      
+
       if (!data) {
         const newSelections = initializeSelections();
         const { data: newPlan, error: createError } = await supabase
           .from('food_plans')
           .insert([{
             user_id: user.id,
+            booking_id: activeBookingId,
             selections: JSON.parse(JSON.stringify(newSelections)),
           }])
           .select()
           .single();
-        
+
         if (createError) throw createError;
         data = newPlan;
       }
@@ -126,7 +129,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast, initializeSelections, days, datesKey]);
+  }, [user, activeBookingId, toast, initializeSelections, days, datesKey]);
 
   // Pure function: sync selections array to match current days
   function syncSelectionsToDateRange(
@@ -165,7 +168,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     } else if (days.length === 0) {
       setIsLoading(false);
     }
-  }, [user?.id, datesKey]); // Only re-load when user or date range changes
+  }, [user?.id, activeBookingId, datesKey]); // Only re-load when user / booking / date range changes
 
   // Sync selections when dates change AFTER initial load
   useEffect(() => {
@@ -263,11 +266,11 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
         console.debug('[FoodPlan] autoSave payload', payload);
       }
 
-      const { error } = await supabase
-        .from('food_plans')
-        .update(payload)
-        .eq('user_id', user.id);
-      
+      const updateQuery = supabase.from('food_plans').update(payload);
+      const { error } = await (activeBookingId
+        ? updateQuery.eq('booking_id', activeBookingId)
+        : updateQuery.eq('user_id', user.id));
+
       if (error) throw error;
       triggerSheetsSync();
       return true;
@@ -275,7 +278,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
       console.error('Error auto-saving food plan:', error);
       return false;
     }
-  }, [user, foodPlan]);
+  }, [user, activeBookingId, foodPlan]);
 
   // Update notes
   const updateNotes = useCallback((notes: string) => {

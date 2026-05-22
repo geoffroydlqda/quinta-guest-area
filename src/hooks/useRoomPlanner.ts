@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { 
   RoomSelection, 
   RoomStats, 
@@ -15,6 +16,7 @@ import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 export function useRoomPlanner() {
   const { user } = useAuth();
+  const { activeBookingId } = useActiveBooking();
   const { toast } = useToast();
   
   const [roomSelection, setRoomSelection] = useState<RoomSelection>(initialRoomSelection);
@@ -94,11 +96,11 @@ export function useRoomPlanner() {
     setIsLoadingRecord(true);
     
     try {
-      const { data, error } = await supabase
-        .from('room_setups')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const baseQuery = supabase.from('room_setups').select('*');
+      const scopedQuery = activeBookingId
+        ? baseQuery.eq('booking_id', activeBookingId)
+        : baseQuery.eq('user_id', user.id);
+      const { data, error } = await scopedQuery.maybeSingle();
 
       if (error) throw error;
 
@@ -123,14 +125,14 @@ export function useRoomPlanner() {
     } finally {
       setIsLoadingRecord(false);
     }
-  }, [user, toast]);
+  }, [user, activeBookingId, toast]);
 
   // Load user record on mount
   useEffect(() => {
     if (user) {
       loadUserRecord();
     }
-  }, [user, loadUserRecord]);
+  }, [user, activeBookingId, loadUserRecord]);
 
   // Auto-save function (used by useAutoSave hook)
   const autoSave = useCallback(async (): Promise<boolean> => {
@@ -148,6 +150,7 @@ export function useRoomPlanner() {
       
       const recordData = {
         user_id: user.id,
+        booking_id: activeBookingId,
         email: user.email || '',
         full_name: '', // No longer collecting from room setup
         remarks_roomsetup: remarks.trim() || null,
@@ -184,7 +187,7 @@ export function useRoomPlanner() {
       console.error('Auto-save error:', error);
       return false;
     }
-  }, [user, recordId, roomSelection, roomPlan, remarks, isSelectionValid]);
+  }, [user, activeBookingId, recordId, roomSelection, roomPlan, remarks, isSelectionValid]);
 
   return {
     // State
