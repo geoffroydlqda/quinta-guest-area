@@ -214,8 +214,11 @@ const AdminContent = () => {
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <h1 className="text-xl font-medium">Admin · Quinta do Amor</h1>
           <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => setCreateBookingOpen(true)}>
+              <Plus className="w-4 h-4 mr-1" />New booking
+            </Button>
             <Button size="sm" variant="outline" onClick={load}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button>
-            <Button size="sm" onClick={sync} disabled={syncing}>
+            <Button size="sm" variant="outline" onClick={sync} disabled={syncing}>
               {syncing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
               Sync to Google Sheets
             </Button>
