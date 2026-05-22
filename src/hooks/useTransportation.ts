@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { useToast } from '@/hooks/use-toast';
 import type { TransportationTrip, TransportationPassenger, TransportationRequest } from '@/types/guest';
 import { calculateTripPrice } from '@/types/guest';
@@ -9,6 +10,7 @@ import { syncTripCalendar, deleteTripCalendarEvent } from '@/lib/calendarSync';
 
 export function useTransportation() {
   const { user } = useAuth();
+  const { activeBookingId } = useActiveBooking();
   const { toast } = useToast();
   
   const [request, setRequest] = useState<TransportationRequest | null>(null);
@@ -23,35 +25,35 @@ export function useTransportation() {
     setIsLoading(true);
     
     try {
-      // Get or create request
-      let { data: requestData, error: reqError } = await supabase
-        .from('transportation_requests')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
+      // Get or create request (booking-scoped if active booking present)
+      const reqQuery = supabase.from('transportation_requests').select('*');
+      const scopedReqQuery = activeBookingId
+        ? reqQuery.eq('booking_id', activeBookingId)
+        : reqQuery.eq('user_id', user.id);
+      let { data: requestData, error: reqError } = await scopedReqQuery.maybeSingle();
+
       if (reqError) throw reqError;
-      
+
       if (!requestData) {
         const { data: newReq, error: createError } = await supabase
           .from('transportation_requests')
-          .insert({ user_id: user.id })
+          .insert({ user_id: user.id, booking_id: activeBookingId })
           .select()
           .single();
-        
+
         if (createError) throw createError;
         requestData = newReq;
       }
-      
+
       setRequest(requestData as TransportationRequest);
-      
-      // Fetch trips with passengers
-      const { data: tripsData, error: tripsError } = await supabase
-        .from('transportation_trips')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('trip_date', { ascending: true });
-      
+
+      // Fetch trips (booking-scoped if available)
+      const tripsBaseQuery = supabase.from('transportation_trips').select('*');
+      const scopedTripsQuery = activeBookingId
+        ? tripsBaseQuery.eq('booking_id', activeBookingId)
+        : tripsBaseQuery.eq('user_id', user.id);
+      const { data: tripsData, error: tripsError } = await scopedTripsQuery.order('trip_date', { ascending: true });
+
       if (tripsError) throw tripsError;
       
       // Fetch all passengers for user's trips
@@ -90,13 +92,13 @@ export function useTransportation() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast]);
+  }, [user, activeBookingId, toast]);
 
   useEffect(() => {
     if (user) {
       loadData();
     }
-  }, [user, loadData]);
+  }, [user, activeBookingId, loadData]);
 
   // Add a new trip
   const addTrip = useCallback(async (tripData: Partial<TransportationTrip>): Promise<TransportationTrip | null> => {
@@ -113,6 +115,7 @@ export function useTransportation() {
         .from('transportation_trips')
         .insert({
           user_id: user.id,
+          booking_id: activeBookingId,
           trip_direction: tripData.trip_direction || 'To Quinta',
           pickup_location: tripData.pickup_location || '',
           dropoff_location: tripData.dropoff_location || 'Quinta do Amor',
@@ -124,7 +127,7 @@ export function useTransportation() {
         })
         .select()
         .single();
-      
+
       if (error) throw error;
       
       const newTrip = { ...data, passengers: [] } as TransportationTrip;
@@ -141,7 +144,7 @@ export function useTransportation() {
       });
       return null;
     }
-  }, [user, toast]);
+  }, [user, activeBookingId, toast]);
 
   // Update a trip
   const updateTrip = useCallback(async (tripId: string, updates: Partial<TransportationTrip>): Promise<boolean> => {
@@ -217,6 +220,7 @@ export function useTransportation() {
         .from('transportation_passengers')
         .insert({
           user_id: user.id,
+          booking_id: activeBookingId,
           trip_id: tripId,
           first_name: passenger.first_name || '',
           phone: passenger.phone || '',
@@ -224,7 +228,7 @@ export function useTransportation() {
         })
         .select()
         .single();
-      
+
       if (error) throw error;
       
       setTrips(prev => prev.map(t => 
@@ -238,7 +242,7 @@ export function useTransportation() {
       console.error('Error adding passenger:', error);
       return false;
     }
-  }, [user]);
+  }, [user, activeBookingId]);
 
   // Remove passenger
   const removePassenger = useCallback(async (passengerId: string, tripId: string): Promise<boolean> => {
@@ -278,20 +282,20 @@ export function useTransportation() {
     if (!user || !request) return false;
     
     try {
-      const { error } = await supabase
+      const updateQuery = supabase
         .from('transportation_requests')
-        .update({
-          notes_transportation: request.notes_transportation || null,
-        })
-        .eq('user_id', user.id);
-      
+        .update({ notes_transportation: request.notes_transportation || null });
+      const { error } = await (activeBookingId
+        ? updateQuery.eq('booking_id', activeBookingId)
+        : updateQuery.eq('user_id', user.id));
+
       if (error) throw error;
       return true;
     } catch (error: any) {
       console.error('Error auto-saving transportation:', error);
       return false;
     }
-  }, [user, request]);
+  }, [user, activeBookingId, request]);
 
   return {
     request,
