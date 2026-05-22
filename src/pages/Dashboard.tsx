@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -22,6 +24,7 @@ import { dietConfigTotal, EMPTY_DIET_CONFIG } from '@/types/guest';
 const DashboardContent = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
+  const { bookings, activeBookingId, isLoading: bookingsLoading } = useActiveBooking();
   
   const { 
     profile, 
