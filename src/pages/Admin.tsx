@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,8 +45,17 @@ type Passenger = { id: string; first_name: string; last_name?: string | null; ph
 type Trip = { id: string; user_id: string; trip_direction: string; pickup_location: string; dropoff_location: string; trip_date: string; trip_time: string; passengers_count: number; taxi_size: string; price_estimate: string; custom_price: number | null; google_calendar_event_id?: string | null; sync_status?: string | null; last_synced_at?: string | null; sync_error?: string | null; passengers?: Passenger[] };
 type FoodPlan = { user_id: string; selections: any; diet_preference: string | null; status_food: string };
 
+type BookingRow = {
+  id: string; retreat_name: string; first_name: string | null; last_name: string | null;
+  email: string; guest_count: number;
+  check_in_date: string | null; check_out_date: string | null;
+  payment_status: string; invitation_token: string | null; invitation_claimed: boolean;
+  user_id: string | null; created_at: string;
+};
+
 interface Data {
   profiles: Profile[]; rooms: Room[]; trips: Trip[]; food: FoodPlan[];
+  bookings?: BookingRow[];
 }
 
 function csvEscape(v: any): string {
@@ -258,6 +267,10 @@ const AdminContent = () => {
                 }),
               ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
             </div>
+
+            {categoryFilter === "all" && (data.bookings || []).filter((b) => !b.invitation_claimed).length > 0 && (
+              <PendingInvitationsSection bookings={(data.bookings || []).filter((b) => !b.invitation_claimed)} onChanged={load} />
+            )}
 
             {(categoryFilter === "all" || categoryFilter === "live" || categoryFilter === "upcoming") && (
               <section className="mb-6">
@@ -813,3 +826,86 @@ function ProfileTable({
     </div>
   );
 }
+
+function PendingInvitationsSection({ bookings, onChanged }: { bookings: BookingRow[]; onChanged: () => void }) {
+  const { toast } = useToast();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const inviteUrl = (token: string | null) =>
+    token ? `${window.location.origin}/invite/${token}` : "";
+
+  const copy = async (b: BookingRow) => {
+    const url = inviteUrl(b.invitation_token);
+    if (!url) return;
+    await navigator.clipboard.writeText(url);
+    setCopiedId(b.id);
+    toast({ title: "Invitation link copied" });
+    setTimeout(() => setCopiedId((c) => (c === b.id ? null : c)), 2000);
+  };
+
+  const remove = async (b: BookingRow) => {
+    if (!confirm(`Delete pending booking for ${b.email}?`)) return;
+    const { error } = await supabase.from("bookings").delete().eq("id", b.id);
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Booking deleted" });
+    onChanged();
+  };
+
+  return (
+    <section className="mb-6">
+      <h2 className="text-base font-medium mb-2">
+        Pending invitations <span className="text-muted-foreground text-sm font-normal">({bookings.length})</span>
+      </h2>
+      <div className="border border-border rounded-lg bg-card overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2">Retreat</th>
+              <th className="px-3 py-2">Guest</th>
+              <th className="px-3 py-2">Email</th>
+              <th className="px-3 py-2">Dates</th>
+              <th className="px-3 py-2">Payment</th>
+              <th className="px-3 py-2">Invite link</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {bookings.map((b) => {
+              const name = [b.first_name, b.last_name].filter(Boolean).join(" ").trim();
+              return (
+                <tr key={b.id} className="border-t border-border">
+                  <td className="px-3 py-2">{b.retreat_name || "—"}</td>
+                  <td className="px-3 py-2">{name || "—"}</td>
+                  <td className="px-3 py-2">{b.email}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {b.check_in_date || "—"} → {b.check_out_date || "—"}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">{b.payment_status}</td>
+                  <td className="px-3 py-2">
+                    {b.invitation_token ? (
+                      <Button size="sm" variant="outline" onClick={() => copy(b)}>
+                        {copiedId === b.id ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
+                        Copy link
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Button size="sm" variant="ghost" onClick={() => remove(b)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+

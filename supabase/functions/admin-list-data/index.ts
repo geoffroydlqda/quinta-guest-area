@@ -42,12 +42,13 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const [profiles, rooms, trips, passengers, food] = await Promise.all([
+    const [profiles, rooms, trips, passengers, food, bookings] = await Promise.all([
       admin.from("guest_profiles").select("*"),
       admin.from("room_setups").select("*"),
       admin.from("transportation_trips").select("*"),
       admin.from("transportation_passengers").select("*"),
       admin.from("food_plans").select("*"),
+      admin.from("bookings").select("*").order("created_at", { ascending: false }),
     ]);
 
     // Filter out admin user profiles and their related rows
@@ -60,6 +61,9 @@ serve(async (req) => {
     const filteredTripsRaw = (trips.data || []).filter((t: any) => !adminUserIds.has(t.user_id));
     const filteredPassengers = (passengers.data || []).filter((p: any) => !adminUserIds.has(p.user_id));
     const filteredFood = (food.data || []).filter((f: any) => !adminUserIds.has(f.user_id));
+    const filteredBookings = (bookings.data || []).filter(
+      (b: any) => !isAdmin(b.email) && (!b.user_id || !adminUserIds.has(b.user_id))
+    );
 
     // Attach passengers to their trips (preserve creation order)
     const paxByTrip = new Map<string, any[]>();
@@ -80,6 +84,7 @@ serve(async (req) => {
       rooms: filteredRooms,
       trips: filteredTrips,
       food: filteredFood,
+      bookings: filteredBookings,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e: any) {
     console.error(e);
