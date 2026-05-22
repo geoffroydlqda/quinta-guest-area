@@ -237,11 +237,17 @@ export function useGuestProfile() {
   }, [state.profile?.check_out_date]);
 
   // Initial load effect - runs once per user
+  const previousBookingIdRef = useRef<string | null>(null);
   useEffect(() => {
     // Reset when user changes
     if (user?.id !== currentUserIdRef.current) {
       hasLoadedRef.current = false;
       loadingRef.current = false;
+    }
+    // Re-load when active booking changes (tool statuses are booking-scoped)
+    if (previousBookingIdRef.current !== activeBookingId) {
+      hasLoadedRef.current = false;
+      previousBookingIdRef.current = activeBookingId;
     }
 
     if (user && !hasLoadedRef.current) {
@@ -263,7 +269,7 @@ export function useGuestProfile() {
       hasLoadedRef.current = false;
       currentUserIdRef.current = null;
     }
-  }, [user, loadProfile]);
+  }, [user, activeBookingId, loadProfile]);
 
   // Complete profile with first/last name
   const completeProfile = useCallback(async (firstName: string, lastName: string) => {
