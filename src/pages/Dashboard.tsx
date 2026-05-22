@@ -237,8 +237,13 @@ const DashboardContent = () => {
     await signOut();
   };
 
+  // Multi-booking: route to selector if user has >1 bookings and none is active
+  if (!bookingsLoading && bookings.length > 1 && !activeBookingId) {
+    return <Navigate to="/bookings" replace />;
+  }
+
   // Loading state
-  if (isLoading) {
+  if (isLoading || bookingsLoading) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
