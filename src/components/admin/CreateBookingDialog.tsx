@@ -63,31 +63,59 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
       return;
     }
     setSubmitting(true);
-    const res = await supabase.functions.invoke("create-booking", {
-      body: {
-        retreat_name: form.retreat_name.trim(),
-        first_name: form.first_name.trim() || null,
-        last_name: form.last_name.trim() || null,
-        email: form.email.trim().toLowerCase(),
-        guest_count: Number(form.guest_count) || 1,
-        check_in_date: form.check_in_date || null,
-        check_out_date: form.check_out_date || null,
-        payment_status: form.payment_status,
-        deposit_amount: form.deposit_amount === "" ? null : Number(form.deposit_amount),
-        remaining_balance: form.remaining_balance === "" ? null : Number(form.remaining_balance),
-        internal_notes: form.internal_notes.trim() || null,
-        origin: window.location.origin,
-      },
-    });
-    setSubmitting(false);
-    if (res.error) {
-      toast({ title: "Failed to create booking", description: res.error.message, variant: "destructive" });
-      return;
+    const payload = {
+      retreat_name: form.retreat_name.trim(),
+      first_name: form.first_name.trim() || null,
+      last_name: form.last_name.trim() || null,
+      email: form.email.trim().toLowerCase(),
+      guest_count: Number(form.guest_count) || 1,
+      check_in_date: form.check_in_date || null,
+      check_out_date: form.check_out_date || null,
+      payment_status: form.payment_status,
+      deposit_amount: form.deposit_amount === "" ? null : Number(form.deposit_amount),
+      remaining_balance: form.remaining_balance === "" ? null : Number(form.remaining_balance),
+      internal_notes: form.internal_notes.trim() || null,
+      origin: window.location.origin,
+    };
+    console.log("[create-booking] payload", payload);
+
+    try {
+      const res = await supabase.functions.invoke("create-booking", { body: payload });
+      console.log("[create-booking] response", res);
+
+      if (res.error) {
+        const detail =
+          (res.data as any)?.error
+            ? typeof (res.data as any).error === "string"
+              ? (res.data as any).error
+              : JSON.stringify((res.data as any).error)
+            : res.error.message;
+        console.error("[create-booking] invoke error", res.error, res.data);
+        toast({ title: "Failed to create booking", description: detail, variant: "destructive" });
+        return;
+      }
+
+      const data = res.data as { ok?: boolean; booking?: { id?: string }; invite_url?: string; error?: unknown };
+      if (!data?.ok || !data.booking?.id) {
+        console.error("[create-booking] missing booking in response", data);
+        toast({
+          title: "Failed to create booking",
+          description: typeof data?.error === "string" ? data.error : "No booking returned by server",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log("[create-booking] success", { booking_id: data.booking.id, invite_url: data.invite_url });
+      setInviteUrl(data.invite_url ?? null);
+      toast({ title: "Booking created" });
+      onCreated?.();
+    } catch (e: any) {
+      console.error("[create-booking] threw", e);
+      toast({ title: "Failed to create booking", description: e?.message ?? String(e), variant: "destructive" });
+    } finally {
+      setSubmitting(false);
     }
-    const data = res.data as { invite_url?: string };
-    setInviteUrl(data.invite_url ?? null);
-    toast({ title: "Booking created" });
-    onCreated?.();
   };
 
   const copyLink = async () => {
