@@ -1,0 +1,112 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://esm.sh/zod@3.23.8";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+const BodySchema = z.object({
+  token: z.string().trim().min(16).max(128).regex(/^[a-f0-9]+$/i),
+});
+
+const norm = (e?: string | null) =>
+  (e || "").normalize("NFC").toLowerCase().trim();
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return json({ error: "Unauthorized" }, 401);
+    }
+
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+    const { data: { user }, error: authErr } = await userClient.auth.getUser();
+    if (authErr || !user) return json({ error: "Unauthorized" }, 401);
+
+    const parsed = BodySchema.safeParse(await req.json());
+    if (!parsed.success) {
+      return json({ error: parsed.error.flatten().fieldErrors }, 400);
+    }
+    const { token } = parsed.data;
+
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const { data: booking, error: findErr } = await admin
+      .from("bookings")
+      .select("*")
+      .eq("invitation_token", token)
+      .maybeSingle();
+
+    if (findErr) {
+      console.error("[claim-booking] lookup error", findErr);
+      return json({ error: findErr.message }, 500);
+    }
+    if (!booking) return json({ error: "Invitation not found" }, 404);
+
+    if (
+      booking.invitation_expires_at &&
+      new Date(booking.invitation_expires_at).getTime() < Date.now()
+    ) {
+      return json({ error: "Invitation expired" }, 410);
+    }
+
+    const userEmail = norm(user.email);
+    const bookingEmail = norm(booking.email);
+
+    // If already claimed
+    if (booking.invitation_claimed && booking.user_id) {
+      if (booking.user_id === user.id) {
+        return json({ ok: true, booking_id: booking.id, already_claimed: true });
+      }
+      return json({ error: "Invitation already claimed" }, 409);
+    }
+
+    // Email must match the invitation
+    if (userEmail !== bookingEmail) {
+      return json(
+        {
+          error: "email_mismatch",
+          message: `This invitation is for ${booking.email}. Please sign in with that email.`,
+          booking_email: booking.email,
+        },
+        403
+      );
+    }
+
+    const { error: updErr } = await admin
+      .from("bookings")
+      .update({
+        user_id: user.id,
+        invitation_claimed: true,
+      })
+      .eq("id", booking.id);
+
+    if (updErr) {
+      console.error("[claim-booking] update error", updErr);
+      return json({ error: updErr.message }, 500);
+    }
+
+    return json({ ok: true, booking_id: booking.id, already_claimed: false });
+  } catch (e: any) {
+    console.error("[claim-booking] error", e);
+    return json({ error: e.message ?? String(e) }, 500);
+  }
+});

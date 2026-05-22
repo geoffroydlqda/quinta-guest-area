@@ -19,6 +19,7 @@ import Documentation from "./pages/Documentation";
 import Admin from "./pages/Admin";
 import AdminGuestDetail from "./pages/AdminGuestDetail";
 import BookingSelector from "./pages/BookingSelector";
+import InvitePage from "./pages/InvitePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/invite/:token" element={<InvitePage />} />
               {/* Protected routes - require authentication */}
               <Route path="/bookings" element={<BookingSelector />} />
               <Route path="/dashboard" element={<Dashboard />} />
