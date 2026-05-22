@@ -74,6 +74,7 @@ const AdminContent = () => {
   const [categoryFilter, setCategoryFilter] = useState<"all" | "live" | "upcoming" | "past">("all");
   const [pastCollapsed, setPastCollapsed] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+  const [createBookingOpen, setCreateBookingOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
