@@ -76,32 +76,40 @@ serve(async (req) => {
 
     const token = genToken();
 
+    const insertPayload = {
+      retreat_name: body.retreat_name || "",
+      first_name: body.first_name ?? null,
+      last_name: body.last_name ?? null,
+      email: body.email.toLowerCase(),
+      guest_count: body.guest_count,
+      check_in_date: body.check_in_date ?? null,
+      check_out_date: body.check_out_date ?? null,
+      payment_status: body.payment_status,
+      deposit_amount: body.deposit_amount ?? null,
+      remaining_balance: body.remaining_balance ?? null,
+      internal_notes: body.internal_notes ?? null,
+      invitation_token: token,
+      invitation_claimed: false,
+      invitation_expires_at: body.invitation_expires_at ?? null,
+      created_by_admin: true,
+    };
+    console.log("[create-booking] insert payload", { ...insertPayload, invitation_token: "***" });
+
     const { data: booking, error: insErr } = await admin
       .from("bookings")
-      .insert({
-        retreat_name: body.retreat_name || "",
-        first_name: body.first_name ?? null,
-        last_name: body.last_name ?? null,
-        email: body.email.toLowerCase(),
-        guest_count: body.guest_count,
-        check_in_date: body.check_in_date ?? null,
-        check_out_date: body.check_out_date ?? null,
-        payment_status: body.payment_status,
-        deposit_amount: body.deposit_amount ?? null,
-        remaining_balance: body.remaining_balance ?? null,
-        internal_notes: body.internal_notes ?? null,
-        invitation_token: token,
-        invitation_claimed: false,
-        invitation_expires_at: body.invitation_expires_at ?? null,
-        created_by_admin: true,
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
     if (insErr) {
       console.error("[create-booking] insert error", insErr);
-      return json({ error: insErr.message }, 500);
+      return json({ error: insErr.message, code: insErr.code, details: insErr.details }, 500);
     }
+    if (!booking?.id) {
+      console.error("[create-booking] insert returned no row");
+      return json({ error: "Insert returned no row" }, 500);
+    }
+    console.log("[create-booking] inserted", { booking_id: booking.id });
 
     const origin = body.origin || "";
     const inviteUrl = origin ? `${origin.replace(/\/$/, "")}/invite/${token}` : `/invite/${token}`;
