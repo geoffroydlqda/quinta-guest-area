@@ -37,6 +37,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/invite/:token" element={<InvitePage />} />
               {/* Protected routes - require authentication */}
               <Route path="/bookings" element={<BookingSelector />} />
               <Route path="/dashboard" element={<Dashboard />} />
