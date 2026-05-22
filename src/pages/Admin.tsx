@@ -826,3 +826,86 @@ function ProfileTable({
     </div>
   );
 }
+
+function PendingInvitationsSection({ bookings, onChanged }: { bookings: BookingRow[]; onChanged: () => void }) {
+  const { toast } = useToast();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const inviteUrl = (token: string | null) =>
+    token ? `${window.location.origin}/invite/${token}` : "";
+
+  const copy = async (b: BookingRow) => {
+    const url = inviteUrl(b.invitation_token);
+    if (!url) return;
+    await navigator.clipboard.writeText(url);
+    setCopiedId(b.id);
+    toast({ title: "Invitation link copied" });
+    setTimeout(() => setCopiedId((c) => (c === b.id ? null : c)), 2000);
+  };
+
+  const remove = async (b: BookingRow) => {
+    if (!confirm(`Delete pending booking for ${b.email}?`)) return;
+    const { error } = await supabase.from("bookings").delete().eq("id", b.id);
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Booking deleted" });
+    onChanged();
+  };
+
+  return (
+    <section className="mb-6">
+      <h2 className="text-base font-medium mb-2">
+        Pending invitations <span className="text-muted-foreground text-sm font-normal">({bookings.length})</span>
+      </h2>
+      <div className="border border-border rounded-lg bg-card overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2">Retreat</th>
+              <th className="px-3 py-2">Guest</th>
+              <th className="px-3 py-2">Email</th>
+              <th className="px-3 py-2">Dates</th>
+              <th className="px-3 py-2">Payment</th>
+              <th className="px-3 py-2">Invite link</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {bookings.map((b) => {
+              const name = [b.first_name, b.last_name].filter(Boolean).join(" ").trim();
+              return (
+                <tr key={b.id} className="border-t border-border">
+                  <td className="px-3 py-2">{b.retreat_name || "—"}</td>
+                  <td className="px-3 py-2">{name || "—"}</td>
+                  <td className="px-3 py-2">{b.email}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {b.check_in_date || "—"} → {b.check_out_date || "—"}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">{b.payment_status}</td>
+                  <td className="px-3 py-2">
+                    {b.invitation_token ? (
+                      <Button size="sm" variant="outline" onClick={() => copy(b)}>
+                        {copiedId === b.id ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
+                        Copy link
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Button size="sm" variant="ghost" onClick={() => remove(b)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
