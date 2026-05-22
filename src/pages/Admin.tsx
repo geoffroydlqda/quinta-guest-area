@@ -45,8 +45,17 @@ type Passenger = { id: string; first_name: string; last_name?: string | null; ph
 type Trip = { id: string; user_id: string; trip_direction: string; pickup_location: string; dropoff_location: string; trip_date: string; trip_time: string; passengers_count: number; taxi_size: string; price_estimate: string; custom_price: number | null; google_calendar_event_id?: string | null; sync_status?: string | null; last_synced_at?: string | null; sync_error?: string | null; passengers?: Passenger[] };
 type FoodPlan = { user_id: string; selections: any; diet_preference: string | null; status_food: string };
 
+type BookingRow = {
+  id: string; retreat_name: string; first_name: string | null; last_name: string | null;
+  email: string; guest_count: number;
+  check_in_date: string | null; check_out_date: string | null;
+  payment_status: string; invitation_token: string | null; invitation_claimed: boolean;
+  user_id: string | null; created_at: string;
+};
+
 interface Data {
   profiles: Profile[]; rooms: Room[]; trips: Trip[]; food: FoodPlan[];
+  bookings?: BookingRow[];
 }
 
 function csvEscape(v: any): string {
