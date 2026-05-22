@@ -346,6 +346,12 @@ const AdminContent = () => {
           } : d);
         }}
       />
+
+      <CreateBookingDialog
+        open={createBookingOpen}
+        onOpenChange={setCreateBookingOpen}
+        onCreated={load}
+      />
     </div>
   );
 };
