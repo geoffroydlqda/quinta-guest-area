@@ -1,0 +1,201 @@
+import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, Copy, Check } from "lucide-react";
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated?: () => void;
+}
+
+const initial = {
+  retreat_name: "",
+  first_name: "",
+  last_name: "",
+  email: "",
+  guest_count: 1,
+  check_in_date: "",
+  check_out_date: "",
+  payment_status: "pending" as "pending" | "deposit_paid" | "paid_in_full" | "overdue",
+  deposit_amount: "",
+  remaining_balance: "",
+  internal_notes: "",
+};
+
+export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
+  const { toast } = useToast();
+  const [form, setForm] = useState(initial);
+  const [submitting, setSubmitting] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const reset = () => {
+    setForm(initial);
+    setInviteUrl(null);
+    setCopied(false);
+  };
+
+  const handleClose = (next: boolean) => {
+    if (!next) reset();
+    onOpenChange(next);
+  };
+
+  const submit = async () => {
+    if (!form.email.trim()) {
+      toast({ title: "Email required", variant: "destructive" });
+      return;
+    }
+    if (form.check_in_date && form.check_out_date && form.check_out_date < form.check_in_date) {
+      toast({ title: "Check-out must be on or after check-in", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    const res = await supabase.functions.invoke("create-booking", {
+      body: {
+        retreat_name: form.retreat_name.trim(),
+        first_name: form.first_name.trim() || null,
+        last_name: form.last_name.trim() || null,
+        email: form.email.trim().toLowerCase(),
+        guest_count: Number(form.guest_count) || 1,
+        check_in_date: form.check_in_date || null,
+        check_out_date: form.check_out_date || null,
+        payment_status: form.payment_status,
+        deposit_amount: form.deposit_amount === "" ? null : Number(form.deposit_amount),
+        remaining_balance: form.remaining_balance === "" ? null : Number(form.remaining_balance),
+        internal_notes: form.internal_notes.trim() || null,
+        origin: window.location.origin,
+      },
+    });
+    setSubmitting(false);
+    if (res.error) {
+      toast({ title: "Failed to create booking", description: res.error.message, variant: "destructive" });
+      return;
+    }
+    const data = res.data as { invite_url?: string };
+    setInviteUrl(data.invite_url ?? null);
+    toast({ title: "Booking created" });
+    onCreated?.();
+  };
+
+  const copyLink = async () => {
+    if (!inviteUrl) return;
+    await navigator.clipboard.writeText(inviteUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Create booking</DialogTitle>
+          <DialogDescription>
+            Generate a new stay and an invitation link the guest can use to claim it.
+          </DialogDescription>
+        </DialogHeader>
+
+        {inviteUrl ? (
+          <div className="space-y-3">
+            <Label>Invitation link</Label>
+            <div className="flex gap-2">
+              <Input readOnly value={inviteUrl} className="font-mono text-xs" />
+              <Button type="button" variant="outline" onClick={copyLink}>
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Share this with the guest. They'll be asked to sign in or sign up, then the booking will be linked to their account.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => handleClose(false)}>Done</Button>
+              <Button onClick={reset}>Create another</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="retreat_name">Retreat name</Label>
+              <Input id="retreat_name" value={form.retreat_name} onChange={(e) => setForm({ ...form, retreat_name: e.target.value })} placeholder="e.g. Yoga Retreat — June" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="first_name">First name</Label>
+                <Input id="first_name" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} />
+              </div>
+              <div>
+                <Label htmlFor="last_name">Last name</Label>
+                <Input id="last_name" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="email">Email *</Label>
+              <Input id="email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label htmlFor="check_in_date">Check-in</Label>
+                <Input id="check_in_date" type="date" value={form.check_in_date} onChange={(e) => setForm({ ...form, check_in_date: e.target.value })} />
+              </div>
+              <div>
+                <Label htmlFor="check_out_date">Check-out</Label>
+                <Input id="check_out_date" type="date" value={form.check_out_date} onChange={(e) => setForm({ ...form, check_out_date: e.target.value })} />
+              </div>
+              <div>
+                <Label htmlFor="guest_count">Guests</Label>
+                <Input id="guest_count" type="number" min={1} max={50} value={form.guest_count} onChange={(e) => setForm({ ...form, guest_count: Number(e.target.value) || 1 })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label htmlFor="payment_status">Payment</Label>
+                <select
+                  id="payment_status"
+                  value={form.payment_status}
+                  onChange={(e) => setForm({ ...form, payment_status: e.target.value as typeof form.payment_status })}
+                  className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background h-10"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="deposit_paid">Deposit paid</option>
+                  <option value="paid_in_full">Paid in full</option>
+                  <option value="overdue">Overdue</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="deposit_amount">Deposit</Label>
+                <Input id="deposit_amount" type="number" min={0} step="0.01" value={form.deposit_amount} onChange={(e) => setForm({ ...form, deposit_amount: e.target.value })} />
+              </div>
+              <div>
+                <Label htmlFor="remaining_balance">Balance</Label>
+                <Input id="remaining_balance" type="number" min={0} step="0.01" value={form.remaining_balance} onChange={(e) => setForm({ ...form, remaining_balance: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="internal_notes">Internal notes</Label>
+              <Textarea id="internal_notes" rows={3} value={form.internal_notes} onChange={(e) => setForm({ ...form, internal_notes: e.target.value })} />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => handleClose(false)} disabled={submitting}>Cancel</Button>
+              <Button onClick={submit} disabled={submitting}>
+                {submitting && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+                Create booking
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

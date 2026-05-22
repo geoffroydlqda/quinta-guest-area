@@ -4,13 +4,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
+import { CreateBookingDialog } from "@/components/admin/CreateBookingDialog";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
 import { CalendarCheck, AlertTriangle } from "lucide-react";
@@ -73,6 +74,7 @@ const AdminContent = () => {
   const [categoryFilter, setCategoryFilter] = useState<"all" | "live" | "upcoming" | "past">("all");
   const [pastCollapsed, setPastCollapsed] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+  const [createBookingOpen, setCreateBookingOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -212,8 +214,11 @@ const AdminContent = () => {
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
           <h1 className="text-xl font-medium">Admin · Quinta do Amor</h1>
           <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => setCreateBookingOpen(true)}>
+              <Plus className="w-4 h-4 mr-1" />New booking
+            </Button>
             <Button size="sm" variant="outline" onClick={load}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button>
-            <Button size="sm" onClick={sync} disabled={syncing}>
+            <Button size="sm" variant="outline" onClick={sync} disabled={syncing}>
               {syncing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
               Sync to Google Sheets
             </Button>
@@ -340,6 +345,12 @@ const AdminContent = () => {
             food: d.food.filter((f) => f.user_id !== id),
           } : d);
         }}
+      />
+
+      <CreateBookingDialog
+        open={createBookingOpen}
+        onOpenChange={setCreateBookingOpen}
+        onCreated={load}
       />
     </div>
   );
