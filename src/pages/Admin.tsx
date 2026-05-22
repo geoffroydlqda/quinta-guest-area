@@ -268,6 +268,10 @@ const AdminContent = () => {
               ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
             </div>
 
+            {categoryFilter === "all" && (data.bookings || []).filter((b) => !b.invitation_claimed).length > 0 && (
+              <PendingInvitationsSection bookings={(data.bookings || []).filter((b) => !b.invitation_claimed)} onChanged={load} />
+            )}
+
             {(categoryFilter === "all" || categoryFilter === "live" || categoryFilter === "upcoming") && (
               <section className="mb-6">
                 <h2 className="text-base font-medium mb-2">Upcoming events <span className="text-muted-foreground text-sm font-normal">({visibleUpcoming.length})</span></h2>
