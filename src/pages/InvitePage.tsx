@@ -12,7 +12,7 @@ type Status = "loading" | "needs_auth" | "claiming" | "success" | "error";
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { refresh, setActiveBookingId } = useActiveBooking();
 
   const [status, setStatus] = useState<Status>("loading");
