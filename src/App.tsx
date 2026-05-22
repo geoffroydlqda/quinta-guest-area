@@ -19,6 +19,7 @@ import Documentation from "./pages/Documentation";
 import Admin from "./pages/Admin";
 import AdminGuestDetail from "./pages/AdminGuestDetail";
 import BookingSelector from "./pages/BookingSelector";
+import InvitePage from "./pages/InvitePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
