@@ -51,17 +51,17 @@ export function getTripPrice(
 }
 
 /**
- * Returns the effective price for a trip:
- * - fixed-route price, OR
- * - admin-defined custom_price (if set), OR
+ * Returns the effective price for a trip. Manual override ALWAYS wins:
+ * - admin-defined custom_price (if set) — manual override, OR
+ * - fixed-route price (automatic rule), OR
  * - null when it is a custom-offer trip without a price yet.
  */
 export function getEffectiveTripPrice(trip: Pick<TransportationTrip, 'pickup_location' | 'dropoff_location' | 'taxi_size' | 'custom_price'>): number | null {
-  const fixed = getFixedTripPriceNumeric(trip.pickup_location, trip.dropoff_location, trip.taxi_size);
-  if (fixed !== null) return fixed;
   if (trip.custom_price !== null && trip.custom_price !== undefined && !Number.isNaN(Number(trip.custom_price))) {
     return Number(trip.custom_price);
   }
+  const fixed = getFixedTripPriceNumeric(trip.pickup_location, trip.dropoff_location, trip.taxi_size);
+  if (fixed !== null) return fixed;
   return null;
 }
 
