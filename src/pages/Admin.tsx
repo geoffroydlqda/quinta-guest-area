@@ -245,7 +245,7 @@ const AdminContent = () => {
       </header>
 
       <main className="container mx-auto px-4 py-6">
-        <Tabs defaultValue="overview">
+        <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="mb-4 flex flex-wrap">
             <TabsTrigger value="overview">Guests Overview</TabsTrigger>
             <TabsTrigger value="food">Food Planning</TabsTrigger>
