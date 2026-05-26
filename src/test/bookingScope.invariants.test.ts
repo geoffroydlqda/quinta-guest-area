@@ -81,6 +81,24 @@ describe("Booking scope invariants — useTransportation", () => {
   it("update path filters by booking_id when active, else by user_id", () => {
     expect(TRANSPORT).toMatch(/activeBookingId[\s\S]{0,120}\.eq\(['"]booking_id['"],\s*activeBookingId\)/);
   });
+
+  it("loads full live trip records instead of cached transportation summary fields", () => {
+    const DASHBOARD = read("src/pages/Dashboard.tsx");
+    expect(DASHBOARD).toMatch(/from\('transportation_trips'\)\s*\.select\('\*'\)/);
+    expect(DASHBOARD).toMatch(/setTransportationTrips/);
+    expect(DASHBOARD).not.toMatch(/tripCount:\s*costSummary\.totalTrips/);
+    expect(DASHBOARD).not.toMatch(/totalPrice:\s*costSummary\.fixedPriceTotal/);
+  });
+
+  it("subscribes to live transportation trip changes for instant guest overview sync", () => {
+    const DASHBOARD = read("src/pages/Dashboard.tsx");
+    expect(DASHBOARD).toMatch(/channel\(`dashboard-transportation-/);
+    expect(DASHBOARD).toMatch(/postgres_changes/);
+    expect(DASHBOARD).toMatch(/table:\s*'transportation_trips'/);
+    expect(DASHBOARD).toMatch(/invalidateQueries\(\{ queryKey: \['transportation_trips'/);
+    expect(DASHBOARD).toMatch(/invalidateQueries\(\{ queryKey: \['guest_overview'/);
+    expect(DASHBOARD).toMatch(/invalidateQueries\(\{ queryKey: \['booking_totals'/);
+  });
 });
 
 describe("Booking scope invariants — App wiring", () => {
