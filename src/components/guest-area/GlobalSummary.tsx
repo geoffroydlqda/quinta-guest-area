@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ChevronRight, BedDouble, Car, Utensils, Users, Euro } from 'lucide-react';
-import { format } from 'date-fns';
 import type { ToolStatuses, GuestProfile } from '@/types/guest';
+import type { TransportationCostSummary } from '@/lib/transportationPricing';
 
 interface GlobalSummaryProps {
   profile: GuestProfile;
@@ -13,11 +13,7 @@ interface GlobalSummaryProps {
     queenEnsuiteCount: number;
     twinsEnsuiteCount: number;
   };
-  transportationData?: {
-    tripCount: number;
-    totalPrice: number;
-    customOfferCount: number;
-  };
+  transportationData?: TransportationCostSummary;
   foodData?: {
     fullBoardDays: number;
     breakfastOnlyDays: number;
@@ -137,15 +133,15 @@ export function GlobalSummary({
           {hasTransportation ? (
             <div className="text-sm text-muted-foreground pl-6 space-y-1">
               <div className="flex justify-between">
-                <span>{transportationData!.tripCount} trip{transportationData!.tripCount !== 1 ? 's' : ''} scheduled</span>
+                <span>{transportationData!.totalTrips} trip{transportationData!.totalTrips !== 1 ? 's' : ''} scheduled</span>
               </div>
-              {transportationData!.totalPrice > 0 && (
+              {transportationData!.subtotal > 0 && (
                 <div className="flex justify-between items-center">
                   <span className="flex items-center gap-1">
                     <Euro className="w-3 h-3" />
-                    Estimated total (fixed-price)
+                    Transportation subtotal
                   </span>
-                  <span className="font-semibold text-foreground">€{transportationData!.totalPrice}</span>
+                  <span className="font-semibold text-foreground">€{transportationData!.subtotal}</span>
                 </div>
               )}
               {transportationData!.customOfferCount > 0 && (

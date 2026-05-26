@@ -6,7 +6,7 @@ interface TransportationCostSummaryProps {
 }
 
 export function TransportationCostSummaryCard({ summary }: TransportationCostSummaryProps) {
-  const { fixedPriceTotal, customOfferCount, totalTrips } = summary;
+  const { subtotal, customOfferCount, totalTrips } = summary;
 
   if (totalTrips === 0) {
     return null;
@@ -25,10 +25,10 @@ export function TransportationCostSummaryCard({ summary }: TransportationCostSum
           <span className="font-medium">{totalTrips}</span>
         </div>
 
-        {fixedPriceTotal > 0 && (
+        {subtotal > 0 && (
           <div className="flex justify-between items-center py-2 bg-primary/5 rounded-lg px-3 -mx-3">
-            <span className="font-medium">Estimated total (fixed-price trips)</span>
-            <span className="text-lg font-bold text-primary">€{fixedPriceTotal}</span>
+            <span className="font-medium">Transportation subtotal</span>
+            <span className="text-lg font-bold text-primary">€{subtotal}</span>
           </div>
         )}
 

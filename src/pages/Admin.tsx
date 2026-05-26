@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
@@ -77,6 +78,7 @@ const AdminContent = () => {
   const { signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -343,7 +345,12 @@ const AdminContent = () => {
           </TabsContent>
 
           <TabsContent value="transport">
-            <TransportView data={data} guestName={guestName} onTripPatched={patchTrip} onReload={() => load({ silent: true })} />
+            <TransportView data={data} guestName={guestName} onTripPatched={patchTrip} onReload={() => load({ silent: true })} onInvalidateTransport={(bookingId, userId) => Promise.all([
+              queryClient.invalidateQueries({ queryKey: ['transportation_trips', bookingId ?? userId] }),
+              queryClient.invalidateQueries({ queryKey: ['booking_summary', bookingId ?? userId] }),
+              queryClient.invalidateQueries({ queryKey: ['guest_overview', bookingId ?? userId] }),
+              queryClient.invalidateQueries({ queryKey: ['booking_totals', bookingId ?? userId] }),
+            ]).then(() => undefined)} />
           </TabsContent>
 
           <TabsContent value="rooms">
@@ -458,7 +465,7 @@ function FoodView({ data, guestName }: { data: Data; guestName: (u: string) => s
   );
 }
 
-function TransportView({ data, guestName, onTripPatched, onReload }: { data: Data; guestName: (u: string) => string; onTripPatched: (id: string, patch: Partial<Trip>) => void; onReload: () => void }) {
+function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateTransport }: { data: Data; guestName: (u: string) => string; onTripPatched: (id: string, patch: Partial<Trip>) => void; onReload: () => void; onInvalidateTransport: (bookingId: string | null | undefined, userId: string) => Promise<void> }) {
   const { toast } = useToast();
   const [syncingAll, setSyncingAll] = useState(false);
   const [forceResyncing, setForceResyncing] = useState(false);
@@ -589,7 +596,7 @@ function TransportView({ data, guestName, onTripPatched, onReload }: { data: Dat
       <div className="space-y-4">
         {groups.map((g) => {
           const collapsedNow = isCollapsed(g);
-          const hasFixedTotal = g.cost.fixedPriceTotal > 0;
+          const hasSubtotal = g.cost.subtotal > 0;
           return (
             <section key={g.key} className="border border-border rounded-lg bg-card overflow-hidden">
               <button
@@ -608,7 +615,7 @@ function TransportView({ data, guestName, onTripPatched, onReload }: { data: Dat
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground whitespace-nowrap">
                   <span>{g.cost.totalTrips} trip{g.cost.totalTrips === 1 ? "" : "s"}</span>
-                  {hasFixedTotal && <span className="font-medium text-foreground">Total: €{g.cost.fixedPriceTotal}</span>}
+                  {hasSubtotal && <span className="font-medium text-foreground">Total: €{g.cost.subtotal}</span>}
                   {g.cost.customOfferCount > 0 && <span>{g.cost.customOfferCount} custom offer{g.cost.customOfferCount === 1 ? "" : "s"}</span>}
                 </div>
               </button>
@@ -665,7 +672,7 @@ function TransportView({ data, guestName, onTripPatched, onReload }: { data: Dat
                               </div>
                             </td>
                             <td className="px-3 py-2">
-                              <CustomPriceEditor trip={t} onPatch={(v) => onTripPatched(t.id, { custom_price: v })} />
+                              <CustomPriceEditor trip={t} bookingId={t.booking_id} userId={t.user_id} onPatch={(v) => onTripPatched(t.id, { custom_price: v })} onInvalidateTransport={onInvalidateTransport} />
                             </td>
                             <td className="px-3 py-2">
                               <Button size="sm" variant="outline" onClick={handleSign}>
@@ -690,7 +697,7 @@ function TransportView({ data, guestName, onTripPatched, onReload }: { data: Dat
   );
 }
 
-function CustomPriceEditor({ trip, onSaved, onPatch }: { trip: { id: string; custom_price: number | null }; onSaved?: (v: number | null) => void; onPatch?: (v: number | null) => void }) {
+function CustomPriceEditor({ trip, bookingId, userId, onSaved, onPatch, onInvalidateTransport }: { trip: { id: string; custom_price: number | null }; bookingId?: string | null; userId?: string; onSaved?: (v: number | null) => void; onPatch?: (v: number | null) => void; onInvalidateTransport?: (bookingId: string | null | undefined, userId: string) => Promise<void> }) {
   const [value, setValue] = useState<string>(
     trip.custom_price !== null && trip.custom_price !== undefined ? String(trip.custom_price) : ""
   );
@@ -733,9 +740,21 @@ function CustomPriceEditor({ trip, onSaved, onPatch }: { trip: { id: string; cus
     setSavedValue(next);
     onSaved?.(next);
     onPatch?.(next);
+    if (import.meta.env.DEV) {
+      console.debug('[transport-sync][admin]', {
+        booking_id: bookingId ?? null,
+        trip_id: trip.id,
+        displayed_price: next,
+        transportation_subtotal_source: 'transportation_trips_live',
+        manual_override_value: next,
+      });
+    }
+    if (onInvalidateTransport && userId) {
+      await onInvalidateTransport(bookingId, userId);
+    }
     // Push the new price to Google Calendar (fire-and-forget).
     syncTripCalendar(trip.id);
-    toast({ title: next === null ? "Custom price cleared" : `Custom price set to €${next}` });
+    toast({ title: "Saved", description: next === null ? "Custom price cleared" : `Custom price set to €${next}` });
   };
 
   return (

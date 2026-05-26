@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActiveBooking } from '@/contexts/BookingContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
@@ -25,6 +26,7 @@ const DashboardContent = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const { bookings, activeBookingId, isLoading: bookingsLoading } = useActiveBooking();
+  const queryClient = useQueryClient();
   
   const { 
     profile, 
@@ -44,12 +46,17 @@ const DashboardContent = () => {
   } = useGuestProfile();
 
   const [roomSetupData, setRoomSetupData] = useState<any>(null);
-  const [transportationData, setTransportationData] = useState<any>(null);
+  const [transportationTrips, setTransportationTrips] = useState<TransportationTrip[]>([]);
   const [foodData, setFoodData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || 'draft');
   const isLocked = guestStatus.isEditingLocked;
+
+  const transportationData = useMemo(() => {
+    if (transportationTrips.length === 0) return null;
+    return calculateTransportationCost(transportationTrips);
+  }, [transportationTrips]);
 
   // Diet validation: total assigned guests must not exceed guests_count
   const dietConfig: DietConfig | null = foodData?.dietConfig || null;
@@ -79,21 +86,14 @@ const DashboardContent = () => {
         });
       }
 
-      // Fetch transportation data with trip details
+      // Fetch live transportation trip records (single source of truth for pricing)
       const { data: tripData } = await scope(
         supabase
           .from('transportation_trips')
-          .select('id, price_estimate, pickup_location, dropoff_location, taxi_size, custom_price')
+          .select('*')
       );
 
-      if (tripData && tripData.length > 0) {
-        const costSummary = calculateTransportationCost(tripData as TransportationTrip[]);
-        setTransportationData({
-          tripCount: costSummary.totalTrips,
-          totalPrice: costSummary.fixedPriceTotal,
-          customOfferCount: costSummary.customOfferCount,
-        });
-      }
+      setTransportationTrips((tripData || []) as TransportationTrip[]);
 
       // Fetch food data
       const { data: foodPlanData } = await scope(
@@ -144,22 +144,74 @@ const DashboardContent = () => {
           selections,
         });
       }
-
-      // Fetch full trip data for email
-      const { data: fullTripData } = await scope(
-        supabase.from('transportation_trips').select('*')
-      );
-
-      if (fullTripData && fullTripData.length > 0) {
-        setTransportationData(prev => ({
-          ...prev,
-          trips: fullTripData,
-        }));
-      }
     };
 
     fetchSummaryData();
   }, [user, profile, toolStatuses, activeBookingId]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const bookingFilter = activeBookingId
+      ? `booking_id=eq.${activeBookingId}`
+      : `user_id=eq.${user.id}`;
+
+    const channel = supabase
+      .channel(`dashboard-transportation-${activeBookingId || user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transportation_trips',
+          filter: bookingFilter,
+        },
+        async (payload) => {
+          const row = (payload.new || payload.old || {}) as Partial<TransportationTrip> & { booking_id?: string | null };
+
+          setTransportationTrips((prev) => {
+            const nextTrips = payload.eventType === 'DELETE'
+              ? prev.filter((trip) => trip.id !== row.id)
+              : payload.eventType === 'INSERT'
+                ? [...prev.filter((trip) => trip.id !== row.id), row as TransportationTrip]
+                : prev.map((trip) => trip.id === row.id ? { ...trip, ...(row as Partial<TransportationTrip>) } : trip);
+
+            if (import.meta.env.DEV) {
+              const summary = calculateTransportationCost(nextTrips as TransportationTrip[]);
+              console.debug('[transport-sync][dashboard]', {
+                booking_id: activeBookingId ?? row.booking_id ?? null,
+                trip_id: row.id ?? null,
+                displayed_price: row.custom_price ?? row.price_estimate ?? null,
+                transportation_subtotal_source: 'transportation_trips_live',
+                manual_override_value: row.custom_price ?? null,
+                recalculated_total: summary.subtotal,
+              });
+            }
+
+            return nextTrips as TransportationTrip[];
+          });
+
+          await queryClient.invalidateQueries({ queryKey: ['transportation_trips', activeBookingId ?? user.id] });
+          await queryClient.invalidateQueries({ queryKey: ['booking_summary', activeBookingId ?? user.id] });
+          await queryClient.invalidateQueries({ queryKey: ['guest_overview', activeBookingId ?? user.id] });
+          await queryClient.invalidateQueries({ queryKey: ['booking_totals', activeBookingId ?? user.id] });
+
+          const scope = <T extends { eq: any }>(q: T) =>
+            activeBookingId ? q.eq('booking_id', activeBookingId) : q.eq('user_id', user.id);
+          const { data } = await scope(
+            supabase
+              .from('transportation_trips')
+              .select('id, price_estimate, pickup_location, dropoff_location, taxi_size, custom_price, trip_date, trip_time, passengers_count, trip_direction, user_id, created_at, updated_at')
+          );
+          setTransportationTrips((data || []) as TransportationTrip[]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, activeBookingId, queryClient]);
 
   const handleSubmitInformation = async () => {
     if (!profile || !hasDatesSet) {
@@ -205,7 +257,7 @@ const DashboardContent = () => {
           checkOutDate: profile.check_out_date,
           guestsCount: profile.guests_count,
           roomSetup: roomSetupData,
-          transportation: transportationData,
+          transportation: transportationData ? { ...transportationData, trips: transportationTrips } : null,
           food: foodData ? {
             ...foodData,
             selections: foodData.selections || [],

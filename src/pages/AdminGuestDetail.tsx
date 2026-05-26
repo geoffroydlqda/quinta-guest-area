@@ -124,7 +124,7 @@ const AdminGuestDetailContent = () => {
   }, [data, dietConfig]);
 
   const transportCost = useMemo(() => calculateTransportationCost((data?.trips || []) as any), [data]);
-  const grandTotal = foodCost.grandTotal + transportCost.fixedPriceTotal;
+  const grandTotal = foodCost.grandTotal + transportCost.subtotal;
 
   const passengersByTrip = useMemo(() => {
     const map = new Map<string, Passenger[]>();
@@ -161,8 +161,9 @@ const AdminGuestDetailContent = () => {
             twinsEnsuiteCount: data.room.twins_ensuite_qty,
           } : null,
           transportation: data.trips.length > 0 ? {
-            tripCount: transportCost.totalTrips,
-            totalPrice: transportCost.fixedPriceTotal,
+            totalTrips: transportCost.totalTrips,
+            subtotal: transportCost.subtotal,
+            fixedPriceTotal: transportCost.subtotal,
             customOfferCount: transportCost.customOfferCount,
             trips: data.trips,
           } : null,
@@ -467,7 +468,7 @@ const AdminGuestDetailContent = () => {
               })}
               <div className="pt-3 border-t border-border flex justify-between items-center">
                 <span className="font-semibold">Transportation subtotal</span>
-                <span className="font-bold text-primary">€{transportCost.fixedPriceTotal}</span>
+                <span className="font-bold text-primary">€{transportCost.subtotal}</span>
               </div>
               {transportCost.customOfferCount > 0 && (
                 <p className="text-xs italic text-muted-foreground">
