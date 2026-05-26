@@ -596,7 +596,7 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
       <div className="space-y-4">
         {groups.map((g) => {
           const collapsedNow = isCollapsed(g);
-          const hasFixedTotal = g.cost.fixedPriceTotal > 0;
+          const hasSubtotal = g.cost.subtotal > 0;
           return (
             <section key={g.key} className="border border-border rounded-lg bg-card overflow-hidden">
               <button
@@ -615,7 +615,7 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground whitespace-nowrap">
                   <span>{g.cost.totalTrips} trip{g.cost.totalTrips === 1 ? "" : "s"}</span>
-                  {hasFixedTotal && <span className="font-medium text-foreground">Total: €{g.cost.fixedPriceTotal}</span>}
+                  {hasSubtotal && <span className="font-medium text-foreground">Total: €{g.cost.subtotal}</span>}
                   {g.cost.customOfferCount > 0 && <span>{g.cost.customOfferCount} custom offer{g.cost.customOfferCount === 1 ? "" : "s"}</span>}
                 </div>
               </button>
