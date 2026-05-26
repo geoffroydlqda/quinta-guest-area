@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
@@ -77,6 +78,7 @@ const AdminContent = () => {
   const { signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -343,7 +345,12 @@ const AdminContent = () => {
           </TabsContent>
 
           <TabsContent value="transport">
-            <TransportView data={data} guestName={guestName} onTripPatched={patchTrip} onReload={() => load({ silent: true })} />
+            <TransportView data={data} guestName={guestName} onTripPatched={patchTrip} onReload={() => load({ silent: true })} onInvalidateTransport={(bookingId, userId) => Promise.all([
+              queryClient.invalidateQueries({ queryKey: ['transportation_trips', bookingId ?? userId] }),
+              queryClient.invalidateQueries({ queryKey: ['booking_summary', bookingId ?? userId] }),
+              queryClient.invalidateQueries({ queryKey: ['guest_overview', bookingId ?? userId] }),
+              queryClient.invalidateQueries({ queryKey: ['booking_totals', bookingId ?? userId] }),
+            ]).then(() => undefined)} />
           </TabsContent>
 
           <TabsContent value="rooms">
