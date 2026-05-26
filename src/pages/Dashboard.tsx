@@ -86,11 +86,11 @@ const DashboardContent = () => {
         });
       }
 
-      // Fetch transportation data with trip details
+      // Fetch live transportation trip records (single source of truth for pricing)
       const { data: tripData } = await scope(
         supabase
           .from('transportation_trips')
-          .select('id, price_estimate, pickup_location, dropoff_location, taxi_size, custom_price')
+          .select('*')
       );
 
       setTransportationTrips((tripData || []) as TransportationTrip[]);
@@ -143,15 +143,6 @@ const DashboardContent = () => {
           mealTimes,
           selections,
         });
-      }
-
-      // Fetch full trip data for email
-      const { data: fullTripData } = await scope(
-        supabase.from('transportation_trips').select('*')
-      );
-
-      if (fullTripData) {
-        setTransportationTrips(fullTripData as TransportationTrip[]);
       }
     };
 
@@ -214,7 +205,7 @@ const DashboardContent = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, activeBookingId, queryClient, transportationTrips]);
+  }, [user, activeBookingId, queryClient]);
 
   const handleSubmitInformation = async () => {
     if (!profile || !hasDatesSet) {
@@ -260,7 +251,7 @@ const DashboardContent = () => {
           checkOutDate: profile.check_out_date,
           guestsCount: profile.guests_count,
           roomSetup: roomSetupData,
-          transportation: transportationData,
+          transportation: transportationData ? { ...transportationData, trips: transportationTrips } : null,
           food: foodData ? {
             ...foodData,
             selections: foodData.selections || [],
