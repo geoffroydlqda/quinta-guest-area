@@ -167,23 +167,29 @@ const DashboardContent = () => {
           filter: bookingFilter,
         },
         async (payload) => {
-          if (import.meta.env.DEV) {
-            const row = (payload.new || payload.old || {}) as Partial<TransportationTrip> & { booking_id?: string | null };
+          const row = (payload.new || payload.old || {}) as Partial<TransportationTrip> & { booking_id?: string | null };
+
+          setTransportationTrips((prev) => {
             const nextTrips = payload.eventType === 'DELETE'
-              ? transportationTrips.filter((trip) => trip.id !== row.id)
+              ? prev.filter((trip) => trip.id !== row.id)
               : payload.eventType === 'INSERT'
-                ? [...transportationTrips.filter((trip) => trip.id !== row.id), row as TransportationTrip]
-                : transportationTrips.map((trip) => trip.id === row.id ? { ...trip, ...(row as Partial<TransportationTrip>) } : trip);
-            const summary = calculateTransportationCost(nextTrips as TransportationTrip[]);
-            console.debug('[transport-sync][dashboard]', {
-              booking_id: activeBookingId ?? row.booking_id ?? null,
-              trip_id: row.id ?? null,
-              displayed_price: row.custom_price ?? row.price_estimate ?? null,
-              transportation_subtotal_source: 'transportation_trips_live',
-              manual_override_value: row.custom_price ?? null,
-              recalculated_total: summary.subtotal,
-            });
-          }
+                ? [...prev.filter((trip) => trip.id !== row.id), row as TransportationTrip]
+                : prev.map((trip) => trip.id === row.id ? { ...trip, ...(row as Partial<TransportationTrip>) } : trip);
+
+            if (import.meta.env.DEV) {
+              const summary = calculateTransportationCost(nextTrips as TransportationTrip[]);
+              console.debug('[transport-sync][dashboard]', {
+                booking_id: activeBookingId ?? row.booking_id ?? null,
+                trip_id: row.id ?? null,
+                displayed_price: row.custom_price ?? row.price_estimate ?? null,
+                transportation_subtotal_source: 'transportation_trips_live',
+                manual_override_value: row.custom_price ?? null,
+                recalculated_total: summary.subtotal,
+              });
+            }
+
+            return nextTrips as TransportationTrip[];
+          });
 
           await queryClient.invalidateQueries({ queryKey: ['transportation_trips', activeBookingId ?? user.id] });
           await queryClient.invalidateQueries({ queryKey: ['booking_summary', activeBookingId ?? user.id] });
