@@ -2,7 +2,9 @@ import type { TransportationTrip } from '@/types/guest';
 import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS, STANDARD_TAXI_PRICE_8_SEATS, CUSTOM_OFFER_TEXT, type TaxiSize } from '@/types/guest';
 
 export interface TransportationCostSummary {
-  /** Total of all confirmed prices: fixed-route trips + custom-offer trips with admin-set custom_price. */
+  /** Total of all confirmed prices from live trip records using manual override precedence. */
+  subtotal: number;
+  /** Backwards-compatible alias for subtotal. */
   fixedPriceTotal: number;
   /** Number of custom-offer trips that still have NO admin-defined price. */
   customOfferCount: number;
@@ -75,20 +77,21 @@ export function getTripPriceNumeric(
 }
 
 export function calculateTransportationCost(trips: TransportationTrip[]): TransportationCostSummary {
-  let fixedPriceTotal = 0;
+  let subtotal = 0;
   let customOfferCount = 0;
 
   trips.forEach((trip) => {
     const price = getEffectiveTripPrice(trip);
     if (price !== null) {
-      fixedPriceTotal += price;
+      subtotal += price;
     } else {
       customOfferCount++;
     }
   });
 
   return {
-    fixedPriceTotal,
+    subtotal,
+    fixedPriceTotal: subtotal,
     customOfferCount,
     totalTrips: trips.length,
   };
