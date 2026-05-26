@@ -778,6 +778,7 @@ function TripDateEditor({ trip, onSaved, onPatch }: { trip: { id: string; trip_d
     toast({ title: "Trip date updated" });
     syncTripCalendar(trip.id);
     onSaved?.();
+    onPatch?.(next);
   };
 
   return (
