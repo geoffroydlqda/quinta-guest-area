@@ -756,7 +756,7 @@ function CustomPriceEditor({ trip, onSaved, onPatch }: { trip: { id: string; cus
 
 export { CustomPriceEditor };
 
-function TripDateEditor({ trip, onSaved }: { trip: { id: string; trip_date: string; user_id: string }; onSaved?: () => void }) {
+function TripDateEditor({ trip, onSaved, onPatch }: { trip: { id: string; trip_date: string; user_id: string }; onSaved?: () => void; onPatch?: (d: string) => void }) {
   const [value, setValue] = useState<string>(trip.trip_date || "");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
