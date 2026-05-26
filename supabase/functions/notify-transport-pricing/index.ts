@@ -36,9 +36,10 @@ function fixedPrice(pickup: string, dropoff: string, taxi: string): number | nul
 }
 
 function effectivePrice(t: any): number | null {
+  // Manual override ALWAYS wins over automatic fixed-route pricing.
+  if (t.custom_price !== null && t.custom_price !== undefined && !Number.isNaN(Number(t.custom_price))) return Number(t.custom_price);
   const f = fixedPrice(t.pickup_location, t.dropoff_location, t.taxi_size);
   if (f !== null) return f;
-  if (t.custom_price !== null && t.custom_price !== undefined && !Number.isNaN(Number(t.custom_price))) return Number(t.custom_price);
   return null;
 }
 
