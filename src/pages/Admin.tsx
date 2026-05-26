@@ -234,7 +234,7 @@ const AdminContent = () => {
             <Button size="sm" onClick={() => setCreateBookingOpen(true)}>
               <Plus className="w-4 h-4 mr-1" />New booking
             </Button>
-            <Button size="sm" variant="outline" onClick={load}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button>
+            <Button size="sm" variant="outline" onClick={() => load()}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button>
             <Button size="sm" variant="outline" onClick={sync} disabled={syncing}>
               {syncing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
               Sync to Google Sheets
