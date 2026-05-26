@@ -458,14 +458,69 @@ function FoodView({ data, guestName }: { data: Data; guestName: (u: string) => s
   );
 }
 
-function TransportView({ data, guestName, onTripUpdated }: { data: Data; guestName: (u: string) => string; onTripUpdated?: () => void }) {
+function TransportView({ data, guestName, onTripPatched, onReload }: { data: Data; guestName: (u: string) => string; onTripPatched: (id: string, patch: Partial<Trip>) => void; onReload: () => void }) {
   const { toast } = useToast();
   const [syncingAll, setSyncingAll] = useState(false);
   const [forceResyncing, setForceResyncing] = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  const rows = useMemo(() =>
-    [...data.trips].sort((a, b) => `${a.trip_date} ${a.trip_time}`.localeCompare(`${b.trip_date} ${b.trip_time}`)),
-    [data]
+  const todayIso = useMemo(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const groups = useMemo(() => {
+    const bookingsById = new Map((data.bookings || []).map((b) => [b.id, b]));
+    // pick a "primary" booking per user_id (latest by check_in_date) for trips with no booking_id
+    const bookingsByUser = new Map<string, BookingRow>();
+    for (const b of data.bookings || []) {
+      if (!b.user_id) continue;
+      const cur = bookingsByUser.get(b.user_id);
+      if (!cur || (b.check_in_date || "") > (cur.check_in_date || "")) {
+        bookingsByUser.set(b.user_id, b);
+      }
+    }
+
+    type Group = {
+      key: string;
+      retreatName: string;
+      checkIn: string | null;
+      checkOut: string | null;
+      sortKey: string;
+      trips: Trip[];
+    };
+    const map = new Map<string, Group>();
+
+    for (const t of data.trips) {
+      const b = (t.booking_id && bookingsById.get(t.booking_id)) || bookingsByUser.get(t.user_id);
+      const key = b?.id || `user:${t.user_id}`;
+      const retreatName = b?.retreat_name?.trim() || guestName(t.user_id);
+      const checkIn = b?.check_in_date || null;
+      const checkOut = b?.check_out_date || null;
+      // Sort key: upcoming first (future check-in ascending), then past (descending);
+      // Fallback to earliest trip date for groups with no stay dates.
+      const stayRef = checkIn || t.trip_date;
+      const isPast = (checkOut || stayRef) < todayIso;
+      const sortKey = `${isPast ? "2" : "1"}_${stayRef || "9999-99-99"}`;
+      if (!map.has(key)) {
+        map.set(key, { key, retreatName, checkIn, checkOut, sortKey, trips: [] });
+      }
+      map.get(key)!.trips.push(t);
+    }
+
+    return Array.from(map.values())
+      .map((g) => ({
+        ...g,
+        trips: g.trips.sort((a, b) => `${a.trip_date} ${a.trip_time}`.localeCompare(`${b.trip_date} ${b.trip_time}`)),
+        cost: calculateTransportationCost(g.trips as unknown as TransportationTrip[]),
+        isPast: g.sortKey.startsWith("2"),
+      }))
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  }, [data, guestName, todayIso]);
+
+  const allTripsForCSV = useMemo(
+    () => groups.flatMap((g) => g.trips),
+    [groups]
   );
 
   const handleBackfill = async () => {
@@ -480,7 +535,7 @@ function TransportView({ data, guestName, onTripUpdated }: { data: Data; guestNa
       title: "Calendar sync complete",
       description: `${res.synced} synced, ${res.failed} failed (out of ${res.total}).`,
     });
-    onTripUpdated?.();
+    onReload();
   };
 
   const handleForceResync = async () => {
@@ -496,8 +551,14 @@ function TransportView({ data, guestName, onTripUpdated }: { data: Data; guestNa
       title: "Force resync complete",
       description: `${res.synced} recreated, ${res.failed} failed (out of ${res.total}).`,
     });
-    onTripUpdated?.();
+    onReload();
   };
+
+  const isCollapsed = (g: typeof groups[number]) =>
+    g.key in collapsed ? collapsed[g.key] : g.isPast; // upcoming expanded by default
+
+  const fmtDate = (d: string | null) =>
+    d ? new Date(d + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—";
 
   return (
     <div className="space-y-3">
@@ -512,83 +573,118 @@ function TransportView({ data, guestName, onTripUpdated }: { data: Data; guestNa
         </Button>
         <Button size="sm" variant="outline" onClick={() => downloadCSV("transport.csv", [
           ["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Passengers","Price","Custom price (€)","Custom","Calendar event","Sync status"],
-          ...rows.map((t) => {
+          ...allTripsForCSV.map((t) => {
             const isCustom = t.price_estimate?.toLowerCase().includes("custom");
             return [t.trip_date, t.trip_time, guestName(t.user_id), t.trip_direction, t.pickup_location, t.dropoff_location, t.taxi_size, t.passengers_count, t.price_estimate, t.custom_price ?? "", isCustom ? "yes" : "", t.google_calendar_event_id ?? "", t.sync_status ?? ""];
           }),
         ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
       </div>
-      <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-muted"><tr className="text-left">
-            {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Price (€)","Sign","Notify"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {rows.map((t, i) => {
-              const gName = guestName(t.user_id);
-              const isCustom = (t.price_estimate || "").toLowerCase().includes("custom");
-              const hasManualPrice = t.custom_price !== null && t.custom_price !== undefined;
-              const syncFailed = t.sync_status === "failed";
-              const handleSign = () => {
-                const names = resolveAirportSignNames({ passengers: t.passengers, guestFullName: gName });
-                if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, names });
-                const slug = gName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "guest";
-                const filename = `airport-sign-${slug}-${t.trip_date}.pdf`;
-                const ok = generateAirportSignPdf(names, filename);
-                if (!ok) {
-                  import("sonner").then(({ toast }) => toast.error("Unable to generate airport sign PDF."));
-                }
-              };
-              return (
-                <tr key={i} className="border-t border-border">
-                  <td className="px-3 py-2"><TripDateEditor trip={t} onSaved={onTripUpdated} /></td>
-                  <td className="px-3 py-2">{t.trip_time}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span>{gName}</span>
-                      {syncFailed && (
-                        <span title={t.sync_error || "Calendar sync failed"} className="inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 text-destructive px-2 py-0.5 text-[10px] font-medium whitespace-nowrap">
-                          <AlertTriangle className="w-3 h-3" />
-                          Calendar sync failed
-                        </span>
-                      )}
+
+      {groups.length === 0 && (
+        <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">
+          No transportation trips yet.
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {groups.map((g) => {
+          const collapsedNow = isCollapsed(g);
+          const hasFixedTotal = g.cost.fixedPriceTotal > 0;
+          return (
+            <section key={g.key} className="border border-border rounded-lg bg-card overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setCollapsed((c) => ({ ...c, [g.key]: !collapsedNow }))}
+                className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-muted/40 hover:bg-muted/60 text-left"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {collapsedNow ? <ChevronRight className="w-4 h-4 shrink-0" /> : <ChevronDown className="w-4 h-4 shrink-0" />}
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{g.retreatName}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {fmtDate(g.checkIn)} → {fmtDate(g.checkOut)}
                     </div>
-                  </td>
-                  <td className="px-3 py-2">{t.trip_direction}</td>
-                  <td className="px-3 py-2">{t.pickup_location}</td>
-                  <td className="px-3 py-2">{t.dropoff_location}</td>
-                  <td className="px-3 py-2">{t.taxi_size}</td>
-                  <td className="px-3 py-2">{t.passengers_count}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span>
-                        {hasManualPrice
-                          ? `${Number(t.custom_price)}€`
-                          : t.price_estimate}
-                      </span>
-                      {hasManualPrice && (
-                        <span className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-medium whitespace-nowrap">
-                          Manual price
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <CustomPriceEditor trip={t} onSaved={onTripUpdated} />
-                  </td>
-                  <td className="px-3 py-2">
-                    <Button size="sm" variant="outline" onClick={handleSign}>
-                      <FileDown className="w-4 h-4 mr-1" />Airport sign
-                    </Button>
-                  </td>
-                  <td className="px-3 py-2">
-                    <NotifyGuestButton userId={t.user_id} guestName={gName} />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground whitespace-nowrap">
+                  <span>{g.cost.totalTrips} trip{g.cost.totalTrips === 1 ? "" : "s"}</span>
+                  {hasFixedTotal && <span className="font-medium text-foreground">Total: €{g.cost.fixedPriceTotal}</span>}
+                  {g.cost.customOfferCount > 0 && <span>{g.cost.customOfferCount} custom offer{g.cost.customOfferCount === 1 ? "" : "s"}</span>}
+                </div>
+              </button>
+
+              {!collapsedNow && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/20"><tr className="text-left">
+                      {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Price (€)","Sign","Notify"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {g.trips.map((t) => {
+                        const gName = guestName(t.user_id);
+                        const hasManualPrice = t.custom_price !== null && t.custom_price !== undefined;
+                        const syncFailed = t.sync_status === "failed";
+                        const handleSign = () => {
+                          const names = resolveAirportSignNames({ passengers: t.passengers, guestFullName: gName });
+                          if (import.meta.env.DEV) console.log("[airport-sign] trip", { trip_id: t.id, names });
+                          const slug = gName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "guest";
+                          const filename = `airport-sign-${slug}-${t.trip_date}.pdf`;
+                          const ok = generateAirportSignPdf(names, filename);
+                          if (!ok) {
+                            import("sonner").then(({ toast }) => toast.error("Unable to generate airport sign PDF."));
+                          }
+                        };
+                        return (
+                          <tr key={t.id} className="border-t border-border">
+                            <td className="px-3 py-2"><TripDateEditor trip={t} onPatch={(d) => onTripPatched(t.id, { trip_date: d })} /></td>
+                            <td className="px-3 py-2 whitespace-nowrap">{t.trip_time}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span>{gName}</span>
+                                {syncFailed && (
+                                  <span title={t.sync_error || "Calendar sync failed"} className="inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 text-destructive px-2 py-0.5 text-[10px] font-medium whitespace-nowrap">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    Calendar sync failed
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">{t.trip_direction}</td>
+                            <td className="px-3 py-2">{t.pickup_location}</td>
+                            <td className="px-3 py-2">{t.dropoff_location}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{t.taxi_size}</td>
+                            <td className="px-3 py-2">{t.passengers_count}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span>{hasManualPrice ? `${Number(t.custom_price)}€` : t.price_estimate}</span>
+                                {hasManualPrice && (
+                                  <span className="inline-flex items-center rounded-full border border-primary/40 bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-medium whitespace-nowrap">
+                                    Manual price
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <CustomPriceEditor trip={t} onPatch={(v) => onTripPatched(t.id, { custom_price: v })} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <Button size="sm" variant="outline" onClick={handleSign}>
+                                <FileDown className="w-4 h-4 mr-1" />Airport sign
+                              </Button>
+                            </td>
+                            <td className="px-3 py-2">
+                              <NotifyGuestButton userId={t.user_id} guestName={gName} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          );
+        })}
       </div>
     </div>
   );
