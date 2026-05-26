@@ -343,7 +343,7 @@ const AdminContent = () => {
           </TabsContent>
 
           <TabsContent value="transport">
-            <TransportView data={data} guestName={guestName} onTripUpdated={load} />
+            <TransportView data={data} guestName={guestName} onTripPatched={patchTrip} onReload={() => load({ silent: true })} />
           </TabsContent>
 
           <TabsContent value="rooms">
