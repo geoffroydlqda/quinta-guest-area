@@ -16,7 +16,7 @@ import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
 import { CalendarCheck, AlertTriangle } from "lucide-react";
 import { calculateTransportationCost } from "@/lib/transportationPricing";
-import type { TransportationTrip, TaxiSize } from "@/types/guest";
+import type { TransportationTrip } from "@/types/guest";
 
 const STATUS_BADGE: Record<GuestStatusKind, { label: string; className: string }> = {
   pending: { label: "Pending completion", className: "bg-muted text-foreground border border-border" },
