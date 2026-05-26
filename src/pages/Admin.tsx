@@ -690,7 +690,7 @@ function TransportView({ data, guestName, onTripPatched, onReload }: { data: Dat
   );
 }
 
-function CustomPriceEditor({ trip, onSaved }: { trip: { id: string; custom_price: number | null }; onSaved?: (v: number | null) => void }) {
+function CustomPriceEditor({ trip, onSaved, onPatch }: { trip: { id: string; custom_price: number | null }; onSaved?: (v: number | null) => void; onPatch?: (v: number | null) => void }) {
   const [value, setValue] = useState<string>(
     trip.custom_price !== null && trip.custom_price !== undefined ? String(trip.custom_price) : ""
   );
