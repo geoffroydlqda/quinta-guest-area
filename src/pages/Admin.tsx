@@ -698,6 +698,14 @@ function CustomPriceEditor({ trip, onSaved, onPatch }: { trip: { id: string; cus
   const [savedValue, setSavedValue] = useState<number | null>(trip.custom_price);
   const { toast } = useToast();
 
+  // Keep local state in sync if the parent updates the trip's custom_price
+  // (e.g., after optimistic patch from another control / reload).
+  useEffect(() => {
+    setSavedValue(trip.custom_price);
+    setValue(trip.custom_price !== null && trip.custom_price !== undefined ? String(trip.custom_price) : "");
+  }, [trip.id, trip.custom_price]);
+
+
   const dirty = (value === "" ? null : Number(value)) !== savedValue;
   const isMissing = savedValue === null || savedValue === undefined;
 
