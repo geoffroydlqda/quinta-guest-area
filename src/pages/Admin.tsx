@@ -86,16 +86,22 @@ const AdminContent = () => {
   const [pastCollapsed, setPastCollapsed] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
   const [createBookingOpen, setCreateBookingOpen] = useState(false);
+  const [tab, setTab] = useState<string>("overview");
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (opts?: { silent?: boolean }) => {
+    const silent = !!opts?.silent;
+    if (!silent) setLoading(true);
     const res = await supabase.functions.invoke("admin-list-data");
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });
     } else {
       setData(res.data as Data);
     }
-    setLoading(false);
+    if (!silent) setLoading(false);
+  };
+
+  const patchTrip = (id: string, patch: Partial<Trip>) => {
+    setData((d) => d ? { ...d, trips: d.trips.map((t) => t.id === id ? { ...t, ...patch } : t) } : d);
   };
 
   useEffect(() => { load(); }, []);
