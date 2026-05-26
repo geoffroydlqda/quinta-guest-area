@@ -697,7 +697,7 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
   );
 }
 
-function CustomPriceEditor({ trip, onSaved, onPatch }: { trip: { id: string; custom_price: number | null }; onSaved?: (v: number | null) => void; onPatch?: (v: number | null) => void }) {
+function CustomPriceEditor({ trip, bookingId, userId, onSaved, onPatch, onInvalidateTransport }: { trip: { id: string; custom_price: number | null }; bookingId?: string | null; userId?: string; onSaved?: (v: number | null) => void; onPatch?: (v: number | null) => void; onInvalidateTransport?: (bookingId: string | null | undefined, userId: string) => Promise<void> }) {
   const [value, setValue] = useState<string>(
     trip.custom_price !== null && trip.custom_price !== undefined ? String(trip.custom_price) : ""
   );
@@ -740,9 +740,21 @@ function CustomPriceEditor({ trip, onSaved, onPatch }: { trip: { id: string; cus
     setSavedValue(next);
     onSaved?.(next);
     onPatch?.(next);
+    if (import.meta.env.DEV) {
+      console.debug('[transport-sync][admin]', {
+        booking_id: bookingId ?? null,
+        trip_id: trip.id,
+        displayed_price: next,
+        transportation_subtotal_source: 'transportation_trips_live',
+        manual_override_value: next,
+      });
+    }
+    if (onInvalidateTransport && userId) {
+      await onInvalidateTransport(bookingId, userId);
+    }
     // Push the new price to Google Calendar (fire-and-forget).
     syncTripCalendar(trip.id);
-    toast({ title: next === null ? "Custom price cleared" : `Custom price set to €${next}` });
+    toast({ title: "Saved", description: next === null ? "Custom price cleared" : `Custom price set to €${next}` });
   };
 
   return (
