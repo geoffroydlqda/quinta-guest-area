@@ -465,7 +465,7 @@ function FoodView({ data, guestName }: { data: Data; guestName: (u: string) => s
   );
 }
 
-function TransportView({ data, guestName, onTripPatched, onReload }: { data: Data; guestName: (u: string) => string; onTripPatched: (id: string, patch: Partial<Trip>) => void; onReload: () => void }) {
+function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateTransport }: { data: Data; guestName: (u: string) => string; onTripPatched: (id: string, patch: Partial<Trip>) => void; onReload: () => void; onInvalidateTransport: (bookingId: string | null | undefined, userId: string) => Promise<void> }) {
   const { toast } = useToast();
   const [syncingAll, setSyncingAll] = useState(false);
   const [forceResyncing, setForceResyncing] = useState(false);
@@ -672,7 +672,7 @@ function TransportView({ data, guestName, onTripPatched, onReload }: { data: Dat
                               </div>
                             </td>
                             <td className="px-3 py-2">
-                              <CustomPriceEditor trip={t} onPatch={(v) => onTripPatched(t.id, { custom_price: v })} />
+                              <CustomPriceEditor trip={t} bookingId={t.booking_id} userId={t.user_id} onPatch={(v) => onTripPatched(t.id, { custom_price: v })} onInvalidateTransport={onInvalidateTransport} />
                             </td>
                             <td className="px-3 py-2">
                               <Button size="sm" variant="outline" onClick={handleSign}>
