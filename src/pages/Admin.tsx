@@ -350,16 +350,24 @@ const AdminContent = () => {
     return resolvePaymentStatus({ payment_status_override: e.paymentStatusOverride }, inst);
   };
 
-  const deleteBookingDirect = async (bookingId: string, email: string) => {
-    if (!confirm(`Delete pending booking for ${email}?`)) return;
-    const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
-    if (error) {
-      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+  const deleteBookingDirect = async (bookingId: string, _label: string) => {
+    const ok = confirm(
+      "Delete this booking and all its data (rooms, food, transport, payments)?\n\nThe guest's account and other bookings are kept."
+    );
+    if (!ok) return;
+    const res = await supabase.functions.invoke("admin-delete-guest", {
+      body: { booking_id: bookingId },
+    });
+    if (res.error || (res.data && (res.data as any).error)) {
+      const msg = (res.data as any)?.error || res.error?.message || "Delete failed";
+      toast({ title: "Delete failed", description: String(msg), variant: "destructive" });
       return;
     }
+    setData((d) => d ? { ...d, bookings: (d.bookings || []).filter((b) => b.id !== bookingId) } : d);
     toast({ title: "Booking deleted" });
-    load();
+    load({ silent: true });
   };
+
 
   if (loading || !data) {
     return (
