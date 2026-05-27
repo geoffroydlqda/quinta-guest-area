@@ -499,6 +499,7 @@ const AdminGuestDetailContent = () => {
         {/* Payments */}
         <PaymentSection userId={profile.user_id} />
 
+
         {/* Timestamps */}
         <section className="text-xs text-muted-foreground text-center pb-6">
           <div>Last updated: {fmtTimestamp(profile.updated_at)}</div>
