@@ -252,8 +252,16 @@ const Food = () => {
                   >
                     <div className="p-4">
                       <p className="font-semibold">{format(parseISO(day.date), 'EEE, dd MMM')}</p>
-                      {day.isCheckIn && <span className="text-xs text-primary font-medium">Check-in</span>}
-                      {day.isCheckOut && <span className="text-xs text-primary font-medium">Check-out</span>}
+                      {day.isCheckIn && (
+                        <span className="text-xs text-primary font-medium block">
+                          Check-in — dinner only
+                        </span>
+                      )}
+                      {day.isCheckOut && (
+                        <span className="text-xs text-primary font-medium block">
+                          Check-out — breakfast only
+                        </span>
+                      )}
                     </div>
                     <div className="p-3 flex items-center justify-center border-l border-border">
                       <Input
@@ -271,24 +279,41 @@ const Food = () => {
                       />
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
-                      <MealToggle selected={selection.fullBoard} disabled={isLocked || hasIndividualMeal}
-                        onClick={() => updateDaySelection(day.date, { fullBoard: !selection.fullBoard })} />
+                      {!day.isCheckIn && !day.isCheckOut ? (
+                        <MealToggle selected={selection.fullBoard} disabled={isLocked || hasIndividualMeal}
+                          onClick={() => updateDaySelection(day.date, { fullBoard: !selection.fullBoard })} />
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
-                      <MealToggle selected={selection.breakfast} disabled={isLocked || selection.fullBoard}
-                        onClick={() => updateDaySelection(day.date, { breakfast: !selection.breakfast })} />
+                      {!day.isCheckIn ? (
+                        <MealToggle selected={selection.breakfast} disabled={isLocked || selection.fullBoard}
+                          onClick={() => updateDaySelection(day.date, { breakfast: !selection.breakfast })} />
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
-                      <MealToggle selected={selection.lunch} disabled={isLocked || selection.fullBoard}
-                        onClick={() => updateDaySelection(day.date, { lunch: !selection.lunch })} />
+                      {!day.isCheckIn && !day.isCheckOut ? (
+                        <MealToggle selected={selection.lunch} disabled={isLocked || selection.fullBoard}
+                          onClick={() => updateDaySelection(day.date, { lunch: !selection.lunch })} />
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
                     </div>
                     <div className="p-4 flex items-center justify-center border-l border-border">
-                      <MealToggle selected={selection.dinner} disabled={isLocked || selection.fullBoard}
-                        onClick={() => updateDaySelection(day.date, { dinner: !selection.dinner })} />
+                      {!day.isCheckOut ? (
+                        <MealToggle selected={selection.dinner} disabled={isLocked || selection.fullBoard}
+                          onClick={() => updateDaySelection(day.date, { dinner: !selection.dinner })} />
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
                     </div>
                   </div>
                 );
               })}
+
             </div>
           </div>
         </div>
