@@ -518,21 +518,6 @@ const AdminContent = () => {
         </Tabs>
       </main>
 
-      <DeleteGuestDialog
-        open={!!deleteTarget}
-        onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}
-        guestId={deleteTarget?.id ?? null}
-        guestLabel={deleteTarget?.label}
-        onDeleted={(id) => {
-          setData((d) => d ? {
-            ...d,
-            profiles: d.profiles.filter((p) => p.user_id !== id),
-            rooms: d.rooms.filter((r) => r.user_id !== id),
-            trips: d.trips.filter((t) => t.user_id !== id),
-            food: d.food.filter((f) => f.user_id !== id),
-          } : d);
-        }}
-      />
 
       <CreateBookingDialog
         open={createBookingOpen}
