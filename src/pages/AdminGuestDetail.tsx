@@ -534,6 +534,8 @@ function Row({ label, value }: { label: string; value: any }) {
 type Booking = {
   id: string;
   total_rental_price: number | null;
+  payment_status: "pending" | "deposit_paid" | "paid_in_full" | "overdue";
+  payment_status_override: "pending" | "deposit_paid" | "paid_in_full" | "overdue" | null;
 };
 
 type Installment = {
@@ -557,12 +559,14 @@ type Invoice = {
   file_url: string;
   file_name: string;
   uploaded_at: string;
+  amount: number | null;
+  paid: boolean;
+  paid_at: string | null;
 };
 
-function computeStatus(amount_due: number, amount_paid: number, due_date: string | null, override?: Installment["status"]): Installment["status"] {
-  if (override === "paid" || override === "overdue" || override === "partial" || override === "pending") {
-    // allow manual override to pass through only if user changed it explicitly; handled in form
-  }
+type BookingStatus = "pending" | "deposit_paid" | "paid_in_full" | "overdue";
+
+function computeStatus(amount_due: number, amount_paid: number, due_date: string | null): Installment["status"] {
   if (amount_paid >= amount_due && amount_due > 0) return "paid";
   if (amount_paid > 0) return "partial";
   if (due_date) {
@@ -573,6 +577,28 @@ function computeStatus(amount_due: number, amount_paid: number, due_date: string
   return "pending";
 }
 
+function deriveBookingStatus(installments: Installment[]): BookingStatus {
+  if (installments.length === 0) return "pending";
+  if (installments.some((i) => i.status === "overdue")) return "overdue";
+  if (installments.every((i) => i.status === "paid")) return "paid_in_full";
+  if (installments.some((i) => i.status === "paid" || i.status === "partial")) return "deposit_paid";
+  return "pending";
+}
+
+const BOOKING_STATUS_LABEL: Record<BookingStatus, string> = {
+  pending: "Pending",
+  deposit_paid: "Deposit paid",
+  paid_in_full: "Paid in full",
+  overdue: "Overdue",
+};
+
+const BOOKING_STATUS_STYLES: Record<BookingStatus, string> = {
+  pending: "bg-amber-100 text-amber-900 border-amber-300",
+  deposit_paid: "bg-orange-100 text-orange-900 border-orange-300",
+  paid_in_full: "bg-green-100 text-green-900 border-green-300",
+  overdue: "bg-red-100 text-red-900 border-red-300",
+};
+
 const STATUS_STYLES: Record<Installment["status"], string> = {
   pending: "bg-amber-100 text-amber-900 border-amber-300",
   paid: "bg-green-100 text-green-900 border-green-300",
@@ -582,6 +608,9 @@ const STATUS_STYLES: Record<Installment["status"], string> = {
 
 function PaymentSection({ userId }: { userId: string }) {
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const bookingIdParam = searchParams.get("bookingId");
+
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [installments, setInstallments] = useState<Installment[]>([]);
@@ -592,16 +621,18 @@ function PaymentSection({ userId }: { userId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteInstId, setDeleteInstId] = useState<string | null>(null);
   const [deleteInvId, setDeleteInvId] = useState<string | null>(null);
+  const [savingOverride, setSavingOverride] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   const loadAll = async () => {
     setLoading(true);
-    const bRes = await supabase
-      .from("bookings")
-      .select("id,total_rental_price")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    let q = supabase.from("bookings").select("id,total_rental_price,payment_status,payment_status_override");
+    if (bookingIdParam) {
+      q = q.eq("id", bookingIdParam);
+    } else {
+      q = q.eq("user_id", userId).order("created_at", { ascending: true }).limit(1);
+    }
+    const bRes = await q.maybeSingle();
 
     if (bRes.error || !bRes.data) {
       setBooking(null);
@@ -623,7 +654,7 @@ function PaymentSection({ userId }: { userId: string }) {
     setLoading(false);
   };
 
-  useEffect(() => { loadAll(); }, [userId]);
+  useEffect(() => { loadAll(); }, [userId, bookingIdParam]);
 
   const totals = useMemo(() => {
     const totalDue = installments.reduce((s, i) => s + Number(i.amount_due || 0), 0);
@@ -631,8 +662,13 @@ function PaymentSection({ userId }: { userId: string }) {
     const rental = Number(booking?.total_rental_price || 0);
     const remaining = Math.max(0, rental - totalPaid);
     const pct = rental > 0 ? Math.min(100, (totalPaid / rental) * 100) : 0;
-    return { totalDue, totalPaid, rental, remaining, pct };
+    const mismatch = rental > 0 && installments.length > 0 && Math.abs(totalDue - rental) > 0.001;
+    return { totalDue, totalPaid, rental, remaining, pct, mismatch };
   }, [installments, booking]);
+
+  const derivedStatus = useMemo(() => deriveBookingStatus(installments), [installments]);
+  const resolvedStatus: BookingStatus = booking?.payment_status_override ?? derivedStatus;
+  const usingOverride = !!booking?.payment_status_override;
 
   const saveRental = async () => {
     if (!booking) return;
@@ -649,6 +685,19 @@ function PaymentSection({ userId }: { userId: string }) {
     setBooking({ ...booking, total_rental_price: v });
     setEditingRental(false);
     toast({ title: "Saved" });
+  };
+
+  const setOverride = async (value: BookingStatus | null) => {
+    if (!booking) return;
+    setSavingOverride(true);
+    const { error } = await supabase.from("bookings").update({ payment_status_override: value }).eq("id", booking.id);
+    if (error) {
+      toast({ title: "Failed to save", description: error.message, variant: "destructive" });
+    } else {
+      setBooking({ ...booking, payment_status_override: value });
+      toast({ title: value ? "Override saved" : "Override cleared" });
+    }
+    setSavingOverride(false);
   };
 
   const upsertInstallment = async (id: string | null, values: Omit<Installment, "id" | "booking_id" | "status"> & { status?: Installment["status"] }) => {
@@ -687,13 +736,34 @@ function PaymentSection({ userId }: { userId: string }) {
     setDeleteInstId(null);
   };
 
+  const generate3070 = async () => {
+    if (!booking?.total_rental_price || installments.length > 0) return;
+    setGenerating(true);
+    const total = Number(booking.total_rental_price);
+    const deposit = Math.round(total * 0.3 * 100) / 100;
+    const balance = Math.round((total - deposit) * 100) / 100;
+    const rows = [
+      { label: "Deposit (30%)", amount_due: deposit },
+      { label: "Balance (70%)", amount_due: balance },
+    ];
+    const { error } = await supabase.from("payment_installments").insert(
+      rows.map((r) => ({
+        booking_id: booking.id,
+        label: r.label,
+        amount_due: r.amount_due,
+        amount_paid: 0,
+        status: "pending",
+      }))
+    );
+    if (error) toast({ title: "Failed", description: error.message, variant: "destructive" });
+    else { toast({ title: "30/70 plan created" }); await loadAll(); }
+    setGenerating(false);
+  };
+
   const deleteInvoice = async () => {
     if (!deleteInvId) return;
     const inv = invoices.find((i) => i.id === deleteInvId);
-    if (inv) {
-      // file_url stores the storage path
-      await supabase.storage.from("invoices").remove([inv.file_url]);
-    }
+    if (inv) await supabase.storage.from("invoices").remove([inv.file_url]);
     const { error } = await supabase.from("invoices").delete().eq("id", deleteInvId);
     if (error) toast({ title: "Delete failed", description: error.message, variant: "destructive" });
     else { toast({ title: "Deleted" }); await loadAll(); }
@@ -707,6 +777,16 @@ function PaymentSection({ userId }: { userId: string }) {
       return;
     }
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const toggleInvoicePaid = async (inv: Invoice) => {
+    const nextPaid = !inv.paid;
+    const { error } = await supabase
+      .from("invoices")
+      .update({ paid: nextPaid, paid_at: nextPaid ? new Date().toISOString().slice(0, 10) : null })
+      .eq("id", inv.id);
+    if (error) toast({ title: "Failed", description: error.message, variant: "destructive" });
+    else await loadAll();
   };
 
   if (loading) {
@@ -726,7 +806,7 @@ function PaymentSection({ userId }: { userId: string }) {
         <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
           <Wallet className="w-4 h-4 text-primary" /> Payments
         </h2>
-        <p className="text-sm text-muted-foreground italic">No booking found for this guest.</p>
+        <p className="text-sm text-muted-foreground italic">No booking linked yet.</p>
       </section>
     );
   }
@@ -737,66 +817,99 @@ function PaymentSection({ userId }: { userId: string }) {
         <Wallet className="w-4 h-4 text-primary" /> Payments
       </h2>
 
-      {/* Total rental price */}
-      <div className="space-y-2">
-        <div className="text-xs uppercase text-muted-foreground">Total rental price (€)</div>
-        {editingRental ? (
-          <div className="flex gap-2 items-center">
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={rentalInput}
-              onChange={(e) => setRentalInput(e.target.value)}
-              className="max-w-[180px]"
-              autoFocus
-            />
-            <Button size="sm" onClick={saveRental}><Check className="w-4 h-4" /></Button>
-            <Button size="sm" variant="ghost" onClick={() => {
-              setEditingRental(false);
-              setRentalInput(booking.total_rental_price != null ? String(booking.total_rental_price) : "");
-            }}><X className="w-4 h-4" /></Button>
+      {/* Total rental price + status */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <div className="text-xs uppercase text-muted-foreground">Total rental price (€)</div>
+          {editingRental ? (
+            <div className="flex gap-2 items-center">
+              <Input
+                type="number" min="0" step="0.01"
+                value={rentalInput}
+                onChange={(e) => setRentalInput(e.target.value)}
+                className="max-w-[180px]" autoFocus
+              />
+              <Button size="sm" onClick={saveRental}><Check className="w-4 h-4" /></Button>
+              <Button size="sm" variant="ghost" onClick={() => {
+                setEditingRental(false);
+                setRentalInput(booking.total_rental_price != null ? String(booking.total_rental_price) : "");
+              }}><X className="w-4 h-4" /></Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xl font-bold text-primary">
+                {booking.total_rental_price != null ? `€${booking.total_rental_price}` : "—"}
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => setEditingRental(true)}>
+                <Pencil className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-xs uppercase text-muted-foreground">
+            Payment status {usingOverride ? "(override)" : "(automatic)"}
           </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-xl font-bold text-primary">
-              {booking.total_rental_price != null ? `€${booking.total_rental_price}` : "—"}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs px-2 py-1 rounded-full border ${BOOKING_STATUS_STYLES[resolvedStatus]}`}>
+              {BOOKING_STATUS_LABEL[resolvedStatus]}
             </span>
-            <Button size="sm" variant="ghost" onClick={() => setEditingRental(true)}>
-              <Pencil className="w-4 h-4" />
-            </Button>
+            <select
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+              value={booking.payment_status_override ?? ""}
+              onChange={(e) => setOverride((e.target.value || null) as BookingStatus | null)}
+              disabled={savingOverride}
+            >
+              <option value="">Automatic</option>
+              <option value="pending">Pending</option>
+              <option value="deposit_paid">Deposit paid</option>
+              <option value="paid_in_full">Paid in full</option>
+              <option value="overdue">Overdue</option>
+            </select>
+            {usingOverride && (
+              <Button size="sm" variant="ghost" onClick={() => setOverride(null)} disabled={savingOverride}>
+                Clear override
+              </Button>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Progress bar */}
+      {/* Progress bar — accommodation only */}
       {totals.rental > 0 && (
         <div className="space-y-1">
           <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full bg-green-500 transition-all"
-              style={{ width: `${totals.pct}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>€{totals.totalPaid} paid of €{totals.rental}</span>
-            <span>Remaining €{totals.remaining}</span>
+            <div className="h-full bg-green-500 transition-all" style={{ width: `${totals.pct}%` }} />
           </div>
           <div className="text-xs text-muted-foreground">
-            Installments scheduled: €{totals.totalDue}
+            €{totals.totalPaid} paid of €{totals.rental} · €{totals.remaining} remaining
           </div>
+          {totals.mismatch && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+              Installments (€{totals.totalDue}) do not match rental price (€{totals.rental}).
+            </p>
+          )}
         </div>
       )}
 
       {/* Installments */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="text-xs uppercase text-muted-foreground">Installments</div>
-          {!showAdd && (
-            <Button size="sm" variant="outline" onClick={() => setShowAdd(true)}>
-              <Plus className="w-4 h-4 mr-1" /> Add installment
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {installments.length === 0 && booking.total_rental_price != null && booking.total_rental_price > 0 && (
+              <Button size="sm" variant="outline" onClick={generate3070} disabled={generating}>
+                {generating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                Generate 30/70 plan
+              </Button>
+            )}
+            {!showAdd && (
+              <Button size="sm" variant="outline" onClick={() => setShowAdd(true)}>
+                <Plus className="w-4 h-4 mr-1" /> Add installment
+              </Button>
+            )}
+          </div>
         </div>
 
         {installments.length === 0 && !showAdd && (
@@ -864,6 +977,7 @@ function PaymentSection({ userId }: { userId: string }) {
             onUploaded={loadAll}
             onDownload={downloadInvoice}
             onDelete={(id) => setDeleteInvId(id)}
+            onTogglePaid={toggleInvoicePaid}
           />
         ))}
       </div>
@@ -921,9 +1035,7 @@ function InstallmentForm({
     setSaving(true);
     const due = Number(amountDue);
     const paid = Number(amountPaid || 0);
-    const resolvedStatus = status === "auto"
-      ? computeStatus(due, paid, dueDate || null)
-      : status;
+    const resolvedStatus = status === "auto" ? computeStatus(due, paid, dueDate || null) : status;
     await onSave({
       label: label.trim(),
       amount_due: due,
@@ -995,6 +1107,7 @@ function InvoiceCategory({
   onUploaded,
   onDownload,
   onDelete,
+  onTogglePaid,
 }: {
   category: "rental" | "food" | "transport";
   bookingId: string;
@@ -1002,16 +1115,19 @@ function InvoiceCategory({
   onUploaded: () => void | Promise<void>;
   onDownload: (inv: Invoice) => void;
   onDelete: (id: string) => void;
+  onTogglePaid: (inv: Invoice) => void;
 }) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [label, setLabel] = useState("");
+  const [amount, setAmount] = useState("");
   const [period, setPeriod] = useState<"pre" | "post">("pre");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   const onPick = () => fileRef.current?.click();
 
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
@@ -1024,11 +1140,16 @@ function InvoiceCategory({
       toast({ title: "File too large", description: "Max 20MB.", variant: "destructive" });
       return;
     }
+    setPendingFile(file);
+  };
+
+  const doUpload = async () => {
+    if (!pendingFile) return;
     setUploading(true);
-    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const safeName = pendingFile.name.replace(/[^\w.\-]+/g, "_");
     const path = `${bookingId}/${category}/${Date.now()}_${safeName}`;
-    const up = await supabase.storage.from("invoices").upload(path, file, {
-      contentType: file.type,
+    const up = await supabase.storage.from("invoices").upload(path, pendingFile, {
+      contentType: pendingFile.type,
       upsert: false,
     });
     if (up.error) {
@@ -1036,20 +1157,23 @@ function InvoiceCategory({
       setUploading(false);
       return;
     }
+    const amt = amount.trim() === "" ? null : Number(amount);
     const { error } = await supabase.from("invoices").insert({
       booking_id: bookingId,
       type: category,
       period,
       label: label.trim() || null,
       file_url: path,
-      file_name: file.name,
+      file_name: pendingFile.name,
+      amount: amt != null && !Number.isNaN(amt) ? amt : null,
+      paid: false,
     });
     if (error) {
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
       await supabase.storage.from("invoices").remove([path]);
     } else {
       toast({ title: "Uploaded" });
-      setLabel("");
+      setLabel(""); setAmount(""); setPendingFile(null);
       await onUploaded();
     }
     setUploading(false);
@@ -1057,9 +1181,9 @@ function InvoiceCategory({
 
   return (
     <div className="rounded-lg border border-border p-3 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="font-medium capitalize">{category}</div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <select
             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
             value={period}
@@ -1072,17 +1196,36 @@ function InvoiceCategory({
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="Label (optional)"
-            className="h-8 text-xs max-w-[180px]"
+            className="h-8 text-xs max-w-[160px]"
           />
-          <Button size="sm" variant="outline" onClick={onPick} disabled={uploading}>
-            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Upload className="w-4 h-4 mr-1" /> Upload</>}
-          </Button>
+          <Input
+            type="number" min="0" step="0.01"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="€ amount"
+            className="h-8 text-xs max-w-[110px]"
+          />
+          {pendingFile ? (
+            <>
+              <span className="text-xs text-muted-foreground truncate max-w-[140px]">{pendingFile.name}</span>
+              <Button size="sm" onClick={doUpload} disabled={uploading}>
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Upload className="w-4 h-4 mr-1" /> Upload</>}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setPendingFile(null)} disabled={uploading}>
+                <X className="w-4 h-4" />
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="outline" onClick={onPick}>
+              Choose file
+            </Button>
+          )}
           <input
             ref={fileRef}
             type="file"
             accept="application/pdf,image/jpeg,image/png"
             className="hidden"
-            onChange={onFile}
+            onChange={onFileSelected}
           />
         </div>
       </div>
@@ -1092,13 +1235,22 @@ function InvoiceCategory({
         <ul className="space-y-1">
           {invoices.map((inv) => (
             <li key={inv.id} className="flex items-center justify-between gap-2 text-sm">
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 flex-wrap">
                 <span className="truncate">{inv.label || inv.file_name}</span>
                 <span className="text-[10px] uppercase px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground">
                   {inv.period}
                 </span>
+                {inv.amount != null && (
+                  <span className="text-xs text-muted-foreground">€{inv.amount}</span>
+                )}
+                <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded-full border ${inv.paid ? "bg-green-100 text-green-900 border-green-300" : "bg-amber-100 text-amber-900 border-amber-300"}`}>
+                  {inv.paid ? `Paid${inv.paid_at ? ` · ${fmtDate(inv.paid_at)}` : ""}` : "Unpaid"}
+                </span>
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onTogglePaid(inv)}>
+                  {inv.paid ? "Mark unpaid" : "Mark paid"}
+                </Button>
                 <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onDownload(inv)}>
                   <Download className="w-3.5 h-3.5" />
                 </Button>
@@ -1113,6 +1265,7 @@ function InvoiceCategory({
     </div>
   );
 }
+
 
 
 
