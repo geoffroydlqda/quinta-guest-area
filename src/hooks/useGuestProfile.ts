@@ -221,7 +221,29 @@ export function useGuestProfile() {
         timedOut: false,
       }));
     }
-  }, [user, ensureProfileOnServer, fetchProfile, loadToolStatuses]);
+  }, [user, ensureProfileOnServer, fetchProfile, loadToolStatuses, activeBooking, activeBookingId]);
+
+  // Keep profile date/guest fields in sync with the active booking (source of truth).
+  useEffect(() => {
+    if (!activeBooking) return;
+    setState(prev => {
+      if (!prev.profile) return prev;
+      if (
+        prev.profile.check_in_date === activeBooking.check_in_date &&
+        prev.profile.check_out_date === activeBooking.check_out_date &&
+        prev.profile.guests_count === activeBooking.guest_count
+      ) return prev;
+      return {
+        ...prev,
+        profile: {
+          ...prev.profile,
+          check_in_date: activeBooking.check_in_date,
+          check_out_date: activeBooking.check_out_date,
+          guests_count: activeBooking.guest_count ?? 1,
+        },
+      };
+    });
+  }, [activeBooking?.check_in_date, activeBooking?.check_out_date, activeBooking?.guest_count]);
 
   useEffect(() => {
     const nextCheckOutDate = state.profile?.check_out_date ?? null;
