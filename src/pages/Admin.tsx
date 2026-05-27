@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
+
 import { CreateBookingDialog } from "@/components/admin/CreateBookingDialog";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
@@ -141,7 +141,7 @@ const AdminContent = () => {
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted">("all");
   const [categoryFilter, setCategoryFilter] = useState<"all" | "live" | "upcoming" | "past">("all");
   const [pastCollapsed, setPastCollapsed] = useState(true);
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+  
   const [createBookingOpen, setCreateBookingOpen] = useState(false);
   const [tab, setTab] = useState<string>("overview");
 
@@ -350,16 +350,24 @@ const AdminContent = () => {
     return resolvePaymentStatus({ payment_status_override: e.paymentStatusOverride }, inst);
   };
 
-  const deleteBookingDirect = async (bookingId: string, email: string) => {
-    if (!confirm(`Delete pending booking for ${email}?`)) return;
-    const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
-    if (error) {
-      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+  const deleteBookingDirect = async (bookingId: string, _label: string) => {
+    const ok = confirm(
+      "Delete this booking and all its data (rooms, food, transport, payments)?\n\nThe guest's account and other bookings are kept."
+    );
+    if (!ok) return;
+    const res = await supabase.functions.invoke("admin-delete-guest", {
+      body: { booking_id: bookingId },
+    });
+    if (res.error || (res.data && (res.data as any).error)) {
+      const msg = (res.data as any)?.error || res.error?.message || "Delete failed";
+      toast({ title: "Delete failed", description: String(msg), variant: "destructive" });
       return;
     }
+    setData((d) => d ? { ...d, bookings: (d.bookings || []).filter((b) => b.id !== bookingId) } : d);
     toast({ title: "Booking deleted" });
-    load();
+    load({ silent: true });
   };
+
 
   if (loading || !data) {
     return (
@@ -433,7 +441,6 @@ const AdminContent = () => {
                     categoryOf={categoryOfEvent}
                     paymentForEvent={paymentForEvent}
                     onRowClick={(bookingId) => navigateToBooking(bookingId)}
-                    onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
                     onDeleteBooking={deleteBookingDirect}
                     showLive
                   />
@@ -461,7 +468,6 @@ const AdminContent = () => {
                       categoryOf={categoryOfEvent}
                       paymentForEvent={paymentForEvent}
                       onRowClick={(bookingId) => navigateToBooking(bookingId)}
-                      onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
                       onDeleteBooking={deleteBookingDirect}
                     />
                   )
@@ -478,7 +484,6 @@ const AdminContent = () => {
                   categoryOf={categoryOfEvent}
                   paymentForEvent={paymentForEvent}
                   onRowClick={(bookingId) => navigateToBooking(bookingId)}
-                  onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
                   onDeleteBooking={deleteBookingDirect}
                 />
               </section>
@@ -513,21 +518,6 @@ const AdminContent = () => {
         </Tabs>
       </main>
 
-      <DeleteGuestDialog
-        open={!!deleteTarget}
-        onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}
-        guestId={deleteTarget?.id ?? null}
-        guestLabel={deleteTarget?.label}
-        onDeleted={(id) => {
-          setData((d) => d ? {
-            ...d,
-            profiles: d.profiles.filter((p) => p.user_id !== id),
-            rooms: d.rooms.filter((r) => r.user_id !== id),
-            trips: d.trips.filter((t) => t.user_id !== id),
-            food: d.food.filter((f) => f.user_id !== id),
-          } : d);
-        }}
-      />
 
       <CreateBookingDialog
         open={createBookingOpen}
@@ -1221,7 +1211,6 @@ function EventTable({
   categoryOf,
   paymentForEvent,
   onRowClick,
-  onDeleteGuest,
   onDeleteBooking,
   showLive,
 }: {
@@ -1230,7 +1219,6 @@ function EventTable({
   categoryOf: (e: EventRowProps) => "upcoming" | "past" | "live" | "none";
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
   onRowClick: (bookingId: string) => void;
-  onDeleteGuest: (id: string, label: string) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
   showLive?: boolean;
 }) {
@@ -1314,9 +1302,9 @@ function EventTable({
                     aria-label={`Delete ${label}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (ev.userId) onDeleteGuest(ev.userId, label);
-                      else onDeleteBooking(ev.bookingId, ev.email);
+                      onDeleteBooking(ev.bookingId, ev.email);
                     }}
+
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
