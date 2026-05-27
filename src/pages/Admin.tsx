@@ -1261,7 +1261,7 @@ function EventTable({
             const label = (`${ev.firstName ?? ""} ${ev.lastName ?? ""}`.trim() || ev.email);
             const isLive = showLive && categoryOf(ev) === "live";
             const payStatus = paymentForEvent(ev);
-            const canCopyInvite = !ev.invitationClaimed && !!ev.invitationToken;
+            const canCopyInvite = !ev.invitationClaimed;
             return (
               <tr
                 key={ev.bookingId}
@@ -1294,15 +1294,13 @@ function EventTable({
                   />
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
-                  {canCopyInvite ? (
-                    <Button size="sm" variant="outline" onClick={(e) => copyInvite(e, ev.invitationToken!, ev.bookingId)}>
+                  {ev.invitationClaimed ? (
+                    <span className="text-xs text-muted-foreground">Claimed</span>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={(e) => copyInvite(e, ev.invitationToken, ev.bookingId)}>
                       {copiedId === ev.bookingId ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
                       Copy invite link
                     </Button>
-                  ) : ev.invitationClaimed ? (
-                    <span className="text-xs text-muted-foreground">Claimed</span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
