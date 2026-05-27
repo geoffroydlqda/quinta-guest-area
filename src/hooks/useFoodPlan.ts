@@ -131,33 +131,65 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
     }
   }, [user, activeBookingId, toast, initializeSelections, days, datesKey]);
 
+  // Meals that are NOT allowed on arrival/departure days.
+  // - Arrival day: only Dinner allowed.
+  // - Departure day: only Breakfast allowed.
+  function forbiddenMealsFor(day: { isCheckIn: boolean; isCheckOut: boolean }) {
+    const forbidden = { fullBoard: false, breakfast: false, lunch: false, dinner: false };
+    if (day.isCheckIn) {
+      forbidden.fullBoard = true;
+      forbidden.breakfast = true;
+      forbidden.lunch = true;
+    }
+    if (day.isCheckOut) {
+      forbidden.fullBoard = true;
+      forbidden.lunch = true;
+      forbidden.dinner = true;
+    }
+    return forbidden;
+  }
+
+  function sanitizeSelection(
+    sel: FoodDaySelection,
+    day: { isCheckIn: boolean; isCheckOut: boolean }
+  ): FoodDaySelection {
+    const f = forbiddenMealsFor(day);
+    return {
+      ...sel,
+      fullBoard: f.fullBoard ? false : sel.fullBoard,
+      breakfast: f.breakfast ? false : sel.breakfast,
+      lunch: f.lunch ? false : sel.lunch,
+      dinner: f.dinner ? false : sel.dinner,
+    };
+  }
+
   // Pure function: sync selections array to match current days
   function syncSelectionsToDateRange(
     existingSelections: FoodDaySelection[],
-    currentDays: { date: string }[]
+    currentDays: { date: string; isCheckIn: boolean; isCheckOut: boolean }[]
   ): FoodDaySelection[] {
     if (currentDays.length === 0) return [];
-    
+
     const existingByDate = new Map(existingSelections.map(s => [s.date, s]));
-    
+
     return currentDays.map(day => {
       const found = existingByDate.get(day.date);
-      if (found) {
-        return {
-          ...found,
-          guests_count_day: typeof found.guests_count_day === 'number' && found.guests_count_day >= 0
-            ? found.guests_count_day
-            : defaultGuestsCount,
-        };
-      }
-      return {
-        date: day.date,
-        fullBoard: false,
-        breakfast: false,
-        lunch: false,
-        dinner: false,
-        guests_count_day: defaultGuestsCount,
-      };
+      const base: FoodDaySelection = found
+        ? {
+            ...found,
+            guests_count_day: typeof found.guests_count_day === 'number' && found.guests_count_day >= 0
+              ? found.guests_count_day
+              : defaultGuestsCount,
+          }
+        : {
+            date: day.date,
+            fullBoard: false,
+            breakfast: false,
+            lunch: false,
+            dinner: false,
+            guests_count_day: defaultGuestsCount,
+          };
+      return sanitizeSelection(base, day);
     });
   }
 
@@ -186,29 +218,40 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
   const updateDaySelection = useCallback((date: string, updates: Partial<FoodDaySelection>) => {
     setFoodPlan(prev => {
       if (!prev) return prev;
-      
+
+      const day = days.find(d => d.date === date);
+      const forbidden = day ? forbiddenMealsFor(day) : { fullBoard: false, breakfast: false, lunch: false, dinner: false };
+
+      // Drop forbidden meals silently from incoming updates.
+      const safeUpdates: Partial<FoodDaySelection> = { ...updates };
+      if (forbidden.fullBoard && safeUpdates.fullBoard === true) delete safeUpdates.fullBoard;
+      if (forbidden.breakfast && safeUpdates.breakfast === true) delete safeUpdates.breakfast;
+      if (forbidden.lunch && safeUpdates.lunch === true) delete safeUpdates.lunch;
+      if (forbidden.dinner && safeUpdates.dinner === true) delete safeUpdates.dinner;
+
       const newSelections = prev.selections.map(sel => {
         if (sel.date !== date) return sel;
-        
+
         // Handle exclusive logic: fullBoard vs individual meals
-        if (updates.fullBoard === true) {
+        if (safeUpdates.fullBoard === true) {
           return { ...sel, fullBoard: true, breakfast: false, lunch: false, dinner: false };
         }
-        
-        if (updates.fullBoard === false) {
+
+        if (safeUpdates.fullBoard === false) {
           return { ...sel, fullBoard: false };
         }
-        
-        if (updates.breakfast !== undefined || updates.lunch !== undefined || updates.dinner !== undefined) {
-          return { ...sel, ...updates, fullBoard: false };
+
+        if (safeUpdates.breakfast !== undefined || safeUpdates.lunch !== undefined || safeUpdates.dinner !== undefined) {
+          return { ...sel, ...safeUpdates, fullBoard: false };
         }
-        
-        return { ...sel, ...updates };
+
+        return { ...sel, ...safeUpdates };
       });
-      
+
       return { ...prev, selections: newSelections };
     });
-  }, []);
+  }, [days]);
+
 
   // Update daily guests count for a specific day
   const updateDayGuests = useCallback((date: string, guestsCountDay: number) => {
