@@ -260,7 +260,7 @@ const AdminGuestDetailContent = () => {
             <h1 className="text-lg sm:text-xl font-medium truncate">{fullName}</h1>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={resendEmail} disabled={resending}>
+            <Button size="sm" variant="outline" onClick={resendEmail} disabled={resending || !data?.profile}>
               {resending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />}
               Resend summary email
             </Button>
