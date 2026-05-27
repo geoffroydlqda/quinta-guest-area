@@ -1080,7 +1080,17 @@ function ProfileTable({
   );
 }
 
-function PendingInvitationsSection({ bookings, onChanged }: { bookings: BookingRow[]; onChanged: () => void }) {
+function PendingInvitationsSection({
+  bookings,
+  installmentsByBooking,
+  onNavigate,
+  onChanged,
+}: {
+  bookings: BookingRow[];
+  installmentsByBooking: Map<string, Installment[]>;
+  onNavigate: (bookingId: string) => void;
+  onChanged: () => void;
+}) {
   const { toast } = useToast();
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
