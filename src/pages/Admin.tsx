@@ -218,12 +218,6 @@ const AdminContent = () => {
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
   }, []);
 
-  const categoryOf = (p: Profile): "upcoming" | "past" | "live" | "none" => {
-    if (!p.check_out_date) return "none";
-    if (p.check_out_date < todayIso) return "past";
-    if (p.check_in_date && p.check_in_date <= todayIso && p.check_out_date >= todayIso) return "live";
-    return "upcoming";
-  };
 
   // Unified event row: one entry per booking (claimed or manual).
   type EventRow = {
