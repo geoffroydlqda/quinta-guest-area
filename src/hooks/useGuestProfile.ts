@@ -20,7 +20,7 @@ interface ProfileLoadState {
 
 export function useGuestProfile() {
   const { user } = useAuth();
-  const { activeBookingId } = useActiveBooking();
+  const { activeBookingId, activeBooking, refresh: refreshBookings } = useActiveBooking();
   
   const [state, setState] = useState<ProfileLoadState>({
     profile: null,
