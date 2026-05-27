@@ -994,6 +994,7 @@ function ProfileTable({
   profiles,
   toolStatus,
   categoryOf,
+  paymentForUser,
   onRowClick,
   onDelete,
   showLive,
@@ -1001,16 +1002,18 @@ function ProfileTable({
   profiles: Profile[];
   toolStatus: (uid: string) => { room: string; food: string; trip: string };
   categoryOf: (p: Profile) => "upcoming" | "past" | "live" | "none";
+  paymentForUser: (uid: string) => { status: ResolvedPaymentStatus; bookingId: string | null };
   onRowClick: (uid: string) => void;
   onDelete: (id: string, label: string) => void;
   showLive?: boolean;
 }) {
+  const navigate = useNavigate();
   return (
     <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-muted">
           <tr className="text-left">
-            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status",""].map((h, i) => (
+            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment",""].map((h, i) => (
               <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -1020,6 +1023,7 @@ function ProfileTable({
             const ts = toolStatus(p.user_id);
             const label = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email);
             const isLive = showLive && categoryOf(p) === "live";
+            const pay = paymentForUser(p.user_id);
             return (
               <tr
                 key={p.user_id}
@@ -1045,6 +1049,17 @@ function ProfileTable({
                 <td className="px-3 py-2">{ts.food}</td>
                 <td className="px-3 py-2">{ts.trip}</td>
                 <td className="px-3 py-2"><StatusBadge checkIn={p.check_in_date} statusOverall={p.status_overall} /></td>
+                <td className="px-3 py-2">
+                  <PaymentBadge
+                    status={pay.status}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const seg = p.user_id || pay.bookingId || "";
+                      const qs = pay.bookingId ? `?bookingId=${pay.bookingId}` : "";
+                      navigate(`/admin/guest/${seg}${qs}`);
+                    }}
+                  />
+                </td>
                 <td className="px-3 py-2 text-right">
                   <Button
                     size="icon"
