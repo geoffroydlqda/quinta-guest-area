@@ -144,17 +144,26 @@ const AdminContent = () => {
   const [createBookingOpen, setCreateBookingOpen] = useState(false);
   const [tab, setTab] = useState<string>("overview");
 
+  const [installments, setInstallments] = useState<Installment[]>([]);
+
   const load = async (opts?: { silent?: boolean }) => {
     const silent = !!opts?.silent;
     if (!silent) setLoading(true);
-    const res = await supabase.functions.invoke("admin-list-data");
+    const [res, instRes] = await Promise.all([
+      supabase.functions.invoke("admin-list-data"),
+      supabase.from("payment_installments").select("id,booking_id,amount_due,amount_paid,due_date,paid_at,status"),
+    ]);
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });
     } else {
       setData(res.data as Data);
     }
+    if (!instRes.error && instRes.data) {
+      setInstallments(instRes.data as Installment[]);
+    }
     if (!silent) setLoading(false);
   };
+
 
   const patchTrip = (id: string, patch: Partial<Trip>) => {
     setData((d) => d ? { ...d, trips: d.trips.map((t) => t.id === id ? { ...t, ...patch } : t) } : d);
