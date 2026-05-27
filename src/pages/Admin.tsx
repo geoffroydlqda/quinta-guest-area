@@ -376,7 +376,12 @@ const AdminContent = () => {
             </div>
 
             {categoryFilter === "all" && (data.bookings || []).filter((b) => !b.invitation_claimed).length > 0 && (
-              <PendingInvitationsSection bookings={(data.bookings || []).filter((b) => !b.invitation_claimed)} onChanged={load} />
+              <PendingInvitationsSection
+                bookings={(data.bookings || []).filter((b) => !b.invitation_claimed)}
+                installmentsByBooking={installmentsByBooking}
+                onNavigate={(bookingId) => navigateToDetail(bookingId, bookingId)}
+                onChanged={load}
+              />
             )}
 
             {(categoryFilter === "all" || categoryFilter === "live" || categoryFilter === "upcoming") && (
