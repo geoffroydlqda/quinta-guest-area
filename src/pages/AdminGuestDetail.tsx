@@ -711,9 +711,34 @@ function PaymentSection({ userId }: { userId: string }) {
     setSavingOverride(false);
   };
 
+  const uploadInvoiceToPath = async (
+    bookingId: string,
+    installmentId: string,
+    file: File
+  ): Promise<{ path: string; name: string } | null> => {
+    const allowed = ["application/pdf", "image/jpeg", "image/png"];
+    if (!allowed.includes(file.type)) {
+      toast({ title: "Unsupported file type", description: "PDF, JPG, or PNG only.", variant: "destructive" });
+      return null;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Max 20MB.", variant: "destructive" });
+      return null;
+    }
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${bookingId}/${installmentId}/${Date.now()}_${safeName}`;
+    const up = await supabase.storage.from("invoices").upload(path, file, { contentType: file.type, upsert: false });
+    if (up.error) {
+      toast({ title: "Upload failed", description: up.error.message, variant: "destructive" });
+      return null;
+    }
+    return { path, name: file.name };
+  };
+
   const upsertInstallment = async (
     id: string | null,
-    values: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null }
+    values: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null },
+    file?: File | null
   ) => {
     if (!booking) return false;
     const payload: any = {
@@ -725,15 +750,37 @@ function PaymentSection({ userId }: { userId: string }) {
       category: values.category,
       notes: values.notes,
     };
-    let error;
+    let installmentId = id;
     if (id) {
-      ({ error } = await supabase.from("payment_installments").update(payload).eq("id", id));
+      const { error } = await supabase.from("payment_installments").update(payload).eq("id", id);
+      if (error) {
+        toast({ title: "Save failed", description: error.message, variant: "destructive" });
+        return false;
+      }
     } else {
-      ({ error } = await supabase.from("payment_installments").insert(payload));
+      const { data, error } = await supabase
+        .from("payment_installments")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (error || !data) {
+        toast({ title: "Save failed", description: error?.message, variant: "destructive" });
+        return false;
+      }
+      installmentId = data.id;
     }
-    if (error) {
-      toast({ title: "Save failed", description: error.message, variant: "destructive" });
-      return false;
+    if (file && installmentId) {
+      const existing = id ? installments.find((i) => i.id === id) : null;
+      const uploaded = await uploadInvoiceToPath(booking.id, installmentId, file);
+      if (uploaded) {
+        if (existing?.invoice_file_url) {
+          await supabase.storage.from("invoices").remove([existing.invoice_file_url]);
+        }
+        await supabase
+          .from("payment_installments")
+          .update({ invoice_file_url: uploaded.path, invoice_file_name: uploaded.name })
+          .eq("id", installmentId);
+      }
     }
     toast({ title: "Saved" });
     await loadAll();
