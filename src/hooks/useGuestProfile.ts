@@ -458,7 +458,7 @@ export function useGuestProfile() {
       console.error('Error updating stay info:', error);
       return false;
     }
-  }, [user, state.profile]);
+  }, [user, state.profile, activeBookingId, refreshBookings]);
 
   // Submit profile
   const submitProfile = useCallback(async () => {
