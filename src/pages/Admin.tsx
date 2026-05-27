@@ -1148,7 +1148,9 @@ function PendingInvitationsSection({
                   <td className="px-3 py-2 whitespace-nowrap">
                     {b.check_in_date || "—"} → {b.check_out_date || "—"}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap">{b.payment_status}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <PaymentBadge status={payStatus} onClick={() => onNavigate(b.id)} />
+                  </td>
                   <td className="px-3 py-2">
                     {b.invitation_token ? (
                       <Button size="sm" variant="outline" onClick={() => copy(b)}>
@@ -1160,9 +1162,14 @@ function PendingInvitationsSection({
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <Button size="sm" variant="ghost" onClick={() => remove(b)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <div className="inline-flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => onNavigate(b.id)}>
+                        Details
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => remove(b)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               );
