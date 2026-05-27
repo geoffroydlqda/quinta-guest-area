@@ -54,6 +54,7 @@ type BookingRow = {
   check_in_date: string | null; check_out_date: string | null;
   payment_status: string; invitation_token: string | null; invitation_claimed: boolean;
   user_id: string | null; created_at: string;
+  payment_status_override?: string | null;
 };
 
 type Installment = {
