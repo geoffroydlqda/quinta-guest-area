@@ -536,7 +536,29 @@ type Booking = {
   total_rental_price: number | null;
   payment_status: "pending" | "deposit_paid" | "paid_in_full" | "overdue";
   payment_status_override: "pending" | "deposit_paid" | "paid_in_full" | "overdue" | null;
+  check_in_date: string | null;
 };
+
+// Date helpers (return ISO YYYY-MM-DD, local-time)
+function toIsoLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function todayIso(): string {
+  return toIsoLocal(new Date());
+}
+function shiftDaysIso(iso: string, days: number): string {
+  const d = parseLocalDate(iso);
+  d.setDate(d.getDate() + days);
+  return toIsoLocal(d);
+}
+function shiftMonthsIso(iso: string, months: number): string {
+  const d = parseLocalDate(iso);
+  d.setMonth(d.getMonth() + months);
+  return toIsoLocal(d);
+}
 
 type Installment = {
   id: string;
