@@ -441,7 +441,6 @@ const AdminContent = () => {
                     categoryOf={categoryOfEvent}
                     paymentForEvent={paymentForEvent}
                     onRowClick={(bookingId) => navigateToBooking(bookingId)}
-                    onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
                     onDeleteBooking={deleteBookingDirect}
                     showLive
                   />
@@ -469,7 +468,6 @@ const AdminContent = () => {
                       categoryOf={categoryOfEvent}
                       paymentForEvent={paymentForEvent}
                       onRowClick={(bookingId) => navigateToBooking(bookingId)}
-                      onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
                       onDeleteBooking={deleteBookingDirect}
                     />
                   )
@@ -486,7 +484,6 @@ const AdminContent = () => {
                   categoryOf={categoryOfEvent}
                   paymentForEvent={paymentForEvent}
                   onRowClick={(bookingId) => navigateToBooking(bookingId)}
-                  onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
                   onDeleteBooking={deleteBookingDirect}
                 />
               </section>
@@ -1229,7 +1226,6 @@ function EventTable({
   categoryOf,
   paymentForEvent,
   onRowClick,
-  onDeleteGuest,
   onDeleteBooking,
   showLive,
 }: {
@@ -1238,7 +1234,6 @@ function EventTable({
   categoryOf: (e: EventRowProps) => "upcoming" | "past" | "live" | "none";
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
   onRowClick: (bookingId: string) => void;
-  onDeleteGuest: (id: string, label: string) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
   showLive?: boolean;
 }) {
