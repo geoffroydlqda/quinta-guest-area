@@ -865,26 +865,40 @@ function PaymentSection({ userId }: { userId: string }) {
   }
 
   const renderInstallment = (inst: Installment) => {
-    const ds = displayStatus(inst);
+    const overdue = inst.status === "pending" && isOverdue(inst);
     return editingId === inst.id ? (
       <InstallmentForm
         key={inst.id}
         initial={inst}
+        checkInDate={booking.check_in_date}
         onCancel={() => setEditingId(null)}
-        onSave={async (vals) => {
-          const ok = await upsertInstallment(inst.id, vals);
+        onSave={async (vals, file) => {
+          const ok = await upsertInstallment(inst.id, vals, file);
           if (ok) setEditingId(null);
         }}
       />
     ) : (
       <div key={inst.id} className="rounded-lg border border-border p-3 text-sm space-y-2">
-        <div className="flex justify-between items-start gap-2">
-          <div className="font-semibold">{inst.label}</div>
-          <div className="flex items-center gap-2">
-            <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLES[ds]}`}>{ds}</span>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => togglePaid(inst)}>
-              {inst.status === "paid" ? "Mark unpaid" : "Mark paid"}
-            </Button>
+        <div className="flex justify-between items-start gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="font-semibold truncate">{inst.label}</div>
+            <span className="text-[10px] uppercase px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground">
+              {inst.category}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+              <Checkbox
+                checked={inst.status === "paid"}
+                onCheckedChange={(v) => setPaidStatus(inst, v === true)}
+              />
+              <span>Paid</span>
+            </label>
+            {overdue && (
+              <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLES.overdue}`}>
+                Overdue
+              </span>
+            )}
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(inst.id)}>
               <Pencil className="w-3.5 h-3.5" />
             </Button>
