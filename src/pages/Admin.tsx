@@ -58,8 +58,8 @@ type BookingRow = {
 };
 
 type Installment = {
-  id: string; booking_id: string; amount_due: number; amount_paid: number;
-  due_date: string | null; paid_at: string | null; status: string;
+  id: string; booking_id: string; amount_due: number;
+  due_date: string | null; status: string; category?: string | null;
 };
 
 interface Data {
@@ -70,16 +70,16 @@ interface Data {
 type ResolvedPaymentStatus = "paid_in_full" | "overdue" | "deposit_paid" | "pending";
 
 function deriveStatusFromInstallments(installments: Installment[]): ResolvedPaymentStatus {
-  if (installments.length === 0) return "pending";
+  const rentals = installments.filter((i) => (i.category ?? "rental") === "rental");
+  if (rentals.length === 0) return "pending";
   const todayIso = new Date().toISOString().slice(0, 10);
-  const hasOverdue = installments.some((i) =>
-    i.status === "overdue" ||
-    (i.due_date && i.due_date < todayIso && Number(i.amount_paid) < Number(i.amount_due))
+  const hasOverdue = rentals.some((i) =>
+    i.status !== "paid" && i.due_date && i.due_date < todayIso
   );
   if (hasOverdue) return "overdue";
-  const allPaid = installments.every((i) => Number(i.amount_paid) >= Number(i.amount_due) && Number(i.amount_due) > 0);
+  const allPaid = rentals.every((i) => i.status === "paid");
   if (allPaid) return "paid_in_full";
-  const anyPaid = installments.some((i) => Number(i.amount_paid) > 0);
+  const anyPaid = rentals.some((i) => i.status === "paid");
   if (anyPaid) return "deposit_paid";
   return "pending";
 }
