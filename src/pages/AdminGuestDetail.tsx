@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
@@ -536,7 +537,29 @@ type Booking = {
   total_rental_price: number | null;
   payment_status: "pending" | "deposit_paid" | "paid_in_full" | "overdue";
   payment_status_override: "pending" | "deposit_paid" | "paid_in_full" | "overdue" | null;
+  check_in_date: string | null;
 };
+
+// Date helpers (return ISO YYYY-MM-DD, local-time)
+function toIsoLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function todayIso(): string {
+  return toIsoLocal(new Date());
+}
+function shiftDaysIso(iso: string, days: number): string {
+  const d = parseLocalDate(iso);
+  d.setDate(d.getDate() + days);
+  return toIsoLocal(d);
+}
+function shiftMonthsIso(iso: string, months: number): string {
+  const d = parseLocalDate(iso);
+  d.setMonth(d.getMonth() + months);
+  return toIsoLocal(d);
+}
 
 type Installment = {
   id: string;
@@ -604,7 +627,7 @@ function PaymentSection({ userId }: { userId: string }) {
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [editingRental, setEditingRental] = useState(false);
   const [rentalInput, setRentalInput] = useState("");
-  const [addCategory, setAddCategory] = useState<"rental" | "extra" | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteInstId, setDeleteInstId] = useState<string | null>(null);
   const [savingOverride, setSavingOverride] = useState(false);
@@ -612,7 +635,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const loadAll = async () => {
     setLoading(true);
-    let q = supabase.from("bookings").select("id,total_rental_price,payment_status,payment_status_override");
+    let q = supabase.from("bookings").select("id,total_rental_price,payment_status,payment_status_override,check_in_date");
     if (bookingIdParam) {
       q = q.eq("id", bookingIdParam);
     } else {
@@ -688,9 +711,34 @@ function PaymentSection({ userId }: { userId: string }) {
     setSavingOverride(false);
   };
 
+  const uploadInvoiceToPath = async (
+    bookingId: string,
+    installmentId: string,
+    file: File
+  ): Promise<{ path: string; name: string } | null> => {
+    const allowed = ["application/pdf", "image/jpeg", "image/png"];
+    if (!allowed.includes(file.type)) {
+      toast({ title: "Unsupported file type", description: "PDF, JPG, or PNG only.", variant: "destructive" });
+      return null;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Max 20MB.", variant: "destructive" });
+      return null;
+    }
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${bookingId}/${installmentId}/${Date.now()}_${safeName}`;
+    const up = await supabase.storage.from("invoices").upload(path, file, { contentType: file.type, upsert: false });
+    if (up.error) {
+      toast({ title: "Upload failed", description: up.error.message, variant: "destructive" });
+      return null;
+    }
+    return { path, name: file.name };
+  };
+
   const upsertInstallment = async (
     id: string | null,
-    values: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null }
+    values: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null },
+    file?: File | null
   ) => {
     if (!booking) return false;
     const payload: any = {
@@ -702,15 +750,37 @@ function PaymentSection({ userId }: { userId: string }) {
       category: values.category,
       notes: values.notes,
     };
-    let error;
+    let installmentId = id;
     if (id) {
-      ({ error } = await supabase.from("payment_installments").update(payload).eq("id", id));
+      const { error } = await supabase.from("payment_installments").update(payload).eq("id", id);
+      if (error) {
+        toast({ title: "Save failed", description: error.message, variant: "destructive" });
+        return false;
+      }
     } else {
-      ({ error } = await supabase.from("payment_installments").insert(payload));
+      const { data, error } = await supabase
+        .from("payment_installments")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (error || !data) {
+        toast({ title: "Save failed", description: error?.message, variant: "destructive" });
+        return false;
+      }
+      installmentId = data.id;
     }
-    if (error) {
-      toast({ title: "Save failed", description: error.message, variant: "destructive" });
-      return false;
+    if (file && installmentId) {
+      const existing = id ? installments.find((i) => i.id === id) : null;
+      const uploaded = await uploadInvoiceToPath(booking.id, installmentId, file);
+      if (uploaded) {
+        if (existing?.invoice_file_url) {
+          await supabase.storage.from("invoices").remove([existing.invoice_file_url]);
+        }
+        await supabase
+          .from("payment_installments")
+          .update({ invoice_file_url: uploaded.path, invoice_file_name: uploaded.name })
+          .eq("id", installmentId);
+      }
     }
     toast({ title: "Saved" });
     await loadAll();
@@ -735,15 +805,18 @@ function PaymentSection({ userId }: { userId: string }) {
     const total = Number(booking.total_rental_price);
     const deposit = Math.round(total * 0.3 * 100) / 100;
     const balance = Math.round((total - deposit) * 100) / 100;
+    const depositDue = todayIso();
+    const balanceDue = booking.check_in_date ? shiftMonthsIso(booking.check_in_date, -2) : null;
     const rows = [
-      { label: "Deposit (30%)", amount_due: deposit },
-      { label: "Balance (70%)", amount_due: balance },
+      { label: "Deposit (30%)", amount_due: deposit, due_date: depositDue },
+      { label: "Balance (70%)", amount_due: balance, due_date: balanceDue },
     ];
     const { error } = await supabase.from("payment_installments").insert(
       rows.map((r) => ({
         booking_id: booking.id,
         label: r.label,
         amount_due: r.amount_due,
+        due_date: r.due_date,
         category: "rental",
         status: "pending",
       }))
@@ -753,8 +826,8 @@ function PaymentSection({ userId }: { userId: string }) {
     setGenerating(false);
   };
 
-  const togglePaid = async (inst: Installment) => {
-    const next = inst.status === "paid" ? "pending" : "paid";
+  const setPaidStatus = async (inst: Installment, paid: boolean) => {
+    const next = paid ? "paid" : "pending";
     const { error } = await supabase.from("payment_installments").update({ status: next }).eq("id", inst.id);
     if (error) toast({ title: "Failed", description: error.message, variant: "destructive" });
     else await loadAll();
@@ -839,26 +912,40 @@ function PaymentSection({ userId }: { userId: string }) {
   }
 
   const renderInstallment = (inst: Installment) => {
-    const ds = displayStatus(inst);
+    const overdue = inst.status === "pending" && isOverdue(inst);
     return editingId === inst.id ? (
       <InstallmentForm
         key={inst.id}
         initial={inst}
+        checkInDate={booking.check_in_date}
         onCancel={() => setEditingId(null)}
-        onSave={async (vals) => {
-          const ok = await upsertInstallment(inst.id, vals);
+        onSave={async (vals, file) => {
+          const ok = await upsertInstallment(inst.id, vals, file);
           if (ok) setEditingId(null);
         }}
       />
     ) : (
       <div key={inst.id} className="rounded-lg border border-border p-3 text-sm space-y-2">
-        <div className="flex justify-between items-start gap-2">
-          <div className="font-semibold">{inst.label}</div>
-          <div className="flex items-center gap-2">
-            <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLES[ds]}`}>{ds}</span>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => togglePaid(inst)}>
-              {inst.status === "paid" ? "Mark unpaid" : "Mark paid"}
-            </Button>
+        <div className="flex justify-between items-start gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="font-semibold truncate">{inst.label}</div>
+            <span className="text-[10px] uppercase px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground">
+              {inst.category}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+              <Checkbox
+                checked={inst.status === "paid"}
+                onCheckedChange={(v) => setPaidStatus(inst, v === true)}
+              />
+              <span>Paid</span>
+            </label>
+            {overdue && (
+              <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLES.overdue}`}>
+                Overdue
+              </span>
+            )}
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(inst.id)}>
               <Pencil className="w-3.5 h-3.5" />
             </Button>
@@ -965,70 +1052,57 @@ function PaymentSection({ userId }: { userId: string }) {
       )}
 
       {/* Rental installments */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="text-xs uppercase text-muted-foreground">Rental installments</div>
-          <div className="flex gap-2">
-            {rentalInst.length === 0 && booking.total_rental_price != null && booking.total_rental_price > 0 && (
-              <Button size="sm" variant="outline" onClick={generate3070} disabled={generating}>
-                {generating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-                Generate 30/70 plan
-              </Button>
-            )}
-            {addCategory !== "rental" && (
-              <Button size="sm" variant="outline" onClick={() => setAddCategory("rental")}>
-                <Plus className="w-4 h-4 mr-1" /> Add rental
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {rentalInst.length === 0 && addCategory !== "rental" && (
-          <p className="text-sm text-muted-foreground italic">No rental installments yet.</p>
+      {/* Top action bar: single Add payment + 30/70 quick action */}
+      <div className="flex items-center justify-end flex-wrap gap-2">
+        {rentalInst.length === 0 && booking.total_rental_price != null && booking.total_rental_price > 0 && (
+          <Button size="sm" variant="outline" onClick={generate3070} disabled={generating}>
+            {generating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            Generate 30/70 plan
+          </Button>
         )}
-
-        {rentalInst.map(renderInstallment)}
-
-        {addCategory === "rental" && (
-          <InstallmentForm
-            defaultCategory="rental"
-            onCancel={() => setAddCategory(null)}
-            onSave={async (vals) => {
-              const ok = await upsertInstallment(null, vals);
-              if (ok) setAddCategory(null);
-            }}
-          />
+        {!showAdd && (
+          <Button size="sm" onClick={() => setShowAdd(true)}>
+            <Plus className="w-4 h-4 mr-1" /> Add payment
+          </Button>
         )}
       </div>
 
-      {/* Extras */}
+      {showAdd && (
+        <InstallmentForm
+          checkInDate={booking.check_in_date}
+          onCancel={() => setShowAdd(false)}
+          onSave={async (vals, file) => {
+            const ok = await upsertInstallment(null, vals, file);
+            if (ok) setShowAdd(false);
+          }}
+        />
+      )}
+
+      {/* Accommodation group */}
+      <div className="space-y-3">
+        <div className="text-xs uppercase text-muted-foreground">Accommodation</div>
+        {rentalInst.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">No accommodation payments yet.</p>
+        ) : (
+          rentalInst.map(renderInstallment)
+        )}
+      </div>
+
+      {/* Extras group */}
       <div className="space-y-3 pt-2 border-t border-border">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="text-xs uppercase text-muted-foreground">Extras (food, transport, other)</div>
-          {addCategory !== "extra" && (
-            <Button size="sm" variant="outline" onClick={() => setAddCategory("extra")}>
-              <Plus className="w-4 h-4 mr-1" /> Add extra
-            </Button>
-          )}
+          <div className="text-xs uppercase text-muted-foreground">Extras</div>
+          <div className="text-xs text-muted-foreground">
+            Subtotal: €{extraInst.reduce((s, i) => s + Number(i.amount_due || 0), 0)}
+          </div>
         </div>
-
-        {extraInst.length === 0 && addCategory !== "extra" && (
+        {extraInst.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">No extras yet.</p>
-        )}
-
-        {extraInst.map(renderInstallment)}
-
-        {addCategory === "extra" && (
-          <InstallmentForm
-            defaultCategory="extra"
-            onCancel={() => setAddCategory(null)}
-            onSave={async (vals) => {
-              const ok = await upsertInstallment(null, vals);
-              if (ok) setAddCategory(null);
-            }}
-          />
+        ) : (
+          extraInst.map(renderInstallment)
         )}
       </div>
+
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteInstId} onOpenChange={(o) => !o && setDeleteInstId(null)}>
@@ -1049,39 +1123,82 @@ function PaymentSection({ userId }: { userId: string }) {
 
 function InstallmentForm({
   initial,
-  defaultCategory,
+  checkInDate,
   onCancel,
   onSave,
 }: {
   initial?: Installment;
-  defaultCategory?: "rental" | "extra";
+  checkInDate?: string | null;
   onCancel: () => void;
-  onSave: (v: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null }) => Promise<void> | void;
+  onSave: (
+    v: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null },
+    file?: File | null
+  ) => Promise<void> | void;
 }) {
   const [label, setLabel] = useState(initial?.label || "");
   const [amountDue, setAmountDue] = useState(initial?.amount_due != null ? String(initial.amount_due) : "");
   const [dueDate, setDueDate] = useState(initial?.due_date || "");
+  const [dueDateTouched, setDueDateTouched] = useState(!!initial?.due_date);
   const [notes, setNotes] = useState(initial?.notes || "");
   const [status, setStatus] = useState<"pending" | "paid">(initial?.status ?? "pending");
-  const [category, setCategory] = useState<"rental" | "extra">(initial?.category ?? defaultCategory ?? "rental");
+  const [category, setCategory] = useState<"rental" | "extra">(initial?.category ?? "rental");
+  const [file, setFile] = useState<File | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
+
+  // Auto-fill due_date when category changes to "extra" (if not touched)
+  useEffect(() => {
+    if (initial) return;
+    if (dueDateTouched) return;
+    if (category === "extra" && checkInDate) {
+      setDueDate(shiftDaysIso(checkInDate, -7));
+    } else if (category === "rental") {
+      setDueDate("");
+    }
+  }, [category, checkInDate, dueDateTouched, initial]);
+
+  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null;
+    e.target.value = "";
+    setFile(f);
+  };
 
   const submit = async () => {
     if (!label.trim() || !amountDue) return;
     setSaving(true);
-    await onSave({
-      label: label.trim(),
-      amount_due: Number(amountDue),
-      due_date: dueDate || null,
-      status,
-      category,
-      notes: notes.trim() || null,
-    });
+    await onSave(
+      {
+        label: label.trim(),
+        amount_due: Number(amountDue),
+        due_date: dueDate || null,
+        status,
+        category,
+        notes: notes.trim() || null,
+      },
+      file
+    );
     setSaving(false);
   };
 
   return (
     <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 space-y-2 text-sm">
+      {/* Category toggle */}
+      <div className="space-y-1">
+        <div className="text-xs text-muted-foreground">Category *</div>
+        <div className="inline-flex rounded-md border border-input overflow-hidden">
+          {(["rental", "extra"] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCategory(c)}
+              className={`px-3 py-1.5 text-xs capitalize ${category === c ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid sm:grid-cols-2 gap-2">
         <label className="space-y-1">
           <div className="text-xs text-muted-foreground">Label *</div>
@@ -1093,18 +1210,11 @@ function InstallmentForm({
         </label>
         <label className="space-y-1">
           <div className="text-xs text-muted-foreground">Due date</div>
-          <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-        </label>
-        <label className="space-y-1">
-          <div className="text-xs text-muted-foreground">Category</div>
-          <select
-            className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as "rental" | "extra")}
-          >
-            <option value="rental">Rental</option>
-            <option value="extra">Extra</option>
-          </select>
+          <Input
+            type="date"
+            value={dueDate}
+            onChange={(e) => { setDueDate(e.target.value); setDueDateTouched(true); }}
+          />
         </label>
         <label className="space-y-1">
           <div className="text-xs text-muted-foreground">Status</div>
@@ -1118,6 +1228,31 @@ function InstallmentForm({
           </select>
         </label>
       </div>
+
+      <div className="space-y-1">
+        <div className="text-xs text-muted-foreground">Invoice file (optional)</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
+            <Upload className="w-3.5 h-3.5 mr-1" /> {file ? "Replace file" : "Choose file"}
+          </Button>
+          {file && (
+            <>
+              <span className="text-xs text-muted-foreground truncate max-w-[200px]">{file.name}</span>
+              <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => setFile(null)}>
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf,image/jpeg,image/png"
+            className="hidden"
+            onChange={onFileSelected}
+          />
+        </div>
+      </div>
+
       <label className="space-y-1 block">
         <div className="text-xs text-muted-foreground">Notes</div>
         <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
