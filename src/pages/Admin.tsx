@@ -54,11 +54,65 @@ type BookingRow = {
   check_in_date: string | null; check_out_date: string | null;
   payment_status: string; invitation_token: string | null; invitation_claimed: boolean;
   user_id: string | null; created_at: string;
+  payment_status_override?: string | null;
+};
+
+type Installment = {
+  id: string; booking_id: string; amount_due: number; amount_paid: number;
+  due_date: string | null; paid_at: string | null; status: string;
 };
 
 interface Data {
   profiles: Profile[]; rooms: Room[]; trips: Trip[]; food: FoodPlan[];
   bookings?: BookingRow[];
+}
+
+type ResolvedPaymentStatus = "paid_in_full" | "overdue" | "deposit_paid" | "pending";
+
+function deriveStatusFromInstallments(installments: Installment[]): ResolvedPaymentStatus {
+  if (installments.length === 0) return "pending";
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const hasOverdue = installments.some((i) =>
+    i.status === "overdue" ||
+    (i.due_date && i.due_date < todayIso && Number(i.amount_paid) < Number(i.amount_due))
+  );
+  if (hasOverdue) return "overdue";
+  const allPaid = installments.every((i) => Number(i.amount_paid) >= Number(i.amount_due) && Number(i.amount_due) > 0);
+  if (allPaid) return "paid_in_full";
+  const anyPaid = installments.some((i) => Number(i.amount_paid) > 0);
+  if (anyPaid) return "deposit_paid";
+  return "pending";
+}
+
+function resolvePaymentStatus(
+  booking: { payment_status_override?: string | null } | null | undefined,
+  installments: Installment[]
+): ResolvedPaymentStatus {
+  const override = booking?.payment_status_override;
+  if (override && ["paid_in_full", "overdue", "deposit_paid", "pending"].includes(override)) {
+    return override as ResolvedPaymentStatus;
+  }
+  return deriveStatusFromInstallments(installments);
+}
+
+const PAYMENT_BADGE: Record<ResolvedPaymentStatus, { label: string; className: string }> = {
+  paid_in_full: { label: "Paid", className: "bg-green-100 text-green-800 border border-green-300" },
+  overdue: { label: "Overdue", className: "bg-red-100 text-red-800 border border-red-300" },
+  deposit_paid: { label: "Deposit", className: "bg-amber-100 text-amber-900 border border-amber-300" },
+  pending: { label: "Pending", className: "bg-muted text-muted-foreground border border-border" },
+};
+
+function PaymentBadge({ status, onClick }: { status: ResolvedPaymentStatus; onClick?: (e: React.MouseEvent) => void }) {
+  const cfg = PAYMENT_BADGE[status];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${cfg.className} ${onClick ? "hover:opacity-80 cursor-pointer" : ""}`}
+    >
+      {cfg.label}
+    </button>
+  );
 }
 
 function csvEscape(v: any): string {
@@ -90,17 +144,26 @@ const AdminContent = () => {
   const [createBookingOpen, setCreateBookingOpen] = useState(false);
   const [tab, setTab] = useState<string>("overview");
 
+  const [installments, setInstallments] = useState<Installment[]>([]);
+
   const load = async (opts?: { silent?: boolean }) => {
     const silent = !!opts?.silent;
     if (!silent) setLoading(true);
-    const res = await supabase.functions.invoke("admin-list-data");
+    const [res, instRes] = await Promise.all([
+      supabase.functions.invoke("admin-list-data"),
+      supabase.from("payment_installments").select("id,booking_id,amount_due,amount_paid,due_date,paid_at,status"),
+    ]);
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });
     } else {
       setData(res.data as Data);
     }
+    if (!instRes.error && instRes.data) {
+      setInstallments(instRes.data as Installment[]);
+    }
     if (!silent) setLoading(false);
   };
+
 
   const patchTrip = (id: string, patch: Partial<Trip>) => {
     setData((d) => d ? { ...d, trips: d.trips.map((t) => t.id === id ? { ...t, ...patch } : t) } : d);
@@ -219,6 +282,40 @@ const AdminContent = () => {
     };
   };
 
+  // Map user_id → primary booking (latest by check_in_date) for claimed bookings
+  const bookingByUser = useMemo(() => {
+    const m = new Map<string, BookingRow>();
+    for (const b of data?.bookings || []) {
+      if (!b.user_id) continue;
+      const cur = m.get(b.user_id);
+      if (!cur || (b.check_in_date || "") > (cur.check_in_date || "")) m.set(b.user_id, b);
+    }
+    return m;
+  }, [data]);
+
+  const installmentsByBooking = useMemo(() => {
+    const m = new Map<string, Installment[]>();
+    for (const i of installments) {
+      const arr = m.get(i.booking_id) || [];
+      arr.push(i);
+      m.set(i.booking_id, arr);
+    }
+    return m;
+  }, [installments]);
+
+  const navigateToDetail = (uidOrFallback: string, bookingId: string | null | undefined) => {
+    const seg = uidOrFallback || bookingId || "";
+    const qs = bookingId ? `?bookingId=${bookingId}` : "";
+    navigate(`/admin/guest/${seg}${qs}`);
+  };
+
+  const paymentForUser = (uid: string): { status: ResolvedPaymentStatus; bookingId: string | null } => {
+    const b = bookingByUser.get(uid);
+    if (!b) return { status: "pending", bookingId: null };
+    const inst = installmentsByBooking.get(b.id) || [];
+    return { status: resolvePaymentStatus(b, inst), bookingId: b.id };
+  };
+
   if (loading || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -279,7 +376,12 @@ const AdminContent = () => {
             </div>
 
             {categoryFilter === "all" && (data.bookings || []).filter((b) => !b.invitation_claimed).length > 0 && (
-              <PendingInvitationsSection bookings={(data.bookings || []).filter((b) => !b.invitation_claimed)} onChanged={load} />
+              <PendingInvitationsSection
+                bookings={(data.bookings || []).filter((b) => !b.invitation_claimed)}
+                installmentsByBooking={installmentsByBooking}
+                onNavigate={(bookingId) => navigateToDetail(bookingId, bookingId)}
+                onChanged={load}
+              />
             )}
 
             {(categoryFilter === "all" || categoryFilter === "live" || categoryFilter === "upcoming") && (
@@ -292,7 +394,8 @@ const AdminContent = () => {
                     profiles={visibleUpcoming}
                     toolStatus={toolStatus}
                     categoryOf={categoryOf}
-                    onRowClick={(uid) => navigate(`/admin/guest/${uid}`)}
+                    paymentForUser={paymentForUser}
+                    onRowClick={(uid) => navigateToDetail(uid, paymentForUser(uid).bookingId)}
                     onDelete={(id, label) => setDeleteTarget({ id, label })}
                     showLive
                   />
@@ -318,7 +421,8 @@ const AdminContent = () => {
                       profiles={visiblePast}
                       toolStatus={toolStatus}
                       categoryOf={categoryOf}
-                      onRowClick={(uid) => navigate(`/admin/guest/${uid}`)}
+                      paymentForUser={paymentForUser}
+                      onRowClick={(uid) => navigateToDetail(uid, paymentForUser(uid).bookingId)}
                       onDelete={(id, label) => setDeleteTarget({ id, label })}
                     />
                   )
@@ -333,7 +437,8 @@ const AdminContent = () => {
                   profiles={visibleUnscheduled}
                   toolStatus={toolStatus}
                   categoryOf={categoryOf}
-                  onRowClick={(uid) => navigate(`/admin/guest/${uid}`)}
+                  paymentForUser={paymentForUser}
+                  onRowClick={(uid) => navigateToDetail(uid, paymentForUser(uid).bookingId)}
                   onDelete={(id, label) => setDeleteTarget({ id, label })}
                 />
               </section>
@@ -889,6 +994,7 @@ function ProfileTable({
   profiles,
   toolStatus,
   categoryOf,
+  paymentForUser,
   onRowClick,
   onDelete,
   showLive,
@@ -896,16 +1002,18 @@ function ProfileTable({
   profiles: Profile[];
   toolStatus: (uid: string) => { room: string; food: string; trip: string };
   categoryOf: (p: Profile) => "upcoming" | "past" | "live" | "none";
+  paymentForUser: (uid: string) => { status: ResolvedPaymentStatus; bookingId: string | null };
   onRowClick: (uid: string) => void;
   onDelete: (id: string, label: string) => void;
   showLive?: boolean;
 }) {
+  const navigate = useNavigate();
   return (
     <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-muted">
           <tr className="text-left">
-            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status",""].map((h, i) => (
+            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment",""].map((h, i) => (
               <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -915,6 +1023,7 @@ function ProfileTable({
             const ts = toolStatus(p.user_id);
             const label = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email);
             const isLive = showLive && categoryOf(p) === "live";
+            const pay = paymentForUser(p.user_id);
             return (
               <tr
                 key={p.user_id}
@@ -940,6 +1049,17 @@ function ProfileTable({
                 <td className="px-3 py-2">{ts.food}</td>
                 <td className="px-3 py-2">{ts.trip}</td>
                 <td className="px-3 py-2"><StatusBadge checkIn={p.check_in_date} statusOverall={p.status_overall} /></td>
+                <td className="px-3 py-2">
+                  <PaymentBadge
+                    status={pay.status}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const seg = p.user_id || pay.bookingId || "";
+                      const qs = pay.bookingId ? `?bookingId=${pay.bookingId}` : "";
+                      navigate(`/admin/guest/${seg}${qs}`);
+                    }}
+                  />
+                </td>
                 <td className="px-3 py-2 text-right">
                   <Button
                     size="icon"
@@ -960,7 +1080,17 @@ function ProfileTable({
   );
 }
 
-function PendingInvitationsSection({ bookings, onChanged }: { bookings: BookingRow[]; onChanged: () => void }) {
+function PendingInvitationsSection({
+  bookings,
+  installmentsByBooking,
+  onNavigate,
+  onChanged,
+}: {
+  bookings: BookingRow[];
+  installmentsByBooking: Map<string, Installment[]>;
+  onNavigate: (bookingId: string) => void;
+  onChanged: () => void;
+}) {
   const { toast } = useToast();
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -1008,6 +1138,8 @@ function PendingInvitationsSection({ bookings, onChanged }: { bookings: BookingR
           <tbody>
             {bookings.map((b) => {
               const name = [b.first_name, b.last_name].filter(Boolean).join(" ").trim();
+              const inst = installmentsByBooking.get(b.id) || [];
+              const payStatus = resolvePaymentStatus(b, inst);
               return (
                 <tr key={b.id} className="border-t border-border">
                   <td className="px-3 py-2">{b.retreat_name || "—"}</td>
@@ -1016,7 +1148,9 @@ function PendingInvitationsSection({ bookings, onChanged }: { bookings: BookingR
                   <td className="px-3 py-2 whitespace-nowrap">
                     {b.check_in_date || "—"} → {b.check_out_date || "—"}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap">{b.payment_status}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <PaymentBadge status={payStatus} onClick={() => onNavigate(b.id)} />
+                  </td>
                   <td className="px-3 py-2">
                     {b.invitation_token ? (
                       <Button size="sm" variant="outline" onClick={() => copy(b)}>
@@ -1028,9 +1162,14 @@ function PendingInvitationsSection({ bookings, onChanged }: { bookings: BookingR
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <Button size="sm" variant="ghost" onClick={() => remove(b)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <div className="inline-flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => onNavigate(b.id)}>
+                        Details
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => remove(b)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               );
