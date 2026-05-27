@@ -386,6 +386,7 @@ const AdminContent = () => {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="mb-4 flex flex-wrap">
             <TabsTrigger value="overview">Guests Overview</TabsTrigger>
+            <TabsTrigger value="payments">Payments</TabsTrigger>
             <TabsTrigger value="food">Food Planning</TabsTrigger>
             <TabsTrigger value="transport">Transportation</TabsTrigger>
             <TabsTrigger value="rooms">Room Setup</TabsTrigger>
