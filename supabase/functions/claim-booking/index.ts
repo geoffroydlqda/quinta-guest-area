@@ -12,9 +12,6 @@ const BodySchema = z.object({
   token: z.string().trim().min(16).max(128).regex(/^[a-f0-9]+$/i),
 });
 
-const norm = (e?: string | null) =>
-  (e || "").normalize("NFC").toLowerCase().trim();
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -68,33 +65,19 @@ serve(async (req) => {
       return json({ error: "Invitation expired" }, 410);
     }
 
-    const userEmail = norm(user.email);
-    const bookingEmail = norm(booking.email);
-
     // If already claimed
-    if (booking.invitation_claimed && booking.user_id) {
+    if (booking.invitation_claimed) {
       if (booking.user_id === user.id) {
         return json({ ok: true, booking_id: booking.id, already_claimed: true });
       }
       return json({ error: "Invitation already claimed" }, 409);
     }
 
-    // Email must match the invitation
-    if (userEmail !== bookingEmail) {
-      return json(
-        {
-          error: "email_mismatch",
-          message: `This invitation is for ${booking.email}. Please sign in with that email.`,
-          booking_email: booking.email,
-        },
-        403
-      );
-    }
-
     const { error: updErr } = await admin
       .from("bookings")
       .update({
         user_id: user.id,
+        email: user.email,
         invitation_claimed: true,
       })
       .eq("id", booking.id);
