@@ -57,8 +57,22 @@ type FoodPlan = {
   updated_at: string;
 };
 
+type BookingRow = {
+  id: string;
+  user_id: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  guest_count: number;
+  check_in_date: string | null;
+  check_out_date: string | null;
+  payment_status: string;
+  invitation_claimed: boolean;
+};
+
 interface Detail {
-  profile: Profile;
+  booking: BookingRow | null;
+  profile: Profile | null;
   room: Room | null;
   food: FoodPlan | null;
   trips: Trip[];
