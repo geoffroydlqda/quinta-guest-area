@@ -157,7 +157,8 @@ const RoomSetup = () => {
           
           <RoomTypeCard 
             title="Queen size (shared bathroom)" 
-            description="Rooms 2, 3, 4, 5, 7 or 8.  Two single beds in a room with shared bathroom." 
+            description="Rooms 2, 3, 4, 5, 7 or 8.  Queen size bed in a room with shared bathroom." 
+
             image={roomQueenImage} 
             quantity={roomSelection.queenSharedQty} 
             maxQuantity={remainingShared + roomSelection.queenSharedQty} 
