@@ -138,7 +138,7 @@ const AdminGuestDetailContent = () => {
 
   const foodCost = useMemo(() => {
     const rawSels = Array.isArray(data?.food?.selections) ? data!.food!.selections : [];
-    const guestsCount = data?.profile?.guests_count || 1;
+    const guestsCount = data?.profile?.guests_count ?? data?.booking?.guest_count ?? 1;
     const sels = rawSels.map((s: any) => ({
       ...s,
       guests_count_day: typeof s?.guests_count_day === 'number' && s.guests_count_day >= 0
