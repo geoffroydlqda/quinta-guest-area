@@ -23,14 +23,14 @@ export type PaymentInstallment = {
 
 export function usePaymentData(bookingId: string | null | undefined) {
   const [booking, setBooking] = useState<PaymentBooking | null>(null);
-  const [installments, setInstallments] = useState<PaymentInstallment[]>([]);
+  const [payments, setPayments] = useState<PaymentInstallment[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(!!bookingId);
 
   useEffect(() => {
     let cancelled = false;
     if (!bookingId) {
       setBooking(null);
-      setInstallments([]);
+      setPayments([]);
       setIsLoading(false);
       return;
     }
@@ -50,7 +50,7 @@ export function usePaymentData(bookingId: string | null | undefined) {
       ]);
       if (cancelled) return;
       setBooking((bRes.data as PaymentBooking | null) ?? null);
-      setInstallments((iRes.data as PaymentInstallment[] | null) ?? []);
+      setPayments((iRes.data as PaymentInstallment[] | null) ?? []);
       setIsLoading(false);
     })();
     return () => {
@@ -58,5 +58,5 @@ export function usePaymentData(bookingId: string | null | undefined) {
     };
   }, [bookingId]);
 
-  return { booking, installments, isLoading };
+  return { booking, payments, isLoading };
 }
