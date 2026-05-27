@@ -1225,12 +1225,23 @@ function EventTable({
   const { toast } = useToast();
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const copyInvite = async (e: React.MouseEvent, token: string, bookingId: string) => {
+  const copyInvite = async (e: React.MouseEvent, token: string | null, bookingId: string) => {
     e.stopPropagation();
-    const url = `${window.location.origin}/invite/${token}`;
+    let t = token;
+    if (!t) {
+      const { data, error } = await supabase.functions.invoke("admin-generate-invite-token", {
+        body: { booking_id: bookingId },
+      });
+      if (error || !data?.token) {
+        toast({ title: "Could not generate invite", description: error?.message || data?.error || "Unknown error", variant: "destructive" });
+        return;
+      }
+      t = data.token;
+    }
+    const url = `${window.location.origin}/invite/${t}`;
     await navigator.clipboard.writeText(url);
     setCopiedId(bookingId);
-    toast({ title: "Invitation link copied" });
+    toast({ title: "Invite link copied" });
     setTimeout(() => setCopiedId((c) => (c === bookingId ? null : c)), 2000);
   };
 
@@ -1250,7 +1261,7 @@ function EventTable({
             const label = (`${ev.firstName ?? ""} ${ev.lastName ?? ""}`.trim() || ev.email);
             const isLive = showLive && categoryOf(ev) === "live";
             const payStatus = paymentForEvent(ev);
-            const canCopyInvite = !ev.invitationClaimed && !!ev.invitationToken;
+            const canCopyInvite = !ev.invitationClaimed;
             return (
               <tr
                 key={ev.bookingId}
@@ -1283,15 +1294,13 @@ function EventTable({
                   />
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
-                  {canCopyInvite ? (
-                    <Button size="sm" variant="outline" onClick={(e) => copyInvite(e, ev.invitationToken!, ev.bookingId)}>
+                  {ev.invitationClaimed ? (
+                    <span className="text-xs text-muted-foreground">Claimed</span>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={(e) => copyInvite(e, ev.invitationToken, ev.bookingId)}>
                       {copiedId === ev.bookingId ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
                       Copy invite link
                     </Button>
-                  ) : ev.invitationClaimed ? (
-                    <span className="text-xs text-muted-foreground">Claimed</span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
