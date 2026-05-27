@@ -282,6 +282,40 @@ const AdminContent = () => {
     };
   };
 
+  // Map user_id → primary booking (latest by check_in_date) for claimed bookings
+  const bookingByUser = useMemo(() => {
+    const m = new Map<string, BookingRow>();
+    for (const b of data?.bookings || []) {
+      if (!b.user_id) continue;
+      const cur = m.get(b.user_id);
+      if (!cur || (b.check_in_date || "") > (cur.check_in_date || "")) m.set(b.user_id, b);
+    }
+    return m;
+  }, [data]);
+
+  const installmentsByBooking = useMemo(() => {
+    const m = new Map<string, Installment[]>();
+    for (const i of installments) {
+      const arr = m.get(i.booking_id) || [];
+      arr.push(i);
+      m.set(i.booking_id, arr);
+    }
+    return m;
+  }, [installments]);
+
+  const navigateToDetail = (uidOrFallback: string, bookingId: string | null | undefined) => {
+    const seg = uidOrFallback || bookingId || "";
+    const qs = bookingId ? `?bookingId=${bookingId}` : "";
+    navigate(`/admin/guest/${seg}${qs}`);
+  };
+
+  const paymentForUser = (uid: string): { status: ResolvedPaymentStatus; bookingId: string | null } => {
+    const b = bookingByUser.get(uid);
+    if (!b) return { status: "pending", bookingId: null };
+    const inst = installmentsByBooking.get(b.id) || [];
+    return { status: resolvePaymentStatus(b, inst), bookingId: b.id };
+  };
+
   if (loading || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
