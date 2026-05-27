@@ -223,7 +223,7 @@ const AdminGuestDetailContent = () => {
     );
   }
 
-  if (!data) {
+  if (!data || (!data.profile && !data.booking)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
         <p>Guest not found.</p>
@@ -232,10 +232,17 @@ const AdminGuestDetailContent = () => {
     );
   }
 
-  const { profile, room, food } = data;
-  const fullName = profile.full_name ||
-    `${profile.first_name || ""} ${profile.last_name || ""}`.trim() ||
-    profile.email;
+  const { profile, room, food, booking } = data;
+  const isPending = !profile;
+  const firstName = profile?.first_name ?? booking?.first_name ?? null;
+  const lastName = profile?.last_name ?? booking?.last_name ?? null;
+  const email = profile?.email ?? booking?.email ?? "";
+  const checkIn = profile?.check_in_date ?? booking?.check_in_date ?? null;
+  const checkOut = profile?.check_out_date ?? booking?.check_out_date ?? null;
+  const guestsCount = profile?.guests_count ?? booking?.guest_count ?? 1;
+  const fullName = profile?.full_name ||
+    `${firstName || ""} ${lastName || ""}`.trim() ||
+    email || "Guest";
   const activeDiets = foodCost.dietBreakdown.filter((d) => d.guests > 0);
   const activeFoodDays = (food?.selections || []).filter(
     (s: any) => s.fullBoard || s.breakfast || s.lunch || s.dinner
