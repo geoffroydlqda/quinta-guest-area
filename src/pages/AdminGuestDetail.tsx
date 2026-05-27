@@ -97,6 +97,8 @@ function fmtTimestamp(t?: string | null): string {
 
 const AdminGuestDetailContent = () => {
   const { guestId } = useParams<{ guestId: string }>();
+  const [searchParams] = useSearchParams();
+  const bookingIdParam = searchParams.get("bookingId");
   const navigate = useNavigate();
   const { toast } = useToast();
   const [data, setData] = useState<Detail | null>(null);
@@ -105,11 +107,12 @@ const AdminGuestDetailContent = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const load = async () => {
-    if (!guestId) return;
+    if (!guestId && !bookingIdParam) return;
     setLoading(true);
-    const res = await supabase.functions.invoke("admin-guest-detail", {
-      body: { guest_id: guestId },
-    });
+    const body: { guest_id?: string; booking_id?: string } = {};
+    if (bookingIdParam) body.booking_id = bookingIdParam;
+    if (guestId && /^[0-9a-f-]{36}$/i.test(guestId)) body.guest_id = guestId;
+    const res = await supabase.functions.invoke("admin-guest-detail", { body });
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });
       setData(null);
@@ -119,7 +122,7 @@ const AdminGuestDetailContent = () => {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [guestId]);
+  useEffect(() => { load(); }, [guestId, bookingIdParam]);
 
   const dietConfig: DietConfig = useMemo(() => {
     const dc = data?.food?.diet_config;
