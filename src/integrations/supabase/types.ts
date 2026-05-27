@@ -31,6 +31,7 @@ export type Database = {
           invitation_token: string | null
           last_name: string | null
           payment_status: Database["public"]["Enums"]["payment_status"]
+          payment_status_override: string | null
           remaining_balance: number | null
           retreat_name: string
           total_rental_price: number | null
@@ -53,6 +54,7 @@ export type Database = {
           invitation_token?: string | null
           last_name?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
+          payment_status_override?: string | null
           remaining_balance?: number | null
           retreat_name?: string
           total_rental_price?: number | null
@@ -75,6 +77,7 @@ export type Database = {
           invitation_token?: string | null
           last_name?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
+          payment_status_override?: string | null
           remaining_balance?: number | null
           retreat_name?: string
           total_rental_price?: number | null
@@ -239,31 +242,40 @@ export type Database = {
       }
       invoices: {
         Row: {
+          amount: number | null
           booking_id: string
           file_name: string
           file_url: string
           id: string
           label: string | null
+          paid: boolean
+          paid_at: string | null
           period: string
           type: string
           uploaded_at: string
         }
         Insert: {
+          amount?: number | null
           booking_id: string
           file_name: string
           file_url: string
           id?: string
           label?: string | null
+          paid?: boolean
+          paid_at?: string | null
           period?: string
           type: string
           uploaded_at?: string
         }
         Update: {
+          amount?: number | null
           booking_id?: string
           file_name?: string
           file_url?: string
           id?: string
           label?: string | null
+          paid?: boolean
+          paid_at?: string | null
           period?: string
           type?: string
           uploaded_at?: string
