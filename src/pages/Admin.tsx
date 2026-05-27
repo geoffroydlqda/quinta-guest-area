@@ -479,6 +479,15 @@ const AdminContent = () => {
             )}
           </TabsContent>
 
+          <TabsContent value="payments">
+            <PaymentsView
+              bookings={data.bookings || []}
+              installments={installments}
+              guestName={(uid) => uid ? guestName(uid) : ""}
+              onOpen={navigateToBooking}
+            />
+          </TabsContent>
+
           <TabsContent value="food">
             <FoodView data={data} guestName={guestName} />
           </TabsContent>
