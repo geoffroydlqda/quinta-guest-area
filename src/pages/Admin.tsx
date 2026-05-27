@@ -225,51 +225,99 @@ const AdminContent = () => {
     return "upcoming";
   };
 
-  const filteredProfiles = useMemo(() => {
-    if (!data) return [];
+  // Unified event row: one entry per booking (claimed or manual).
+  type EventRow = {
+    bookingId: string;
+    userId: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    checkIn: string | null;
+    checkOut: string | null;
+    guestsCount: number;
+    statusOverall: string;
+    submittedAt: string | null;
+    invitationClaimed: boolean;
+    invitationToken: string | null;
+    paymentStatusOverride: string | null;
+  };
+
+  const events: EventRow[] = useMemo(() => {
+    const list: EventRow[] = [];
+    for (const b of data?.bookings || []) {
+      const p = b.user_id ? profileById.get(b.user_id) : undefined;
+      list.push({
+        bookingId: b.id,
+        userId: b.user_id,
+        firstName: p?.first_name ?? b.first_name,
+        lastName: p?.last_name ?? b.last_name,
+        email: p?.email ?? b.email,
+        checkIn: p?.check_in_date ?? b.check_in_date,
+        checkOut: p?.check_out_date ?? b.check_out_date,
+        guestsCount: p?.guests_count ?? b.guest_count,
+        statusOverall: p?.status_overall ?? "draft",
+        submittedAt: p?.submitted_at ?? null,
+        invitationClaimed: b.invitation_claimed,
+        invitationToken: b.invitation_token,
+        paymentStatusOverride: b.payment_status_override ?? null,
+      });
+    }
+    return list;
+  }, [data, profileById]);
+
+  const categoryOfEvent = (e: EventRow): "upcoming" | "past" | "live" | "none" => {
+    if (!e.checkIn) return "none";
+    if (e.checkOut && e.checkOut < todayIso) return "past";
+    if (e.checkIn <= todayIso && (e.checkOut ?? todayIso) >= todayIso) return "live";
+    if (e.checkIn > todayIso) return "upcoming";
+    return "past";
+  };
+
+  const filteredEvents = useMemo(() => {
     const s = search.toLowerCase().trim();
-    return data.profiles.filter((p) => {
-      if (statusFilter !== "all" && p.status_overall !== statusFilter) return false;
+    return events.filter((e) => {
+      if (statusFilter !== "all" && e.statusOverall !== statusFilter) return false;
       if (!s) return true;
       return (
-        (p.full_name || "").toLowerCase().includes(s) ||
-        (p.email || "").toLowerCase().includes(s) ||
-        (p.first_name || "").toLowerCase().includes(s) ||
-        (p.last_name || "").toLowerCase().includes(s)
+        (e.firstName || "").toLowerCase().includes(s) ||
+        (e.lastName || "").toLowerCase().includes(s) ||
+        (e.email || "").toLowerCase().includes(s) ||
+        `${e.firstName ?? ""} ${e.lastName ?? ""}`.toLowerCase().includes(s)
       );
     });
-  }, [data, search, statusFilter]);
+  }, [events, search, statusFilter]);
 
-  const { upcomingProfiles, pastProfiles, unscheduledProfiles } = useMemo(() => {
-    const upcoming: Profile[] = [];
-    const past: Profile[] = [];
-    const none: Profile[] = [];
-    for (const p of filteredProfiles) {
-      const c = categoryOf(p);
-      if (c === "past") past.push(p);
-      else if (c === "none") none.push(p);
-      else upcoming.push(p); // upcoming + live
+  const { upcomingEvents, pastEvents, unscheduledEvents } = useMemo(() => {
+    const upcoming: EventRow[] = [];
+    const past: EventRow[] = [];
+    const none: EventRow[] = [];
+    for (const e of filteredEvents) {
+      const c = categoryOfEvent(e);
+      if (c === "past") past.push(e);
+      else if (c === "none") none.push(e);
+      else upcoming.push(e); // upcoming + live
     }
-    upcoming.sort((a, b) => (a.check_out_date || "").localeCompare(b.check_out_date || ""));
-    past.sort((a, b) => (b.check_out_date || "").localeCompare(a.check_out_date || ""));
-    return { upcomingProfiles: upcoming, pastProfiles: past, unscheduledProfiles: none };
-  }, [filteredProfiles, todayIso]);
+    upcoming.sort((a, b) => (a.checkIn || "").localeCompare(b.checkIn || ""));
+    past.sort((a, b) => (b.checkOut || "").localeCompare(a.checkOut || ""));
+    return { upcomingEvents: upcoming, pastEvents: past, unscheduledEvents: none };
+  }, [filteredEvents, todayIso]);
 
   const visibleUpcoming = useMemo(() => {
     if (categoryFilter === "past") return [];
-    if (categoryFilter === "live") return upcomingProfiles.filter((p) => categoryOf(p) === "live");
-    if (categoryFilter === "upcoming") return upcomingProfiles.filter((p) => categoryOf(p) === "upcoming");
-    return upcomingProfiles;
-  }, [upcomingProfiles, categoryFilter, todayIso]);
+    if (categoryFilter === "live") return upcomingEvents.filter((e) => categoryOfEvent(e) === "live");
+    if (categoryFilter === "upcoming") return upcomingEvents.filter((e) => categoryOfEvent(e) === "upcoming");
+    return upcomingEvents;
+  }, [upcomingEvents, categoryFilter, todayIso]);
 
   const visiblePast = useMemo(() => {
     if (categoryFilter === "upcoming" || categoryFilter === "live") return [];
-    return pastProfiles;
-  }, [pastProfiles, categoryFilter]);
+    return pastEvents;
+  }, [pastEvents, categoryFilter]);
 
-  const visibleUnscheduled = categoryFilter === "all" ? unscheduledProfiles : [];
+  const visibleUnscheduled = categoryFilter === "all" ? unscheduledEvents : [];
 
-  const toolStatus = (uid: string) => {
+  const toolStatus = (uid: string | null) => {
+    if (!uid) return { room: "—", trip: "—", food: "—" };
     const room = data?.rooms.find((r) => r.user_id === uid);
     const trip = data?.trips.find((t) => t.user_id === uid);
     const food = data?.food.find((f) => f.user_id === uid);
@@ -282,17 +330,6 @@ const AdminContent = () => {
     };
   };
 
-  // Map user_id → primary booking (latest by check_in_date) for claimed bookings
-  const bookingByUser = useMemo(() => {
-    const m = new Map<string, BookingRow>();
-    for (const b of data?.bookings || []) {
-      if (!b.user_id) continue;
-      const cur = m.get(b.user_id);
-      if (!cur || (b.check_in_date || "") > (cur.check_in_date || "")) m.set(b.user_id, b);
-    }
-    return m;
-  }, [data]);
-
   const installmentsByBooking = useMemo(() => {
     const m = new Map<string, Installment[]>();
     for (const i of installments) {
@@ -303,17 +340,24 @@ const AdminContent = () => {
     return m;
   }, [installments]);
 
-  const navigateToDetail = (uidOrFallback: string, bookingId: string | null | undefined) => {
-    const seg = uidOrFallback || bookingId || "";
-    const qs = bookingId ? `?bookingId=${bookingId}` : "";
-    navigate(`/admin/guest/${seg}${qs}`);
+  const navigateToBooking = (bookingId: string) => {
+    navigate(`/admin/guest/${bookingId}?bookingId=${bookingId}`);
   };
 
-  const paymentForUser = (uid: string): { status: ResolvedPaymentStatus; bookingId: string | null } => {
-    const b = bookingByUser.get(uid);
-    if (!b) return { status: "pending", bookingId: null };
-    const inst = installmentsByBooking.get(b.id) || [];
-    return { status: resolvePaymentStatus(b, inst), bookingId: b.id };
+  const paymentForEvent = (e: EventRow): ResolvedPaymentStatus => {
+    const inst = installmentsByBooking.get(e.bookingId) || [];
+    return resolvePaymentStatus({ payment_status_override: e.paymentStatusOverride }, inst);
+  };
+
+  const deleteBookingDirect = async (bookingId: string, email: string) => {
+    if (!confirm(`Delete pending booking for ${email}?`)) return;
+    const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Booking deleted" });
+    load();
   };
 
   if (loading || !data) {
