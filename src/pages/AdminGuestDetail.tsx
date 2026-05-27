@@ -283,29 +283,38 @@ const AdminGuestDetailContent = () => {
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
             <div>
               <div className="text-muted-foreground">First name</div>
-              <div className="font-medium">{profile.first_name || "—"}</div>
+              <div className="font-medium">{firstName || "—"}</div>
             </div>
             <div>
               <div className="text-muted-foreground">Last name</div>
-              <div className="font-medium">{profile.last_name || "—"}</div>
+              <div className="font-medium">{lastName || "—"}</div>
             </div>
             <div>
               <div className="text-muted-foreground">Email</div>
-              <div className="font-medium break-all">{profile.email}</div>
+              <div className="font-medium break-all">{email || "—"}</div>
             </div>
             <div>
               <div className="text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> Guests</div>
-              <div className="font-medium">{profile.guests_count}</div>
+              <div className="font-medium">{guestsCount}</div>
             </div>
             <div>
               <div className="text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" /> Stay dates</div>
-              <div className="font-medium">{fmtDate(profile.check_in_date)} → {fmtDate(profile.check_out_date)}</div>
+              <div className="font-medium">{fmtDate(checkIn)} → {fmtDate(checkOut)}</div>
             </div>
             <div>
               <div className="text-muted-foreground">Status</div>
-              <div className="font-medium">{getGuestStatus(profile.check_in_date, profile.status_overall).label}</div>
+              <div className="font-medium">
+                {isPending
+                  ? "Invitation pending"
+                  : getGuestStatus(checkIn, profile!.status_overall).label}
+              </div>
             </div>
           </div>
+          {isPending && (
+            <p className="mt-4 text-xs italic text-muted-foreground">
+              This booking has not been claimed by the guest yet.
+            </p>
+          )}
         </section>
 
         {/* Room Setup */}
