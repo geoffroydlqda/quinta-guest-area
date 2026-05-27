@@ -1123,39 +1123,82 @@ function PaymentSection({ userId }: { userId: string }) {
 
 function InstallmentForm({
   initial,
-  defaultCategory,
+  checkInDate,
   onCancel,
   onSave,
 }: {
   initial?: Installment;
-  defaultCategory?: "rental" | "extra";
+  checkInDate?: string | null;
   onCancel: () => void;
-  onSave: (v: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null }) => Promise<void> | void;
+  onSave: (
+    v: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null },
+    file?: File | null
+  ) => Promise<void> | void;
 }) {
   const [label, setLabel] = useState(initial?.label || "");
   const [amountDue, setAmountDue] = useState(initial?.amount_due != null ? String(initial.amount_due) : "");
   const [dueDate, setDueDate] = useState(initial?.due_date || "");
+  const [dueDateTouched, setDueDateTouched] = useState(!!initial?.due_date);
   const [notes, setNotes] = useState(initial?.notes || "");
   const [status, setStatus] = useState<"pending" | "paid">(initial?.status ?? "pending");
-  const [category, setCategory] = useState<"rental" | "extra">(initial?.category ?? defaultCategory ?? "rental");
+  const [category, setCategory] = useState<"rental" | "extra">(initial?.category ?? "rental");
+  const [file, setFile] = useState<File | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
+
+  // Auto-fill due_date when category changes to "extra" (if not touched)
+  useEffect(() => {
+    if (initial) return;
+    if (dueDateTouched) return;
+    if (category === "extra" && checkInDate) {
+      setDueDate(shiftDaysIso(checkInDate, -7));
+    } else if (category === "rental") {
+      setDueDate("");
+    }
+  }, [category, checkInDate, dueDateTouched, initial]);
+
+  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null;
+    e.target.value = "";
+    setFile(f);
+  };
 
   const submit = async () => {
     if (!label.trim() || !amountDue) return;
     setSaving(true);
-    await onSave({
-      label: label.trim(),
-      amount_due: Number(amountDue),
-      due_date: dueDate || null,
-      status,
-      category,
-      notes: notes.trim() || null,
-    });
+    await onSave(
+      {
+        label: label.trim(),
+        amount_due: Number(amountDue),
+        due_date: dueDate || null,
+        status,
+        category,
+        notes: notes.trim() || null,
+      },
+      file
+    );
     setSaving(false);
   };
 
   return (
     <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 space-y-2 text-sm">
+      {/* Category toggle */}
+      <div className="space-y-1">
+        <div className="text-xs text-muted-foreground">Category *</div>
+        <div className="inline-flex rounded-md border border-input overflow-hidden">
+          {(["rental", "extra"] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCategory(c)}
+              className={`px-3 py-1.5 text-xs capitalize ${category === c ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid sm:grid-cols-2 gap-2">
         <label className="space-y-1">
           <div className="text-xs text-muted-foreground">Label *</div>
@@ -1167,18 +1210,11 @@ function InstallmentForm({
         </label>
         <label className="space-y-1">
           <div className="text-xs text-muted-foreground">Due date</div>
-          <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-        </label>
-        <label className="space-y-1">
-          <div className="text-xs text-muted-foreground">Category</div>
-          <select
-            className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as "rental" | "extra")}
-          >
-            <option value="rental">Rental</option>
-            <option value="extra">Extra</option>
-          </select>
+          <Input
+            type="date"
+            value={dueDate}
+            onChange={(e) => { setDueDate(e.target.value); setDueDateTouched(true); }}
+          />
         </label>
         <label className="space-y-1">
           <div className="text-xs text-muted-foreground">Status</div>
@@ -1192,6 +1228,31 @@ function InstallmentForm({
           </select>
         </label>
       </div>
+
+      <div className="space-y-1">
+        <div className="text-xs text-muted-foreground">Invoice file (optional)</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
+            <Upload className="w-3.5 h-3.5 mr-1" /> {file ? "Replace file" : "Choose file"}
+          </Button>
+          {file && (
+            <>
+              <span className="text-xs text-muted-foreground truncate max-w-[200px]">{file.name}</span>
+              <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => setFile(null)}>
+                <X className="w-3.5 h-3.5" />
+              </Button>
+            </>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf,image/jpeg,image/png"
+            className="hidden"
+            onChange={onFileSelected}
+          />
+        </div>
+      </div>
+
       <label className="space-y-1 block">
         <div className="text-xs text-muted-foreground">Notes</div>
         <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
