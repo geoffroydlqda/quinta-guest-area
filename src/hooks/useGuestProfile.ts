@@ -336,27 +336,25 @@ export function useGuestProfile() {
     }
   }, [user]);
 
-  // Update check-in date
+  // Update check-in date (writes to active booking)
   const updateCheckInDate = useCallback(async (checkIn: Date | null) => {
-    if (!user || !state.profile) return false;
+    if (!user || !state.profile || !activeBookingId) return false;
 
     try {
       const nextCheckInDate = formatDateForDatabase(checkIn);
       const { error } = await supabase
-        .from('guest_profiles')
+        .from('bookings')
         .update({ check_in_date: nextCheckInDate })
-        .eq('user_id', user.id);
+        .eq('id', activeBookingId);
 
       if (error) throw error;
       triggerSheetsSync();
+      await refreshBookings();
 
       checkOutChangeSourceRef.current = 'user_check_in_change';
       setState(prev => ({
         ...prev,
-        profile: prev.profile ? {
-          ...prev.profile,
-          check_in_date: nextCheckInDate,
-        } : null,
+        profile: prev.profile ? { ...prev.profile, check_in_date: nextCheckInDate } : null,
       }));
 
       return true;
@@ -364,29 +362,27 @@ export function useGuestProfile() {
       console.error('Error updating check-in date:', error);
       return false;
     }
-  }, [user, state.profile]);
+  }, [user, state.profile, activeBookingId, refreshBookings]);
 
-  // Update check-out date
+  // Update check-out date (writes to active booking)
   const updateCheckOutDate = useCallback(async (checkOut: Date | null) => {
-    if (!user || !state.profile) return false;
+    if (!user || !state.profile || !activeBookingId) return false;
 
     try {
       const nextCheckOutDate = formatDateForDatabase(checkOut);
       const { error } = await supabase
-        .from('guest_profiles')
+        .from('bookings')
         .update({ check_out_date: nextCheckOutDate })
-        .eq('user_id', user.id);
+        .eq('id', activeBookingId);
 
       if (error) throw error;
       triggerSheetsSync();
+      await refreshBookings();
 
       checkOutChangeSourceRef.current = 'user_check_out_change';
       setState(prev => ({
         ...prev,
-        profile: prev.profile ? {
-          ...prev.profile,
-          check_out_date: nextCheckOutDate,
-        } : null,
+        profile: prev.profile ? { ...prev.profile, check_out_date: nextCheckOutDate } : null,
       }));
 
       return true;
@@ -394,27 +390,25 @@ export function useGuestProfile() {
       console.error('Error updating check-out date:', error);
       return false;
     }
-  }, [user, state.profile]);
+  }, [user, state.profile, activeBookingId, refreshBookings]);
 
-  // Update guests count
+  // Update guests count (writes to active booking)
   const updateGuestsCount = useCallback(async (guestsCount: number) => {
-    if (!user || !state.profile) return false;
+    if (!user || !state.profile || !activeBookingId) return false;
 
     try {
       const { error } = await supabase
-        .from('guest_profiles')
-        .update({ guests_count: guestsCount })
-        .eq('user_id', user.id);
+        .from('bookings')
+        .update({ guest_count: guestsCount })
+        .eq('id', activeBookingId);
 
       if (error) throw error;
       triggerSheetsSync();
+      await refreshBookings();
 
       setState(prev => ({
         ...prev,
-        profile: prev.profile ? {
-          ...prev.profile,
-          guests_count: guestsCount,
-        } : null,
+        profile: prev.profile ? { ...prev.profile, guests_count: guestsCount } : null,
       }));
 
       return true;
@@ -422,30 +416,31 @@ export function useGuestProfile() {
       console.error('Error updating guests count:', error);
       return false;
     }
-  }, [user, state.profile]);
+  }, [user, state.profile, activeBookingId, refreshBookings]);
 
-  // Update stay info (combined)
+  // Update stay info (combined, writes to active booking)
   const updateStayInfo = useCallback(async (
     checkIn: Date | null,
     checkOut: Date | null,
     guestsCount: number
   ) => {
-    if (!user || !state.profile) return false;
+    if (!user || !state.profile || !activeBookingId) return false;
 
     try {
       const nextCheckInDate = formatDateForDatabase(checkIn);
       const nextCheckOutDate = formatDateForDatabase(checkOut);
       const { error } = await supabase
-        .from('guest_profiles')
+        .from('bookings')
         .update({
           check_in_date: nextCheckInDate,
           check_out_date: nextCheckOutDate,
-          guests_count: guestsCount,
+          guest_count: guestsCount,
         })
-        .eq('user_id', user.id);
+        .eq('id', activeBookingId);
 
       if (error) throw error;
       triggerSheetsSync();
+      await refreshBookings();
 
       checkOutChangeSourceRef.current = 'combined_stay_update';
       setState(prev => ({
