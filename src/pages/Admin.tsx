@@ -1138,6 +1138,8 @@ function PendingInvitationsSection({
           <tbody>
             {bookings.map((b) => {
               const name = [b.first_name, b.last_name].filter(Boolean).join(" ").trim();
+              const inst = installmentsByBooking.get(b.id) || [];
+              const payStatus = resolvePaymentStatus(b, inst);
               return (
                 <tr key={b.id} className="border-t border-border">
                   <td className="px-3 py-2">{b.retreat_name || "—"}</td>
