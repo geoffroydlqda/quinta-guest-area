@@ -627,7 +627,7 @@ function PaymentSection({ userId }: { userId: string }) {
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [editingRental, setEditingRental] = useState(false);
   const [rentalInput, setRentalInput] = useState("");
-  const [addCategory, setAddCategory] = useState<"rental" | "extra" | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteInstId, setDeleteInstId] = useState<string | null>(null);
   const [savingOverride, setSavingOverride] = useState(false);
