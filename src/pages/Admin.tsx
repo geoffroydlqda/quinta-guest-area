@@ -55,6 +55,7 @@ type BookingRow = {
   payment_status: string; invitation_token: string | null; invitation_claimed: boolean;
   user_id: string | null; created_at: string;
   payment_status_override?: string | null;
+  total_rental_price?: number | null;
 };
 
 type Installment = {
