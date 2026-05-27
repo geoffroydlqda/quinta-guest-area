@@ -367,6 +367,9 @@ const DashboardContent = () => {
             onGuestsCountChange={updateGuestsCount}
           />
 
+          {/* Payment Overview (read-only) */}
+          <PaymentOverview bookingId={activeBookingId} />
+
           {/* Section 2: Tool Tiles */}
           <div>
             <h2 className="text-xl font-medium mb-4">Your setup</h2>
