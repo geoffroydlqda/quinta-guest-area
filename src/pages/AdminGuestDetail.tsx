@@ -1052,70 +1052,57 @@ function PaymentSection({ userId }: { userId: string }) {
       )}
 
       {/* Rental installments */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="text-xs uppercase text-muted-foreground">Rental installments</div>
-          <div className="flex gap-2">
-            {rentalInst.length === 0 && booking.total_rental_price != null && booking.total_rental_price > 0 && (
-              <Button size="sm" variant="outline" onClick={generate3070} disabled={generating}>
-                {generating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-                Generate 30/70 plan
-              </Button>
-            )}
-            {addCategory !== "rental" && (
-              <Button size="sm" variant="outline" onClick={() => setAddCategory("rental")}>
-                <Plus className="w-4 h-4 mr-1" /> Add rental
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {rentalInst.length === 0 && addCategory !== "rental" && (
-          <p className="text-sm text-muted-foreground italic">No rental installments yet.</p>
+      {/* Top action bar: single Add payment + 30/70 quick action */}
+      <div className="flex items-center justify-end flex-wrap gap-2">
+        {rentalInst.length === 0 && booking.total_rental_price != null && booking.total_rental_price > 0 && (
+          <Button size="sm" variant="outline" onClick={generate3070} disabled={generating}>
+            {generating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            Generate 30/70 plan
+          </Button>
         )}
-
-        {rentalInst.map(renderInstallment)}
-
-        {addCategory === "rental" && (
-          <InstallmentForm
-            defaultCategory="rental"
-            onCancel={() => setAddCategory(null)}
-            onSave={async (vals) => {
-              const ok = await upsertInstallment(null, vals);
-              if (ok) setAddCategory(null);
-            }}
-          />
+        {!showAdd && (
+          <Button size="sm" onClick={() => setShowAdd(true)}>
+            <Plus className="w-4 h-4 mr-1" /> Add payment
+          </Button>
         )}
       </div>
 
-      {/* Extras */}
+      {showAdd && (
+        <InstallmentForm
+          checkInDate={booking.check_in_date}
+          onCancel={() => setShowAdd(false)}
+          onSave={async (vals, file) => {
+            const ok = await upsertInstallment(null, vals, file);
+            if (ok) setShowAdd(false);
+          }}
+        />
+      )}
+
+      {/* Accommodation group */}
+      <div className="space-y-3">
+        <div className="text-xs uppercase text-muted-foreground">Accommodation</div>
+        {rentalInst.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">No accommodation payments yet.</p>
+        ) : (
+          rentalInst.map(renderInstallment)
+        )}
+      </div>
+
+      {/* Extras group */}
       <div className="space-y-3 pt-2 border-t border-border">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="text-xs uppercase text-muted-foreground">Extras (food, transport, other)</div>
-          {addCategory !== "extra" && (
-            <Button size="sm" variant="outline" onClick={() => setAddCategory("extra")}>
-              <Plus className="w-4 h-4 mr-1" /> Add extra
-            </Button>
-          )}
+          <div className="text-xs uppercase text-muted-foreground">Extras</div>
+          <div className="text-xs text-muted-foreground">
+            Subtotal: €{extraInst.reduce((s, i) => s + Number(i.amount_due || 0), 0)}
+          </div>
         </div>
-
-        {extraInst.length === 0 && addCategory !== "extra" && (
+        {extraInst.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">No extras yet.</p>
-        )}
-
-        {extraInst.map(renderInstallment)}
-
-        {addCategory === "extra" && (
-          <InstallmentForm
-            defaultCategory="extra"
-            onCancel={() => setAddCategory(null)}
-            onSave={async (vals) => {
-              const ok = await upsertInstallment(null, vals);
-              if (ok) setAddCategory(null);
-            }}
-          />
+        ) : (
+          extraInst.map(renderInstallment)
         )}
       </div>
+
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteInstId} onOpenChange={(o) => !o && setDeleteInstId(null)}>
