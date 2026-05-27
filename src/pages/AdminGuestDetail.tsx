@@ -544,44 +544,33 @@ type Installment = {
   label: string;
   amount_due: number;
   due_date: string | null;
-  amount_paid: number;
-  paid_at: string | null;
-  status: "pending" | "paid" | "overdue" | "partial";
+  status: "pending" | "paid";
+  category: "rental" | "extra";
+  invoice_file_url: string | null;
+  invoice_file_name: string | null;
   notes: string | null;
-};
-
-type Invoice = {
-  id: string;
-  booking_id: string;
-  type: "rental" | "food" | "transport";
-  period: "pre" | "post";
-  label: string | null;
-  file_url: string;
-  file_name: string;
-  uploaded_at: string;
-  amount: number | null;
-  paid: boolean;
-  paid_at: string | null;
 };
 
 type BookingStatus = "pending" | "deposit_paid" | "paid_in_full" | "overdue";
 
-function computeStatus(amount_due: number, amount_paid: number, due_date: string | null): Installment["status"] {
-  if (amount_paid >= amount_due && amount_due > 0) return "paid";
-  if (amount_paid > 0) return "partial";
-  if (due_date) {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const d = parseLocalDate(due_date);
-    if (d < today && amount_paid === 0) return "overdue";
-  }
+function isOverdue(inst: Installment): boolean {
+  if (inst.status === "paid" || !inst.due_date) return false;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return parseLocalDate(inst.due_date) < today;
+}
+
+function displayStatus(inst: Installment): "paid" | "overdue" | "pending" {
+  if (inst.status === "paid") return "paid";
+  if (isOverdue(inst)) return "overdue";
   return "pending";
 }
 
 function deriveBookingStatus(installments: Installment[]): BookingStatus {
-  if (installments.length === 0) return "pending";
-  if (installments.some((i) => i.status === "overdue")) return "overdue";
-  if (installments.every((i) => i.status === "paid")) return "paid_in_full";
-  if (installments.some((i) => i.status === "paid" || i.status === "partial")) return "deposit_paid";
+  const rentals = installments.filter((i) => i.category === "rental");
+  if (rentals.length === 0) return "pending";
+  if (rentals.some((i) => isOverdue(i))) return "overdue";
+  if (rentals.every((i) => i.status === "paid")) return "paid_in_full";
+  if (rentals.some((i) => i.status === "paid")) return "deposit_paid";
   return "pending";
 }
 
@@ -599,11 +588,10 @@ const BOOKING_STATUS_STYLES: Record<BookingStatus, string> = {
   overdue: "bg-red-100 text-red-900 border-red-300",
 };
 
-const STATUS_STYLES: Record<Installment["status"], string> = {
+const STATUS_STYLES: Record<"pending" | "paid" | "overdue", string> = {
   pending: "bg-amber-100 text-amber-900 border-amber-300",
   paid: "bg-green-100 text-green-900 border-green-300",
   overdue: "bg-red-100 text-red-900 border-red-300",
-  partial: "bg-orange-100 text-orange-900 border-orange-300",
 };
 
 function PaymentSection({ userId }: { userId: string }) {
@@ -614,13 +602,11 @@ function PaymentSection({ userId }: { userId: string }) {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [installments, setInstallments] = useState<Installment[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [editingRental, setEditingRental] = useState(false);
   const [rentalInput, setRentalInput] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
+  const [addCategory, setAddCategory] = useState<"rental" | "extra" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteInstId, setDeleteInstId] = useState<string | null>(null);
-  const [deleteInvId, setDeleteInvId] = useState<string | null>(null);
   const [savingOverride, setSavingOverride] = useState(false);
   const [generating, setGenerating] = useState(false);
 
@@ -637,7 +623,6 @@ function PaymentSection({ userId }: { userId: string }) {
     if (bRes.error || !bRes.data) {
       setBooking(null);
       setInstallments([]);
-      setInvoices([]);
       setLoading(false);
       return;
     }
@@ -645,29 +630,32 @@ function PaymentSection({ userId }: { userId: string }) {
     setBooking(b);
     setRentalInput(b.total_rental_price != null ? String(b.total_rental_price) : "");
 
-    const [iRes, vRes] = await Promise.all([
-      supabase.from("payment_installments").select("*").eq("booking_id", b.id).order("due_date", { ascending: true, nullsFirst: false }),
-      supabase.from("invoices").select("*").eq("booking_id", b.id).order("uploaded_at", { ascending: false }),
-    ]);
+    const iRes = await supabase
+      .from("payment_installments")
+      .select("id,booking_id,label,amount_due,due_date,status,category,invoice_file_url,invoice_file_name,notes")
+      .eq("booking_id", b.id)
+      .order("due_date", { ascending: true, nullsFirst: false });
     if (!iRes.error) setInstallments((iRes.data || []) as Installment[]);
-    if (!vRes.error) setInvoices((vRes.data || []) as Invoice[]);
     setLoading(false);
   };
 
   useEffect(() => { loadAll(); }, [userId, bookingIdParam]);
 
+  const rentalInst = useMemo(() => installments.filter((i) => i.category === "rental"), [installments]);
+  const extraInst = useMemo(() => installments.filter((i) => i.category === "extra"), [installments]);
+
   const totals = useMemo(() => {
-    const totalDue = installments.reduce((s, i) => s + Number(i.amount_due || 0), 0);
-    const totalPaid = installments.reduce((s, i) => s + Number(i.amount_paid || 0), 0);
+    const totalDue = rentalInst.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    const totalPaid = rentalInst.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const rental = Number(booking?.total_rental_price || 0);
     const remaining = Math.max(0, rental - totalPaid);
     const pct = rental > 0 ? Math.min(100, (totalPaid / rental) * 100) : 0;
-    const mismatch = rental > 0 && installments.length > 0 && Math.abs(totalDue - rental) > 0.001;
+    const mismatch = rental > 0 && rentalInst.length > 0 && Math.abs(totalDue - rental) > 0.001;
     return { totalDue, totalPaid, rental, remaining, pct, mismatch };
-  }, [installments, booking]);
+  }, [rentalInst, booking]);
 
   const derivedStatus = useMemo(() => deriveBookingStatus(installments), [installments]);
-  const resolvedStatus: BookingStatus = booking?.payment_status_override ?? derivedStatus;
+  const resolvedStatus: BookingStatus = (booking?.payment_status_override as BookingStatus | null) ?? derivedStatus;
   const usingOverride = !!booking?.payment_status_override;
 
   const saveRental = async () => {
@@ -700,18 +688,19 @@ function PaymentSection({ userId }: { userId: string }) {
     setSavingOverride(false);
   };
 
-  const upsertInstallment = async (id: string | null, values: Omit<Installment, "id" | "booking_id" | "status"> & { status?: Installment["status"] }) => {
-    if (!booking) return;
-    const status = values.status ?? computeStatus(Number(values.amount_due), Number(values.amount_paid), values.due_date);
+  const upsertInstallment = async (
+    id: string | null,
+    values: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null }
+  ) => {
+    if (!booking) return false;
     const payload: any = {
       booking_id: booking.id,
       label: values.label,
-      amount_due: Number(values.amount_due),
-      amount_paid: Number(values.amount_paid || 0),
-      due_date: values.due_date || null,
-      paid_at: values.paid_at || null,
-      notes: values.notes || null,
-      status,
+      amount_due: values.amount_due,
+      due_date: values.due_date,
+      status: values.status,
+      category: values.category,
+      notes: values.notes,
     };
     let error;
     if (id) {
@@ -730,6 +719,10 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const deleteInstallment = async () => {
     if (!deleteInstId) return;
+    const inst = installments.find((i) => i.id === deleteInstId);
+    if (inst?.invoice_file_url) {
+      await supabase.storage.from("invoices").remove([inst.invoice_file_url]);
+    }
     const { error } = await supabase.from("payment_installments").delete().eq("id", deleteInstId);
     if (error) toast({ title: "Delete failed", description: error.message, variant: "destructive" });
     else { toast({ title: "Deleted" }); await loadAll(); }
@@ -737,7 +730,7 @@ function PaymentSection({ userId }: { userId: string }) {
   };
 
   const generate3070 = async () => {
-    if (!booking?.total_rental_price || installments.length > 0) return;
+    if (!booking?.total_rental_price || rentalInst.length > 0) return;
     setGenerating(true);
     const total = Number(booking.total_rental_price);
     const deposit = Math.round(total * 0.3 * 100) / 100;
@@ -751,7 +744,7 @@ function PaymentSection({ userId }: { userId: string }) {
         booking_id: booking.id,
         label: r.label,
         amount_due: r.amount_due,
-        amount_paid: 0,
+        category: "rental",
         status: "pending",
       }))
     );
@@ -760,18 +753,16 @@ function PaymentSection({ userId }: { userId: string }) {
     setGenerating(false);
   };
 
-  const deleteInvoice = async () => {
-    if (!deleteInvId) return;
-    const inv = invoices.find((i) => i.id === deleteInvId);
-    if (inv) await supabase.storage.from("invoices").remove([inv.file_url]);
-    const { error } = await supabase.from("invoices").delete().eq("id", deleteInvId);
-    if (error) toast({ title: "Delete failed", description: error.message, variant: "destructive" });
-    else { toast({ title: "Deleted" }); await loadAll(); }
-    setDeleteInvId(null);
+  const togglePaid = async (inst: Installment) => {
+    const next = inst.status === "paid" ? "pending" : "paid";
+    const { error } = await supabase.from("payment_installments").update({ status: next }).eq("id", inst.id);
+    if (error) toast({ title: "Failed", description: error.message, variant: "destructive" });
+    else await loadAll();
   };
 
-  const downloadInvoice = async (inv: Invoice) => {
-    const { data, error } = await supabase.storage.from("invoices").createSignedUrl(inv.file_url, 60 * 60);
+  const downloadInvoice = async (inst: Installment) => {
+    if (!inst.invoice_file_url) return;
+    const { data, error } = await supabase.storage.from("invoices").createSignedUrl(inst.invoice_file_url, 60 * 60);
     if (error || !data) {
       toast({ title: "Failed to get download URL", description: error?.message, variant: "destructive" });
       return;
@@ -779,14 +770,50 @@ function PaymentSection({ userId }: { userId: string }) {
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   };
 
-  const toggleInvoicePaid = async (inv: Invoice) => {
-    const nextPaid = !inv.paid;
+  const uploadInvoice = async (inst: Installment, file: File) => {
+    if (!booking) return;
+    const allowed = ["application/pdf", "image/jpeg", "image/png"];
+    if (!allowed.includes(file.type)) {
+      toast({ title: "Unsupported file type", description: "PDF, JPG, or PNG only.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Max 20MB.", variant: "destructive" });
+      return;
+    }
+    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${booking.id}/${inst.id}/${Date.now()}_${safeName}`;
+    const up = await supabase.storage.from("invoices").upload(path, file, { contentType: file.type, upsert: false });
+    if (up.error) {
+      toast({ title: "Upload failed", description: up.error.message, variant: "destructive" });
+      return;
+    }
+    // remove old file if any
+    if (inst.invoice_file_url) {
+      await supabase.storage.from("invoices").remove([inst.invoice_file_url]);
+    }
     const { error } = await supabase
-      .from("invoices")
-      .update({ paid: nextPaid, paid_at: nextPaid ? new Date().toISOString().slice(0, 10) : null })
-      .eq("id", inv.id);
+      .from("payment_installments")
+      .update({ invoice_file_url: path, invoice_file_name: file.name })
+      .eq("id", inst.id);
+    if (error) {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      await supabase.storage.from("invoices").remove([path]);
+      return;
+    }
+    toast({ title: "Invoice uploaded" });
+    await loadAll();
+  };
+
+  const removeInvoice = async (inst: Installment) => {
+    if (!inst.invoice_file_url) return;
+    await supabase.storage.from("invoices").remove([inst.invoice_file_url]);
+    const { error } = await supabase
+      .from("payment_installments")
+      .update({ invoice_file_url: null, invoice_file_name: null })
+      .eq("id", inst.id);
     if (error) toast({ title: "Failed", description: error.message, variant: "destructive" });
-    else await loadAll();
+    else { toast({ title: "Invoice removed" }); await loadAll(); }
   };
 
   if (loading) {
@@ -810,6 +837,50 @@ function PaymentSection({ userId }: { userId: string }) {
       </section>
     );
   }
+
+  const renderInstallment = (inst: Installment) => {
+    const ds = displayStatus(inst);
+    return editingId === inst.id ? (
+      <InstallmentForm
+        key={inst.id}
+        initial={inst}
+        onCancel={() => setEditingId(null)}
+        onSave={async (vals) => {
+          const ok = await upsertInstallment(inst.id, vals);
+          if (ok) setEditingId(null);
+        }}
+      />
+    ) : (
+      <div key={inst.id} className="rounded-lg border border-border p-3 text-sm space-y-2">
+        <div className="flex justify-between items-start gap-2">
+          <div className="font-semibold">{inst.label}</div>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLES[ds]}`}>{ds}</span>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => togglePaid(inst)}>
+              {inst.status === "paid" ? "Mark unpaid" : "Mark paid"}
+            </Button>
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(inst.id)}>
+              <Pencil className="w-3.5 h-3.5" />
+            </Button>
+            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeleteInstId(inst.id)}>
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+        <Row label="Amount" value={`€${inst.amount_due}`} />
+        <Row label="Due date" value={fmtDate(inst.due_date)} />
+        {inst.notes && (
+          <p className="text-xs italic text-muted-foreground whitespace-pre-wrap">{inst.notes}</p>
+        )}
+        <InvoiceFileControl
+          inst={inst}
+          onUpload={(f) => uploadInvoice(inst, f)}
+          onDownload={() => downloadInvoice(inst)}
+          onRemove={() => removeInvoice(inst)}
+        />
+      </div>
+    );
+  };
 
   return (
     <section className="bg-card rounded-2xl border border-border p-6 space-y-6">
@@ -887,124 +958,88 @@ function PaymentSection({ userId }: { userId: string }) {
           </div>
           {totals.mismatch && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-              Installments (€{totals.totalDue}) do not match rental price (€{totals.rental}).
+              Rental installments (€{totals.totalDue}) do not match rental price (€{totals.rental}).
             </p>
           )}
         </div>
       )}
 
-      {/* Installments */}
+      {/* Rental installments */}
       <div className="space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="text-xs uppercase text-muted-foreground">Installments</div>
+          <div className="text-xs uppercase text-muted-foreground">Rental installments</div>
           <div className="flex gap-2">
-            {installments.length === 0 && booking.total_rental_price != null && booking.total_rental_price > 0 && (
+            {rentalInst.length === 0 && booking.total_rental_price != null && booking.total_rental_price > 0 && (
               <Button size="sm" variant="outline" onClick={generate3070} disabled={generating}>
                 {generating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                 Generate 30/70 plan
               </Button>
             )}
-            {!showAdd && (
-              <Button size="sm" variant="outline" onClick={() => setShowAdd(true)}>
-                <Plus className="w-4 h-4 mr-1" /> Add installment
+            {addCategory !== "rental" && (
+              <Button size="sm" variant="outline" onClick={() => setAddCategory("rental")}>
+                <Plus className="w-4 h-4 mr-1" /> Add rental
               </Button>
             )}
           </div>
         </div>
 
-        {installments.length === 0 && !showAdd && (
-          <p className="text-sm text-muted-foreground italic">No installments yet.</p>
+        {rentalInst.length === 0 && addCategory !== "rental" && (
+          <p className="text-sm text-muted-foreground italic">No rental installments yet.</p>
         )}
 
-        {installments.map((inst) =>
-          editingId === inst.id ? (
-            <InstallmentForm
-              key={inst.id}
-              initial={inst}
-              onCancel={() => setEditingId(null)}
-              onSave={async (vals) => {
-                const ok = await upsertInstallment(inst.id, vals);
-                if (ok) setEditingId(null);
-              }}
-            />
-          ) : (
-            <div key={inst.id} className="rounded-lg border border-border p-3 text-sm">
-              <div className="flex justify-between items-start gap-2 mb-1">
-                <div className="font-semibold">{inst.label}</div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLES[inst.status]}`}>
-                    {inst.status}
-                  </span>
-                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(inst.id)}>
-                    <Pencil className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDeleteInstId(inst.id)}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
-              <Row label="Amount due" value={`€${inst.amount_due}`} />
-              <Row label="Due date" value={fmtDate(inst.due_date)} />
-              <Row label="Amount paid" value={`€${inst.amount_paid}`} />
-              <Row label="Paid at" value={fmtDate(inst.paid_at)} />
-              {inst.notes && (
-                <p className="mt-2 text-xs italic text-muted-foreground whitespace-pre-wrap">{inst.notes}</p>
-              )}
-            </div>
-          )
-        )}
+        {rentalInst.map(renderInstallment)}
 
-        {showAdd && (
+        {addCategory === "rental" && (
           <InstallmentForm
-            onCancel={() => setShowAdd(false)}
+            defaultCategory="rental"
+            onCancel={() => setAddCategory(null)}
             onSave={async (vals) => {
               const ok = await upsertInstallment(null, vals);
-              if (ok) setShowAdd(false);
+              if (ok) setAddCategory(null);
             }}
           />
         )}
       </div>
 
-      {/* Invoices */}
-      <div className="space-y-4 pt-2 border-t border-border">
-        <div className="text-xs uppercase text-muted-foreground">Invoices</div>
-        {(["rental", "food", "transport"] as const).map((cat) => (
-          <InvoiceCategory
-            key={cat}
-            category={cat}
-            bookingId={booking.id}
-            invoices={invoices.filter((i) => i.type === cat)}
-            onUploaded={loadAll}
-            onDownload={downloadInvoice}
-            onDelete={(id) => setDeleteInvId(id)}
-            onTogglePaid={toggleInvoicePaid}
+      {/* Extras */}
+      <div className="space-y-3 pt-2 border-t border-border">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="text-xs uppercase text-muted-foreground">Extras (food, transport, other)</div>
+          {addCategory !== "extra" && (
+            <Button size="sm" variant="outline" onClick={() => setAddCategory("extra")}>
+              <Plus className="w-4 h-4 mr-1" /> Add extra
+            </Button>
+          )}
+        </div>
+
+        {extraInst.length === 0 && addCategory !== "extra" && (
+          <p className="text-sm text-muted-foreground italic">No extras yet.</p>
+        )}
+
+        {extraInst.map(renderInstallment)}
+
+        {addCategory === "extra" && (
+          <InstallmentForm
+            defaultCategory="extra"
+            onCancel={() => setAddCategory(null)}
+            onSave={async (vals) => {
+              const ok = await upsertInstallment(null, vals);
+              if (ok) setAddCategory(null);
+            }}
           />
-        ))}
+        )}
       </div>
 
-      {/* Delete confirms */}
+      {/* Delete confirm */}
       <AlertDialog open={!!deleteInstId} onOpenChange={(o) => !o && setDeleteInstId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete installment?</AlertDialogTitle>
-            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+            <AlertDialogDescription>This cannot be undone. Any attached invoice file will also be deleted.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={deleteInstallment}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!deleteInvId} onOpenChange={(o) => !o && setDeleteInvId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete invoice?</AlertDialogTitle>
-            <AlertDialogDescription>The file will be removed from storage.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={deleteInvoice}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1014,36 +1049,33 @@ function PaymentSection({ userId }: { userId: string }) {
 
 function InstallmentForm({
   initial,
+  defaultCategory,
   onCancel,
   onSave,
 }: {
   initial?: Installment;
+  defaultCategory?: "rental" | "extra";
   onCancel: () => void;
-  onSave: (v: Omit<Installment, "id" | "booking_id">) => Promise<void> | void;
+  onSave: (v: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null }) => Promise<void> | void;
 }) {
   const [label, setLabel] = useState(initial?.label || "");
   const [amountDue, setAmountDue] = useState(initial?.amount_due != null ? String(initial.amount_due) : "");
   const [dueDate, setDueDate] = useState(initial?.due_date || "");
-  const [amountPaid, setAmountPaid] = useState(initial?.amount_paid != null ? String(initial.amount_paid) : "0");
-  const [paidAt, setPaidAt] = useState(initial?.paid_at || "");
   const [notes, setNotes] = useState(initial?.notes || "");
-  const [status, setStatus] = useState<Installment["status"] | "auto">(initial ? initial.status : "auto");
+  const [status, setStatus] = useState<"pending" | "paid">(initial?.status ?? "pending");
+  const [category, setCategory] = useState<"rental" | "extra">(initial?.category ?? defaultCategory ?? "rental");
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
     if (!label.trim() || !amountDue) return;
     setSaving(true);
-    const due = Number(amountDue);
-    const paid = Number(amountPaid || 0);
-    const resolvedStatus = status === "auto" ? computeStatus(due, paid, dueDate || null) : status;
     await onSave({
       label: label.trim(),
-      amount_due: due,
+      amount_due: Number(amountDue),
       due_date: dueDate || null,
-      amount_paid: paid,
-      paid_at: paidAt || null,
+      status,
+      category,
       notes: notes.trim() || null,
-      status: resolvedStatus,
     });
     setSaving(false);
   };
@@ -1053,10 +1085,10 @@ function InstallmentForm({
       <div className="grid sm:grid-cols-2 gap-2">
         <label className="space-y-1">
           <div className="text-xs text-muted-foreground">Label *</div>
-          <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Deposit, balance, etc." />
+          <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Deposit, balance, food, taxi, etc." />
         </label>
         <label className="space-y-1">
-          <div className="text-xs text-muted-foreground">Amount due (€) *</div>
+          <div className="text-xs text-muted-foreground">Amount (€) *</div>
           <Input type="number" min="0" step="0.01" value={amountDue} onChange={(e) => setAmountDue(e.target.value)} />
         </label>
         <label className="space-y-1">
@@ -1064,25 +1096,25 @@ function InstallmentForm({
           <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
         </label>
         <label className="space-y-1">
-          <div className="text-xs text-muted-foreground">Amount paid (€)</div>
-          <Input type="number" min="0" step="0.01" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
-        </label>
-        <label className="space-y-1">
-          <div className="text-xs text-muted-foreground">Paid at</div>
-          <Input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+          <div className="text-xs text-muted-foreground">Category</div>
+          <select
+            className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+            value={category}
+            onChange={(e) => setCategory(e.target.value as "rental" | "extra")}
+          >
+            <option value="rental">Rental</option>
+            <option value="extra">Extra</option>
+          </select>
         </label>
         <label className="space-y-1">
           <div className="text-xs text-muted-foreground">Status</div>
           <select
             className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
             value={status}
-            onChange={(e) => setStatus(e.target.value as any)}
+            onChange={(e) => setStatus(e.target.value as "pending" | "paid")}
           >
-            <option value="auto">Auto</option>
             <option value="pending">Pending</option>
             <option value="paid">Paid</option>
-            <option value="partial">Partial</option>
-            <option value="overdue">Overdue</option>
           </select>
         </label>
       </div>
@@ -1100,171 +1132,71 @@ function InstallmentForm({
   );
 }
 
-function InvoiceCategory({
-  category,
-  bookingId,
-  invoices,
-  onUploaded,
+function InvoiceFileControl({
+  inst,
+  onUpload,
   onDownload,
-  onDelete,
-  onTogglePaid,
+  onRemove,
 }: {
-  category: "rental" | "food" | "transport";
-  bookingId: string;
-  invoices: Invoice[];
-  onUploaded: () => void | Promise<void>;
-  onDownload: (inv: Invoice) => void;
-  onDelete: (id: string) => void;
-  onTogglePaid: (inv: Invoice) => void;
+  inst: Installment;
+  onUpload: (file: File) => Promise<void> | void;
+  onDownload: () => void;
+  onRemove: () => void;
 }) {
-  const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [label, setLabel] = useState("");
-  const [amount, setAmount] = useState("");
-  const [period, setPeriod] = useState<"pre" | "post">("pre");
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const onPick = () => fileRef.current?.click();
 
-  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    const allowed = ["application/pdf", "image/jpeg", "image/png"];
-    if (!allowed.includes(file.type)) {
-      toast({ title: "Unsupported file type", description: "PDF, JPG, or PNG only.", variant: "destructive" });
-      return;
-    }
-    if (file.size > 20 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Max 20MB.", variant: "destructive" });
-      return;
-    }
-    setPendingFile(file);
-  };
-
-  const doUpload = async () => {
-    if (!pendingFile) return;
-    setUploading(true);
-    const safeName = pendingFile.name.replace(/[^\w.\-]+/g, "_");
-    const path = `${bookingId}/${category}/${Date.now()}_${safeName}`;
-    const up = await supabase.storage.from("invoices").upload(path, pendingFile, {
-      contentType: pendingFile.type,
-      upsert: false,
-    });
-    if (up.error) {
-      toast({ title: "Upload failed", description: up.error.message, variant: "destructive" });
-      setUploading(false);
-      return;
-    }
-    const amt = amount.trim() === "" ? null : Number(amount);
-    const { error } = await supabase.from("invoices").insert({
-      booking_id: bookingId,
-      type: category,
-      period,
-      label: label.trim() || null,
-      file_url: path,
-      file_name: pendingFile.name,
-      amount: amt != null && !Number.isNaN(amt) ? amt : null,
-      paid: false,
-    });
-    if (error) {
-      toast({ title: "Save failed", description: error.message, variant: "destructive" });
-      await supabase.storage.from("invoices").remove([path]);
-    } else {
-      toast({ title: "Uploaded" });
-      setLabel(""); setAmount(""); setPendingFile(null);
-      await onUploaded();
-    }
-    setUploading(false);
+    setBusy(true);
+    await onUpload(file);
+    setBusy(false);
   };
 
   return (
-    <div className="rounded-lg border border-border p-3 space-y-3">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="font-medium capitalize">{category}</div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value as "pre" | "post")}
-          >
-            <option value="pre">Pre</option>
-            <option value="post">Post</option>
-          </select>
-          <Input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="Label (optional)"
-            className="h-8 text-xs max-w-[160px]"
-          />
-          <Input
-            type="number" min="0" step="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="€ amount"
-            className="h-8 text-xs max-w-[110px]"
-          />
-          {pendingFile ? (
-            <>
-              <span className="text-xs text-muted-foreground truncate max-w-[140px]">{pendingFile.name}</span>
-              <Button size="sm" onClick={doUpload} disabled={uploading}>
-                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Upload className="w-4 h-4 mr-1" /> Upload</>}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setPendingFile(null)} disabled={uploading}>
-                <X className="w-4 h-4" />
-              </Button>
-            </>
-          ) : (
-            <Button size="sm" variant="outline" onClick={onPick}>
-              Choose file
-            </Button>
-          )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/pdf,image/jpeg,image/png"
-            className="hidden"
-            onChange={onFileSelected}
-          />
-        </div>
+    <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
+      <div className="text-xs text-muted-foreground min-w-0 truncate">
+        {inst.invoice_file_url ? (
+          <span className="truncate">📎 {inst.invoice_file_name || "Invoice attached"}</span>
+        ) : (
+          <span className="italic">No invoice file attached</span>
+        )}
       </div>
-      {invoices.length === 0 ? (
-        <p className="text-xs italic text-muted-foreground">No invoices.</p>
-      ) : (
-        <ul className="space-y-1">
-          {invoices.map((inv) => (
-            <li key={inv.id} className="flex items-center justify-between gap-2 text-sm">
-              <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                <span className="truncate">{inv.label || inv.file_name}</span>
-                <span className="text-[10px] uppercase px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground">
-                  {inv.period}
-                </span>
-                {inv.amount != null && (
-                  <span className="text-xs text-muted-foreground">€{inv.amount}</span>
-                )}
-                <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded-full border ${inv.paid ? "bg-green-100 text-green-900 border-green-300" : "bg-amber-100 text-amber-900 border-amber-300"}`}>
-                  {inv.paid ? `Paid${inv.paid_at ? ` · ${fmtDate(inv.paid_at)}` : ""}` : "Unpaid"}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onTogglePaid(inv)}>
-                  {inv.paid ? "Mark unpaid" : "Mark paid"}
-                </Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onDownload(inv)}>
-                  <Download className="w-3.5 h-3.5" />
-                </Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => onDelete(inv.id)}>
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="flex items-center gap-1 shrink-0">
+        {inst.invoice_file_url ? (
+          <>
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onDownload} title="Download">
+              <Download className="w-3.5 h-3.5" />
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onPick} disabled={busy}>
+              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Replace"}
+            </Button>
+            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={onRemove} title="Remove invoice">
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onPick} disabled={busy}>
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Upload className="w-3.5 h-3.5 mr-1" />}
+            Upload invoice
+          </Button>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/pdf,image/jpeg,image/png"
+          className="hidden"
+          onChange={onSelected}
+        />
+      </div>
     </div>
   );
 }
+
 
 
 
