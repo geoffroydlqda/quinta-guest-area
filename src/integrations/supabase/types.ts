@@ -33,6 +33,7 @@ export type Database = {
           payment_status: Database["public"]["Enums"]["payment_status"]
           remaining_balance: number | null
           retreat_name: string
+          total_rental_price: number | null
           updated_at: string
           user_id: string | null
         }
@@ -54,6 +55,7 @@ export type Database = {
           payment_status?: Database["public"]["Enums"]["payment_status"]
           remaining_balance?: number | null
           retreat_name?: string
+          total_rental_price?: number | null
           updated_at?: string
           user_id?: string | null
         }
@@ -75,6 +77,7 @@ export type Database = {
           payment_status?: Database["public"]["Enums"]["payment_status"]
           remaining_balance?: number | null
           retreat_name?: string
+          total_rental_price?: number | null
           updated_at?: string
           user_id?: string | null
         }
@@ -233,6 +236,97 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      invoices: {
+        Row: {
+          booking_id: string
+          file_name: string
+          file_url: string
+          id: string
+          label: string | null
+          period: string
+          type: string
+          uploaded_at: string
+        }
+        Insert: {
+          booking_id: string
+          file_name: string
+          file_url: string
+          id?: string
+          label?: string | null
+          period?: string
+          type: string
+          uploaded_at?: string
+        }
+        Update: {
+          booking_id?: string
+          file_name?: string
+          file_url?: string
+          id?: string
+          label?: string | null
+          period?: string
+          type?: string
+          uploaded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_installments: {
+        Row: {
+          amount_due: number
+          amount_paid: number
+          booking_id: string
+          created_at: string
+          due_date: string | null
+          id: string
+          label: string
+          notes: string | null
+          paid_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount_due: number
+          amount_paid?: number
+          booking_id: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          label: string
+          notes?: string | null
+          paid_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_due?: number
+          amount_paid?: number
+          booking_id?: string
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          label?: string
+          notes?: string | null
+          paid_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_installments_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       room_setups: {
         Row: {
