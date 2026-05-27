@@ -758,15 +758,18 @@ function PaymentSection({ userId }: { userId: string }) {
     const total = Number(booking.total_rental_price);
     const deposit = Math.round(total * 0.3 * 100) / 100;
     const balance = Math.round((total - deposit) * 100) / 100;
+    const depositDue = todayIso();
+    const balanceDue = booking.check_in_date ? shiftMonthsIso(booking.check_in_date, -2) : null;
     const rows = [
-      { label: "Deposit (30%)", amount_due: deposit },
-      { label: "Balance (70%)", amount_due: balance },
+      { label: "Deposit (30%)", amount_due: deposit, due_date: depositDue },
+      { label: "Balance (70%)", amount_due: balance, due_date: balanceDue },
     ];
     const { error } = await supabase.from("payment_installments").insert(
       rows.map((r) => ({
         booking_id: booking.id,
         label: r.label,
         amount_due: r.amount_due,
+        due_date: r.due_date,
         category: "rental",
         status: "pending",
       }))
@@ -776,8 +779,8 @@ function PaymentSection({ userId }: { userId: string }) {
     setGenerating(false);
   };
 
-  const togglePaid = async (inst: Installment) => {
-    const next = inst.status === "paid" ? "pending" : "paid";
+  const setPaidStatus = async (inst: Installment, paid: boolean) => {
+    const next = paid ? "paid" : "pending";
     const { error } = await supabase.from("payment_installments").update({ status: next }).eq("id", inst.id);
     if (error) toast({ title: "Failed", description: error.message, variant: "destructive" });
     else await loadAll();
