@@ -489,14 +489,11 @@ function fmtDate(d: string | null | undefined) {
 
 function installmentBadge(s: PaymentInstallment) {
   const todayIso = new Date().toISOString().slice(0, 10);
-  let kind: 'paid' | 'partial' | 'overdue' | 'pending' = 'pending';
-  if (s.status === 'paid' || (s.amount_due > 0 && s.amount_paid >= s.amount_due)) kind = 'paid';
-  else if (s.amount_paid > 0) kind = 'partial';
+  let kind: 'paid' | 'overdue' | 'pending' = 'pending';
+  if (s.status === 'paid') kind = 'paid';
   else if (s.due_date && s.due_date < todayIso) kind = 'overdue';
-  else if (s.status === 'overdue') kind = 'overdue';
   const map = {
     paid: { label: 'Paid', cls: 'bg-green-100 text-green-800 border border-green-300' },
-    partial: { label: 'Partial', cls: 'bg-orange-100 text-orange-800 border border-orange-300' },
     overdue: { label: 'Overdue', cls: 'bg-red-100 text-red-800 border border-red-300' },
     pending: { label: 'Pending', cls: 'bg-amber-100 text-amber-900 border border-amber-300' },
   } as const;
@@ -504,8 +501,8 @@ function installmentBadge(s: PaymentInstallment) {
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${cfg.cls}`}>{cfg.label}</span>;
 }
 
-async function downloadInvoice(inv: PaymentInvoice) {
-  const path = inv.file_url;
+async function downloadInstallmentInvoice(inst: PaymentInstallment) {
+  const path = inst.invoice_file_url;
   if (!path) return;
   const { data, error } = await supabase.storage.from('invoices').createSignedUrl(path, 60 * 60);
   if (error || !data?.signedUrl) {
@@ -515,58 +512,40 @@ async function downloadInvoice(inv: PaymentInvoice) {
   window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
 }
 
-function InvoiceRow({ inv }: { inv: PaymentInvoice }) {
-  const isFood = inv.type === 'food';
-  const isTransport = inv.type === 'transport';
+function InstallmentRow({ inst }: { inst: PaymentInstallment }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-2 border-t border-border first:border-t-0">
-      <div className="flex items-center gap-3 min-w-0">
-        {isFood ? <Utensils className="w-4 h-4 text-muted-foreground shrink-0" /> :
-          isTransport ? <Car className="w-4 h-4 text-muted-foreground shrink-0" /> :
-            <FileText className="w-4 h-4 text-muted-foreground shrink-0" />}
-        <div className="min-w-0">
-          <div className="text-sm truncate">{inv.label || inv.file_name}</div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground border border-border">
-              {inv.period === 'post' ? 'Post-stay' : 'Pre-stay'}
-            </span>
-            {inv.paid_at && <span className="text-[10px] text-muted-foreground">Paid {fmtDate(inv.paid_at)}</span>}
-          </div>
+    <div className="py-2.5 flex items-center justify-between gap-3 border-t border-border first:border-t-0">
+      <div className="min-w-0">
+        <div className="text-sm font-medium truncate">{inst.label}</div>
+        <div className="text-xs text-muted-foreground">
+          Due {fmtDate(inst.due_date) || '—'}
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        {typeof inv.amount === 'number' && inv.amount !== null && (
-          <span className="text-sm font-medium">{fmtEur(inv.amount)}</span>
+        <span className="text-sm font-medium">{fmtEur(inst.amount_due)}</span>
+        {installmentBadge(inst)}
+        {inst.invoice_file_url && (
+          <Button size="sm" variant="outline" onClick={() => downloadInstallmentInvoice(inst)}>
+            <Download className="w-3.5 h-3.5 mr-1" /> Invoice
+          </Button>
         )}
-        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
-          inv.paid
-            ? 'bg-green-100 text-green-800 border border-green-300'
-            : 'bg-amber-100 text-amber-900 border border-amber-300'
-        }`}>
-          {inv.paid ? 'Paid' : 'Unpaid'}
-        </span>
-        <Button size="sm" variant="outline" onClick={() => downloadInvoice(inv)}>
-          <Download className="w-3.5 h-3.5 mr-1" /> Download
-        </Button>
       </div>
     </div>
   );
 }
 
 function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }) {
-  const { booking, installments, invoices, isLoading } = usePaymentData(bookingId);
+  const { booking, installments, isLoading } = usePaymentData(bookingId);
 
   if (isLoading) return null;
 
-  const rentalInvoices = invoices.filter((i) => i.type === 'rental');
-  const foodInvoices = invoices.filter((i) => i.type === 'food');
-  const transportInvoices = invoices.filter((i) => i.type === 'transport');
-  const extras = [...foodInvoices, ...transportInvoices];
+  const rental = installments.filter((i) => (i.category ?? 'rental') === 'rental');
+  const extras = installments.filter((i) => i.category === 'extra');
 
-  const hasAccommodation = installments.length > 0 || (booking?.total_rental_price ?? 0) > 0 || rentalInvoices.length > 0;
+  const hasAccommodation = rental.length > 0 || (booking?.total_rental_price ?? 0) > 0;
   const hasExtras = extras.length > 0;
 
-  if (!hasAccommodation && !hasExtras && invoices.length === 0) {
+  if (!hasAccommodation && !hasExtras) {
     return (
       <div className="bg-card rounded-2xl border border-border p-6 flex items-start gap-3">
         <CreditCard className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
@@ -579,12 +558,12 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
   }
 
   const totalDue = Number(booking?.total_rental_price ?? 0);
-  const totalPaid = installments.reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
+  const totalPaid = rental.filter((i) => i.status === 'paid').reduce((s, i) => s + Number(i.amount_due || 0), 0);
   const remaining = Math.max(totalDue - totalPaid, 0);
   const pct = totalDue > 0 ? Math.min(100, Math.round((totalPaid / totalDue) * 100)) : 0;
 
-  const extrasTotal = extras.reduce((s, i) => s + Number(i.amount || 0), 0);
-  const extrasPaid = extras.filter((i) => i.paid).reduce((s, i) => s + Number(i.amount || 0), 0);
+  const extrasTotal = extras.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+  const extrasPaid = extras.filter((i) => i.status === 'paid').reduce((s, i) => s + Number(i.amount_due || 0), 0);
   const extrasOutstanding = Math.max(extrasTotal - extrasPaid, 0);
 
   return (
@@ -608,42 +587,13 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
             </div>
           )}
 
-          {installments.length > 0 && (
-            <div className="divide-y divide-border">
-              {installments.map((i) => (
-                <div key={i.id} className="py-2.5 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{i.label}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Due {fmtDate(i.due_date) || '—'}
-                      {i.paid_at && i.amount_paid >= i.amount_due && (
-                        <span className="ml-2">· Paid {fmtDate(i.paid_at)}</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm font-medium">{fmtEur(i.amount_due)}</span>
-                    {installmentBadge(i)}
-                  </div>
-                </div>
-              ))}
-            </div>
+          {rental.length > 0 && (
+            <div>{rental.map((i) => <InstallmentRow key={i.id} inst={i} />)}</div>
           )}
 
           {totalDue > 0 && (
             <div className="mt-3 pt-3 border-t border-border text-sm text-muted-foreground">
               {fmtEur(totalPaid)} paid of {fmtEur(totalDue)} · {fmtEur(remaining)} remaining
-            </div>
-          )}
-
-          {rentalInvoices.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-border">
-              <div className="text-sm font-medium mb-2">Documents</div>
-              <div>
-                {rentalInvoices.map((inv) => (
-                  <InvoiceRow key={inv.id} inv={inv} />
-                ))}
-              </div>
             </div>
           )}
         </section>
@@ -656,27 +606,7 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
             <h2 className="text-lg font-medium">Extras</h2>
           </div>
 
-          {foodInvoices.length > 0 && (
-            <div className="mb-4">
-              <div className="text-sm font-medium mb-1 flex items-center gap-1.5">
-                <Utensils className="w-4 h-4" /> Food
-              </div>
-              <div>
-                {foodInvoices.map((inv) => <InvoiceRow key={inv.id} inv={inv} />)}
-              </div>
-            </div>
-          )}
-
-          {transportInvoices.length > 0 && (
-            <div className="mb-4">
-              <div className="text-sm font-medium mb-1 flex items-center gap-1.5">
-                <Car className="w-4 h-4" /> Transport
-              </div>
-              <div>
-                {transportInvoices.map((inv) => <InvoiceRow key={inv.id} inv={inv} />)}
-              </div>
-            </div>
-          )}
+          <div>{extras.map((i) => <InstallmentRow key={i.id} inst={i} />)}</div>
 
           <div className="mt-3 pt-3 border-t border-border text-sm text-muted-foreground">
             Extras total: {fmtEur(extrasTotal)} · {fmtEur(extrasPaid)} paid · {fmtEur(extrasOutstanding)} outstanding
@@ -686,5 +616,6 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
     </div>
   );
 }
+
 
 export default Dashboard;
