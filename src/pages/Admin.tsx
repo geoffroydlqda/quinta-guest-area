@@ -218,58 +218,100 @@ const AdminContent = () => {
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
   }, []);
 
-  const categoryOf = (p: Profile): "upcoming" | "past" | "live" | "none" => {
-    if (!p.check_out_date) return "none";
-    if (p.check_out_date < todayIso) return "past";
-    if (p.check_in_date && p.check_in_date <= todayIso && p.check_out_date >= todayIso) return "live";
-    return "upcoming";
+
+  // Unified event row: one entry per booking (claimed or manual).
+  type EventRow = {
+    bookingId: string;
+    userId: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    checkIn: string | null;
+    checkOut: string | null;
+    guestsCount: number;
+    statusOverall: string;
+    submittedAt: string | null;
+    invitationClaimed: boolean;
+    invitationToken: string | null;
+    paymentStatusOverride: string | null;
   };
 
-  const filteredProfiles = useMemo(() => {
-    if (!data) return [];
+  const events: EventRow[] = useMemo(() => {
+    const list: EventRow[] = [];
+    for (const b of data?.bookings || []) {
+      const p = b.user_id ? profileById.get(b.user_id) : undefined;
+      list.push({
+        bookingId: b.id,
+        userId: b.user_id,
+        firstName: p?.first_name ?? b.first_name,
+        lastName: p?.last_name ?? b.last_name,
+        email: p?.email ?? b.email,
+        checkIn: p?.check_in_date ?? b.check_in_date,
+        checkOut: p?.check_out_date ?? b.check_out_date,
+        guestsCount: p?.guests_count ?? b.guest_count,
+        statusOverall: p?.status_overall ?? "draft",
+        submittedAt: p?.submitted_at ?? null,
+        invitationClaimed: b.invitation_claimed,
+        invitationToken: b.invitation_token,
+        paymentStatusOverride: b.payment_status_override ?? null,
+      });
+    }
+    return list;
+  }, [data, profileById]);
+
+  const categoryOfEvent = (e: EventRow): "upcoming" | "past" | "live" | "none" => {
+    if (!e.checkIn) return "none";
+    if (e.checkOut && e.checkOut < todayIso) return "past";
+    if (e.checkIn <= todayIso && (e.checkOut ?? todayIso) >= todayIso) return "live";
+    if (e.checkIn > todayIso) return "upcoming";
+    return "past";
+  };
+
+  const filteredEvents = useMemo(() => {
     const s = search.toLowerCase().trim();
-    return data.profiles.filter((p) => {
-      if (statusFilter !== "all" && p.status_overall !== statusFilter) return false;
+    return events.filter((e) => {
+      if (statusFilter !== "all" && e.statusOverall !== statusFilter) return false;
       if (!s) return true;
       return (
-        (p.full_name || "").toLowerCase().includes(s) ||
-        (p.email || "").toLowerCase().includes(s) ||
-        (p.first_name || "").toLowerCase().includes(s) ||
-        (p.last_name || "").toLowerCase().includes(s)
+        (e.firstName || "").toLowerCase().includes(s) ||
+        (e.lastName || "").toLowerCase().includes(s) ||
+        (e.email || "").toLowerCase().includes(s) ||
+        `${e.firstName ?? ""} ${e.lastName ?? ""}`.toLowerCase().includes(s)
       );
     });
-  }, [data, search, statusFilter]);
+  }, [events, search, statusFilter]);
 
-  const { upcomingProfiles, pastProfiles, unscheduledProfiles } = useMemo(() => {
-    const upcoming: Profile[] = [];
-    const past: Profile[] = [];
-    const none: Profile[] = [];
-    for (const p of filteredProfiles) {
-      const c = categoryOf(p);
-      if (c === "past") past.push(p);
-      else if (c === "none") none.push(p);
-      else upcoming.push(p); // upcoming + live
+  const { upcomingEvents, pastEvents, unscheduledEvents } = useMemo(() => {
+    const upcoming: EventRow[] = [];
+    const past: EventRow[] = [];
+    const none: EventRow[] = [];
+    for (const e of filteredEvents) {
+      const c = categoryOfEvent(e);
+      if (c === "past") past.push(e);
+      else if (c === "none") none.push(e);
+      else upcoming.push(e); // upcoming + live
     }
-    upcoming.sort((a, b) => (a.check_out_date || "").localeCompare(b.check_out_date || ""));
-    past.sort((a, b) => (b.check_out_date || "").localeCompare(a.check_out_date || ""));
-    return { upcomingProfiles: upcoming, pastProfiles: past, unscheduledProfiles: none };
-  }, [filteredProfiles, todayIso]);
+    upcoming.sort((a, b) => (a.checkIn || "").localeCompare(b.checkIn || ""));
+    past.sort((a, b) => (b.checkOut || "").localeCompare(a.checkOut || ""));
+    return { upcomingEvents: upcoming, pastEvents: past, unscheduledEvents: none };
+  }, [filteredEvents, todayIso]);
 
   const visibleUpcoming = useMemo(() => {
     if (categoryFilter === "past") return [];
-    if (categoryFilter === "live") return upcomingProfiles.filter((p) => categoryOf(p) === "live");
-    if (categoryFilter === "upcoming") return upcomingProfiles.filter((p) => categoryOf(p) === "upcoming");
-    return upcomingProfiles;
-  }, [upcomingProfiles, categoryFilter, todayIso]);
+    if (categoryFilter === "live") return upcomingEvents.filter((e) => categoryOfEvent(e) === "live");
+    if (categoryFilter === "upcoming") return upcomingEvents.filter((e) => categoryOfEvent(e) === "upcoming");
+    return upcomingEvents;
+  }, [upcomingEvents, categoryFilter, todayIso]);
 
   const visiblePast = useMemo(() => {
     if (categoryFilter === "upcoming" || categoryFilter === "live") return [];
-    return pastProfiles;
-  }, [pastProfiles, categoryFilter]);
+    return pastEvents;
+  }, [pastEvents, categoryFilter]);
 
-  const visibleUnscheduled = categoryFilter === "all" ? unscheduledProfiles : [];
+  const visibleUnscheduled = categoryFilter === "all" ? unscheduledEvents : [];
 
-  const toolStatus = (uid: string) => {
+  const toolStatus = (uid: string | null) => {
+    if (!uid) return { room: "—", trip: "—", food: "—" };
     const room = data?.rooms.find((r) => r.user_id === uid);
     const trip = data?.trips.find((t) => t.user_id === uid);
     const food = data?.food.find((f) => f.user_id === uid);
@@ -282,17 +324,6 @@ const AdminContent = () => {
     };
   };
 
-  // Map user_id → primary booking (latest by check_in_date) for claimed bookings
-  const bookingByUser = useMemo(() => {
-    const m = new Map<string, BookingRow>();
-    for (const b of data?.bookings || []) {
-      if (!b.user_id) continue;
-      const cur = m.get(b.user_id);
-      if (!cur || (b.check_in_date || "") > (cur.check_in_date || "")) m.set(b.user_id, b);
-    }
-    return m;
-  }, [data]);
-
   const installmentsByBooking = useMemo(() => {
     const m = new Map<string, Installment[]>();
     for (const i of installments) {
@@ -303,17 +334,24 @@ const AdminContent = () => {
     return m;
   }, [installments]);
 
-  const navigateToDetail = (uidOrFallback: string, bookingId: string | null | undefined) => {
-    const seg = uidOrFallback || bookingId || "";
-    const qs = bookingId ? `?bookingId=${bookingId}` : "";
-    navigate(`/admin/guest/${seg}${qs}`);
+  const navigateToBooking = (bookingId: string) => {
+    navigate(`/admin/guest/${bookingId}?bookingId=${bookingId}`);
   };
 
-  const paymentForUser = (uid: string): { status: ResolvedPaymentStatus; bookingId: string | null } => {
-    const b = bookingByUser.get(uid);
-    if (!b) return { status: "pending", bookingId: null };
-    const inst = installmentsByBooking.get(b.id) || [];
-    return { status: resolvePaymentStatus(b, inst), bookingId: b.id };
+  const paymentForEvent = (e: EventRow): ResolvedPaymentStatus => {
+    const inst = installmentsByBooking.get(e.bookingId) || [];
+    return resolvePaymentStatus({ payment_status_override: e.paymentStatusOverride }, inst);
+  };
+
+  const deleteBookingDirect = async (bookingId: string, email: string) => {
+    if (!confirm(`Delete pending booking for ${email}?`)) return;
+    const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Booking deleted" });
+    load();
   };
 
   if (loading || !data) {
@@ -367,22 +405,13 @@ const AdminContent = () => {
                 <option value="past">Past</option>
               </select>
               <Button size="sm" variant="outline" onClick={() => downloadCSV("guests.csv", [
-                ["First name","Last name","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Submitted at"],
-                ...filteredProfiles.map((p) => {
-                  const ts = toolStatus(p.user_id);
-                  return [p.first_name||"", p.last_name||"", p.email, p.check_in_date||"", p.check_out_date||"", p.guests_count, ts.room, ts.food, ts.trip, p.status_overall, p.submitted_at||""];
+                ["First name","Last name","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Submitted at","Claimed"],
+                ...filteredEvents.map((e) => {
+                  const ts = toolStatus(e.userId);
+                  return [e.firstName||"", e.lastName||"", e.email, e.checkIn||"", e.checkOut||"", e.guestsCount, ts.room, ts.food, ts.trip, e.statusOverall, e.submittedAt||"", e.invitationClaimed ? "yes" : "no"];
                 }),
               ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
             </div>
-
-            {categoryFilter === "all" && (data.bookings || []).filter((b) => !b.invitation_claimed).length > 0 && (
-              <PendingInvitationsSection
-                bookings={(data.bookings || []).filter((b) => !b.invitation_claimed)}
-                installmentsByBooking={installmentsByBooking}
-                onNavigate={(bookingId) => navigateToDetail(bookingId, bookingId)}
-                onChanged={load}
-              />
-            )}
 
             {(categoryFilter === "all" || categoryFilter === "live" || categoryFilter === "upcoming") && (
               <section className="mb-6">
@@ -390,13 +419,14 @@ const AdminContent = () => {
                 {visibleUpcoming.length === 0 ? (
                   <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No upcoming events.</div>
                 ) : (
-                  <ProfileTable
-                    profiles={visibleUpcoming}
+                  <EventTable
+                    events={visibleUpcoming}
                     toolStatus={toolStatus}
-                    categoryOf={categoryOf}
-                    paymentForUser={paymentForUser}
-                    onRowClick={(uid) => navigateToDetail(uid, paymentForUser(uid).bookingId)}
-                    onDelete={(id, label) => setDeleteTarget({ id, label })}
+                    categoryOf={categoryOfEvent}
+                    paymentForEvent={paymentForEvent}
+                    onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                    onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
+                    onDeleteBooking={deleteBookingDirect}
                     showLive
                   />
                 )}
@@ -417,13 +447,14 @@ const AdminContent = () => {
                   visiblePast.length === 0 ? (
                     <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No past events.</div>
                   ) : (
-                    <ProfileTable
-                      profiles={visiblePast}
+                    <EventTable
+                      events={visiblePast}
                       toolStatus={toolStatus}
-                      categoryOf={categoryOf}
-                      paymentForUser={paymentForUser}
-                      onRowClick={(uid) => navigateToDetail(uid, paymentForUser(uid).bookingId)}
-                      onDelete={(id, label) => setDeleteTarget({ id, label })}
+                      categoryOf={categoryOfEvent}
+                      paymentForEvent={paymentForEvent}
+                      onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                      onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
+                      onDeleteBooking={deleteBookingDirect}
                     />
                   )
                 )}
@@ -433,13 +464,14 @@ const AdminContent = () => {
             {visibleUnscheduled.length > 0 && (
               <section className="mb-6">
                 <h2 className="text-base font-medium mb-2">No dates set <span className="text-muted-foreground text-sm font-normal">({visibleUnscheduled.length})</span></h2>
-                <ProfileTable
-                  profiles={visibleUnscheduled}
+                <EventTable
+                  events={visibleUnscheduled}
                   toolStatus={toolStatus}
-                  categoryOf={categoryOf}
-                  paymentForUser={paymentForUser}
-                  onRowClick={(uid) => navigateToDetail(uid, paymentForUser(uid).bookingId)}
-                  onDelete={(id, label) => setDeleteTarget({ id, label })}
+                  categoryOf={categoryOfEvent}
+                  paymentForEvent={paymentForEvent}
+                  onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                  onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
+                  onDeleteBooking={deleteBookingDirect}
                 />
               </section>
             )}
@@ -990,49 +1022,79 @@ const Admin = () => (
 
 export default Admin;
 
-function ProfileTable({
-  profiles,
+type EventRowProps = {
+  bookingId: string;
+  userId: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+  checkIn: string | null;
+  checkOut: string | null;
+  guestsCount: number;
+  statusOverall: string;
+  submittedAt: string | null;
+  invitationClaimed: boolean;
+  invitationToken: string | null;
+  paymentStatusOverride: string | null;
+};
+
+function EventTable({
+  events,
   toolStatus,
   categoryOf,
-  paymentForUser,
+  paymentForEvent,
   onRowClick,
-  onDelete,
+  onDeleteGuest,
+  onDeleteBooking,
   showLive,
 }: {
-  profiles: Profile[];
-  toolStatus: (uid: string) => { room: string; food: string; trip: string };
-  categoryOf: (p: Profile) => "upcoming" | "past" | "live" | "none";
-  paymentForUser: (uid: string) => { status: ResolvedPaymentStatus; bookingId: string | null };
-  onRowClick: (uid: string) => void;
-  onDelete: (id: string, label: string) => void;
+  events: EventRowProps[];
+  toolStatus: (uid: string | null) => { room: string; food: string; trip: string };
+  categoryOf: (e: EventRowProps) => "upcoming" | "past" | "live" | "none";
+  paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
+  onRowClick: (bookingId: string) => void;
+  onDeleteGuest: (id: string, label: string) => void;
+  onDeleteBooking: (bookingId: string, email: string) => void;
   showLive?: boolean;
 }) {
-  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyInvite = async (e: React.MouseEvent, token: string, bookingId: string) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/invite/${token}`;
+    await navigator.clipboard.writeText(url);
+    setCopiedId(bookingId);
+    toast({ title: "Invitation link copied" });
+    setTimeout(() => setCopiedId((c) => (c === bookingId ? null : c)), 2000);
+  };
+
   return (
     <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-muted">
           <tr className="text-left">
-            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment",""].map((h, i) => (
+            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment","Invite",""].map((h, i) => (
               <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {profiles.map((p) => {
-            const ts = toolStatus(p.user_id);
-            const label = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email);
-            const isLive = showLive && categoryOf(p) === "live";
-            const pay = paymentForUser(p.user_id);
+          {events.map((ev) => {
+            const ts = toolStatus(ev.userId);
+            const label = (`${ev.firstName ?? ""} ${ev.lastName ?? ""}`.trim() || ev.email);
+            const isLive = showLive && categoryOf(ev) === "live";
+            const payStatus = paymentForEvent(ev);
+            const canCopyInvite = !ev.invitationClaimed && !!ev.invitationToken;
             return (
               <tr
-                key={p.user_id}
+                key={ev.bookingId}
                 className="border-t border-border hover:bg-muted/40 cursor-pointer"
-                onClick={() => onRowClick(p.user_id)}
+                onClick={() => onRowClick(ev.bookingId)}
               >
                 <td className="px-3 py-2 underline-offset-2 hover:underline">
                   <span className="inline-flex items-center gap-2">
-                    {p.first_name}
+                    {ev.firstName}
                     {isLive && (
                       <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 border border-green-300">
                         Live
@@ -1040,25 +1102,32 @@ function ProfileTable({
                     )}
                   </span>
                 </td>
-                <td className="px-3 py-2">{p.last_name}</td>
-                <td className="px-3 py-2">{p.email}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{p.check_in_date}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{p.check_out_date}</td>
-                <td className="px-3 py-2">{p.guests_count}</td>
+                <td className="px-3 py-2">{ev.lastName}</td>
+                <td className="px-3 py-2">{ev.email}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{ev.checkIn}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{ev.checkOut}</td>
+                <td className="px-3 py-2">{ev.guestsCount}</td>
                 <td className="px-3 py-2">{ts.room}</td>
                 <td className="px-3 py-2">{ts.food}</td>
                 <td className="px-3 py-2">{ts.trip}</td>
-                <td className="px-3 py-2"><StatusBadge checkIn={p.check_in_date} statusOverall={p.status_overall} /></td>
+                <td className="px-3 py-2"><StatusBadge checkIn={ev.checkIn} statusOverall={ev.statusOverall} /></td>
                 <td className="px-3 py-2">
                   <PaymentBadge
-                    status={pay.status}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const seg = p.user_id || pay.bookingId || "";
-                      const qs = pay.bookingId ? `?bookingId=${pay.bookingId}` : "";
-                      navigate(`/admin/guest/${seg}${qs}`);
-                    }}
+                    status={payStatus}
+                    onClick={(e) => { e.stopPropagation(); onRowClick(ev.bookingId); }}
                   />
+                </td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {canCopyInvite ? (
+                    <Button size="sm" variant="outline" onClick={(e) => copyInvite(e, ev.invitationToken!, ev.bookingId)}>
+                      {copiedId === ev.bookingId ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
+                      Copy invite link
+                    </Button>
+                  ) : ev.invitationClaimed ? (
+                    <span className="text-xs text-muted-foreground">Claimed</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <Button
@@ -1066,7 +1135,11 @@ function ProfileTable({
                     variant="ghost"
                     className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     aria-label={`Delete ${label}`}
-                    onClick={(e) => { e.stopPropagation(); onDelete(p.user_id, label); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (ev.userId) onDeleteGuest(ev.userId, label);
+                      else onDeleteBooking(ev.bookingId, ev.email);
+                    }}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -1080,104 +1153,4 @@ function ProfileTable({
   );
 }
 
-function PendingInvitationsSection({
-  bookings,
-  installmentsByBooking,
-  onNavigate,
-  onChanged,
-}: {
-  bookings: BookingRow[];
-  installmentsByBooking: Map<string, Installment[]>;
-  onNavigate: (bookingId: string) => void;
-  onChanged: () => void;
-}) {
-  const { toast } = useToast();
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const inviteUrl = (token: string | null) =>
-    token ? `${window.location.origin}/invite/${token}` : "";
-
-  const copy = async (b: BookingRow) => {
-    const url = inviteUrl(b.invitation_token);
-    if (!url) return;
-    await navigator.clipboard.writeText(url);
-    setCopiedId(b.id);
-    toast({ title: "Invitation link copied" });
-    setTimeout(() => setCopiedId((c) => (c === b.id ? null : c)), 2000);
-  };
-
-  const remove = async (b: BookingRow) => {
-    if (!confirm(`Delete pending booking for ${b.email}?`)) return;
-    const { error } = await supabase.from("bookings").delete().eq("id", b.id);
-    if (error) {
-      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "Booking deleted" });
-    onChanged();
-  };
-
-  return (
-    <section className="mb-6">
-      <h2 className="text-base font-medium mb-2">
-        Pending invitations <span className="text-muted-foreground text-sm font-normal">({bookings.length})</span>
-      </h2>
-      <div className="border border-border rounded-lg bg-card overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">Retreat</th>
-              <th className="px-3 py-2">Guest</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Dates</th>
-              <th className="px-3 py-2">Payment</th>
-              <th className="px-3 py-2">Invite link</th>
-              <th className="px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.map((b) => {
-              const name = [b.first_name, b.last_name].filter(Boolean).join(" ").trim();
-              const inst = installmentsByBooking.get(b.id) || [];
-              const payStatus = resolvePaymentStatus(b, inst);
-              return (
-                <tr key={b.id} className="border-t border-border">
-                  <td className="px-3 py-2">{b.retreat_name || "—"}</td>
-                  <td className="px-3 py-2">{name || "—"}</td>
-                  <td className="px-3 py-2">{b.email}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {b.check_in_date || "—"} → {b.check_out_date || "—"}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <PaymentBadge status={payStatus} onClick={() => onNavigate(b.id)} />
-                  </td>
-                  <td className="px-3 py-2">
-                    {b.invitation_token ? (
-                      <Button size="sm" variant="outline" onClick={() => copy(b)}>
-                        {copiedId === b.id ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
-                        Copy link
-                      </Button>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="inline-flex items-center gap-2">
-                      <Button size="sm" variant="outline" onClick={() => onNavigate(b.id)}>
-                        Details
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => remove(b)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
 
