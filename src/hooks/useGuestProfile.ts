@@ -168,6 +168,12 @@ export function useGuestProfile() {
       // Clear timeout since we succeeded
       clearTimeout(timeoutId);
 
+      // Stay dates + guest count are owned by the bookings table now.
+      // Overlay active booking values onto the profile shape used across the app.
+      const bookingForOverlay = activeBooking
+        ?? (activeBookingId
+          ? null
+          : null);
       const typedProfile: GuestProfile = {
         id: profileData.id,
         user_id: profileData.user_id,
@@ -175,9 +181,9 @@ export function useGuestProfile() {
         first_name: profileData.first_name || null,
         last_name: profileData.last_name || null,
         email: profileData.email,
-        check_in_date: profileData.check_in_date,
-        check_out_date: profileData.check_out_date,
-        guests_count: profileData.guests_count ?? 1,
+        check_in_date: bookingForOverlay?.check_in_date ?? profileData.check_in_date,
+        check_out_date: bookingForOverlay?.check_out_date ?? profileData.check_out_date,
+        guests_count: bookingForOverlay?.guest_count ?? profileData.guests_count ?? 1,
         submitted_at: profileData.submitted_at,
         status_overall: (profileData.status_overall as 'draft' | 'submitted') || 'draft',
         created_at: profileData.created_at,
