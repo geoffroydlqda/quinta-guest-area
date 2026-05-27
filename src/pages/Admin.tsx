@@ -151,7 +151,7 @@ const AdminContent = () => {
     if (!silent) setLoading(true);
     const [res, instRes] = await Promise.all([
       supabase.functions.invoke("admin-list-data"),
-      supabase.from("payment_installments").select("id,booking_id,amount_due,amount_paid,due_date,paid_at,status"),
+      supabase.from("payment_installments").select("id,booking_id,amount_due,due_date,status,category"),
     ]);
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });
