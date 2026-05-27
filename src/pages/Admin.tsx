@@ -1322,9 +1322,9 @@ function EventTable({
                     aria-label={`Delete ${label}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (ev.userId) onDeleteGuest(ev.userId, label);
-                      else onDeleteBooking(ev.bookingId, ev.email);
+                      onDeleteBooking(ev.bookingId, ev.email);
                     }}
+
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
