@@ -469,7 +469,7 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+
 
 // ============================================================
 // PaymentOverview — read-only payment summary for guests
