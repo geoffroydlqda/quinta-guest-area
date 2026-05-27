@@ -535,12 +535,12 @@ function InstallmentRow({ inst }: { inst: PaymentInstallment }) {
 }
 
 function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }) {
-  const { booking, installments, isLoading } = usePaymentData(bookingId);
+  const { booking, payments, isLoading } = usePaymentData(bookingId);
 
   if (isLoading) return null;
 
-  const rental = installments.filter((i) => (i.category ?? 'rental') === 'rental');
-  const extras = installments.filter((i) => i.category === 'extra');
+  const rental = payments.filter((i) => (i.category ?? 'rental') === 'rental');
+  const extras = payments.filter((i) => i.category === 'extra');
 
   const hasAccommodation = rental.length > 0 || (booking?.total_rental_price ?? 0) > 0;
   const hasExtras = extras.length > 0;
