@@ -348,7 +348,9 @@ const AdminGuestDetailContent = () => {
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
             <Utensils className="w-4 h-4 text-primary" /> Food
           </h2>
-          {food ? (
+          {isPending ? (
+            <p className="text-sm text-muted-foreground italic">This booking has not been claimed by the guest yet.</p>
+          ) : food ? (
             <div className="space-y-4 text-sm">
               {(() => {
                 const mt = food.meal_times;
