@@ -635,7 +635,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const loadAll = async () => {
     setLoading(true);
-    let q = supabase.from("bookings").select("id,total_rental_price,payment_status,payment_status_override");
+    let q = supabase.from("bookings").select("id,total_rental_price,payment_status,payment_status_override,check_in_date");
     if (bookingIdParam) {
       q = q.eq("id", bookingIdParam);
     } else {
