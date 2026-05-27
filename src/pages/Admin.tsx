@@ -411,22 +411,13 @@ const AdminContent = () => {
                 <option value="past">Past</option>
               </select>
               <Button size="sm" variant="outline" onClick={() => downloadCSV("guests.csv", [
-                ["First name","Last name","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Submitted at"],
-                ...filteredProfiles.map((p) => {
-                  const ts = toolStatus(p.user_id);
-                  return [p.first_name||"", p.last_name||"", p.email, p.check_in_date||"", p.check_out_date||"", p.guests_count, ts.room, ts.food, ts.trip, p.status_overall, p.submitted_at||""];
+                ["First name","Last name","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Submitted at","Claimed"],
+                ...filteredEvents.map((e) => {
+                  const ts = toolStatus(e.userId);
+                  return [e.firstName||"", e.lastName||"", e.email, e.checkIn||"", e.checkOut||"", e.guestsCount, ts.room, ts.food, ts.trip, e.statusOverall, e.submittedAt||"", e.invitationClaimed ? "yes" : "no"];
                 }),
               ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
             </div>
-
-            {categoryFilter === "all" && (data.bookings || []).filter((b) => !b.invitation_claimed).length > 0 && (
-              <PendingInvitationsSection
-                bookings={(data.bookings || []).filter((b) => !b.invitation_claimed)}
-                installmentsByBooking={installmentsByBooking}
-                onNavigate={(bookingId) => navigateToDetail(bookingId, bookingId)}
-                onChanged={load}
-              />
-            )}
 
             {(categoryFilter === "all" || categoryFilter === "live" || categoryFilter === "upcoming") && (
               <section className="mb-6">
@@ -434,13 +425,14 @@ const AdminContent = () => {
                 {visibleUpcoming.length === 0 ? (
                   <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No upcoming events.</div>
                 ) : (
-                  <ProfileTable
-                    profiles={visibleUpcoming}
+                  <EventTable
+                    events={visibleUpcoming}
                     toolStatus={toolStatus}
-                    categoryOf={categoryOf}
-                    paymentForUser={paymentForUser}
-                    onRowClick={(uid) => navigateToDetail(uid, paymentForUser(uid).bookingId)}
-                    onDelete={(id, label) => setDeleteTarget({ id, label })}
+                    categoryOf={categoryOfEvent}
+                    paymentForEvent={paymentForEvent}
+                    onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                    onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
+                    onDeleteBooking={deleteBookingDirect}
                     showLive
                   />
                 )}
@@ -461,13 +453,14 @@ const AdminContent = () => {
                   visiblePast.length === 0 ? (
                     <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No past events.</div>
                   ) : (
-                    <ProfileTable
-                      profiles={visiblePast}
+                    <EventTable
+                      events={visiblePast}
                       toolStatus={toolStatus}
-                      categoryOf={categoryOf}
-                      paymentForUser={paymentForUser}
-                      onRowClick={(uid) => navigateToDetail(uid, paymentForUser(uid).bookingId)}
-                      onDelete={(id, label) => setDeleteTarget({ id, label })}
+                      categoryOf={categoryOfEvent}
+                      paymentForEvent={paymentForEvent}
+                      onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                      onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
+                      onDeleteBooking={deleteBookingDirect}
                     />
                   )
                 )}
@@ -477,13 +470,14 @@ const AdminContent = () => {
             {visibleUnscheduled.length > 0 && (
               <section className="mb-6">
                 <h2 className="text-base font-medium mb-2">No dates set <span className="text-muted-foreground text-sm font-normal">({visibleUnscheduled.length})</span></h2>
-                <ProfileTable
-                  profiles={visibleUnscheduled}
+                <EventTable
+                  events={visibleUnscheduled}
                   toolStatus={toolStatus}
-                  categoryOf={categoryOf}
-                  paymentForUser={paymentForUser}
-                  onRowClick={(uid) => navigateToDetail(uid, paymentForUser(uid).bookingId)}
-                  onDelete={(id, label) => setDeleteTarget({ id, label })}
+                  categoryOf={categoryOfEvent}
+                  paymentForEvent={paymentForEvent}
+                  onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                  onDeleteGuest={(id, label) => setDeleteTarget({ id, label })}
+                  onDeleteBooking={deleteBookingDirect}
                 />
               </section>
             )}
