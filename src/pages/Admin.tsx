@@ -1028,49 +1028,79 @@ const Admin = () => (
 
 export default Admin;
 
-function ProfileTable({
-  profiles,
+type EventRowProps = {
+  bookingId: string;
+  userId: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+  checkIn: string | null;
+  checkOut: string | null;
+  guestsCount: number;
+  statusOverall: string;
+  submittedAt: string | null;
+  invitationClaimed: boolean;
+  invitationToken: string | null;
+  paymentStatusOverride: string | null;
+};
+
+function EventTable({
+  events,
   toolStatus,
   categoryOf,
-  paymentForUser,
+  paymentForEvent,
   onRowClick,
-  onDelete,
+  onDeleteGuest,
+  onDeleteBooking,
   showLive,
 }: {
-  profiles: Profile[];
-  toolStatus: (uid: string) => { room: string; food: string; trip: string };
-  categoryOf: (p: Profile) => "upcoming" | "past" | "live" | "none";
-  paymentForUser: (uid: string) => { status: ResolvedPaymentStatus; bookingId: string | null };
-  onRowClick: (uid: string) => void;
-  onDelete: (id: string, label: string) => void;
+  events: EventRowProps[];
+  toolStatus: (uid: string | null) => { room: string; food: string; trip: string };
+  categoryOf: (e: EventRowProps) => "upcoming" | "past" | "live" | "none";
+  paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
+  onRowClick: (bookingId: string) => void;
+  onDeleteGuest: (id: string, label: string) => void;
+  onDeleteBooking: (bookingId: string, email: string) => void;
   showLive?: boolean;
 }) {
-  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyInvite = async (e: React.MouseEvent, token: string, bookingId: string) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/invite/${token}`;
+    await navigator.clipboard.writeText(url);
+    setCopiedId(bookingId);
+    toast({ title: "Invitation link copied" });
+    setTimeout(() => setCopiedId((c) => (c === bookingId ? null : c)), 2000);
+  };
+
   return (
     <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-muted">
           <tr className="text-left">
-            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment",""].map((h, i) => (
+            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment","Invite",""].map((h, i) => (
               <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {profiles.map((p) => {
-            const ts = toolStatus(p.user_id);
-            const label = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email);
-            const isLive = showLive && categoryOf(p) === "live";
-            const pay = paymentForUser(p.user_id);
+          {events.map((ev) => {
+            const ts = toolStatus(ev.userId);
+            const label = (`${ev.firstName ?? ""} ${ev.lastName ?? ""}`.trim() || ev.email);
+            const isLive = showLive && categoryOf(ev) === "live";
+            const payStatus = paymentForEvent(ev);
+            const canCopyInvite = !ev.invitationClaimed && !!ev.invitationToken;
             return (
               <tr
-                key={p.user_id}
+                key={ev.bookingId}
                 className="border-t border-border hover:bg-muted/40 cursor-pointer"
-                onClick={() => onRowClick(p.user_id)}
+                onClick={() => onRowClick(ev.bookingId)}
               >
                 <td className="px-3 py-2 underline-offset-2 hover:underline">
                   <span className="inline-flex items-center gap-2">
-                    {p.first_name}
+                    {ev.firstName}
                     {isLive && (
                       <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 border border-green-300">
                         Live
@@ -1078,25 +1108,32 @@ function ProfileTable({
                     )}
                   </span>
                 </td>
-                <td className="px-3 py-2">{p.last_name}</td>
-                <td className="px-3 py-2">{p.email}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{p.check_in_date}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{p.check_out_date}</td>
-                <td className="px-3 py-2">{p.guests_count}</td>
+                <td className="px-3 py-2">{ev.lastName}</td>
+                <td className="px-3 py-2">{ev.email}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{ev.checkIn}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{ev.checkOut}</td>
+                <td className="px-3 py-2">{ev.guestsCount}</td>
                 <td className="px-3 py-2">{ts.room}</td>
                 <td className="px-3 py-2">{ts.food}</td>
                 <td className="px-3 py-2">{ts.trip}</td>
-                <td className="px-3 py-2"><StatusBadge checkIn={p.check_in_date} statusOverall={p.status_overall} /></td>
+                <td className="px-3 py-2"><StatusBadge checkIn={ev.checkIn} statusOverall={ev.statusOverall} /></td>
                 <td className="px-3 py-2">
                   <PaymentBadge
-                    status={pay.status}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const seg = p.user_id || pay.bookingId || "";
-                      const qs = pay.bookingId ? `?bookingId=${pay.bookingId}` : "";
-                      navigate(`/admin/guest/${seg}${qs}`);
-                    }}
+                    status={payStatus}
+                    onClick={(e) => { e.stopPropagation(); onRowClick(ev.bookingId); }}
                   />
+                </td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {canCopyInvite ? (
+                    <Button size="sm" variant="outline" onClick={(e) => copyInvite(e, ev.invitationToken!, ev.bookingId)}>
+                      {copiedId === ev.bookingId ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
+                      Copy invite link
+                    </Button>
+                  ) : ev.invitationClaimed ? (
+                    <span className="text-xs text-muted-foreground">Claimed</span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <Button
@@ -1104,7 +1141,11 @@ function ProfileTable({
                     variant="ghost"
                     className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     aria-label={`Delete ${label}`}
-                    onClick={(e) => { e.stopPropagation(); onDelete(p.user_id, label); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (ev.userId) onDeleteGuest(ev.userId, label);
+                      else onDeleteBooking(ev.bookingId, ev.email);
+                    }}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -1118,104 +1159,4 @@ function ProfileTable({
   );
 }
 
-function PendingInvitationsSection({
-  bookings,
-  installmentsByBooking,
-  onNavigate,
-  onChanged,
-}: {
-  bookings: BookingRow[];
-  installmentsByBooking: Map<string, Installment[]>;
-  onNavigate: (bookingId: string) => void;
-  onChanged: () => void;
-}) {
-  const { toast } = useToast();
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const inviteUrl = (token: string | null) =>
-    token ? `${window.location.origin}/invite/${token}` : "";
-
-  const copy = async (b: BookingRow) => {
-    const url = inviteUrl(b.invitation_token);
-    if (!url) return;
-    await navigator.clipboard.writeText(url);
-    setCopiedId(b.id);
-    toast({ title: "Invitation link copied" });
-    setTimeout(() => setCopiedId((c) => (c === b.id ? null : c)), 2000);
-  };
-
-  const remove = async (b: BookingRow) => {
-    if (!confirm(`Delete pending booking for ${b.email}?`)) return;
-    const { error } = await supabase.from("bookings").delete().eq("id", b.id);
-    if (error) {
-      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "Booking deleted" });
-    onChanged();
-  };
-
-  return (
-    <section className="mb-6">
-      <h2 className="text-base font-medium mb-2">
-        Pending invitations <span className="text-muted-foreground text-sm font-normal">({bookings.length})</span>
-      </h2>
-      <div className="border border-border rounded-lg bg-card overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-muted/40 text-left text-xs uppercase text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">Retreat</th>
-              <th className="px-3 py-2">Guest</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Dates</th>
-              <th className="px-3 py-2">Payment</th>
-              <th className="px-3 py-2">Invite link</th>
-              <th className="px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.map((b) => {
-              const name = [b.first_name, b.last_name].filter(Boolean).join(" ").trim();
-              const inst = installmentsByBooking.get(b.id) || [];
-              const payStatus = resolvePaymentStatus(b, inst);
-              return (
-                <tr key={b.id} className="border-t border-border">
-                  <td className="px-3 py-2">{b.retreat_name || "—"}</td>
-                  <td className="px-3 py-2">{name || "—"}</td>
-                  <td className="px-3 py-2">{b.email}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    {b.check_in_date || "—"} → {b.check_out_date || "—"}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <PaymentBadge status={payStatus} onClick={() => onNavigate(b.id)} />
-                  </td>
-                  <td className="px-3 py-2">
-                    {b.invitation_token ? (
-                      <Button size="sm" variant="outline" onClick={() => copy(b)}>
-                        {copiedId === b.id ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
-                        Copy link
-                      </Button>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="inline-flex items-center gap-2">
-                      <Button size="sm" variant="outline" onClick={() => onNavigate(b.id)}>
-                        Details
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => remove(b)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
 
