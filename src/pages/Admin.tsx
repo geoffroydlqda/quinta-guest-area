@@ -56,9 +56,62 @@ type BookingRow = {
   user_id: string | null; created_at: string;
 };
 
+type Installment = {
+  id: string; booking_id: string; amount_due: number; amount_paid: number;
+  due_date: string | null; paid_at: string | null; status: string;
+};
+
 interface Data {
   profiles: Profile[]; rooms: Room[]; trips: Trip[]; food: FoodPlan[];
   bookings?: BookingRow[];
+}
+
+type ResolvedPaymentStatus = "paid_in_full" | "overdue" | "deposit_paid" | "pending";
+
+function deriveStatusFromInstallments(installments: Installment[]): ResolvedPaymentStatus {
+  if (installments.length === 0) return "pending";
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const hasOverdue = installments.some((i) =>
+    i.status === "overdue" ||
+    (i.due_date && i.due_date < todayIso && Number(i.amount_paid) < Number(i.amount_due))
+  );
+  if (hasOverdue) return "overdue";
+  const allPaid = installments.every((i) => Number(i.amount_paid) >= Number(i.amount_due) && Number(i.amount_due) > 0);
+  if (allPaid) return "paid_in_full";
+  const anyPaid = installments.some((i) => Number(i.amount_paid) > 0);
+  if (anyPaid) return "deposit_paid";
+  return "pending";
+}
+
+function resolvePaymentStatus(
+  booking: { payment_status_override?: string | null } | null | undefined,
+  installments: Installment[]
+): ResolvedPaymentStatus {
+  const override = booking?.payment_status_override;
+  if (override && ["paid_in_full", "overdue", "deposit_paid", "pending"].includes(override)) {
+    return override as ResolvedPaymentStatus;
+  }
+  return deriveStatusFromInstallments(installments);
+}
+
+const PAYMENT_BADGE: Record<ResolvedPaymentStatus, { label: string; className: string }> = {
+  paid_in_full: { label: "Paid", className: "bg-green-100 text-green-800 border border-green-300" },
+  overdue: { label: "Overdue", className: "bg-red-100 text-red-800 border border-red-300" },
+  deposit_paid: { label: "Deposit", className: "bg-amber-100 text-amber-900 border border-amber-300" },
+  pending: { label: "Pending", className: "bg-muted text-muted-foreground border border-border" },
+};
+
+function PaymentBadge({ status, onClick }: { status: ResolvedPaymentStatus; onClick?: (e: React.MouseEvent) => void }) {
+  const cfg = PAYMENT_BADGE[status];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${cfg.className} ${onClick ? "hover:opacity-80 cursor-pointer" : ""}`}
+    >
+      {cfg.label}
+    </button>
+  );
 }
 
 function csvEscape(v: any): string {
