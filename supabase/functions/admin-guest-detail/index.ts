@@ -13,6 +13,8 @@ const ADMIN_EMAILS = ["hello@quintamor.com", "loïs@quintamor.com", "lois@quinta
 const isAdmin = (email?: string | null) =>
   !!email && ADMIN_EMAILS.includes(email.normalize("NFC").toLowerCase().trim());
 
+const UUID_RE = /^[0-9a-f-]{36}$/i;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -39,8 +41,10 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const guestId: string | undefined = body?.guest_id;
-    if (!guestId || !/^[0-9a-f-]{36}$/i.test(guestId)) {
-      return new Response(JSON.stringify({ error: "Invalid guest_id" }), {
+    const bookingId: string | undefined = body?.booking_id;
+
+    if ((!guestId || !UUID_RE.test(guestId)) && (!bookingId || !UUID_RE.test(bookingId))) {
+      return new Response(JSON.stringify({ error: "Invalid guest_id or booking_id" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -50,26 +54,65 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const [profile, room, food, trips, passengers] = await Promise.all([
-      admin.from("guest_profiles").select("*").eq("user_id", guestId).maybeSingle(),
-      admin.from("room_setups").select("*").eq("user_id", guestId).maybeSingle(),
-      admin.from("food_plans").select("*").eq("user_id", guestId).maybeSingle(),
-      admin.from("transportation_trips").select("*").eq("user_id", guestId),
-      admin.from("transportation_passengers").select("*").eq("user_id", guestId),
-    ]);
+    // Resolve target user_id and booking
+    let booking: any = null;
+    let targetUserId: string | null = null;
 
-    if (!profile.data) {
+    if (bookingId && UUID_RE.test(bookingId)) {
+      const bRes = await admin.from("bookings").select("*").eq("id", bookingId).maybeSingle();
+      if (!bRes.data) {
+        return new Response(JSON.stringify({ error: "Booking not found" }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      booking = bRes.data;
+      targetUserId = booking.user_id || null;
+    } else if (guestId) {
+      targetUserId = guestId;
+      const bRes = await admin
+        .from("bookings")
+        .select("*")
+        .eq("user_id", guestId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      booking = bRes.data || null;
+    }
+
+    let profile: any = null;
+    let room: any = null;
+    let food: any = null;
+    let trips: any[] = [];
+    let passengers: any[] = [];
+
+    if (targetUserId) {
+      const [pRes, rRes, fRes, tRes, paxRes] = await Promise.all([
+        admin.from("guest_profiles").select("*").eq("user_id", targetUserId).maybeSingle(),
+        admin.from("room_setups").select("*").eq("user_id", targetUserId).maybeSingle(),
+        admin.from("food_plans").select("*").eq("user_id", targetUserId).maybeSingle(),
+        admin.from("transportation_trips").select("*").eq("user_id", targetUserId),
+        admin.from("transportation_passengers").select("*").eq("user_id", targetUserId),
+      ]);
+      profile = pRes.data || null;
+      room = rRes.data || null;
+      food = fRes.data || null;
+      trips = tRes.data || [];
+      passengers = paxRes.data || [];
+    }
+
+    if (!booking && !profile) {
       return new Response(JSON.stringify({ error: "Guest not found" }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     return new Response(JSON.stringify({
-      profile: profile.data,
-      room: room.data || null,
-      food: food.data || null,
-      trips: trips.data || [],
-      passengers: passengers.data || [],
+      booking,
+      profile,
+      room,
+      food,
+      trips,
+      passengers,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e: any) {
     console.error(e);

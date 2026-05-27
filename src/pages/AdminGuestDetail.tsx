@@ -57,8 +57,22 @@ type FoodPlan = {
   updated_at: string;
 };
 
+type BookingRow = {
+  id: string;
+  user_id: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  guest_count: number;
+  check_in_date: string | null;
+  check_out_date: string | null;
+  payment_status: string;
+  invitation_claimed: boolean;
+};
+
 interface Detail {
-  profile: Profile;
+  booking: BookingRow | null;
+  profile: Profile | null;
   room: Room | null;
   food: FoodPlan | null;
   trips: Trip[];
@@ -83,6 +97,8 @@ function fmtTimestamp(t?: string | null): string {
 
 const AdminGuestDetailContent = () => {
   const { guestId } = useParams<{ guestId: string }>();
+  const [searchParams] = useSearchParams();
+  const bookingIdParam = searchParams.get("bookingId");
   const navigate = useNavigate();
   const { toast } = useToast();
   const [data, setData] = useState<Detail | null>(null);
@@ -91,11 +107,12 @@ const AdminGuestDetailContent = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const load = async () => {
-    if (!guestId) return;
+    if (!guestId && !bookingIdParam) return;
     setLoading(true);
-    const res = await supabase.functions.invoke("admin-guest-detail", {
-      body: { guest_id: guestId },
-    });
+    const body: { guest_id?: string; booking_id?: string } = {};
+    if (bookingIdParam) body.booking_id = bookingIdParam;
+    if (guestId && /^[0-9a-f-]{36}$/i.test(guestId)) body.guest_id = guestId;
+    const res = await supabase.functions.invoke("admin-guest-detail", { body });
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });
       setData(null);
@@ -105,7 +122,7 @@ const AdminGuestDetailContent = () => {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [guestId]);
+  useEffect(() => { load(); }, [guestId, bookingIdParam]);
 
   const dietConfig: DietConfig = useMemo(() => {
     const dc = data?.food?.diet_config;
@@ -121,7 +138,7 @@ const AdminGuestDetailContent = () => {
 
   const foodCost = useMemo(() => {
     const rawSels = Array.isArray(data?.food?.selections) ? data!.food!.selections : [];
-    const guestsCount = data?.profile?.guests_count || 1;
+    const guestsCount = data?.profile?.guests_count ?? data?.booking?.guest_count ?? 1;
     const sels = rawSels.map((s: any) => ({
       ...s,
       guests_count_day: typeof s?.guests_count_day === 'number' && s.guests_count_day >= 0
@@ -206,7 +223,7 @@ const AdminGuestDetailContent = () => {
     );
   }
 
-  if (!data) {
+  if (!data || (!data.profile && !data.booking)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
         <p>Guest not found.</p>
@@ -215,10 +232,17 @@ const AdminGuestDetailContent = () => {
     );
   }
 
-  const { profile, room, food } = data;
-  const fullName = profile.full_name ||
-    `${profile.first_name || ""} ${profile.last_name || ""}`.trim() ||
-    profile.email;
+  const { profile, room, food, booking } = data;
+  const isPending = !profile;
+  const firstName = profile?.first_name ?? booking?.first_name ?? null;
+  const lastName = profile?.last_name ?? booking?.last_name ?? null;
+  const email = profile?.email ?? booking?.email ?? "";
+  const checkIn = profile?.check_in_date ?? booking?.check_in_date ?? null;
+  const checkOut = profile?.check_out_date ?? booking?.check_out_date ?? null;
+  const guestsCount = profile?.guests_count ?? booking?.guest_count ?? 1;
+  const fullName = profile?.full_name ||
+    `${firstName || ""} ${lastName || ""}`.trim() ||
+    email || "Guest";
   const activeDiets = foodCost.dietBreakdown.filter((d) => d.guests > 0);
   const activeFoodDays = (food?.selections || []).filter(
     (s: any) => s.fullBoard || s.breakfast || s.lunch || s.dinner
@@ -236,7 +260,7 @@ const AdminGuestDetailContent = () => {
             <h1 className="text-lg sm:text-xl font-medium truncate">{fullName}</h1>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={resendEmail} disabled={resending}>
+            <Button size="sm" variant="outline" onClick={resendEmail} disabled={resending || !data?.profile}>
               {resending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />}
               Resend summary email
             </Button>
@@ -259,29 +283,38 @@ const AdminGuestDetailContent = () => {
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
             <div>
               <div className="text-muted-foreground">First name</div>
-              <div className="font-medium">{profile.first_name || "—"}</div>
+              <div className="font-medium">{firstName || "—"}</div>
             </div>
             <div>
               <div className="text-muted-foreground">Last name</div>
-              <div className="font-medium">{profile.last_name || "—"}</div>
+              <div className="font-medium">{lastName || "—"}</div>
             </div>
             <div>
               <div className="text-muted-foreground">Email</div>
-              <div className="font-medium break-all">{profile.email}</div>
+              <div className="font-medium break-all">{email || "—"}</div>
             </div>
             <div>
               <div className="text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> Guests</div>
-              <div className="font-medium">{profile.guests_count}</div>
+              <div className="font-medium">{guestsCount}</div>
             </div>
             <div>
               <div className="text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" /> Stay dates</div>
-              <div className="font-medium">{fmtDate(profile.check_in_date)} → {fmtDate(profile.check_out_date)}</div>
+              <div className="font-medium">{fmtDate(checkIn)} → {fmtDate(checkOut)}</div>
             </div>
             <div>
               <div className="text-muted-foreground">Status</div>
-              <div className="font-medium">{getGuestStatus(profile.check_in_date, profile.status_overall).label}</div>
+              <div className="font-medium">
+                {isPending
+                  ? "Invitation pending"
+                  : getGuestStatus(checkIn, profile!.status_overall).label}
+              </div>
             </div>
           </div>
+          {isPending && (
+            <p className="mt-4 text-xs italic text-muted-foreground">
+              This booking has not been claimed by the guest yet.
+            </p>
+          )}
         </section>
 
         {/* Room Setup */}
@@ -289,7 +322,9 @@ const AdminGuestDetailContent = () => {
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
             <BedDouble className="w-4 h-4 text-primary" /> Room Setup
           </h2>
-          {room ? (
+          {isPending ? (
+            <p className="text-sm text-muted-foreground italic">This booking has not been claimed by the guest yet.</p>
+          ) : room ? (
             <div className="text-sm space-y-1">
               <Row label="King (en-suite bathroom) — fixed" value="2" />
               <Row label="Queen (shared bathroom)" value={room.queen_shared_qty} />
@@ -313,7 +348,9 @@ const AdminGuestDetailContent = () => {
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
             <Utensils className="w-4 h-4 text-primary" /> Food
           </h2>
-          {food ? (
+          {isPending ? (
+            <p className="text-sm text-muted-foreground italic">This booking has not been claimed by the guest yet.</p>
+          ) : food ? (
             <div className="space-y-4 text-sm">
               {(() => {
                 const mt = food.meal_times;
@@ -398,7 +435,9 @@ const AdminGuestDetailContent = () => {
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
             <Car className="w-4 h-4 text-primary" /> Transportation
           </h2>
-          {sortedTrips.length === 0 ? (
+          {isPending ? (
+            <p className="text-sm text-muted-foreground italic">This booking has not been claimed by the guest yet.</p>
+          ) : sortedTrips.length === 0 ? (
             <p className="text-sm text-muted-foreground italic">No trips</p>
           ) : (
             <div className="space-y-3 text-sm">
@@ -498,14 +537,16 @@ const AdminGuestDetailContent = () => {
         )}
 
         {/* Payments */}
-        <PaymentSection userId={profile.user_id} />
+        <PaymentSection userId={profile?.user_id ?? booking?.user_id ?? ""} />
 
 
         {/* Timestamps */}
-        <section className="text-xs text-muted-foreground text-center pb-6">
-          <div>Last updated: {fmtTimestamp(profile.updated_at)}</div>
-          {profile.submitted_at && <div>Submitted at: {fmtTimestamp(profile.submitted_at)}</div>}
-        </section>
+        {profile && (
+          <section className="text-xs text-muted-foreground text-center pb-6">
+            <div>Last updated: {fmtTimestamp(profile.updated_at)}</div>
+            {profile.submitted_at && <div>Submitted at: {fmtTimestamp(profile.submitted_at)}</div>}
+          </section>
+        )}
       </main>
 
       <DeleteGuestDialog
