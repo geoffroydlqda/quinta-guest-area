@@ -1225,12 +1225,23 @@ function EventTable({
   const { toast } = useToast();
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const copyInvite = async (e: React.MouseEvent, token: string, bookingId: string) => {
+  const copyInvite = async (e: React.MouseEvent, token: string | null, bookingId: string) => {
     e.stopPropagation();
-    const url = `${window.location.origin}/invite/${token}`;
+    let t = token;
+    if (!t) {
+      const { data, error } = await supabase.functions.invoke("admin-generate-invite-token", {
+        body: { booking_id: bookingId },
+      });
+      if (error || !data?.token) {
+        toast({ title: "Could not generate invite", description: error?.message || data?.error || "Unknown error", variant: "destructive" });
+        return;
+      }
+      t = data.token;
+    }
+    const url = `${window.location.origin}/invite/${t}`;
     await navigator.clipboard.writeText(url);
     setCopiedId(bookingId);
-    toast({ title: "Invitation link copied" });
+    toast({ title: "Invite link copied" });
     setTimeout(() => setCopiedId((c) => (c === bookingId ? null : c)), 2000);
   };
 
