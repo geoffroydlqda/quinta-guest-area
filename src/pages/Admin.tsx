@@ -239,17 +239,23 @@ const AdminContent = () => {
 
   const events: EventRow[] = useMemo(() => {
     const list: EventRow[] = [];
+    const seen = new Set<string>();
     for (const b of data?.bookings || []) {
+      if (seen.has(b.id)) continue;
+      seen.add(b.id);
+      // Tool status (room/food submission state) still comes from the user's profile,
+      // but all displayed booking fields (names, email, dates, guest count) MUST be
+      // read directly from the booking row — bookings is the single source of truth.
       const p = b.user_id ? profileById.get(b.user_id) : undefined;
       list.push({
         bookingId: b.id,
         userId: b.user_id,
-        firstName: p?.first_name ?? b.first_name,
-        lastName: p?.last_name ?? b.last_name,
-        email: p?.email ?? b.email,
-        checkIn: p?.check_in_date ?? b.check_in_date,
-        checkOut: p?.check_out_date ?? b.check_out_date,
-        guestsCount: p?.guests_count ?? b.guest_count,
+        firstName: b.first_name,
+        lastName: b.last_name,
+        email: b.email,
+        checkIn: b.check_in_date,
+        checkOut: b.check_out_date,
+        guestsCount: b.guest_count,
         statusOverall: p?.status_overall ?? "draft",
         submittedAt: p?.submitted_at ?? null,
         invitationClaimed: b.invitation_claimed,
