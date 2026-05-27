@@ -394,7 +394,8 @@ const AdminContent = () => {
                     profiles={visibleUpcoming}
                     toolStatus={toolStatus}
                     categoryOf={categoryOf}
-                    onRowClick={(uid) => navigate(`/admin/guest/${uid}`)}
+                    paymentForUser={paymentForUser}
+                    onRowClick={(uid) => navigateToDetail(uid, paymentForUser(uid).bookingId)}
                     onDelete={(id, label) => setDeleteTarget({ id, label })}
                     showLive
                   />
