@@ -16,6 +16,7 @@ export interface Booking {
   user_id: string | null;
   created_at: string;
   updated_at: string;
+  whatsapp_group_url: string | null;
 }
 
 interface BookingContextValue {
