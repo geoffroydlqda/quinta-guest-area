@@ -18,7 +18,8 @@ import { ProfileCompletionModal } from '@/components/guest-area/ProfileCompletio
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { featureFlags } from '@/lib/featureFlags';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, RefreshCw, LogOut, AlertCircle, CreditCard, Download, Utensils, Car, FileText } from 'lucide-react';
+import { Loader2, Send, RefreshCw, LogOut, AlertCircle, CreditCard, Download, Utensils, Car, FileText, MessageCircle, Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, CloudFog } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import type { FoodDaySelection, TransportationTrip, DietConfig } from '@/types/guest';
 import { dietConfigTotal, EMPTY_DIET_CONFIG } from '@/types/guest';
 import { usePaymentData, type PaymentInstallment } from '@/hooks/usePaymentData';
