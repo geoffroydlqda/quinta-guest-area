@@ -38,7 +38,7 @@ export function StaySwitcher() {
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel>Switch stay</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {bookings.map((b) => (
+        {bookingsPersonal.map((b) => (
           <DropdownMenuItem
             key={b.id}
             onClick={() => {
