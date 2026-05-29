@@ -263,6 +263,7 @@ const AdminContent = () => {
         invitationClaimed: b.invitation_claimed,
         invitationToken: b.invitation_token,
         paymentStatusOverride: b.payment_status_override ?? null,
+        internalNotes: b.internal_notes ?? null,
       });
     }
     return list;
