@@ -56,6 +56,7 @@ type BookingRow = {
   user_id: string | null; created_at: string;
   payment_status_override?: string | null;
   total_rental_price?: number | null;
+  internal_notes?: string | null;
 };
 
 type Installment = {
