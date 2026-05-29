@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useMemo } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,8 +23,8 @@ export interface Booking {
 }
 
 interface BookingContextValue {
-  bookings: Booking[];           // all bookings owned by user (incl. admin_managed)
-  bookingsPersonal: Booking[];   // bookings where admin_managed = false (for StaySwitcher / dashboard gating)
+  bookings: Booking[];           // all bookings owned by the connected user
+  bookingsPersonal: Booking[];   // alias of `bookings` (kept for backward compat)
   activeBookingId: string | null;
   activeBooking: Booking | null;
   isLoading: boolean;
@@ -33,6 +33,7 @@ interface BookingContextValue {
   isImpersonating: boolean;
   impersonatedBooking: Booking | null;
 }
+
 
 const STORAGE_KEY = 'qda_active_booking_id';
 
@@ -79,23 +80,22 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     const list = (data || []) as Booking[];
     setBookings(list);
 
-    // Resolve active booking
+    // Resolve active booking — no admin_managed filter (the claim-as-me flow
+    // has been retired; impersonation is the supported path).
     const stored = localStorage.getItem(STORAGE_KEY);
     const storedValid = stored && list.some((b) => b.id === stored);
-    // Auto-select considers only personal bookings (admin_managed entries must
-    // be entered explicitly via "Open guest dashboard")
-    const personal = list.filter((b) => !b.admin_managed);
     if (storedValid) {
       setActiveBookingIdState(stored);
-    } else if (personal.length === 1) {
-      setActiveBookingIdState(personal[0].id);
-      localStorage.setItem(STORAGE_KEY, personal[0].id);
+    } else if (list.length === 1) {
+      setActiveBookingIdState(list[0].id);
+      localStorage.setItem(STORAGE_KEY, list[0].id);
     } else {
       setActiveBookingIdState(null);
       localStorage.removeItem(STORAGE_KEY);
     }
     setIsLoading(false);
   }, [user]);
+
 
   useEffect(() => {
     loadBookings();
@@ -137,7 +137,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     ? impersonatedBooking!.id
     : activeBookingId;
 
-  const bookingsPersonal = useMemo(() => bookings.filter((b) => !b.admin_managed), [bookings]);
+  const bookingsPersonal = bookings;
 
   return (
     <BookingContext.Provider

@@ -371,22 +371,8 @@ const AdminContent = () => {
     load({ silent: true });
   };
 
-  const claimBookingAsAdmin = async (bookingId: string) => {
-    const ok = confirm(
-      "Attach this booking to your admin account so you can edit Room / Food / Transportation as the guest?\n\nYou can release it later from the guest detail page."
-    );
-    if (!ok) return;
-    const res = await supabase.functions.invoke("admin-claim-booking", {
-      body: { booking_id: bookingId },
-    });
-    if (res.error || (res.data && (res.data as any).error)) {
-      const msg = (res.data as any)?.error || res.error?.message || "Claim failed";
-      toast({ title: "Claim failed", description: String(msg), variant: "destructive" });
-      return;
-    }
-    toast({ title: "Booking attached to your account" });
-    load({ silent: true });
-  };
+
+
 
 
   if (loading || !data) {
@@ -462,7 +448,6 @@ const AdminContent = () => {
                     paymentForEvent={paymentForEvent}
                     onRowClick={(bookingId) => navigateToBooking(bookingId)}
                     onDeleteBooking={deleteBookingDirect}
-                    onClaimAsMe={claimBookingAsAdmin}
                     showLive
                   />
                 )}
@@ -490,7 +475,6 @@ const AdminContent = () => {
                       paymentForEvent={paymentForEvent}
                       onRowClick={(bookingId) => navigateToBooking(bookingId)}
                       onDeleteBooking={deleteBookingDirect}
-                    onClaimAsMe={claimBookingAsAdmin}
                     />
                   )
                 )}
@@ -507,7 +491,6 @@ const AdminContent = () => {
                   paymentForEvent={paymentForEvent}
                   onRowClick={(bookingId) => navigateToBooking(bookingId)}
                   onDeleteBooking={deleteBookingDirect}
-                    onClaimAsMe={claimBookingAsAdmin}
                 />
               </section>
             )}
@@ -1236,7 +1219,6 @@ function EventTable({
   paymentForEvent,
   onRowClick,
   onDeleteBooking,
-  onClaimAsMe,
   showLive,
 }: {
   events: EventRowProps[];
@@ -1245,9 +1227,9 @@ function EventTable({
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
   onRowClick: (bookingId: string) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
-  onClaimAsMe: (bookingId: string) => void;
   showLive?: boolean;
 }) {
+
   const { toast } = useToast();
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -1328,14 +1310,7 @@ function EventTable({
                         {copiedId === ev.bookingId ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
                         Copy invite link
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => { e.stopPropagation(); onClaimAsMe(ev.bookingId); }}
-                        title="Attach this booking to your admin account"
-                      >
-                        Claim as me
-                      </Button>
+
                     </div>
                   )}
                 </td>
