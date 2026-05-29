@@ -311,6 +311,18 @@ const AdminGuestDetailContent = () => {
               </div>
             </div>
           </div>
+          <div className="mt-4 pt-4 border-t border-border">
+            <WhatsAppLinkEditor
+              bookingId={booking?.id ?? null}
+              initialValue={booking?.whatsapp_group_url ?? null}
+              onSaved={(v) => {
+                if (booking) {
+                  // mutate local copy so UI reflects immediately
+                  (booking as BookingRow).whatsapp_group_url = v;
+                }
+              }}
+            />
+          </div>
           {isPending && (
             <p className="mt-4 text-xs italic text-muted-foreground">
               This booking has not been claimed by the guest yet.
