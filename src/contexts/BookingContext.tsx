@@ -23,8 +23,8 @@ export interface Booking {
 }
 
 interface BookingContextValue {
-  bookings: Booking[];           // all bookings owned by user (incl. admin_managed)
-  bookingsPersonal: Booking[];   // bookings where admin_managed = false (for StaySwitcher / dashboard gating)
+  bookings: Booking[];           // all bookings owned by the connected user
+  bookingsPersonal: Booking[];   // alias of `bookings` (kept for backward compat)
   activeBookingId: string | null;
   activeBooking: Booking | null;
   isLoading: boolean;
@@ -33,6 +33,7 @@ interface BookingContextValue {
   isImpersonating: boolean;
   impersonatedBooking: Booking | null;
 }
+
 
 const STORAGE_KEY = 'qda_active_booking_id';
 
