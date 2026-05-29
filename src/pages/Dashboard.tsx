@@ -292,7 +292,7 @@ const DashboardContent = () => {
   };
 
   // Multi-booking: route to selector if user has >1 bookings and none is active
-  if (!bookingsLoading && bookings.length > 1 && !activeBookingId) {
+  if (!bookingsLoading && bookingsPersonal.length > 1 && !activeBookingId) {
     return <Navigate to="/bookings" replace />;
   }
 
