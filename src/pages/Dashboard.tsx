@@ -365,10 +365,10 @@ const DashboardContent = () => {
 
           {/* Section 1: Stay Dates */}
           <StayDatesPicker
-            checkInDate={profile.check_in_date}
-            checkOutDate={profile.check_out_date}
-            guestsCount={profile.guests_count}
-            statusOverall={profile.status_overall}
+            checkInDate={bookingCheckIn}
+            checkOutDate={bookingCheckOut}
+            guestsCount={bookingGuestsCount}
+            statusOverall={profile?.status_overall ?? 'draft'}
             onCheckInChange={updateCheckInDate}
             onCheckOutChange={updateCheckOutDate}
             onGuestsCountChange={updateGuestsCount}
@@ -379,8 +379,8 @@ const DashboardContent = () => {
 
           {/* Weather block (Arrábida) */}
           <WeatherCard
-            checkIn={profile.check_in_date}
-            checkOut={profile.check_out_date}
+            checkIn={bookingCheckIn}
+            checkOut={bookingCheckOut}
             bookingId={activeBookingId ?? null}
           />
 
