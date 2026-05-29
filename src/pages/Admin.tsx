@@ -5,12 +5,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check, StickyNote } from "lucide-react";
+import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
@@ -58,7 +57,7 @@ type BookingRow = {
   user_id: string | null; created_at: string;
   payment_status_override?: string | null;
   total_rental_price?: number | null;
-  internal_notes?: string | null;
+  
 };
 
 type Installment = {
@@ -238,7 +237,6 @@ const AdminContent = () => {
     invitationClaimed: boolean;
     invitationToken: string | null;
     paymentStatusOverride: string | null;
-    internalNotes: string | null;
   };
 
   const events: EventRow[] = useMemo(() => {
@@ -265,7 +263,7 @@ const AdminContent = () => {
         invitationClaimed: b.invitation_claimed,
         invitationToken: b.invitation_token,
         paymentStatusOverride: b.payment_status_override ?? null,
-        internalNotes: b.internal_notes ?? null,
+        
       });
     }
     return list;
@@ -1228,7 +1226,7 @@ type EventRowProps = {
   invitationClaimed: boolean;
   invitationToken: string | null;
   paymentStatusOverride: string | null;
-  internalNotes: string | null;
+  
 };
 
 function EventTable({
@@ -1278,7 +1276,7 @@ function EventTable({
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-muted">
           <tr className="text-left">
-            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment","Invite","Notes",""].map((h, i) => (
+            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment","Invite",""].map((h, i) => (
               <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -1341,9 +1339,6 @@ function EventTable({
                     </div>
                   )}
                 </td>
-                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                  <NotesCell bookingId={ev.bookingId} initialValue={ev.internalNotes} />
-                </td>
                 <td className="px-3 py-2 text-right">
                   <Button
                     size="icon"
@@ -1368,90 +1363,6 @@ function EventTable({
   );
 }
 
-function NotesCell({ bookingId, initialValue }: { bookingId: string; initialValue: string | null }) {
-  const { toast } = useToast();
-  const [value, setValue] = useState<string>(initialValue ?? "");
-  const [draft, setDraft] = useState<string>(initialValue ?? "");
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const hasNote = value.trim().length > 0;
-  const preview = value.trim().slice(0, 60);
-
-  const handleOpenChange = (next: boolean) => {
-    if (next) setDraft(value);
-    setOpen(next);
-  };
-
-  const save = async () => {
-    setSaving(true);
-    const trimmed = draft.trim();
-    const { error } = await supabase
-      .from("bookings")
-      .update({ internal_notes: trimmed.length ? trimmed : null })
-      .eq("id", bookingId);
-    setSaving(false);
-    if (error) {
-      toast({ title: "Could not save note", description: error.message, variant: "destructive" });
-      return;
-    }
-    setValue(trimmed);
-    setOpen(false);
-    toast({ title: "Note saved" });
-  };
-
-  return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        {hasNote ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 px-2 gap-1 text-xs"
-            title={preview + (value.length > 60 ? "…" : "")}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <StickyNote className="w-3.5 h-3.5 text-primary" />
-            <span className="max-w-[140px] truncate text-muted-foreground">{preview}{value.length > 60 ? "…" : ""}</span>
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 px-2 text-xs"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Plus className="w-3.5 h-3.5 mr-1" /> Add note
-          </Button>
-        )}
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        className="w-80"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">Internal note</div>
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={5}
-            placeholder="Add an internal note for this booking…"
-            autoFocus
-          />
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => { setDraft(value); setOpen(false); }} disabled={saving}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
-            </Button>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 
 

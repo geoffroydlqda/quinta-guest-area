@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
-  Pencil, Check, X, Plus, Download, Upload, Wallet,
+  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -72,6 +72,7 @@ type BookingRow = {
   invitation_claimed: boolean;
   whatsapp_group_url: string | null;
   admin_managed: boolean;
+  internal_notes: string | null;
 };
 
 interface Detail {
@@ -389,6 +390,13 @@ const AdminGuestDetailContent = () => {
             </p>
           )}
         </section>
+
+        {/* Internal Notes (admin-only) */}
+        <NotesBlock
+          bookingId={booking?.id ?? null}
+          initialValue={booking?.internal_notes ?? null}
+          onSaved={(v) => { if (booking) (booking as BookingRow).internal_notes = v; }}
+        />
 
         {/* Room Setup */}
         <section className="bg-card rounded-2xl border border-border p-6">
@@ -1541,6 +1549,107 @@ function WhatsAppLinkEditor({
         </div>
       )}
     </div>
+  );
+}
+
+
+function NotesBlock({
+  bookingId,
+  initialValue,
+  onSaved,
+}: {
+  bookingId: string | null;
+  initialValue: string | null;
+  onSaved: (value: string | null) => void;
+}) {
+  const { toast } = useToast();
+  const [value, setValue] = useState<string>(initialValue ?? "");
+  const [draft, setDraft] = useState<string>(initialValue ?? "");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Sync when booking changes
+  useEffect(() => {
+    setValue(initialValue ?? "");
+    setDraft(initialValue ?? "");
+    setEditing(false);
+  }, [initialValue, bookingId]);
+
+  if (!bookingId) return null;
+
+  const startEdit = () => {
+    setDraft(value);
+    setEditing(true);
+  };
+
+  const cancel = () => {
+    setDraft(value);
+    setEditing(false);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    const trimmed = draft.trim();
+    const next = trimmed.length ? trimmed : null;
+    const { error } = await supabase
+      .from("bookings")
+      .update({ internal_notes: next })
+      .eq("id", bookingId);
+    setSaving(false);
+    if (error) {
+      toast({ title: "Could not save note", description: error.message, variant: "destructive" });
+      return;
+    }
+    setValue(next ?? "");
+    setEditing(false);
+    onSaved(next);
+    toast({ title: "Note saved" });
+  };
+
+  const hasNote = value.trim().length > 0;
+
+  return (
+    <section className="bg-card rounded-2xl border border-border p-6">
+      <div className="flex items-start justify-between mb-3 gap-2">
+        <h2 className="text-base font-semibold flex items-center gap-2">
+          <StickyNote className="w-4 h-4 text-primary" /> Notes
+        </h2>
+        {!editing && hasNote && (
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={startEdit} aria-label="Edit note">
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="space-y-3">
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={Math.max(4, draft.split("\n").length)}
+            placeholder="Add an internal note for this booking…"
+            autoFocus
+            className="min-h-[6rem]"
+          />
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={cancel} disabled={saving}>Cancel</Button>
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+            </Button>
+          </div>
+        </div>
+      ) : hasNote ? (
+        <p className="text-sm whitespace-pre-wrap">{value}</p>
+      ) : (
+        <button
+          type="button"
+          onClick={startEdit}
+          className="w-full text-left text-sm italic text-muted-foreground hover:text-foreground transition-colors"
+        >
+          No notes yet. Click to add one.
+        </button>
+      )}
+    </section>
   );
 }
 
