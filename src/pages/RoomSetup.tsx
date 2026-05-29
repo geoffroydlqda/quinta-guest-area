@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { useRoomPlanner } from '@/hooks/useRoomPlanner';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
+
 
 import { RoomConfigWarning } from '@/components/guest-area/RoomConfigWarning';
 import { RoomTypeCard } from '@/components/room-planner/RoomTypeCard';
@@ -27,6 +29,7 @@ const RoomSetup = () => {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { profile } = useGuestProfile();
+  const { isImpersonating, activeBooking } = useActiveBooking();
   const [mapOpen, setMapOpen] = useState(false);
   
   const {
@@ -46,8 +49,13 @@ const RoomSetup = () => {
   } = useRoomPlanner();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
-  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft");
+  const guestStatus = getGuestStatus(
+    activeBooking?.check_in_date ?? profile?.check_in_date ?? null,
+    profile?.status_overall || "draft",
+    isImpersonating,
+  );
   const isLocked = guestStatus.isEditingLocked;
+
 
   // Calculate remaining capacity
   const totalShared = roomSelection.queenSharedQty + roomSelection.twinsSharedQty;

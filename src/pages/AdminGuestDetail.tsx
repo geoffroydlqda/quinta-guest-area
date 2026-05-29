@@ -12,8 +12,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
-  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote,
+  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink,
 } from "lucide-react";
+
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -298,6 +299,21 @@ const AdminGuestDetailContent = () => {
             <h1 className="text-lg sm:text-xl font-medium truncate">{fullName}</h1>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (!booking) return;
+                window.open(
+                  `${window.location.origin}/dashboard?impersonate=${booking.id}`,
+                  "_blank",
+                  "noopener,noreferrer"
+                );
+              }}
+              disabled={!booking}
+            >
+              <ExternalLink className="w-4 h-4 mr-1" /> Open as guest
+            </Button>
             <Button size="sm" variant="outline" onClick={resendEmail} disabled={resending || !data?.profile}>
               {resending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />}
               Resend summary email
@@ -312,6 +328,7 @@ const AdminGuestDetailContent = () => {
               <Trash2 className="w-4 h-4 mr-1" /> Delete guest
             </Button>
           </div>
+
         </div>
       </header>
 
