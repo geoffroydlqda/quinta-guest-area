@@ -46,6 +46,7 @@ const Transportation = () => {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { profile } = useGuestProfile();
+  const { isImpersonating, activeBooking } = useActiveBooking();
   
   const {
     request,
@@ -61,8 +62,13 @@ const Transportation = () => {
   } = useTransportation();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
-  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft");
+  const guestStatus = getGuestStatus(
+    activeBooking?.check_in_date ?? profile?.check_in_date ?? null,
+    profile?.status_overall || "draft",
+    isImpersonating,
+  );
   const isLocked = guestStatus.isEditingLocked;
+
 
   // Calculate cost summary
   const costSummary = useMemo(() => {
