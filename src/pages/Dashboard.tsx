@@ -112,7 +112,7 @@ const DashboardContent = () => {
 
       if (foodPlanData?.selections && Array.isArray(foodPlanData.selections)) {
         const rawSelections = foodPlanData.selections as unknown as FoodDaySelection[];
-        const guestsCount = profile?.guests_count || 1;
+        const guestsCount = bookingGuestsCount;
         // Backfill guests_count_day default for legacy records
         const selections: FoodDaySelection[] = rawSelections.map((s) => ({
           ...s,
