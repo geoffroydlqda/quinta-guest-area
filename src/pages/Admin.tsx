@@ -373,6 +373,23 @@ const AdminContent = () => {
     load({ silent: true });
   };
 
+  const claimBookingAsAdmin = async (bookingId: string) => {
+    const ok = confirm(
+      "Attach this booking to your admin account so you can edit Room / Food / Transportation as the guest?\n\nYou can release it later from the guest detail page."
+    );
+    if (!ok) return;
+    const res = await supabase.functions.invoke("admin-claim-booking", {
+      body: { booking_id: bookingId },
+    });
+    if (res.error || (res.data && (res.data as any).error)) {
+      const msg = (res.data as any)?.error || res.error?.message || "Claim failed";
+      toast({ title: "Claim failed", description: String(msg), variant: "destructive" });
+      return;
+    }
+    toast({ title: "Booking attached to your account" });
+    load({ silent: true });
+  };
+
 
   if (loading || !data) {
     return (
