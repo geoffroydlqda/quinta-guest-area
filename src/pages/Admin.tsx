@@ -1309,6 +1309,9 @@ function EventTable({
                     </Button>
                   )}
                 </td>
+                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <NotesCell bookingId={ev.bookingId} initialValue={ev.internalNotes} />
+                </td>
                 <td className="px-3 py-2 text-right">
                   <Button
                     size="icon"
