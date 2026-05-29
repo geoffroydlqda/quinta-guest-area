@@ -57,7 +57,7 @@ type BookingRow = {
   user_id: string | null; created_at: string;
   payment_status_override?: string | null;
   total_rental_price?: number | null;
-  internal_notes?: string | null;
+  
 };
 
 type Installment = {
@@ -237,7 +237,6 @@ const AdminContent = () => {
     invitationClaimed: boolean;
     invitationToken: string | null;
     paymentStatusOverride: string | null;
-    internalNotes: string | null;
   };
 
   const events: EventRow[] = useMemo(() => {
@@ -264,7 +263,7 @@ const AdminContent = () => {
         invitationClaimed: b.invitation_claimed,
         invitationToken: b.invitation_token,
         paymentStatusOverride: b.payment_status_override ?? null,
-        internalNotes: b.internal_notes ?? null,
+        
       });
     }
     return list;
@@ -1227,7 +1226,7 @@ type EventRowProps = {
   invitationClaimed: boolean;
   invitationToken: string | null;
   paymentStatusOverride: string | null;
-  internalNotes: string | null;
+  
 };
 
 function EventTable({
@@ -1277,7 +1276,7 @@ function EventTable({
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-muted">
           <tr className="text-left">
-            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment","Invite","Notes",""].map((h, i) => (
+            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment","Invite",""].map((h, i) => (
               <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
