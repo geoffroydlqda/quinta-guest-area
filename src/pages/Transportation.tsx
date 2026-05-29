@@ -2,12 +2,14 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { useTransportation } from '@/hooks/useTransportation';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
 import { calculateTransportationCost } from '@/lib/transportationPricing';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
+
 
 import { TransportationCostSummaryCard } from '@/components/guest-area/TransportationCostSummary';
 import { Button } from '@/components/ui/button';
