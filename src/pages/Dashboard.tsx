@@ -18,7 +18,8 @@ import { ProfileCompletionModal } from '@/components/guest-area/ProfileCompletio
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { featureFlags } from '@/lib/featureFlags';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, RefreshCw, LogOut, AlertCircle, CreditCard, Download, Utensils, Car, FileText } from 'lucide-react';
+import { Loader2, Send, RefreshCw, LogOut, AlertCircle, CreditCard, Download, Utensils, Car, FileText, MessageCircle, Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, CloudFog } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import type { FoodDaySelection, TransportationTrip, DietConfig } from '@/types/guest';
 import { dietConfigTotal, EMPTY_DIET_CONFIG } from '@/types/guest';
 import { usePaymentData, type PaymentInstallment } from '@/hooks/usePaymentData';
@@ -26,7 +27,7 @@ import { usePaymentData, type PaymentInstallment } from '@/hooks/usePaymentData'
 const DashboardContent = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
-  const { bookings, activeBookingId, isLoading: bookingsLoading } = useActiveBooking();
+  const { bookings, activeBookingId, activeBooking, isLoading: bookingsLoading } = useActiveBooking();
   const queryClient = useQueryClient();
   
   const { 
@@ -367,8 +368,19 @@ const DashboardContent = () => {
             onGuestsCountChange={updateGuestsCount}
           />
 
+          {/* WhatsApp group link (if admin set one) */}
+          <WhatsAppGroupCard url={activeBooking?.whatsapp_group_url ?? null} />
+
+          {/* Weather block (Arrábida) */}
+          <WeatherCard
+            checkIn={profile.check_in_date}
+            checkOut={profile.check_out_date}
+            bookingId={activeBookingId ?? null}
+          />
+
           {/* Payment Overview (read-only) */}
           <PaymentOverview bookingId={activeBookingId} />
+
 
           {/* Section 2: Tool Tiles */}
           <div>
@@ -616,6 +628,151 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
     </div>
   );
 }
+
+// ---------- WhatsApp group card ----------
+function WhatsAppGroupCard({ url }: { url: string | null }) {
+  if (!url) return null;
+  return (
+    <section className="bg-card rounded-2xl border border-border p-6">
+      <div className="flex items-start gap-4">
+        <div className="rounded-full bg-primary/10 p-3 text-primary shrink-0">
+          <MessageCircle className="w-6 h-6" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-medium">Group chat</h2>
+          <p className="text-sm text-muted-foreground">Connect with your fellow guests</p>
+        </div>
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <Button size="sm">Open WhatsApp group</Button>
+        </a>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Weather card ----------
+const QUINTA_LAT = 38.4847;
+const QUINTA_LON = -8.9942;
+
+const SEASONAL_BY_MONTH: Record<number, { min: number; max: number }> = {
+  1: { min: 8, max: 14 }, 2: { min: 8, max: 14 }, 3: { min: 9, max: 17 },
+  4: { min: 11, max: 19 }, 5: { min: 13, max: 22 }, 6: { min: 16, max: 26 },
+  7: { min: 18, max: 29 }, 8: { min: 18, max: 29 }, 9: { min: 17, max: 27 },
+  10: { min: 14, max: 22 }, 11: { min: 11, max: 17 }, 12: { min: 9, max: 14 },
+};
+
+function weatherIconFor(code: number) {
+  if (code === 0) return Sun;
+  if (code <= 3) return CloudSun;
+  if (code <= 48) return CloudFog;
+  if (code <= 67) return CloudRain;
+  if (code <= 77) return CloudSnow;
+  if (code <= 82) return CloudRain;
+  if (code <= 86) return CloudSnow;
+  if (code <= 99) return CloudLightning;
+  return Cloud;
+}
+
+function parseLocalDate(iso: string) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function daysBetween(a: Date, b: Date) {
+  const ms = b.getTime() - a.getTime();
+  return Math.floor(ms / (1000 * 60 * 60 * 24));
+}
+
+type DailyForecast = {
+  time: string[];
+  weather_code: number[];
+  temperature_2m_max: number[];
+  temperature_2m_min: number[];
+};
+
+function WeatherCard({ checkIn, checkOut, bookingId }: { checkIn: string | null; checkOut: string | null; bookingId: string | null }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const checkInDate = checkIn ? parseLocalDate(checkIn) : null;
+  const checkOutDate = checkOut ? parseLocalDate(checkOut) : null;
+  const daysUntilCheckin = checkInDate ? daysBetween(today, checkInDate) : 999;
+  const isPast = !!checkOutDate && checkOutDate < today;
+  const hasDates = !!checkInDate && !!checkOutDate;
+  const inForecastRange = hasDates && !isPast && daysUntilCheckin <= 14;
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['weather', bookingId, checkIn, checkOut],
+    enabled: inForecastRange,
+    staleTime: 1000 * 60 * 30,
+    retry: 1,
+    queryFn: async (): Promise<DailyForecast> => {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${QUINTA_LAT}&longitude=${QUINTA_LON}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Lisbon&start_date=${checkIn}&end_date=${checkOut}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('weather fetch failed');
+      const json = await res.json();
+      return json.daily as DailyForecast;
+    },
+  });
+
+  if (!hasDates || isPast) return null;
+
+
+  // Case 2: too far in future → seasonal fallback
+  if (!inForecastRange) {
+    const month = checkInDate!.getMonth() + 1;
+    const monthName = checkInDate!.toLocaleString('en-US', { month: 'long' });
+    const s = SEASONAL_BY_MONTH[month];
+    return (
+      <section className="bg-card rounded-2xl border border-border p-6">
+        <h2 className="text-lg font-medium mb-1">Seasonal weather in Arrábida</h2>
+        <p className="text-sm text-muted-foreground">
+          Detailed forecast available 14 days before your stay. Typical conditions for {monthName}:
+          daytime {s.min}–{s.max} °C, cooler evenings.
+        </p>
+      </section>
+    );
+  }
+
+  // Case 1: forecast in range
+  if (isError) return null;
+
+  return (
+    <section className="bg-card rounded-2xl border border-border p-6">
+      <h2 className="text-lg font-medium mb-3">Weather forecast</h2>
+      {isLoading || !data ? (
+        <div className="flex gap-3 overflow-x-auto">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="w-24 h-28 rounded-xl bg-muted animate-pulse shrink-0" />
+          ))}
+        </div>
+      ) : (
+        <div className="flex gap-3 overflow-x-auto pb-1">
+          {data.time.map((iso, i) => {
+            const d = parseLocalDate(iso);
+            const label = d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+            const Icon = weatherIconFor(data.weather_code[i]);
+            const max = Math.round(data.temperature_2m_max[i]);
+            const min = Math.round(data.temperature_2m_min[i]);
+            return (
+              <div
+                key={iso}
+                className="shrink-0 w-24 rounded-xl border border-border bg-background p-3 flex flex-col items-center gap-1"
+              >
+                <div className="text-xs text-muted-foreground">{label}</div>
+                <Icon className="w-7 h-7 text-primary" />
+                <div className="text-sm">
+                  <span className="font-medium">{max}°</span>
+                  <span className="text-muted-foreground"> / {min}°</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 
 
 export default Dashboard;

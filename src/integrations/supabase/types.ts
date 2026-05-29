@@ -37,6 +37,7 @@ export type Database = {
           total_rental_price: number | null
           updated_at: string
           user_id: string | null
+          whatsapp_group_url: string | null
         }
         Insert: {
           check_in_date?: string | null
@@ -60,6 +61,7 @@ export type Database = {
           total_rental_price?: number | null
           updated_at?: string
           user_id?: string | null
+          whatsapp_group_url?: string | null
         }
         Update: {
           check_in_date?: string | null
@@ -83,6 +85,7 @@ export type Database = {
           total_rental_price?: number | null
           updated_at?: string
           user_id?: string | null
+          whatsapp_group_url?: string | null
         }
         Relationships: []
       }

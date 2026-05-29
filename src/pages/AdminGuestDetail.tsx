@@ -68,6 +68,7 @@ type BookingRow = {
   check_out_date: string | null;
   payment_status: string;
   invitation_claimed: boolean;
+  whatsapp_group_url: string | null;
 };
 
 interface Detail {
@@ -309,6 +310,18 @@ const AdminGuestDetailContent = () => {
                   : getGuestStatus(checkIn, profile!.status_overall).label}
               </div>
             </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-border">
+            <WhatsAppLinkEditor
+              bookingId={booking?.id ?? null}
+              initialValue={booking?.whatsapp_group_url ?? null}
+              onSaved={(v) => {
+                if (booking) {
+                  // mutate local copy so UI reflects immediately
+                  (booking as BookingRow).whatsapp_group_url = v;
+                }
+              }}
+            />
           </div>
           {isPending && (
             <p className="mt-4 text-xs italic text-muted-foreground">
@@ -1384,5 +1397,92 @@ const AdminGuestDetail = () => (
     </AdminGuard>
   </ProtectedRoute>
 );
+
+function WhatsAppLinkEditor({
+  bookingId,
+  initialValue,
+  onSaved,
+}: {
+  bookingId: string | null;
+  initialValue: string | null;
+  onSaved: (v: string | null) => void;
+}) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState<string>(initialValue ?? "");
+  const [current, setCurrent] = useState<string | null>(initialValue);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setCurrent(initialValue);
+    setValue(initialValue ?? "");
+  }, [initialValue]);
+
+  if (!bookingId) return null;
+
+  const startEdit = () => { setValue(current ?? ""); setEditing(true); };
+  const cancel = () => { setValue(current ?? ""); setEditing(false); };
+
+  const save = async () => {
+    const trimmed = value.trim();
+    const next = trimmed.length ? trimmed : null;
+    setSaving(true);
+    const { error } = await supabase
+      .from("bookings")
+      .update({ whatsapp_group_url: next })
+      .eq("id", bookingId);
+    setSaving(false);
+    if (error) {
+      toast({ title: "Could not save link", description: error.message, variant: "destructive" });
+      return;
+    }
+    setCurrent(next);
+    setEditing(false);
+    onSaved(next);
+    toast({ title: "WhatsApp link saved" });
+  };
+
+  return (
+    <div className="text-sm">
+      <div className="text-muted-foreground mb-1">WhatsApp group link</div>
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <Input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="https://chat.whatsapp.com/..."
+            className="h-9"
+            autoFocus
+          />
+          <Button size="sm" onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={cancel} disabled={saving}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          {current ? (
+            <a
+              href={current}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium break-all underline text-primary"
+            >
+              {current}
+            </a>
+          ) : (
+            <span className="italic text-muted-foreground">Not set</span>
+          )}
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={startEdit}>
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 export default AdminGuestDetail;
