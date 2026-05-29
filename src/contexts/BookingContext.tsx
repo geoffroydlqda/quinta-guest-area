@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { isAdminEmail } from '@/lib/admin';
 
 export interface Booking {
   id: string;
@@ -28,6 +30,8 @@ interface BookingContextValue {
   isLoading: boolean;
   setActiveBookingId: (id: string | null) => void;
   refresh: () => Promise<void>;
+  isImpersonating: boolean;
+  impersonatedBooking: Booking | null;
 }
 
 const STORAGE_KEY = 'qda_active_booking_id';
@@ -36,9 +40,14 @@ const BookingContext = createContext<BookingContextValue | undefined>(undefined)
 
 export function BookingProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [activeBookingId, setActiveBookingIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [impersonatedBooking, setImpersonatedBooking] = useState<Booking | null>(null);
+
+  const isAdmin = isAdminEmail(user?.email);
+  const impersonateId = isAdmin ? (searchParams.get('impersonate') || null) : null;
 
   const setActiveBookingId = useCallback((id: string | null) => {
     setActiveBookingIdState(id);
@@ -92,12 +101,57 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     loadBookings();
   }, [loadBookings]);
 
-  const activeBooking = bookings.find((b) => b.id === activeBookingId) ?? null;
+  // Fetch the impersonated booking when admin + ?impersonate=<id> is present
+  useEffect(() => {
+    let cancelled = false;
+    if (!isAdmin || !impersonateId) {
+      setImpersonatedBooking(null);
+      return;
+    }
+    (async () => {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', impersonateId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        console.error('[BookingContext] failed to load impersonated booking', error);
+        setImpersonatedBooking(null);
+        return;
+      }
+      setImpersonatedBooking((data as Booking) || null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, impersonateId]);
+
+  const isImpersonating = !!(isAdmin && impersonateId && impersonatedBooking);
+
+  const activeBooking = isImpersonating
+    ? impersonatedBooking
+    : (bookings.find((b) => b.id === activeBookingId) ?? null);
+
+  const effectiveActiveBookingId = isImpersonating
+    ? impersonatedBooking!.id
+    : activeBookingId;
+
   const bookingsPersonal = useMemo(() => bookings.filter((b) => !b.admin_managed), [bookings]);
 
   return (
     <BookingContext.Provider
-      value={{ bookings, bookingsPersonal, activeBookingId, activeBooking, isLoading, setActiveBookingId, refresh: loadBookings }}
+      value={{
+        bookings,
+        bookingsPersonal,
+        activeBookingId: effectiveActiveBookingId,
+        activeBooking,
+        isLoading,
+        setActiveBookingId,
+        refresh: loadBookings,
+        isImpersonating,
+        impersonatedBooking: isImpersonating ? impersonatedBooking : null,
+      }}
     >
       {children}
     </BookingContext.Provider>
