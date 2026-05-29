@@ -3,8 +3,8 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-
-
+import { useAuth } from "@/contexts/AuthContext";
+import { useActiveBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,9 +12,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
-  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink,
+  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote,
 } from "lucide-react";
-
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -107,12 +106,13 @@ const AdminGuestDetailContent = () => {
   const bookingIdParam = searchParams.get("bookingId");
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+  const { user } = useAuth();
+  const { setActiveBookingId, refresh: refreshBookings } = useActiveBooking();
   const [data, setData] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [resending, setResending] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-
+  const [releasing, setReleasing] = useState(false);
 
   const load = async () => {
     if (!guestId && !bookingIdParam) return;
@@ -256,8 +256,34 @@ const AdminGuestDetailContent = () => {
     (s: any) => s.fullBoard || s.breakfast || s.lunch || s.dinner
   ).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
+  const isAdminManagedByMe = !!booking?.admin_managed && !!user && booking?.user_id === user.id;
 
+  const openAsGuest = () => {
+    if (!booking) return;
+    setActiveBookingId(booking.id);
+    navigate("/dashboard");
+  };
 
+  const releaseBooking = async () => {
+    if (!booking) return;
+    const ok = confirm(
+      "Release this booking from your admin account?\n\nThe booking will become unclaimed and you'll need to regenerate an invite link to send to the guest again."
+    );
+    if (!ok) return;
+    setReleasing(true);
+    const { error } = await supabase
+      .from("bookings")
+      .update({ user_id: null, invitation_claimed: false, admin_managed: false })
+      .eq("id", booking.id);
+    setReleasing(false);
+    if (error) {
+      toast({ title: "Could not release booking", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Booking released" });
+    await refreshBookings();
+    navigate("/admin");
+  };
 
 
   return (
@@ -272,21 +298,6 @@ const AdminGuestDetailContent = () => {
             <h1 className="text-lg sm:text-xl font-medium truncate">{fullName}</h1>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                if (!booking) return;
-                window.open(
-                  `${window.location.origin}/dashboard?impersonate=${booking.id}`,
-                  "_blank",
-                  "noopener,noreferrer"
-                );
-              }}
-              disabled={!booking}
-            >
-              <ExternalLink className="w-4 h-4 mr-1" /> Open as guest
-            </Button>
             <Button size="sm" variant="outline" onClick={resendEmail} disabled={resending || !data?.profile}>
               {resending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />}
               Resend summary email
@@ -301,13 +312,35 @@ const AdminGuestDetailContent = () => {
               <Trash2 className="w-4 h-4 mr-1" /> Delete guest
             </Button>
           </div>
-
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-6 max-w-3xl space-y-6">
+        {isAdminManagedByMe && (
+          <section className="rounded-2xl border border-primary/30 bg-primary/5 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm">
+              <div className="font-medium">You are managing this booking on behalf of the guest.</div>
+              <div className="text-muted-foreground text-xs mt-0.5">
+                You can edit Room / Food / Transportation from the guest dashboard.
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={openAsGuest}>
+                Open guest dashboard
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={releaseBooking}
+                disabled={releasing}
+              >
+                {releasing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Release this booking"}
+              </Button>
+            </div>
+          </section>
+        )}
         {/* Guest header card */}
-
         <section className="bg-card rounded-2xl border border-border p-6">
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
             <div>

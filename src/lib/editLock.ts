@@ -80,7 +80,6 @@ export const formatFinalSubmissionDate = formatHumanDate;
 export function getGuestStatus(
   checkInDate: string | null,
   _statusOverall: 'draft' | 'submitted' | string = 'draft',
-  isImpersonating: boolean = false,
 ): GuestStatusInfo {
   const today = startOfToday();
   const checkIn = safeParse(checkInDate);
@@ -91,22 +90,6 @@ export function getGuestStatus(
   const isPastFinalLock = !!finalLockDate && differenceInCalendarDays(finalLockDate, today) <= 0;
   const isPastLateStart = !!lateUpdateDate && differenceInCalendarDays(lateUpdateDate, today) <= 0;
   const isInLateUpdatesWindow = isPastLateStart && !isPastFinalLock;
-
-  // Admin impersonation: short-circuit the lock entirely so the admin can edit
-  // finalized / late-window / in-progress bookings on behalf of the guest.
-  if (isImpersonating) {
-    return {
-      status: 'pending',
-      label: 'Admin mode',
-      message: 'Admin impersonation: editing is unlocked regardless of the check-in date.',
-      isEditingLocked: false,
-      isPastFinalLock,
-      isInLateUpdatesWindow,
-      isPastCheckIn,
-      lateUpdateDate,
-      finalLockDate,
-    };
-  }
 
   if (isPastCheckIn) {
     return {
@@ -168,13 +151,10 @@ export function getGuestStatus(
 /**
  * Returns true when tools, autosave and submission should be blocked.
  * Editing is only locked within the final 3 days before check-in or after check-in.
- * Pass `isImpersonating=true` (admin impersonation) to force-unlock.
  */
 export function isEditingLocked(
   checkInDate: string | null,
   statusOverall: 'draft' | 'submitted' | string = 'draft',
-  isImpersonating: boolean = false,
 ): boolean {
-  return getGuestStatus(checkInDate, statusOverall, isImpersonating).isEditingLocked;
+  return getGuestStatus(checkInDate, statusOverall).isEditingLocked;
 }
-

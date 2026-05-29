@@ -15,7 +15,6 @@ interface StayDatesPickerProps {
   checkOutDate: string | null;
   guestsCount: number;
   statusOverall?: 'draft' | 'submitted' | string;
-  isImpersonating?: boolean;
   onCheckInChange: (date: Date | null) => Promise<boolean>;
   onCheckOutChange: (date: Date | null) => Promise<boolean>;
   onGuestsCountChange: (count: number) => Promise<boolean>;
@@ -26,7 +25,6 @@ export function StayDatesPicker({
   checkOutDate, 
   guestsCount,
   statusOverall = 'draft',
-  isImpersonating = false,
   onCheckInChange,
   onCheckOutChange,
   onGuestsCountChange,
@@ -48,8 +46,7 @@ export function StayDatesPicker({
   const isUserEditingCheckOut = useRef(false);
   const isUserEditingGuests = useRef(false);
 
-  const isLocked = isEditingLocked(checkInDate, statusOverall, isImpersonating);
-
+  const isLocked = isEditingLocked(checkInDate, statusOverall);
   const hasDates = !!(checkInDate && checkOutDate);
   
   // Sync check-in from props ONLY when not editing
