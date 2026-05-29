@@ -15,19 +15,19 @@ function formatRange(checkIn: string | null, checkOut: string | null) {
 
 function BookingSelectorContent() {
   const navigate = useNavigate();
-  const { bookings, isLoading, setActiveBookingId, activeBookingId } = useActiveBooking();
+  const { bookingsPersonal, isLoading, setActiveBookingId, activeBookingId } = useActiveBooking();
 
   // If only one booking, auto-select and go
   useEffect(() => {
-    if (!isLoading && bookings.length === 1) {
-      setActiveBookingId(bookings[0].id);
+    if (!isLoading && bookingsPersonal.length === 1) {
+      setActiveBookingId(bookingsPersonal[0].id);
       navigate('/dashboard', { replace: true });
     }
-    if (!isLoading && bookings.length === 0) {
-      // No bookings yet — just send to dashboard (trigger will create one on profile)
+    if (!isLoading && bookingsPersonal.length === 0) {
+      // No bookingsPersonal yet — just send to dashboard (trigger will create one on profile)
       navigate('/dashboard', { replace: true });
     }
-  }, [isLoading, bookings, navigate, setActiveBookingId]);
+  }, [isLoading, bookingsPersonal, navigate, setActiveBookingId]);
 
   const openBooking = (id: string) => {
     setActiveBookingId(id);
@@ -53,7 +53,7 @@ function BookingSelectorContent() {
           </div>
 
           <div className="space-y-3">
-            {bookings.map((b) => (
+            {bookingsPersonal.map((b) => (
               <div
                 key={b.id}
                 className="bg-card border border-border rounded-2xl p-5 flex items-center justify-between gap-4"
