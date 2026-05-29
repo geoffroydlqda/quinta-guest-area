@@ -256,30 +256,38 @@ const DashboardContent = () => {
       // Submit the profile
       await submitProfile();
 
-      // Send summary email via edge function
-      const response = await supabase.functions.invoke('send-guest-summary', {
-        body: {
-          fullName: profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
-          firstName: profile.first_name || null,
-          email: profile.email,
-          checkInDate: bookingCheckIn,
-          checkOutDate: bookingCheckOut,
-          guestsCount: bookingGuestsCount,
-          roomSetup: roomSetupData,
-          transportation: transportationData ? { ...transportationData, trips: transportationTrips } : null,
-          food: foodData ? {
-            ...foodData,
-            selections: foodData.selections || [],
-          } : null,
-        },
-      });
+      if (isImpersonating) {
+        // Admin impersonation: persist changes but do NOT email the guest.
+        toast({
+          title: 'Saved',
+          description: 'No email sent to the guest (admin mode).',
+        });
+      } else {
+        // Send summary email via edge function
+        const response = await supabase.functions.invoke('send-guest-summary', {
+          body: {
+            fullName: profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+            firstName: profile.first_name || null,
+            email: profile.email,
+            checkInDate: bookingCheckIn,
+            checkOutDate: bookingCheckOut,
+            guestsCount: bookingGuestsCount,
+            roomSetup: roomSetupData,
+            transportation: transportationData ? { ...transportationData, trips: transportationTrips } : null,
+            food: foodData ? {
+              ...foodData,
+              selections: foodData.selections || [],
+            } : null,
+          },
+        });
 
-      if (response.error) throw response.error;
+        if (response.error) throw response.error;
 
-      toast({
-        title: 'Information submitted',
-        description: 'A confirmation email has been sent to you.',
-      });
+        toast({
+          title: 'Information submitted',
+          description: 'A confirmation email has been sent to you.',
+        });
+      }
 
       refreshProfile();
     } catch (error: any) {
@@ -293,6 +301,7 @@ const DashboardContent = () => {
       setIsSubmitting(false);
     }
   };
+
 
   const handleLogout = async () => {
     await signOut();
