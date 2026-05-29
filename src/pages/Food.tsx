@@ -2,11 +2,13 @@ import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { useFoodPlan } from '@/hooks/useFoodPlan';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
 import { calculateFoodCostMulti, DIET_TYPES } from '@/lib/foodPricing';
 import { dietConfigTotal, BREAKFAST_TIME_OPTIONS, LUNCH_TIME_OPTIONS, DINNER_TIME_OPTIONS } from '@/types/guest';
+
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 import { FoodCostSummaryCard } from '@/components/guest-area/FoodCostSummary';
