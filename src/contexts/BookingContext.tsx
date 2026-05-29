@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -17,10 +17,12 @@ export interface Booking {
   created_at: string;
   updated_at: string;
   whatsapp_group_url: string | null;
+  admin_managed: boolean;
 }
 
 interface BookingContextValue {
-  bookings: Booking[];
+  bookings: Booking[];           // all bookings owned by user (incl. admin_managed)
+  bookingsPersonal: Booking[];   // bookings where admin_managed = false (for StaySwitcher / dashboard gating)
   activeBookingId: string | null;
   activeBooking: Booking | null;
   isLoading: boolean;
@@ -71,11 +73,14 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     // Resolve active booking
     const stored = localStorage.getItem(STORAGE_KEY);
     const storedValid = stored && list.some((b) => b.id === stored);
+    // Auto-select considers only personal bookings (admin_managed entries must
+    // be entered explicitly via "Open guest dashboard")
+    const personal = list.filter((b) => !b.admin_managed);
     if (storedValid) {
       setActiveBookingIdState(stored);
-    } else if (list.length === 1) {
-      setActiveBookingIdState(list[0].id);
-      localStorage.setItem(STORAGE_KEY, list[0].id);
+    } else if (personal.length === 1) {
+      setActiveBookingIdState(personal[0].id);
+      localStorage.setItem(STORAGE_KEY, personal[0].id);
     } else {
       setActiveBookingIdState(null);
       localStorage.removeItem(STORAGE_KEY);
@@ -88,10 +93,11 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   }, [loadBookings]);
 
   const activeBooking = bookings.find((b) => b.id === activeBookingId) ?? null;
+  const bookingsPersonal = useMemo(() => bookings.filter((b) => !b.admin_managed), [bookings]);
 
   return (
     <BookingContext.Provider
-      value={{ bookings, activeBookingId, activeBooking, isLoading, setActiveBookingId, refresh: loadBookings }}
+      value={{ bookings, bookingsPersonal, activeBookingId, activeBooking, isLoading, setActiveBookingId, refresh: loadBookings }}
     >
       {children}
     </BookingContext.Provider>
