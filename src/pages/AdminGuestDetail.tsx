@@ -391,6 +391,13 @@ const AdminGuestDetailContent = () => {
           )}
         </section>
 
+        {/* Internal Notes (admin-only) */}
+        <NotesBlock
+          bookingId={booking?.id ?? null}
+          initialValue={booking?.internal_notes ?? null}
+          onSaved={(v) => { if (booking) (booking as BookingRow).internal_notes = v; }}
+        />
+
         {/* Room Setup */}
         <section className="bg-card rounded-2xl border border-border p-6">
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
