@@ -691,21 +691,17 @@ type DailyForecast = {
 };
 
 function WeatherCard({ checkIn, checkOut, bookingId }: { checkIn: string | null; checkOut: string | null; bookingId: string | null }) {
-  if (!checkIn || !checkOut) return null;
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const checkInDate = parseLocalDate(checkIn);
-  const checkOutDate = parseLocalDate(checkOut);
-  const daysUntilCheckin = daysBetween(today, checkInDate);
-
-  // Case 3: stay in the past
-  if (checkOutDate < today) return null;
-
-  const inForecastRange = daysUntilCheckin <= 14;
+  const checkInDate = checkIn ? parseLocalDate(checkIn) : null;
+  const checkOutDate = checkOut ? parseLocalDate(checkOut) : null;
+  const daysUntilCheckin = checkInDate ? daysBetween(today, checkInDate) : 999;
+  const isPast = !!checkOutDate && checkOutDate < today;
+  const hasDates = !!checkInDate && !!checkOutDate;
+  const inForecastRange = hasDates && !isPast && daysUntilCheckin <= 14;
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['weather', bookingId, checkIn, checkOut, inForecastRange],
+    queryKey: ['weather', bookingId, checkIn, checkOut],
     enabled: inForecastRange,
     staleTime: 1000 * 60 * 30,
     retry: 1,
@@ -717,6 +713,9 @@ function WeatherCard({ checkIn, checkOut, bookingId }: { checkIn: string | null;
       return json.daily as DailyForecast;
     },
   });
+
+  if (!hasDates || isPast) return null;
+
 
   // Case 2: too far in future → seasonal fallback
   if (!inForecastRange) {
