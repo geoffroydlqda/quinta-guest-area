@@ -236,6 +236,7 @@ const AdminContent = () => {
     invitationClaimed: boolean;
     invitationToken: string | null;
     paymentStatusOverride: string | null;
+    internalNotes: string | null;
   };
 
   const events: EventRow[] = useMemo(() => {
