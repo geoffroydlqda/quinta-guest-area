@@ -137,7 +137,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     ? impersonatedBooking!.id
     : activeBookingId;
 
-  const bookingsPersonal = useMemo(() => bookings.filter((b) => !b.admin_managed), [bookings]);
+  const bookingsPersonal = bookings;
 
   return (
     <BookingContext.Provider
