@@ -12,8 +12,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
-  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote,
+  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink,
 } from "lucide-react";
+
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
