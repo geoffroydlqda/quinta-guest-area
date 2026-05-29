@@ -52,7 +52,13 @@ const DashboardContent = () => {
   const [foodData, setFoodData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || 'draft');
+  // Stay dates and guest count come from the active booking (source of truth).
+  // profile is only used for name and status_overall.
+  const bookingCheckIn = activeBooking?.check_in_date ?? null;
+  const bookingCheckOut = activeBooking?.check_out_date ?? null;
+  const bookingGuestsCount = activeBooking?.guest_count ?? 1;
+
+  const guestStatus = getGuestStatus(bookingCheckIn, profile?.status_overall ?? 'draft');
   const isLocked = guestStatus.isEditingLocked;
 
   const transportationData = useMemo(() => {
@@ -62,7 +68,7 @@ const DashboardContent = () => {
 
   // Diet validation: total assigned guests must not exceed guests_count
   const dietConfig: DietConfig | null = foodData?.dietConfig || null;
-  const dietExceedsGuests = !!dietConfig && dietConfigTotal(dietConfig) > (profile?.guests_count || 0);
+  const dietExceedsGuests = !!dietConfig && dietConfigTotal(dietConfig) > bookingGuestsCount;
 
   // Fetch summary data for tools
   useEffect(() => {
@@ -106,7 +112,7 @@ const DashboardContent = () => {
 
       if (foodPlanData?.selections && Array.isArray(foodPlanData.selections)) {
         const rawSelections = foodPlanData.selections as unknown as FoodDaySelection[];
-        const guestsCount = profile?.guests_count || 1;
+        const guestsCount = bookingGuestsCount;
         // Backfill guests_count_day default for legacy records
         const selections: FoodDaySelection[] = rawSelections.map((s) => ({
           ...s,
@@ -225,7 +231,7 @@ const DashboardContent = () => {
       return;
     }
 
-    if (!profile.guests_count || profile.guests_count < 1) {
+    if (!bookingGuestsCount || bookingGuestsCount < 1) {
       toast({
         title: 'Missing information',
         description: 'Please specify the number of guests.',
@@ -255,9 +261,9 @@ const DashboardContent = () => {
           fullName: profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
           firstName: profile.first_name || null,
           email: profile.email,
-          checkInDate: profile.check_in_date,
-          checkOutDate: profile.check_out_date,
-          guestsCount: profile.guests_count,
+          checkInDate: bookingCheckIn,
+          checkOutDate: bookingCheckOut,
+          guestsCount: bookingGuestsCount,
           roomSetup: roomSetupData,
           transportation: transportationData ? { ...transportationData, trips: transportationTrips } : null,
           food: foodData ? {
@@ -359,10 +365,10 @@ const DashboardContent = () => {
 
           {/* Section 1: Stay Dates */}
           <StayDatesPicker
-            checkInDate={profile.check_in_date}
-            checkOutDate={profile.check_out_date}
-            guestsCount={profile.guests_count}
-            statusOverall={profile.status_overall}
+            checkInDate={bookingCheckIn}
+            checkOutDate={bookingCheckOut}
+            guestsCount={bookingGuestsCount}
+            statusOverall={profile?.status_overall ?? 'draft'}
             onCheckInChange={updateCheckInDate}
             onCheckOutChange={updateCheckOutDate}
             onGuestsCountChange={updateGuestsCount}
@@ -373,8 +379,8 @@ const DashboardContent = () => {
 
           {/* Weather block (Arrábida) */}
           <WeatherCard
-            checkIn={profile.check_in_date}
-            checkOut={profile.check_out_date}
+            checkIn={bookingCheckIn}
+            checkOut={bookingCheckOut}
             bookingId={activeBookingId ?? null}
           />
 
