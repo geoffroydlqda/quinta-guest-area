@@ -107,7 +107,7 @@ const AdminGuestDetailContent = () => {
   const bookingIdParam = searchParams.get("bookingId");
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
+  
   const [data, setData] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [resending, setResending] = useState(false);
