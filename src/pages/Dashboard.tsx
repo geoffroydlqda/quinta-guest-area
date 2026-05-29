@@ -231,7 +231,7 @@ const DashboardContent = () => {
       return;
     }
 
-    if (!profile.guests_count || profile.guests_count < 1) {
+    if (!bookingGuestsCount || bookingGuestsCount < 1) {
       toast({
         title: 'Missing information',
         description: 'Please specify the number of guests.',
