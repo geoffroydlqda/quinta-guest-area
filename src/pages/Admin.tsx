@@ -1310,14 +1310,7 @@ function EventTable({
                         {copiedId === ev.bookingId ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
                         Copy invite link
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => { e.stopPropagation(); onClaimAsMe(ev.bookingId); }}
-                        title="Attach this booking to your admin account"
-                      >
-                        Claim as me
-                      </Button>
+
                     </div>
                   )}
                 </td>
