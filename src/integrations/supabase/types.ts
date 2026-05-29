@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       bookings: {
         Row: {
+          admin_managed: boolean
           check_in_date: string | null
           check_out_date: string | null
           created_at: string
@@ -40,6 +41,7 @@ export type Database = {
           whatsapp_group_url: string | null
         }
         Insert: {
+          admin_managed?: boolean
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string
@@ -64,6 +66,7 @@ export type Database = {
           whatsapp_group_url?: string | null
         }
         Update: {
+          admin_managed?: boolean
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string
