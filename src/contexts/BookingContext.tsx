@@ -80,23 +80,22 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     const list = (data || []) as Booking[];
     setBookings(list);
 
-    // Resolve active booking
+    // Resolve active booking — no admin_managed filter (the claim-as-me flow
+    // has been retired; impersonation is the supported path).
     const stored = localStorage.getItem(STORAGE_KEY);
     const storedValid = stored && list.some((b) => b.id === stored);
-    // Auto-select considers only personal bookings (admin_managed entries must
-    // be entered explicitly via "Open guest dashboard")
-    const personal = list.filter((b) => !b.admin_managed);
     if (storedValid) {
       setActiveBookingIdState(stored);
-    } else if (personal.length === 1) {
-      setActiveBookingIdState(personal[0].id);
-      localStorage.setItem(STORAGE_KEY, personal[0].id);
+    } else if (list.length === 1) {
+      setActiveBookingIdState(list[0].id);
+      localStorage.setItem(STORAGE_KEY, list[0].id);
     } else {
       setActiveBookingIdState(null);
       localStorage.removeItem(STORAGE_KEY);
     }
     setIsLoading(false);
   }, [user]);
+
 
   useEffect(() => {
     loadBookings();
