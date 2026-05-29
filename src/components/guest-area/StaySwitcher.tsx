@@ -19,10 +19,10 @@ function shortRange(checkIn: string | null, checkOut: string | null) {
 }
 
 export function StaySwitcher() {
-  const { bookings, activeBooking, activeBookingId, setActiveBookingId } = useActiveBooking();
+  const { bookingsPersonal, activeBooking, activeBookingId, setActiveBookingId } = useActiveBooking();
   const navigate = useNavigate();
 
-  if (bookings.length <= 1) return null;
+  if (bookingsPersonal.length <= 1) return null;
 
   return (
     <DropdownMenu>
@@ -38,7 +38,7 @@ export function StaySwitcher() {
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel>Switch stay</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {bookings.map((b) => (
+        {bookingsPersonal.map((b) => (
           <DropdownMenuItem
             key={b.id}
             onClick={() => {

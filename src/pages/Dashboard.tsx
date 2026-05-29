@@ -27,7 +27,7 @@ import { usePaymentData, type PaymentInstallment } from '@/hooks/usePaymentData'
 const DashboardContent = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
-  const { bookings, activeBookingId, activeBooking, isLoading: bookingsLoading } = useActiveBooking();
+  const { bookingsPersonal, activeBookingId, activeBooking, isLoading: bookingsLoading } = useActiveBooking();
   const queryClient = useQueryClient();
   
   const { 
@@ -292,7 +292,7 @@ const DashboardContent = () => {
   };
 
   // Multi-booking: route to selector if user has >1 bookings and none is active
-  if (!bookingsLoading && bookings.length > 1 && !activeBookingId) {
+  if (!bookingsLoading && bookingsPersonal.length > 1 && !activeBookingId) {
     return <Navigate to="/bookings" replace />;
   }
 
