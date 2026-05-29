@@ -379,10 +379,12 @@ const DashboardContent = () => {
             checkOutDate={bookingCheckOut}
             guestsCount={bookingGuestsCount}
             statusOverall={profile?.status_overall ?? 'draft'}
+            isImpersonating={isImpersonating}
             onCheckInChange={updateCheckInDate}
             onCheckOutChange={updateCheckOutDate}
             onGuestsCountChange={updateGuestsCount}
           />
+
 
           {/* WhatsApp group link (if admin set one) */}
           <WhatsAppGroupCard url={activeBooking?.whatsapp_group_url ?? null} />
