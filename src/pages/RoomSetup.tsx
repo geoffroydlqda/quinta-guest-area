@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { useRoomPlanner } from '@/hooks/useRoomPlanner';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
+
 
 import { RoomConfigWarning } from '@/components/guest-area/RoomConfigWarning';
 import { RoomTypeCard } from '@/components/room-planner/RoomTypeCard';
