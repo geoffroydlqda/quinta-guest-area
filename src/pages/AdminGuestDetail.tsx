@@ -108,12 +108,11 @@ const AdminGuestDetailContent = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
-  const { setActiveBookingId, refresh: refreshBookings } = useActiveBooking();
   const [data, setData] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [resending, setResending] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [releasing, setReleasing] = useState(false);
+
 
   const load = async () => {
     if (!guestId && !bookingIdParam) return;
