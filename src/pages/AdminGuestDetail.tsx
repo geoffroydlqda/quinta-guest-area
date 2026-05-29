@@ -307,31 +307,8 @@ const AdminGuestDetailContent = () => {
       </header>
 
       <main className="container mx-auto px-4 py-6 max-w-3xl space-y-6">
-        {isAdminManagedByMe && (
-          <section className="rounded-2xl border border-primary/30 bg-primary/5 p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm">
-              <div className="font-medium">You are managing this booking on behalf of the guest.</div>
-              <div className="text-muted-foreground text-xs mt-0.5">
-                You can edit Room / Food / Transportation from the guest dashboard.
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={openAsGuest}>
-                Open guest dashboard
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={releaseBooking}
-                disabled={releasing}
-              >
-                {releasing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Release this booking"}
-              </Button>
-            </div>
-          </section>
-        )}
         {/* Guest header card */}
+
         <section className="bg-card rounded-2xl border border-border p-6">
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
             <div>
