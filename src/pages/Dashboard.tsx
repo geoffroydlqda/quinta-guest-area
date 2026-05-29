@@ -368,8 +368,19 @@ const DashboardContent = () => {
             onGuestsCountChange={updateGuestsCount}
           />
 
+          {/* WhatsApp group link (if admin set one) */}
+          <WhatsAppGroupCard url={activeBooking?.whatsapp_group_url ?? null} />
+
+          {/* Weather block (Arrábida) */}
+          <WeatherCard
+            checkIn={profile.check_in_date}
+            checkOut={profile.check_out_date}
+            bookingId={activeBookingId ?? null}
+          />
+
           {/* Payment Overview (read-only) */}
           <PaymentOverview bookingId={activeBookingId} />
+
 
           {/* Section 2: Tool Tiles */}
           <div>
