@@ -52,7 +52,13 @@ const DashboardContent = () => {
   const [foodData, setFoodData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || 'draft');
+  // Stay dates and guest count come from the active booking (source of truth).
+  // profile is only used for name and status_overall.
+  const bookingCheckIn = activeBooking?.check_in_date ?? null;
+  const bookingCheckOut = activeBooking?.check_out_date ?? null;
+  const bookingGuestsCount = activeBooking?.guest_count ?? 1;
+
+  const guestStatus = getGuestStatus(bookingCheckIn, profile?.status_overall ?? 'draft');
   const isLocked = guestStatus.isEditingLocked;
 
   const transportationData = useMemo(() => {
@@ -62,7 +68,7 @@ const DashboardContent = () => {
 
   // Diet validation: total assigned guests must not exceed guests_count
   const dietConfig: DietConfig | null = foodData?.dietConfig || null;
-  const dietExceedsGuests = !!dietConfig && dietConfigTotal(dietConfig) > (profile?.guests_count || 0);
+  const dietExceedsGuests = !!dietConfig && dietConfigTotal(dietConfig) > bookingGuestsCount;
 
   // Fetch summary data for tools
   useEffect(() => {
