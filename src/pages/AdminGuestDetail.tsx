@@ -299,6 +299,21 @@ const AdminGuestDetailContent = () => {
             <h1 className="text-lg sm:text-xl font-medium truncate">{fullName}</h1>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (!booking) return;
+                window.open(
+                  `${window.location.origin}/dashboard?impersonate=${booking.id}`,
+                  "_blank",
+                  "noopener,noreferrer"
+                );
+              }}
+              disabled={!booking}
+            >
+              <ExternalLink className="w-4 h-4 mr-1" /> Open as guest
+            </Button>
             <Button size="sm" variant="outline" onClick={resendEmail} disabled={resending || !data?.profile}>
               {resending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />}
               Resend summary email
@@ -313,6 +328,7 @@ const AdminGuestDetailContent = () => {
               <Trash2 className="w-4 h-4 mr-1" /> Delete guest
             </Button>
           </div>
+
         </div>
       </header>
 
