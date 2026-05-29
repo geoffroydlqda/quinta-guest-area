@@ -719,8 +719,8 @@ function WeatherCard({ checkIn, checkOut, bookingId }: { checkIn: string | null;
 
   // Case 2: too far in future → seasonal fallback
   if (!inForecastRange) {
-    const month = checkInDate.getMonth() + 1;
-    const monthName = checkInDate.toLocaleString('en-US', { month: 'long' });
+    const month = checkInDate!.getMonth() + 1;
+    const monthName = checkInDate!.toLocaleString('en-US', { month: 'long' });
     const s = SEASONAL_BY_MONTH[month];
     return (
       <section className="bg-card rounded-2xl border border-border p-6">
