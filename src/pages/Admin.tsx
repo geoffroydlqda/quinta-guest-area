@@ -1325,10 +1325,20 @@ function EventTable({
                   {ev.invitationClaimed ? (
                     <span className="text-xs text-muted-foreground">Claimed</span>
                   ) : (
-                    <Button size="sm" variant="outline" onClick={(e) => copyInvite(e, ev.invitationToken, ev.bookingId)}>
-                      {copiedId === ev.bookingId ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
-                      Copy invite link
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      <Button size="sm" variant="outline" onClick={(e) => copyInvite(e, ev.invitationToken, ev.bookingId)}>
+                        {copiedId === ev.bookingId ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
+                        Copy invite link
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => { e.stopPropagation(); onClaimAsMe(ev.bookingId); }}
+                        title="Attach this booking to your admin account"
+                      >
+                        Claim as me
+                      </Button>
+                    </div>
                   )}
                 </td>
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
