@@ -27,7 +27,7 @@ import { usePaymentData, type PaymentInstallment } from '@/hooks/usePaymentData'
 const DashboardContent = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
-  const { bookings, activeBookingId, activeBooking, isLoading: bookingsLoading } = useActiveBooking();
+  const { bookingsPersonal, activeBookingId, activeBooking, isLoading: bookingsLoading } = useActiveBooking();
   const queryClient = useQueryClient();
   
   const { 
