@@ -68,6 +68,7 @@ type BookingRow = {
   check_out_date: string | null;
   payment_status: string;
   invitation_claimed: boolean;
+  whatsapp_group_url: string | null;
 };
 
 interface Detail {
