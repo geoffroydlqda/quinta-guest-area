@@ -565,7 +565,7 @@ export function useGuestProfile() {
       console.error('Error updating profile:', error);
       return false;
     }
-  }, [user, state.profile]);
+  }, [user, state.profile, isImpersonating]);
 
   // Retry loading
   const retryLoad = useCallback(() => {
