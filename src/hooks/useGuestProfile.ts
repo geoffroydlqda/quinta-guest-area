@@ -536,10 +536,14 @@ export function useGuestProfile() {
       console.error('Error submitting profile:', error);
       return false;
     }
-  }, [user, state.profile]);
+  }, [user, state.profile, isImpersonating]);
 
   // Update profile name
   const updateProfile = useCallback(async (fullName: string) => {
+    if (isImpersonating) {
+      console.warn('Skipped: cannot edit guest_profiles in impersonation mode');
+      return false;
+    }
     if (!user || !state.profile) return false;
 
     try {
