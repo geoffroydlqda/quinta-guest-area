@@ -21,16 +21,27 @@ export interface Booking {
 }
 
 interface BookingContextValue {
-  bookings: Booking[];           // all bookings owned by user (incl. admin_managed)
-  bookingsPersonal: Booking[];   // bookings where admin_managed = false (for StaySwitcher / dashboard gating)
+  bookings: Booking[];
+  bookingsPersonal: Booking[];
   activeBookingId: string | null;
   activeBooking: Booking | null;
   isLoading: boolean;
   setActiveBookingId: (id: string | null) => void;
   refresh: () => Promise<void>;
+  isImpersonating: boolean;
+  impersonatedBooking: Booking | null;
+  exitImpersonation: () => void;
 }
 
 const STORAGE_KEY = 'qda_active_booking_id';
+const IMPERSONATION_KEY = 'qda_impersonate_booking_id';
+
+const ADMIN_EMAILS = [
+  'hello@quintamor.com',
+  'loïs@quintamor.com',
+  'lois@quintamor.com',
+  '977luisferreira@gmail.com',
+].map((e) => e.toLowerCase());
 
 const BookingContext = createContext<BookingContextValue | undefined>(undefined);
 
@@ -40,11 +51,56 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const [activeBookingId, setActiveBookingIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const isAdmin = !!user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
+
+  // Read URL param (re-evaluated each render)
+  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const urlImpersonateId = isAdmin ? params.get('impersonate') : null;
+
+  const [impersonateId, setImpersonateId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    if (!isAdmin) return null;
+    if (urlImpersonateId) return urlImpersonateId;
+    return sessionStorage.getItem(IMPERSONATION_KEY);
+  });
+  const [impersonatedBooking, setImpersonatedBooking] = useState<Booking | null>(null);
+
+  // Sync storage/state with URL & admin status
+  useEffect(() => {
+    if (!isAdmin) {
+      sessionStorage.removeItem(IMPERSONATION_KEY);
+      if (impersonateId !== null) setImpersonateId(null);
+      return;
+    }
+    if (urlImpersonateId && urlImpersonateId !== impersonateId) {
+      sessionStorage.setItem(IMPERSONATION_KEY, urlImpersonateId);
+      setImpersonateId(urlImpersonateId);
+    }
+  }, [urlImpersonateId, isAdmin, impersonateId]);
+
   const setActiveBookingId = useCallback((id: string | null) => {
     setActiveBookingIdState(id);
     if (id) localStorage.setItem(STORAGE_KEY, id);
     else localStorage.removeItem(STORAGE_KEY);
   }, []);
+
+  const fetchImpersonatedBooking = useCallback(async (id: string | null) => {
+    if (!isAdmin || !id) {
+      setImpersonatedBooking(null);
+      return;
+    }
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (error || !data) {
+      console.error('[BookingContext] failed to load impersonated booking', error);
+      setImpersonatedBooking(null);
+      return;
+    }
+    setImpersonatedBooking(data as Booking);
+  }, [isAdmin]);
 
   const loadBookings = useCallback(async () => {
     if (!user) {
@@ -70,11 +126,8 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     const list = (data || []) as Booking[];
     setBookings(list);
 
-    // Resolve active booking
     const stored = localStorage.getItem(STORAGE_KEY);
     const storedValid = stored && list.some((b) => b.id === stored);
-    // Auto-select considers only personal bookings (admin_managed entries must
-    // be entered explicitly via "Open guest dashboard")
     const personal = list.filter((b) => !b.admin_managed);
     if (storedValid) {
       setActiveBookingIdState(stored);
@@ -92,12 +145,54 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     loadBookings();
   }, [loadBookings]);
 
-  const activeBooking = bookings.find((b) => b.id === activeBookingId) ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (cancelled) return;
+      await fetchImpersonatedBooking(impersonateId);
+    })();
+    return () => { cancelled = true; };
+  }, [impersonateId, fetchImpersonatedBooking]);
+
+  const refresh = useCallback(async () => {
+    await loadBookings();
+    if (isAdmin && impersonateId) {
+      await fetchImpersonatedBooking(impersonateId);
+    }
+  }, [loadBookings, isAdmin, impersonateId, fetchImpersonatedBooking]);
+
+  const exitImpersonation = useCallback(() => {
+    sessionStorage.removeItem(IMPERSONATION_KEY);
+    setImpersonateId(null);
+    setImpersonatedBooking(null);
+  }, []);
+
+  const isImpersonating = isAdmin && !!impersonateId;
+
+  const effectiveActiveBooking = isImpersonating
+    ? impersonatedBooking
+    : (bookings.find((b) => b.id === activeBookingId) ?? null);
+
+  const effectiveActiveBookingId = isImpersonating
+    ? (impersonatedBooking?.id ?? impersonateId)
+    : activeBookingId;
+
   const bookingsPersonal = useMemo(() => bookings.filter((b) => !b.admin_managed), [bookings]);
 
   return (
     <BookingContext.Provider
-      value={{ bookings, bookingsPersonal, activeBookingId, activeBooking, isLoading, setActiveBookingId, refresh: loadBookings }}
+      value={{
+        bookings,
+        bookingsPersonal,
+        activeBookingId: effectiveActiveBookingId,
+        activeBooking: effectiveActiveBooking,
+        isLoading,
+        setActiveBookingId,
+        refresh,
+        isImpersonating,
+        impersonatedBooking,
+        exitImpersonation,
+      }}
     >
       {children}
     </BookingContext.Provider>
