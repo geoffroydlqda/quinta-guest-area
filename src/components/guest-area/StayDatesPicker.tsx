@@ -47,7 +47,8 @@ export function StayDatesPicker({
   const isUserEditingCheckOut = useRef(false);
   const isUserEditingGuests = useRef(false);
 
-  const isLocked = isEditingLocked(checkInDate, statusOverall);
+  const { isImpersonating } = useActiveBooking();
+  const isLocked = isEditingLocked(checkInDate, statusOverall, isImpersonating);
   const hasDates = !!(checkInDate && checkOutDate);
   
   // Sync check-in from props ONLY when not editing
