@@ -1223,7 +1223,7 @@ function EventTable({
   paymentForEvent,
   onRowClick,
   onDeleteBooking,
-  onClaimAsMe,
+  onOpenAsGuest,
   showLive,
 }: {
   events: EventRowProps[];
