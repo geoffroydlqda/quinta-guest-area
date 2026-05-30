@@ -519,6 +519,10 @@ export function useGuestProfile() {
 
   // Submit profile
   const submitProfile = useCallback(async () => {
+    if (isImpersonating) {
+      console.warn('Skipped guest_profiles write during impersonation');
+      return false;
+    }
     if (!user || !state.profile) return false;
 
     try {
