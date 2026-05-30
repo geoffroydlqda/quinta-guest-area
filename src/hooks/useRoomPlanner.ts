@@ -16,7 +16,7 @@ import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 export function useRoomPlanner() {
   const { user } = useAuth();
-  const { activeBookingId } = useActiveBooking();
+  const { activeBookingId, isImpersonating, impersonatedBooking } = useActiveBooking();
   const { toast } = useToast();
   
   const [roomSelection, setRoomSelection] = useState<RoomSelection>(initialRoomSelection);
@@ -137,6 +137,11 @@ export function useRoomPlanner() {
   // Auto-save function (used by useAutoSave hook)
   const autoSave = useCallback(async (): Promise<boolean> => {
     if (!user || !isSelectionValid) return false;
+    if (isImpersonating && !activeBookingId) return false;
+    
+    const ownerUserId = isImpersonating
+      ? (impersonatedBooking?.user_id ?? null)
+      : user.id;
     
     try {
       // Convert room plan to JSON-compatible format
@@ -149,9 +154,9 @@ export function useRoomPlanner() {
       }));
       
       const recordData = {
-        user_id: user.id,
+        user_id: ownerUserId,
         booking_id: activeBookingId,
-        email: user.email || '',
+        email: isImpersonating ? (impersonatedBooking?.email || '') : (user.email || ''),
         full_name: '', // No longer collecting from room setup
         remarks_roomsetup: remarks.trim() || null,
         queen_shared_qty: roomSelection.queenSharedQty,
@@ -160,7 +165,7 @@ export function useRoomPlanner() {
         twins_ensuite_qty: roomSelection.twinsEnsuiteQty,
         room_plan: roomPlanJson,
         status: 'draft',
-        edit_token: `user-${user.id}`,
+        edit_token: ownerUserId ? `user-${ownerUserId}` : `booking-${activeBookingId}`,
       };
 
       if (recordId) {
@@ -187,7 +192,7 @@ export function useRoomPlanner() {
       console.error('Auto-save error:', error);
       return false;
     }
-  }, [user, activeBookingId, recordId, roomSelection, roomPlan, remarks, isSelectionValid]);
+  }, [user, activeBookingId, recordId, roomSelection, roomPlan, remarks, isSelectionValid, isImpersonating, impersonatedBooking]);
 
   return {
     // State
