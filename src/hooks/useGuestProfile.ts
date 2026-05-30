@@ -504,6 +504,10 @@ export function useGuestProfile() {
 
   // Submit profile
   const submitProfile = useCallback(async () => {
+    if (isImpersonating) {
+      console.warn('Skipped: cannot edit guest_profiles in impersonation mode');
+      return false;
+    }
     if (!user || !state.profile) return false;
 
     try {
