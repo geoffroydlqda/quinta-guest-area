@@ -1232,7 +1232,7 @@ function EventTable({
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
   onRowClick: (bookingId: string) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
-  onClaimAsMe: (bookingId: string) => void;
+  onOpenAsGuest: (bookingId: string) => void;
   showLive?: boolean;
 }) {
   const { toast } = useToast();
