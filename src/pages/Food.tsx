@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { useFoodPlan } from '@/hooks/useFoodPlan';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
@@ -25,6 +26,7 @@ const Food = () => {
 
   const { profile, hasDatesSet, isLoading: profileLoading } = useGuestProfile();
   const guestsCount = profile?.guests_count || 1;
+  const { isImpersonating } = useActiveBooking();
   const {
     foodPlan,
     days,
@@ -38,7 +40,7 @@ const Food = () => {
   } = useFoodPlan(profile?.check_in_date || null, profile?.check_out_date || null, guestsCount);
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
-  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft");
+  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft", isImpersonating);
   const isLocked = guestStatus.isEditingLocked;
 
   const dietConfig = foodPlan?.diet_config || { vegetarian_count: 0, meat_dinner_count: 0, meat_lunch_dinner_count: 0 };
