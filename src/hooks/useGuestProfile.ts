@@ -268,7 +268,7 @@ export function useGuestProfile() {
         timedOut: false,
       }));
     }
-  }, [user, ensureProfileOnServer, fetchProfile, loadToolStatuses, activeBooking, activeBookingId]);
+  }, [user, ensureProfileOnServer, fetchProfile, loadToolStatuses, activeBooking, activeBookingId, isImpersonating, impersonatedBooking]);
 
   // Keep profile date/guest fields in sync with the active booking (source of truth).
   useEffect(() => {
