@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { isEditingLocked } from '@/lib/editLock';
-import { useActiveBooking } from '@/contexts/BookingContext';
 import { parseLocalDateString } from '@/lib/localDate';
 
 interface StayDatesPickerProps {
@@ -47,8 +46,7 @@ export function StayDatesPicker({
   const isUserEditingCheckOut = useRef(false);
   const isUserEditingGuests = useRef(false);
 
-  const { isImpersonating } = useActiveBooking();
-  const isLocked = isEditingLocked(checkInDate, statusOverall, isImpersonating);
+  const isLocked = isEditingLocked(checkInDate, statusOverall);
   const hasDates = !!(checkInDate && checkOutDate);
   
   // Sync check-in from props ONLY when not editing

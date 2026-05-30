@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check, ExternalLink } from "lucide-react";
+import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -371,8 +371,21 @@ const AdminContent = () => {
     load({ silent: true });
   };
 
-  const openAsGuest = (bookingId: string) => {
-    window.open(`/dashboard?impersonate=${bookingId}`, "_blank");
+  const claimBookingAsAdmin = async (bookingId: string) => {
+    const ok = confirm(
+      "Attach this booking to your admin account so you can edit Room / Food / Transportation as the guest?\n\nYou can release it later from the guest detail page."
+    );
+    if (!ok) return;
+    const res = await supabase.functions.invoke("admin-claim-booking", {
+      body: { booking_id: bookingId },
+    });
+    if (res.error || (res.data && (res.data as any).error)) {
+      const msg = (res.data as any)?.error || res.error?.message || "Claim failed";
+      toast({ title: "Claim failed", description: String(msg), variant: "destructive" });
+      return;
+    }
+    toast({ title: "Booking attached to your account" });
+    load({ silent: true });
   };
 
 
@@ -449,7 +462,7 @@ const AdminContent = () => {
                     paymentForEvent={paymentForEvent}
                     onRowClick={(bookingId) => navigateToBooking(bookingId)}
                     onDeleteBooking={deleteBookingDirect}
-                    onOpenAsGuest={openAsGuest}
+                    onClaimAsMe={claimBookingAsAdmin}
                     showLive
                   />
                 )}
@@ -477,7 +490,7 @@ const AdminContent = () => {
                       paymentForEvent={paymentForEvent}
                       onRowClick={(bookingId) => navigateToBooking(bookingId)}
                       onDeleteBooking={deleteBookingDirect}
-                    onOpenAsGuest={openAsGuest}
+                    onClaimAsMe={claimBookingAsAdmin}
                     />
                   )
                 )}
@@ -494,7 +507,7 @@ const AdminContent = () => {
                   paymentForEvent={paymentForEvent}
                   onRowClick={(bookingId) => navigateToBooking(bookingId)}
                   onDeleteBooking={deleteBookingDirect}
-                    onOpenAsGuest={openAsGuest}
+                    onClaimAsMe={claimBookingAsAdmin}
                 />
               </section>
             )}
@@ -1223,7 +1236,7 @@ function EventTable({
   paymentForEvent,
   onRowClick,
   onDeleteBooking,
-  onOpenAsGuest,
+  onClaimAsMe,
   showLive,
 }: {
   events: EventRowProps[];
@@ -1232,7 +1245,7 @@ function EventTable({
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
   onRowClick: (bookingId: string) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
-  onOpenAsGuest: (bookingId: string) => void;
+  onClaimAsMe: (bookingId: string) => void;
   showLive?: boolean;
 }) {
   const { toast } = useToast();
@@ -1307,25 +1320,24 @@ function EventTable({
                   />
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
-                  <div className="flex items-center gap-1.5">
-                    {ev.invitationClaimed ? (
-                      <span className="text-xs text-muted-foreground">Claimed</span>
-                    ) : (
+                  {ev.invitationClaimed ? (
+                    <span className="text-xs text-muted-foreground">Claimed</span>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
                       <Button size="sm" variant="outline" onClick={(e) => copyInvite(e, ev.invitationToken, ev.bookingId)}>
                         {copiedId === ev.bookingId ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
                         Copy invite link
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={(e) => { e.stopPropagation(); onOpenAsGuest(ev.bookingId); }}
-                      title="Open the guest area for this booking in admin mode"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5 mr-1" />
-                      Open as guest
-                    </Button>
-                  </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => { e.stopPropagation(); onClaimAsMe(ev.bookingId); }}
+                        title="Attach this booking to your admin account"
+                      >
+                        Claim as me
+                      </Button>
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <Button

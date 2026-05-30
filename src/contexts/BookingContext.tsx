@@ -1,8 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { isAdminEmail } from '@/lib/admin';
 
 export interface Booking {
   id: string;
@@ -23,44 +21,24 @@ export interface Booking {
 }
 
 interface BookingContextValue {
-  bookings: Booking[];
-  bookingsPersonal: Booking[];
+  bookings: Booking[];           // all bookings owned by user (incl. admin_managed)
+  bookingsPersonal: Booking[];   // bookings where admin_managed = false (for StaySwitcher / dashboard gating)
   activeBookingId: string | null;
   activeBooking: Booking | null;
   isLoading: boolean;
   setActiveBookingId: (id: string | null) => void;
   refresh: () => Promise<void>;
-  // Admin impersonation
-  isImpersonating: boolean;
-  impersonatedBooking: Booking | null;
-  exitImpersonation: () => void;
 }
 
 const STORAGE_KEY = 'qda_active_booking_id';
-const IMPERSONATION_STORAGE_KEY = 'qda_impersonate_booking_id';
 
 const BookingContext = createContext<BookingContextValue | undefined>(undefined);
 
 export function BookingProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [activeBookingId, setActiveBookingIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [impersonatedBooking, setImpersonatedBooking] = useState<Booking | null>(null);
-
-  const isAdmin = useMemo(() => isAdminEmail(user?.email), [user?.email]);
-
-  // Pull from URL first; fall back to sessionStorage so
-  // navigation inside the guest area doesn't break the mode.
-  const urlImpersonateId = isAdmin ? (new URLSearchParams(location.search).get('impersonate') || null) : null;
-
-  const [impersonateId, setImpersonateId] = useState<string | null>(() => {
-    if (urlImpersonateId) return urlImpersonateId;
-    if (!isAdmin) return null;
-    return sessionStorage.getItem(IMPERSONATION_STORAGE_KEY);
-  });
 
   const setActiveBookingId = useCallback((id: string | null) => {
     setActiveBookingIdState(id);
@@ -92,8 +70,11 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     const list = (data || []) as Booking[];
     setBookings(list);
 
+    // Resolve active booking
     const stored = localStorage.getItem(STORAGE_KEY);
     const storedValid = stored && list.some((b) => b.id === stored);
+    // Auto-select considers only personal bookings (admin_managed entries must
+    // be entered explicitly via "Open guest dashboard")
     const personal = list.filter((b) => !b.admin_managed);
     if (storedValid) {
       setActiveBookingIdState(stored);
@@ -111,70 +92,12 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     loadBookings();
   }, [loadBookings]);
 
-  // Keep storage in sync with URL
-  useEffect(() => {
-    if (!isAdmin) {
-      sessionStorage.removeItem(IMPERSONATION_STORAGE_KEY);
-      setImpersonateId(null);
-      return;
-    }
-    if (urlImpersonateId) {
-      sessionStorage.setItem(IMPERSONATION_STORAGE_KEY, urlImpersonateId);
-      setImpersonateId(urlImpersonateId);
-    }
-  }, [urlImpersonateId, isAdmin]);
-
-  // Load impersonated booking (admin only)
-  useEffect(() => {
-    let cancelled = false;
-    if (!impersonateId) {
-      setImpersonatedBooking(null);
-      return;
-    }
-    (async () => {
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('id', impersonateId)
-        .maybeSingle();
-      if (cancelled) return;
-      if (error) {
-        console.error('[BookingContext] failed to load impersonated booking', error);
-        setImpersonatedBooking(null);
-        return;
-      }
-      setImpersonatedBooking((data as Booking | null) ?? null);
-    })();
-    return () => { cancelled = true; };
-  }, [impersonateId]);
-
-  const isImpersonating = !!impersonateId && !!impersonatedBooking;
-
-  const exitImpersonation = useCallback(() => {
-    sessionStorage.removeItem(IMPERSONATION_STORAGE_KEY);
-    setImpersonateId(null);
-    setImpersonatedBooking(null);
-  }, []);
-
-  const personalActive = bookings.find((b) => b.id === activeBookingId) ?? null;
-  const activeBooking: Booking | null = isImpersonating ? impersonatedBooking : personalActive;
-  const effectiveActiveBookingId = isImpersonating ? (impersonatedBooking?.id ?? null) : activeBookingId;
+  const activeBooking = bookings.find((b) => b.id === activeBookingId) ?? null;
   const bookingsPersonal = useMemo(() => bookings.filter((b) => !b.admin_managed), [bookings]);
 
   return (
     <BookingContext.Provider
-      value={{
-        bookings,
-        bookingsPersonal,
-        activeBookingId: effectiveActiveBookingId,
-        activeBooking,
-        isLoading,
-        setActiveBookingId,
-        refresh: loadBookings,
-        isImpersonating,
-        impersonatedBooking,
-        exitImpersonation,
-      }}
+      value={{ bookings, bookingsPersonal, activeBookingId, activeBooking, isLoading, setActiveBookingId, refresh: loadBookings }}
     >
       {children}
     </BookingContext.Provider>

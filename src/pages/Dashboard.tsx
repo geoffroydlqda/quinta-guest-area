@@ -27,7 +27,7 @@ import { usePaymentData, type PaymentInstallment } from '@/hooks/usePaymentData'
 const DashboardContent = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
-  const { bookingsPersonal, activeBookingId, activeBooking, isLoading: bookingsLoading, isImpersonating } = useActiveBooking();
+  const { bookingsPersonal, activeBookingId, activeBooking, isLoading: bookingsLoading } = useActiveBooking();
   const queryClient = useQueryClient();
   
   const { 
@@ -58,7 +58,7 @@ const DashboardContent = () => {
   const bookingCheckOut = activeBooking?.check_out_date ?? null;
   const bookingGuestsCount = activeBooking?.guest_count ?? 1;
 
-  const guestStatus = getGuestStatus(bookingCheckIn, profile?.status_overall ?? 'draft', isImpersonating);
+  const guestStatus = getGuestStatus(bookingCheckIn, profile?.status_overall ?? 'draft');
   const isLocked = guestStatus.isEditingLocked;
 
   const transportationData = useMemo(() => {
@@ -255,37 +255,30 @@ const DashboardContent = () => {
       // Submit the profile
       await submitProfile();
 
-      if (isImpersonating) {
-        toast({
-          title: 'Saved',
-          description: 'Saved (no email sent — admin mode).',
-        });
-      } else {
-        // Send summary email via edge function
-        const response = await supabase.functions.invoke('send-guest-summary', {
-          body: {
-            fullName: profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
-            firstName: profile.first_name || null,
-            email: profile.email,
-            checkInDate: bookingCheckIn,
-            checkOutDate: bookingCheckOut,
-            guestsCount: bookingGuestsCount,
-            roomSetup: roomSetupData,
-            transportation: transportationData ? { ...transportationData, trips: transportationTrips } : null,
-            food: foodData ? {
-              ...foodData,
-              selections: foodData.selections || [],
-            } : null,
-          },
-        });
+      // Send summary email via edge function
+      const response = await supabase.functions.invoke('send-guest-summary', {
+        body: {
+          fullName: profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+          firstName: profile.first_name || null,
+          email: profile.email,
+          checkInDate: bookingCheckIn,
+          checkOutDate: bookingCheckOut,
+          guestsCount: bookingGuestsCount,
+          roomSetup: roomSetupData,
+          transportation: transportationData ? { ...transportationData, trips: transportationTrips } : null,
+          food: foodData ? {
+            ...foodData,
+            selections: foodData.selections || [],
+          } : null,
+        },
+      });
 
-        if (response.error) throw response.error;
+      if (response.error) throw response.error;
 
-        toast({
-          title: 'Information submitted',
-          description: 'A confirmation email has been sent to you.',
-        });
-      }
+      toast({
+        title: 'Information submitted',
+        description: 'A confirmation email has been sent to you.',
+      });
 
       refreshProfile();
     } catch (error: any) {

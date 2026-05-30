@@ -20,7 +20,7 @@ interface ProfileLoadState {
 
 export function useGuestProfile() {
   const { user } = useAuth();
-  const { activeBookingId, activeBooking, refresh: refreshBookings, isImpersonating, impersonatedBooking } = useActiveBooking();
+  const { activeBookingId, activeBooking, refresh: refreshBookings } = useActiveBooking();
   
   const [state, setState] = useState<ProfileLoadState>({
     profile: null,
@@ -150,44 +150,6 @@ export function useGuestProfile() {
     }, PROFILE_LOAD_TIMEOUT);
 
     try {
-      // Impersonation: synthesize profile from booking, skip guest_profiles fetch
-      if (isImpersonating && impersonatedBooking) {
-        clearTimeout(timeoutId);
-        const syntheticProfile: GuestProfile = {
-          id: 'impersonated',
-          user_id: impersonatedBooking.user_id ?? 'impersonated',
-          full_name:
-            [impersonatedBooking.first_name, impersonatedBooking.last_name]
-              .filter(Boolean).join(' ') || 'Guest',
-          first_name: impersonatedBooking.first_name ?? null,
-          last_name: impersonatedBooking.last_name ?? null,
-          email: impersonatedBooking.email,
-          check_in_date: impersonatedBooking.check_in_date,
-          check_out_date: impersonatedBooking.check_out_date,
-          guests_count: impersonatedBooking.guest_count ?? 1,
-          submitted_at: null,
-          status_overall: 'draft',
-          created_at: impersonatedBooking.created_at,
-          updated_at: impersonatedBooking.updated_at,
-        };
-
-        const toolStatuses = await loadToolStatuses(user.id, 'draft');
-
-        hasLoadedRef.current = true;
-        loadingRef.current = false;
-        checkOutChangeSourceRef.current = 'profile_load';
-        setState({
-          profile: syntheticProfile,
-          toolStatuses,
-          isLoading: false,
-          needsProfileCompletion: false,
-          error: null,
-          timedOut: false,
-        });
-        console.log('Impersonation profile synthesized');
-        return;
-      }
-
       // Step 1: Ensure profile exists on server (idempotent)
       console.log('Ensuring profile exists for user:', user.id);
       const serverProfile = await ensureProfileOnServer(user.id, user.user_metadata);
@@ -259,7 +221,7 @@ export function useGuestProfile() {
         timedOut: false,
       }));
     }
-  }, [user, ensureProfileOnServer, fetchProfile, loadToolStatuses, activeBooking, activeBookingId, isImpersonating, impersonatedBooking]);
+  }, [user, ensureProfileOnServer, fetchProfile, loadToolStatuses, activeBooking, activeBookingId]);
 
   // Keep profile date/guest fields in sync with the active booking (source of truth).
   useEffect(() => {
@@ -335,14 +297,10 @@ export function useGuestProfile() {
       hasLoadedRef.current = false;
       currentUserIdRef.current = null;
     }
-  }, [user, activeBookingId, isImpersonating, impersonatedBooking?.id, loadProfile]);
+  }, [user, activeBookingId, loadProfile]);
 
   // Complete profile with first/last name
   const completeProfile = useCallback(async (firstName: string, lastName: string) => {
-    if (isImpersonating) {
-      console.warn('Skipped: cannot edit guest_profiles in impersonation mode');
-      return false;
-    }
     if (!user) return false;
 
     try {
@@ -376,7 +334,7 @@ export function useGuestProfile() {
       console.error('Error completing profile:', error);
       return false;
     }
-  }, [user, isImpersonating]);
+  }, [user]);
 
   // Update check-in date (writes to active booking)
   const updateCheckInDate = useCallback(async (checkIn: Date | null) => {
@@ -504,10 +462,6 @@ export function useGuestProfile() {
 
   // Submit profile
   const submitProfile = useCallback(async () => {
-    if (isImpersonating) {
-      console.warn('Skipped: cannot edit guest_profiles in impersonation mode');
-      return false;
-    }
     if (!user || !state.profile) return false;
 
     try {
@@ -536,14 +490,10 @@ export function useGuestProfile() {
       console.error('Error submitting profile:', error);
       return false;
     }
-  }, [user, state.profile, isImpersonating]);
+  }, [user, state.profile]);
 
   // Update profile name
   const updateProfile = useCallback(async (fullName: string) => {
-    if (isImpersonating) {
-      console.warn('Skipped: cannot edit guest_profiles in impersonation mode');
-      return false;
-    }
     if (!user || !state.profile) return false;
 
     try {
@@ -565,7 +515,7 @@ export function useGuestProfile() {
       console.error('Error updating profile:', error);
       return false;
     }
-  }, [user, state.profile, isImpersonating]);
+  }, [user, state.profile]);
 
   // Retry loading
   const retryLoad = useCallback(() => {

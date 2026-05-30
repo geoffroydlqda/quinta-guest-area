@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
-import { useActiveBooking } from '@/contexts/BookingContext';
 import { useRoomPlanner } from '@/hooks/useRoomPlanner';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
@@ -28,7 +27,6 @@ const RoomSetup = () => {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { profile } = useGuestProfile();
-  const { isImpersonating } = useActiveBooking();
   const [mapOpen, setMapOpen] = useState(false);
   
   const {
@@ -48,7 +46,7 @@ const RoomSetup = () => {
   } = useRoomPlanner();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
-  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft", isImpersonating);
+  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft");
   const isLocked = guestStatus.isEditingLocked;
 
   // Calculate remaining capacity
