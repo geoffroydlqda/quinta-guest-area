@@ -80,6 +80,7 @@ export const formatFinalSubmissionDate = formatHumanDate;
 export function getGuestStatus(
   checkInDate: string | null,
   _statusOverall: 'draft' | 'submitted' | string = 'draft',
+  isImpersonating: boolean = false,
 ): GuestStatusInfo {
   const today = startOfToday();
   const checkIn = safeParse(checkInDate);
@@ -90,6 +91,21 @@ export function getGuestStatus(
   const isPastFinalLock = !!finalLockDate && differenceInCalendarDays(finalLockDate, today) <= 0;
   const isPastLateStart = !!lateUpdateDate && differenceInCalendarDays(lateUpdateDate, today) <= 0;
   const isInLateUpdatesWindow = isPastLateStart && !isPastFinalLock;
+
+  // Admin impersonation always unlocks editing
+  if (isImpersonating) {
+    return {
+      status: 'pending',
+      label: 'Admin mode',
+      message: 'You are editing this booking as admin.',
+      isEditingLocked: false,
+      isPastFinalLock,
+      isInLateUpdatesWindow,
+      isPastCheckIn,
+      lateUpdateDate,
+      finalLockDate,
+    };
+  }
 
   if (isPastCheckIn) {
     return {
@@ -155,6 +171,7 @@ export function getGuestStatus(
 export function isEditingLocked(
   checkInDate: string | null,
   statusOverall: 'draft' | 'submitted' | string = 'draft',
+  isImpersonating: boolean = false,
 ): boolean {
-  return getGuestStatus(checkInDate, statusOverall).isEditingLocked;
+  return getGuestStatus(checkInDate, statusOverall, isImpersonating).isEditingLocked;
 }
