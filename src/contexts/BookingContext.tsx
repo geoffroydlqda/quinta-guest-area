@@ -37,6 +37,7 @@ interface BookingContextValue {
 }
 
 const STORAGE_KEY = 'qda_active_booking_id';
+const IMPERSONATION_STORAGE_KEY = 'qda_impersonate_booking_id';
 
 const BookingContext = createContext<BookingContextValue | undefined>(undefined);
 
@@ -50,11 +51,16 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const [impersonatedBooking, setImpersonatedBooking] = useState<Booking | null>(null);
 
   const isAdmin = useMemo(() => isAdminEmail(user?.email), [user?.email]);
-  const impersonateId = useMemo(() => {
+
+  // Pull from URL first; fall back to sessionStorage so
+  // navigation inside the guest area doesn't break the mode.
+  const urlImpersonateId = isAdmin ? (new URLSearchParams(location.search).get('impersonate') || null) : null;
+
+  const [impersonateId, setImpersonateId] = useState<string | null>(() => {
+    if (urlImpersonateId) return urlImpersonateId;
     if (!isAdmin) return null;
-    const p = new URLSearchParams(location.search);
-    return p.get('impersonate');
-  }, [isAdmin, location.search]);
+    return sessionStorage.getItem(IMPERSONATION_STORAGE_KEY);
+  });
 
   const setActiveBookingId = useCallback((id: string | null) => {
     setActiveBookingIdState(id);
@@ -105,6 +111,19 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     loadBookings();
   }, [loadBookings]);
 
+  // Keep storage in sync with URL
+  useEffect(() => {
+    if (!isAdmin) {
+      sessionStorage.removeItem(IMPERSONATION_STORAGE_KEY);
+      setImpersonateId(null);
+      return;
+    }
+    if (urlImpersonateId) {
+      sessionStorage.setItem(IMPERSONATION_STORAGE_KEY, urlImpersonateId);
+      setImpersonateId(urlImpersonateId);
+    }
+  }, [urlImpersonateId, isAdmin]);
+
   // Load impersonated booking (admin only)
   useEffect(() => {
     let cancelled = false;
@@ -132,9 +151,10 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const isImpersonating = !!impersonateId && !!impersonatedBooking;
 
   const exitImpersonation = useCallback(() => {
+    sessionStorage.removeItem(IMPERSONATION_STORAGE_KEY);
+    setImpersonateId(null);
     setImpersonatedBooking(null);
-    navigate('/admin');
-  }, [navigate]);
+  }, []);
 
   const personalActive = bookings.find((b) => b.id === activeBookingId) ?? null;
   const activeBooking: Booking | null = isImpersonating ? impersonatedBooking : personalActive;
