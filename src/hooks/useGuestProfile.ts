@@ -391,7 +391,7 @@ export function useGuestProfile() {
       console.error('Error completing profile:', error);
       return false;
     }
-  }, [user]);
+  }, [user, isImpersonating]);
 
   // Update check-in date (writes to active booking)
   const updateCheckInDate = useCallback(async (checkIn: Date | null) => {
