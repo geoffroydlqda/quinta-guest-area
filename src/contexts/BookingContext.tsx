@@ -151,9 +151,10 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const isImpersonating = !!impersonateId && !!impersonatedBooking;
 
   const exitImpersonation = useCallback(() => {
+    sessionStorage.removeItem(IMPERSONATION_STORAGE_KEY);
+    setImpersonateId(null);
     setImpersonatedBooking(null);
-    navigate('/admin');
-  }, [navigate]);
+  }, []);
 
   const personalActive = bookings.find((b) => b.id === activeBookingId) ?? null;
   const activeBooking: Booking | null = isImpersonating ? impersonatedBooking : personalActive;
