@@ -127,6 +127,13 @@ export function useGuestProfile() {
       return;
     }
 
+    // Wait for impersonation booking fetch to complete
+    if (isImpersonating && !impersonatedBooking) {
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
+      loadingRef.current = false;
+      return;
+    }
+
     // Prevent concurrent loads
     if (loadingRef.current) {
       return;
