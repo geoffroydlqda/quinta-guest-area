@@ -256,33 +256,9 @@ const AdminGuestDetailContent = () => {
     (s: any) => s.fullBoard || s.breakfast || s.lunch || s.dinner
   ).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
-  const isAdminManagedByMe = !!booking?.admin_managed && !!user && booking?.user_id === user.id;
-
   const openAsGuest = () => {
     if (!booking) return;
-    setActiveBookingId(booking.id);
-    navigate("/dashboard");
-  };
-
-  const releaseBooking = async () => {
-    if (!booking) return;
-    const ok = confirm(
-      "Release this booking from your admin account?\n\nThe booking will become unclaimed and you'll need to regenerate an invite link to send to the guest again."
-    );
-    if (!ok) return;
-    setReleasing(true);
-    const { error } = await supabase
-      .from("bookings")
-      .update({ user_id: null, invitation_claimed: false, admin_managed: false })
-      .eq("id", booking.id);
-    setReleasing(false);
-    if (error) {
-      toast({ title: "Could not release booking", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "Booking released" });
-    await refreshBookings();
-    navigate("/admin");
+    window.open(`/dashboard?impersonate=${booking.id}`, "_blank");
   };
 
 
