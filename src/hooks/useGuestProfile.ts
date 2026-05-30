@@ -324,6 +324,12 @@ export function useGuestProfile() {
       hasLoadedRef.current = false;
       previousBookingIdRef.current = activeBookingId;
     }
+    // Reset when impersonation state changes
+    const impersonationKey = isImpersonating ? (impersonatedBooking?.id ?? 'pending') : 'none';
+    if (previousImpersonationKeyRef.current !== impersonationKey) {
+      hasLoadedRef.current = false;
+      previousImpersonationKeyRef.current = impersonationKey;
+    }
 
     if (user && !hasLoadedRef.current) {
       loadProfile();
