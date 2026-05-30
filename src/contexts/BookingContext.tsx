@@ -111,6 +111,19 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     loadBookings();
   }, [loadBookings]);
 
+  // Keep storage in sync with URL
+  useEffect(() => {
+    if (!isAdmin) {
+      sessionStorage.removeItem(IMPERSONATION_STORAGE_KEY);
+      setImpersonateId(null);
+      return;
+    }
+    if (urlImpersonateId) {
+      sessionStorage.setItem(IMPERSONATION_STORAGE_KEY, urlImpersonateId);
+      setImpersonateId(urlImpersonateId);
+    }
+  }, [urlImpersonateId, isAdmin]);
+
   // Load impersonated booking (admin only)
   useEffect(() => {
     let cancelled = false;
