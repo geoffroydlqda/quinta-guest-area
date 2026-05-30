@@ -38,8 +38,12 @@ const Auth = () => {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
+      const next = searchParams.get('redirectTo');
+      const redirectUri = next
+        ? `${window.location.origin}/auth?redirectTo=${encodeURIComponent(next)}`
+        : `${window.location.origin}/auth`;
       const { error } = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
+        redirect_uri: redirectUri,
       });
       if (error) throw error;
     } catch (error: any) {
