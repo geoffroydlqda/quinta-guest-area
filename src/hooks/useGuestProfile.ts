@@ -335,7 +335,7 @@ export function useGuestProfile() {
       hasLoadedRef.current = false;
       currentUserIdRef.current = null;
     }
-  }, [user, activeBookingId, loadProfile]);
+  }, [user, activeBookingId, isImpersonating, impersonatedBooking?.id, loadProfile]);
 
   // Complete profile with first/last name
   const completeProfile = useCallback(async (firstName: string, lastName: string) => {
