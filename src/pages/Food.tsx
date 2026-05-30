@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { useFoodPlan } from '@/hooks/useFoodPlan';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
