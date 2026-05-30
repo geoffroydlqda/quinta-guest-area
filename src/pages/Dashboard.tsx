@@ -660,13 +660,6 @@ function WhatsAppGroupCard({ url }: { url: string | null }) {
 const QUINTA_LAT = 38.4847;
 const QUINTA_LON = -8.9942;
 
-const SEASONAL_BY_MONTH: Record<number, { min: number; max: number }> = {
-  1: { min: 8, max: 14 }, 2: { min: 8, max: 14 }, 3: { min: 9, max: 17 },
-  4: { min: 11, max: 19 }, 5: { min: 13, max: 22 }, 6: { min: 16, max: 26 },
-  7: { min: 18, max: 29 }, 8: { min: 18, max: 29 }, 9: { min: 17, max: 27 },
-  10: { min: 14, max: 22 }, 11: { min: 11, max: 17 }, 12: { min: 9, max: 14 },
-};
-
 function weatherIconFor(code: number) {
   if (code === 0) return Sun;
   if (code <= 3) return CloudSun;
@@ -684,96 +677,216 @@ function parseLocalDate(iso: string) {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
-function daysBetween(a: Date, b: Date) {
-  const ms = b.getTime() - a.getTime();
-  return Math.floor(ms / (1000 * 60 * 60 * 24));
+function fmtISO(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
-type DailyForecast = {
-  time: string[];
-  weather_code: number[];
-  temperature_2m_max: number[];
-  temperature_2m_min: number[];
+function enumerateDates(startISO: string, endISO: string): string[] {
+  const out: string[] = [];
+  const start = parseLocalDate(startISO);
+  const end = parseLocalDate(endISO);
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    out.push(fmtISO(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+}
+
+type DayWeather = {
+  date: string;
+  weather_code: number;
+  temp_max: number;
+  temp_min: number;
+  source: 'forecast' | 'history';
 };
+
+async function fetchForecast(start: string, end: string) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${QUINTA_LAT}&longitude=${QUINTA_LON}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Lisbon&start_date=${start}&end_date=${end}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const json = await res.json();
+  return json.daily as { time: string[]; weather_code: number[]; temperature_2m_max: number[]; temperature_2m_min: number[] };
+}
+
+async function fetchArchive(start: string, end: string) {
+  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${QUINTA_LAT}&longitude=${QUINTA_LON}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Lisbon&start_date=${start}&end_date=${end}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const json = await res.json();
+  return json.daily as { time: string[]; weather_code: number[]; temperature_2m_max: number[]; temperature_2m_min: number[] };
+}
+
+function modeOf(arr: number[]): number {
+  const counts = new Map<number, number>();
+  let best = arr[0];
+  let bestCount = 0;
+  for (const v of arr) {
+    const c = (counts.get(v) || 0) + 1;
+    counts.set(v, c);
+    if (c > bestCount) { bestCount = c; best = v; }
+  }
+  return best;
+}
+
+async function buildWeather(checkIn: string, checkOut: string): Promise<DayWeather[]> {
+  const allDates = enumerateDates(checkIn, checkOut);
+  const byDate = new Map<string, DayWeather>();
+
+  const forecast = await fetchForecast(checkIn, checkOut).catch(() => null);
+  if (forecast) {
+    forecast.time.forEach((iso, i) => {
+      if (
+        typeof forecast.weather_code[i] === 'number' &&
+        typeof forecast.temperature_2m_max[i] === 'number' &&
+        typeof forecast.temperature_2m_min[i] === 'number'
+      ) {
+        byDate.set(iso, {
+          date: iso,
+          weather_code: forecast.weather_code[i],
+          temp_max: Math.round(forecast.temperature_2m_max[i]),
+          temp_min: Math.round(forecast.temperature_2m_min[i]),
+          source: 'forecast',
+        });
+      }
+    });
+  }
+
+  const missing = allDates.filter((d) => !byDate.has(d));
+  if (missing.length > 0) {
+    const currentYear = new Date().getFullYear();
+    const years = [currentYear - 5, currentYear - 4, currentYear - 3, currentYear - 2, currentYear - 1];
+    const perDayHist = new Map<string, { codes: number[]; maxs: number[]; mins: number[] }>();
+    missing.forEach((d) => perDayHist.set(d, { codes: [], maxs: [], mins: [] }));
+
+    const shiftYear = (iso: string, targetYear: number) => {
+      const d = parseLocalDate(iso);
+      const month = d.getMonth();
+      let day = d.getDate();
+      if (month === 1 && day === 29) day = 28;
+      return fmtISO(new Date(targetYear, month, day));
+    };
+
+    const results = await Promise.all(
+      years.map(async (year) => {
+        const start = shiftYear(checkIn, year);
+        const end = shiftYear(checkOut, year);
+        return { year, data: await fetchArchive(start, end).catch(() => null) };
+      })
+    );
+
+    for (const { data } of results) {
+      if (!data) continue;
+      data.time.forEach((histIso, i) => {
+        const hd = parseLocalDate(histIso);
+        const stayIso = missing.find((m) => {
+          const md = parseLocalDate(m);
+          return md.getMonth() === hd.getMonth() && md.getDate() === hd.getDate();
+        });
+        if (!stayIso) return;
+        const bucket = perDayHist.get(stayIso);
+        if (!bucket) return;
+        if (typeof data.weather_code[i] === 'number') bucket.codes.push(data.weather_code[i]);
+        if (typeof data.temperature_2m_max[i] === 'number') bucket.maxs.push(data.temperature_2m_max[i]);
+        if (typeof data.temperature_2m_min[i] === 'number') bucket.mins.push(data.temperature_2m_min[i]);
+      });
+    }
+
+    for (const date of missing) {
+      const b = perDayHist.get(date);
+      if (!b || b.maxs.length === 0) continue;
+      byDate.set(date, {
+        date,
+        weather_code: b.codes.length ? modeOf(b.codes) : 1,
+        temp_max: Math.round(b.maxs.reduce((s, v) => s + v, 0) / b.maxs.length),
+        temp_min: Math.round(b.mins.reduce((s, v) => s + v, 0) / b.mins.length),
+        source: 'history',
+      });
+    }
+  }
+
+  return allDates.map((d) => byDate.get(d)).filter((x): x is DayWeather => !!x);
+}
 
 function WeatherCard({ checkIn, checkOut, bookingId }: { checkIn: string | null; checkOut: string | null; bookingId: string | null }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const checkInDate = checkIn ? parseLocalDate(checkIn) : null;
   const checkOutDate = checkOut ? parseLocalDate(checkOut) : null;
-  const daysUntilCheckin = checkInDate ? daysBetween(today, checkInDate) : 999;
   const isPast = !!checkOutDate && checkOutDate < today;
   const hasDates = !!checkInDate && !!checkOutDate;
-  const inForecastRange = hasDates && !isPast && daysUntilCheckin <= 14;
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['weather', bookingId, checkIn, checkOut],
-    enabled: inForecastRange,
-    staleTime: 1000 * 60 * 30,
-    retry: 1,
-    queryFn: async (): Promise<DailyForecast> => {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${QUINTA_LAT}&longitude=${QUINTA_LON}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Lisbon&start_date=${checkIn}&end_date=${checkOut}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('weather fetch failed');
-      const json = await res.json();
-      return json.daily as DailyForecast;
-    },
+  const { data, isLoading } = useQuery({
+    queryKey: ['weather-v2', bookingId, checkIn, checkOut],
+    enabled: hasDates && !isPast,
+    staleTime: 1000 * 60 * 60 * 6,
+    gcTime: 1000 * 60 * 60 * 24,
+    retry: 0,
+    queryFn: () => buildWeather(checkIn!, checkOut!),
   });
 
   if (!hasDates || isPast) return null;
 
-
-  // Case 2: too far in future → seasonal fallback
-  if (!inForecastRange) {
-    const month = checkInDate!.getMonth() + 1;
-    const monthName = checkInDate!.toLocaleString('en-US', { month: 'long' });
-    const s = SEASONAL_BY_MONTH[month];
+  if (isLoading) {
     return (
       <section className="bg-card rounded-2xl border border-border p-6">
-        <h2 className="text-lg font-medium mb-1">Seasonal weather in Arrábida</h2>
-        <p className="text-sm text-muted-foreground">
-          Detailed forecast available 14 days before your stay. Typical conditions for {monthName}:
-          daytime {s.min}–{s.max} °C, cooler evenings.
-        </p>
-      </section>
-    );
-  }
-
-  // Case 1: forecast in range
-  if (isError) return null;
-
-  return (
-    <section className="bg-card rounded-2xl border border-border p-6">
-      <h2 className="text-lg font-medium mb-3">Weather forecast</h2>
-      {isLoading || !data ? (
+        <h2 className="text-lg font-medium mb-3">Weather forecast</h2>
         <div className="flex gap-3 overflow-x-auto">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="w-24 h-28 rounded-xl bg-muted animate-pulse shrink-0" />
           ))}
         </div>
-      ) : (
-        <div className="flex gap-3 overflow-x-auto pb-1">
-          {data.time.map((iso, i) => {
-            const d = parseLocalDate(iso);
-            const label = d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
-            const Icon = weatherIconFor(data.weather_code[i]);
-            const max = Math.round(data.temperature_2m_max[i]);
-            const min = Math.round(data.temperature_2m_min[i]);
-            return (
-              <div
-                key={iso}
-                className="shrink-0 w-24 rounded-xl border border-border bg-background p-3 flex flex-col items-center gap-1"
-              >
-                <div className="text-xs text-muted-foreground">{label}</div>
-                <Icon className="w-7 h-7 text-primary" />
-                <div className="text-sm">
-                  <span className="font-medium">{max}°</span>
-                  <span className="text-muted-foreground"> / {min}°</span>
-                </div>
+      </section>
+    );
+  }
+
+  if (!data || data.length === 0) return null;
+
+  const forecastCount = data.filter((d) => d.source === 'forecast').length;
+  const historyCount = data.filter((d) => d.source === 'history').length;
+  const mixed = forecastCount > 0 && historyCount > 0;
+  const showBadge = historyCount > 0;
+  const badgeText = mixed ? 'Partial estimate' : 'Seasonal estimate';
+  const monthName = checkInDate!.toLocaleString('en-US', { month: 'long' });
+  const noteText = mixed
+    ? `Forecast available for the first ${forecastCount} day${forecastCount === 1 ? '' : 's'}. Remaining days based on historical averages.`
+    : `Based on historical averages for ${monthName}. Detailed forecast available 14 days before your stay.`;
+
+  return (
+    <section className="bg-card rounded-2xl border border-border p-6">
+      <div className="flex items-start justify-between mb-3 gap-2">
+        <h2 className="text-lg font-medium">Weather forecast</h2>
+        {showBadge && (
+          <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">
+            {badgeText}
+          </span>
+        )}
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        {data.map((d) => {
+          const dt = parseLocalDate(d.date);
+          const label = dt.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+          const Icon = weatherIconFor(d.weather_code);
+          return (
+            <div
+              key={d.date}
+              className="shrink-0 w-24 rounded-xl border border-border bg-background p-3 flex flex-col items-center gap-1"
+            >
+              <div className="text-xs text-muted-foreground">{label}</div>
+              <Icon className="w-7 h-7 text-primary" />
+              <div className="text-sm">
+                <span className="font-medium">{d.temp_max}°</span>
+                <span className="text-muted-foreground"> / {d.temp_min}°</span>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
+      </div>
+      {showBadge && (
+        <p className="mt-3 text-xs text-muted-foreground">{noteText}</p>
       )}
     </section>
   );
