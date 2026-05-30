@@ -164,6 +164,39 @@ export function useGuestProfile() {
     }, PROFILE_LOAD_TIMEOUT);
 
     try {
+      // Impersonation: build a synthetic profile from the impersonated booking
+      if (isImpersonating && impersonatedBooking) {
+        clearTimeout(timeoutId);
+        const b = impersonatedBooking;
+        const syntheticProfile: GuestProfile = {
+          id: 'impersonated',
+          user_id: b.user_id ?? 'impersonated',
+          full_name: [b.first_name, b.last_name].filter(Boolean).join(' ') || b.email || 'Guest',
+          first_name: b.first_name ?? null,
+          last_name: b.last_name ?? null,
+          email: b.email,
+          check_in_date: b.check_in_date,
+          check_out_date: b.check_out_date,
+          guests_count: b.guest_count ?? 1,
+          submitted_at: null,
+          status_overall: 'draft',
+          created_at: b.created_at,
+          updated_at: b.updated_at,
+        };
+        const toolStatuses = await loadToolStatuses(b.user_id ?? 'impersonated', 'draft');
+        hasLoadedRef.current = true;
+        loadingRef.current = false;
+        setState({
+          profile: syntheticProfile,
+          toolStatuses,
+          isLoading: false,
+          needsProfileCompletion: false,
+          error: null,
+          timedOut: false,
+        });
+        return;
+      }
+
       // Step 1: Ensure profile exists on server (idempotent)
       console.log('Ensuring profile exists for user:', user.id);
       const serverProfile = await ensureProfileOnServer(user.id, user.user_metadata);
