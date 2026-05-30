@@ -354,6 +354,10 @@ export function useGuestProfile() {
 
   // Complete profile with first/last name
   const completeProfile = useCallback(async (firstName: string, lastName: string) => {
+    if (isImpersonating) {
+      console.warn('Skipped guest_profiles write during impersonation');
+      return false;
+    }
     if (!user) return false;
 
     try {
