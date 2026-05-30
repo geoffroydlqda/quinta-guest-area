@@ -48,6 +48,7 @@ export function useGuestProfile() {
   const currentUserIdRef = useRef<string | null>(null);
   const previousCheckOutDateRef = useRef<string | null>(null);
   const checkOutChangeSourceRef = useRef('initial_load');
+  const previousImpersonationKeyRef = useRef<string>('none');
 
   // Ensure profile exists via server-side edge function
   const ensureProfileOnServer = useCallback(async (userId: string, metadata?: Record<string, any>) => {
