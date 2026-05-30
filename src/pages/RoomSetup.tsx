@@ -28,6 +28,7 @@ const RoomSetup = () => {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { profile } = useGuestProfile();
+  const { isImpersonating } = useActiveBooking();
   const [mapOpen, setMapOpen] = useState(false);
   
   const {
@@ -47,7 +48,7 @@ const RoomSetup = () => {
   } = useRoomPlanner();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
-  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft");
+  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft", isImpersonating);
   const isLocked = guestStatus.isEditingLocked;
 
   // Calculate remaining capacity
