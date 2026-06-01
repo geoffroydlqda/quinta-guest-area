@@ -146,59 +146,52 @@ const RoomSetup = () => {
         {/* Room Stats Summary */}
         <RoomStats stats={stats} />
 
-        {/* 5 Room Type Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <RoomTypeCard 
-            title="King (en-suite bathroom)" 
-            description="Rooms 1 & 6 are fixed King beds with en-suite bathrooms." 
-            image={roomKingImage} 
-            quantity={2} 
-            isLocked={true} 
-          />
-          
-          <RoomTypeCard 
-            title="Queen size (shared bathroom)" 
-            description="Rooms 2, 3, 4, 5, 7 or 8.  Queen size bed in a room with shared bathroom." 
+        {/* Fixed King rooms info block */}
+        <div className="bg-card rounded-2xl border border-border overflow-hidden">
+          <div className="flex flex-col sm:flex-row">
+            <img
+              src={roomKingImage}
+              alt="King room"
+              className="w-full sm:w-48 h-40 sm:h-auto object-cover"
+            />
+            <div className="p-5 flex items-start gap-3 flex-1">
+              <Crown className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-lg font-medium mb-1">2 King rooms (fixed)</h3>
+                <p className="text-sm text-muted-foreground">
+                  Rooms 1 &amp; 6 are fixed King beds with en-suite bathrooms. These cannot be changed.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
 
-            image={roomQueenImage} 
-            quantity={roomSelection.queenSharedQty} 
-            maxQuantity={remainingShared + roomSelection.queenSharedQty} 
-            onIncrement={() => !isLocked && setQueenShared(roomSelection.queenSharedQty + 1)} 
-            onDecrement={() => !isLocked && setQueenShared(roomSelection.queenSharedQty - 1)} 
+        {/* Two merged configurable cards */}
+        <div className="grid gap-6 md:grid-cols-2">
+          <MergedRoomCard
+            title="En-suite bedrooms"
+            subtitle="Rooms 9, 10 or 11"
+            bathroomLabel="Private en-suite"
+            images={[roomQueenImage, roomTwinsImage]}
+            twinsQty={roomSelection.twinsEnsuiteQty}
+            kingQty={roomSelection.queenEnsuiteQty}
+            combinedMax={3}
             isLocked={isLocked}
-          />
-          
-          <RoomTypeCard 
-            title="Twins (shared bathroom)" 
-            description="Rooms 2, 3, 4, 5, 7 or 8. Two single beds in a room with shared bathroom." 
-            image={roomTwinsImage} 
-            quantity={roomSelection.twinsSharedQty} 
-            maxQuantity={remainingShared + roomSelection.twinsSharedQty} 
-            onIncrement={() => !isLocked && setTwinsShared(roomSelection.twinsSharedQty + 1)} 
-            onDecrement={() => !isLocked && setTwinsShared(roomSelection.twinsSharedQty - 1)} 
-            isLocked={isLocked}
-          />
-
-          <RoomTypeCard 
-            title="Queen size (en-suite bathroom)" 
-            description="Rooms 9, 10 or 11. Queen size bed in a room with private en-suite bathroom." 
-            image={roomQueenImage} 
-            quantity={roomSelection.queenEnsuiteQty} 
-            maxQuantity={remainingEnsuite + roomSelection.queenEnsuiteQty} 
-            onIncrement={() => !isLocked && setQueenEnsuite(roomSelection.queenEnsuiteQty + 1)} 
-            onDecrement={() => !isLocked && setQueenEnsuite(roomSelection.queenEnsuiteQty - 1)} 
-            isLocked={isLocked}
+            onTwinsChange={setTwinsEnsuite}
+            onKingChange={setQueenEnsuite}
           />
 
-          <RoomTypeCard 
-            title="Twins (en-suite bathroom)" 
-            description="Rooms 9, 10 or 11. Two single beds in a room with private en-suite bathroom." 
-            image={roomTwinsImage} 
-            quantity={roomSelection.twinsEnsuiteQty} 
-            maxQuantity={remainingEnsuite + roomSelection.twinsEnsuiteQty} 
-            onIncrement={() => !isLocked && setTwinsEnsuite(roomSelection.twinsEnsuiteQty + 1)} 
-            onDecrement={() => !isLocked && setTwinsEnsuite(roomSelection.twinsEnsuiteQty - 1)} 
+          <MergedRoomCard
+            title="Shared-bathroom bedrooms"
+            subtitle="Rooms 2, 3, 4, 5, 7 or 8"
+            bathroomLabel="Shared (2 bedrooms share a bathroom)"
+            images={[roomQueenImage, roomTwinsImage]}
+            twinsQty={roomSelection.twinsSharedQty}
+            kingQty={roomSelection.queenSharedQty}
+            combinedMax={6}
             isLocked={isLocked}
+            onTwinsChange={setTwinsShared}
+            onKingChange={setQueenShared}
           />
         </div>
 
@@ -206,15 +199,15 @@ const RoomSetup = () => {
         {!isSharedValid && (
           <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-4">
             <p className="text-sm text-destructive font-medium">
-              Only 6 rooms with shared bathrooms are available.
+              Only 6 shared-bathroom bedrooms are available.
             </p>
           </div>
         )}
-        
+
         {!isEnsuiteValid && (
           <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-4">
             <p className="text-sm text-destructive font-medium">
-              Only 3 rooms with en-suite bathrooms are available.
+              Only 3 en-suite bedrooms are available.
             </p>
           </div>
         )}
