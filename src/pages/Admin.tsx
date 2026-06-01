@@ -1247,6 +1247,7 @@ function EventTable({
   paymentForEvent,
   onRowClick,
   onDeleteBooking,
+  onRenameBooking,
   showLive,
 }: {
   events: EventRowProps[];
@@ -1255,6 +1256,7 @@ function EventTable({
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
   onRowClick: (bookingId: string) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
+  onRenameBooking: (bookingId: string, patch: { first_name?: string | null; last_name?: string | null }) => Promise<void> | void;
   showLive?: boolean;
 }) {
   const { toast } = useToast();
