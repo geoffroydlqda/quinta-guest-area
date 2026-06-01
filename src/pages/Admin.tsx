@@ -1273,7 +1273,7 @@ function EventTable({
         </thead>
         <tbody>
           {events.map((ev) => {
-            const ts = toolStatus(ev.userId);
+            const ts = toolStatus(ev.userId, ev.bookingId);
             const label = (`${ev.firstName ?? ""} ${ev.lastName ?? ""}`.trim() || ev.email);
             const isLive = showLive && categoryOf(ev) === "live";
             const payStatus = paymentForEvent(ev);
