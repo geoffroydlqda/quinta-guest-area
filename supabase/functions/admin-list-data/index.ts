@@ -57,10 +57,10 @@ serve(async (req) => {
       allProfiles.filter((p: any) => isAdmin(p.email)).map((p: any) => p.user_id)
     );
     const filteredProfiles = allProfiles.filter((p: any) => !adminUserIds.has(p.user_id));
-    const filteredRooms = (rooms.data || []).filter((r: any) => !adminUserIds.has(r.user_id));
-    const filteredTripsRaw = (trips.data || []).filter((t: any) => !adminUserIds.has(t.user_id));
-    const filteredPassengers = (passengers.data || []).filter((p: any) => !adminUserIds.has(p.user_id));
-    const filteredFood = (food.data || []).filter((f: any) => !adminUserIds.has(f.user_id));
+    const filteredRooms = rooms.data || [];
+    const filteredTripsRaw = trips.data || [];
+    const filteredPassengers = passengers.data || [];
+    const filteredFood = food.data || [];
     const filteredBookings = (bookings.data || []).filter(
       (b: any) => !isAdmin(b.email) && (!b.user_id || !adminUserIds.has(b.user_id))
     );
