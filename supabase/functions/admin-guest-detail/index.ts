@@ -85,19 +85,41 @@ serve(async (req) => {
     let trips: any[] = [];
     let passengers: any[] = [];
 
+    const resolvedBookingId: string | null = booking?.id ?? null;
+
     if (targetUserId) {
-      const [pRes, rRes, fRes, tRes, paxRes] = await Promise.all([
-        admin.from("guest_profiles").select("*").eq("user_id", targetUserId).maybeSingle(),
-        admin.from("room_setups").select("*").eq("user_id", targetUserId).maybeSingle(),
-        admin.from("food_plans").select("*").eq("user_id", targetUserId).maybeSingle(),
-        admin.from("transportation_trips").select("*").eq("user_id", targetUserId),
-        admin.from("transportation_passengers").select("*").eq("user_id", targetUserId),
-      ]);
+      const pRes = await admin
+        .from("guest_profiles").select("*")
+        .eq("user_id", targetUserId).maybeSingle();
       profile = pRes.data || null;
+    }
+
+    if (resolvedBookingId) {
+      const [rRes, fRes, tRes, paxRes] = await Promise.all([
+        admin.from("room_setups").select("*").eq("booking_id", resolvedBookingId).maybeSingle(),
+        admin.from("food_plans").select("*").eq("booking_id", resolvedBookingId).maybeSingle(),
+        admin.from("transportation_trips").select("*").eq("booking_id", resolvedBookingId),
+        admin.from("transportation_passengers").select("*").eq("booking_id", resolvedBookingId),
+      ]);
       room = rRes.data || null;
       food = fRes.data || null;
       trips = tRes.data || [];
       passengers = paxRes.data || [];
+    }
+
+    if (!room && targetUserId) {
+      const r = await admin.from("room_setups").select("*").eq("user_id", targetUserId).maybeSingle();
+      room = r.data || null;
+    }
+    if (!food && targetUserId) {
+      const f = await admin.from("food_plans").select("*").eq("user_id", targetUserId).maybeSingle();
+      food = f.data || null;
+    }
+    if (trips.length === 0 && targetUserId) {
+      const t = await admin.from("transportation_trips").select("*").eq("user_id", targetUserId);
+      trips = t.data || [];
+      const pax = await admin.from("transportation_passengers").select("*").eq("user_id", targetUserId);
+      passengers = pax.data || [];
     }
 
     if (!booking && !profile) {
