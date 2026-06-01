@@ -232,3 +232,204 @@ const RoomSetup = () => {
 };
 
 export default RoomSetup;
+
+// ---------- Internal components ----------
+
+interface PhotoSliderProps {
+  images: string[];
+  alt: string;
+}
+
+function PhotoSlider({ images, alt }: PhotoSliderProps) {
+  const [index, setIndex] = useState(0);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+
+  const count = images.length;
+  const go = (next: number) => setIndex(((next % count) + count) % count);
+
+  const onTouchStart = (e: React.TouchEvent) => setTouchStart(e.touches[0].clientX);
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    const dx = e.changedTouches[0].clientX - touchStart;
+    if (Math.abs(dx) > 40) go(dx < 0 ? index + 1 : index - 1);
+    setTouchStart(null);
+  };
+
+  return (
+    <div
+      className="relative aspect-[16/9] w-full overflow-hidden bg-muted"
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
+      {images.map((src, i) => (
+        <img
+          key={i}
+          src={src}
+          alt={`${alt} ${i + 1}`}
+          className={cn(
+            'absolute inset-0 w-full h-full object-cover transition-opacity duration-300',
+            i === index ? 'opacity-100' : 'opacity-0'
+          )}
+        />
+      ))}
+
+      {count > 1 && (
+        <>
+          <button
+            type="button"
+            aria-label="Previous photo"
+            onClick={() => go(index - 1)}
+            className="hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 items-center justify-center rounded-full bg-card/80 hover:bg-card border border-border shadow-sm"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="Next photo"
+            onClick={() => go(index + 1)}
+            className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 items-center justify-center rounded-full bg-card/80 hover:bg-card border border-border shadow-sm"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+            {images.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`Go to photo ${i + 1}`}
+                onClick={() => go(i)}
+                className={cn(
+                  'h-2 w-2 rounded-full transition-all',
+                  i === index ? 'bg-card w-4' : 'bg-card/60'
+                )}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+interface StepperProps {
+  label: string;
+  value: number;
+  onChange: (qty: number) => void;
+  canIncrement: boolean;
+  isLocked: boolean;
+}
+
+function Stepper({ label, value, onChange, canIncrement, isLocked }: StepperProps) {
+  const canDecrement = !isLocked && value > 0;
+  const canInc = !isLocked && canIncrement;
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className={cn('text-sm', isLocked ? 'text-muted-foreground' : 'text-foreground')}>
+        {label}
+      </span>
+      <div className="flex items-center gap-3">
+        <Button
+          variant="outline"
+          size="icon"
+          className={cn('h-9 w-9 rounded-full', isLocked && 'opacity-50 cursor-not-allowed')}
+          onClick={() => !isLocked && onChange(value - 1)}
+          disabled={!canDecrement}
+        >
+          <Minus className="w-4 h-4" />
+        </Button>
+        <span
+          className={cn(
+            'w-8 text-center text-xl font-medium',
+            isLocked && 'text-muted-foreground'
+          )}
+        >
+          {value}
+        </span>
+        <Button
+          variant="outline"
+          size="icon"
+          className={cn('h-9 w-9 rounded-full', isLocked && 'opacity-50 cursor-not-allowed')}
+          onClick={() => !isLocked && onChange(value + 1)}
+          disabled={!canInc}
+        >
+          <Plus className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+interface MergedRoomCardProps {
+  title: string;
+  subtitle: string;
+  bathroomLabel: string;
+  images: string[];
+  twinsQty: number;
+  kingQty: number;
+  combinedMax: number;
+  isLocked: boolean;
+  onTwinsChange: (qty: number) => void;
+  onKingChange: (qty: number) => void;
+}
+
+function MergedRoomCard({
+  title,
+  subtitle,
+  bathroomLabel,
+  images,
+  twinsQty,
+  kingQty,
+  combinedMax,
+  isLocked,
+  onTwinsChange,
+  onKingChange,
+}: MergedRoomCardProps) {
+  const combined = twinsQty + kingQty;
+  const canIncrement = combined < combinedMax;
+
+  return (
+    <div className="bg-card rounded-2xl shadow-elegant overflow-hidden border border-border flex flex-col">
+      <PhotoSlider images={images} alt={title} />
+
+      <div className="p-5 space-y-4 flex-1 flex flex-col">
+        <div>
+          <h3 className="text-lg font-medium">{title}</h3>
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
+        </div>
+
+        <div className="space-y-1.5 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Bed className="w-4 h-4" />
+            <span>King bed or twin beds</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Bath className="w-4 h-4" />
+            <span>{bathroomLabel}</span>
+          </div>
+        </div>
+
+        <div className="border-t border-border pt-4 space-y-3">
+          <Stepper
+            label="Bedrooms with twin beds"
+            value={twinsQty}
+            onChange={onTwinsChange}
+            canIncrement={canIncrement}
+            isLocked={isLocked}
+          />
+          <Stepper
+            label="Bedrooms with king bed"
+            value={kingQty}
+            onChange={onKingChange}
+            canIncrement={canIncrement}
+            isLocked={isLocked}
+          />
+          <p className="text-xs text-muted-foreground pt-1">
+            {combined} of {combinedMax} selected
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
