@@ -1217,7 +1217,20 @@ function EventTable({
   paymentForEvent,
   onRowClick,
   onDeleteBooking,
-  onClaimAsMe,
+  showLive,
+}: {
+  events: EventRowProps[];
+  toolStatus: (uid: string | null) => { room: string; food: string; trip: string };
+  categoryOf: (e: EventRowProps) => "upcoming" | "past" | "live" | "none";
+  paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
+  onRowClick: (bookingId: string) => void;
+  onDeleteBooking: (bookingId: string, email: string) => void;
+  showLive?: boolean;
+}) {
+  const { toast } = useToast();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const _unused = () => {
   showLive,
 }: {
   events: EventRowProps[];
