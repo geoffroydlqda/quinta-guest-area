@@ -1397,3 +1397,81 @@ function EventTable({
 
 
 
+
+function InlineNameCell({
+  value,
+  placeholder,
+  onSave,
+}: {
+  value: string | null;
+  placeholder: string;
+  onSave: (next: string | null) => Promise<void> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(value ?? "");
+  }, [value, editing]);
+
+  const start = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDraft(value ?? "");
+    setEditing(true);
+  };
+
+  const cancel = () => {
+    setDraft(value ?? "");
+    setEditing(false);
+  };
+
+  const commit = async () => {
+    const trimmed = draft.trim();
+    const next = trimmed.length ? trimmed : null;
+    if (next === (value ?? null)) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(next);
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+        }}
+        onBlur={commit}
+        disabled={saving}
+        placeholder={placeholder}
+        className="h-7 px-2 py-1 text-sm w-32"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={start}
+      className="group inline-flex items-center gap-1 text-left hover:underline underline-offset-2"
+      title="Click to edit"
+    >
+      <span>{value || <span className="text-muted-foreground italic">{placeholder}</span>}</span>
+      <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+    </button>
+  );
+}
