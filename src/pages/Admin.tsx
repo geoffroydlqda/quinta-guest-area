@@ -432,7 +432,7 @@ const AdminContent = () => {
               <Button size="sm" variant="outline" onClick={() => downloadCSV("guests.csv", [
                 ["First name","Last name","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Submitted at","Claimed"],
                 ...filteredEvents.map((e) => {
-                  const ts = toolStatus(e.userId);
+                  const ts = toolStatus(e.userId, e.bookingId);
                   return [e.firstName||"", e.lastName||"", e.email, e.checkIn||"", e.checkOut||"", e.guestsCount, ts.room, ts.food, ts.trip, e.statusOverall, e.submittedAt||"", e.invitationClaimed ? "yes" : "no"];
                 }),
               ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
