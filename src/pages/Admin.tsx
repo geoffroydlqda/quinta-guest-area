@@ -376,6 +376,28 @@ const AdminContent = () => {
     load({ silent: true });
   };
 
+  const renameBookingDirect = async (
+    bookingId: string,
+    patch: { first_name?: string | null; last_name?: string | null }
+  ) => {
+    const { error } = await supabase.from("bookings").update(patch).eq("id", bookingId);
+    if (error) {
+      toast({ title: "Could not save name", description: error.message, variant: "destructive" });
+      return;
+    }
+    setData((d) =>
+      d
+        ? {
+            ...d,
+            bookings: (d.bookings || []).map((b) =>
+              b.id === bookingId ? { ...b, ...patch } : b
+            ),
+          }
+        : d
+    );
+    toast({ title: "Saved" });
+  };
+
 
 
   if (loading || !data) {
