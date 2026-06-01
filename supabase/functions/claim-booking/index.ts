@@ -87,6 +87,35 @@ serve(async (req) => {
       return json({ error: updErr.message }, 500);
     }
 
+    // Propagate the new user_id to operational data prepared in advance
+    // (e.g. by an admin via impersonation) so the guest can read it under RLS.
+    const newUserId = user.id;
+    const bookingId = booking.id;
+    const tablesToReassign = [
+      "room_setups",
+      "food_plans",
+      "transportation_trips",
+      "transportation_passengers",
+      "docs_ack",
+      "payment_installments",
+    ];
+    for (const table of tablesToReassign) {
+      try {
+        const { error: reassignErr } = await admin
+          .from(table)
+          .update({ user_id: newUserId })
+          .eq("booking_id", bookingId);
+        if (reassignErr) {
+          console.error(
+            `[claim-booking] reassign ${table} failed`,
+            reassignErr
+          );
+        }
+      } catch (e) {
+        console.error(`[claim-booking] reassign ${table} threw`, e);
+      }
+    }
+
     return json({ ok: true, booking_id: booking.id, already_claimed: false });
   } catch (e: any) {
     console.error("[claim-booking] error", e);
