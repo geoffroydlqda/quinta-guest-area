@@ -354,11 +354,33 @@ const AdminGuestDetailContent = () => {
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
             <div>
               <div className="text-muted-foreground">First name</div>
-              <div className="font-medium">{firstName || "—"}</div>
+              <NameField
+                bookingId={booking?.id ?? null}
+                value={firstName}
+                placeholder="First name"
+                onSaved={(v) => {
+                  setData((d) => d ? {
+                    ...d,
+                    booking: d.booking ? { ...d.booking, first_name: v } : d.booking,
+                    profile: d.profile ? { ...d.profile, first_name: v } : d.profile,
+                  } : d);
+                }}
+              />
             </div>
             <div>
               <div className="text-muted-foreground">Last name</div>
-              <div className="font-medium">{lastName || "—"}</div>
+              <NameField
+                bookingId={booking?.id ?? null}
+                value={lastName}
+                placeholder="Last name"
+                onSaved={(v) => {
+                  setData((d) => d ? {
+                    ...d,
+                    booking: d.booking ? { ...d.booking, last_name: v } : d.booking,
+                    profile: d.profile ? { ...d.profile, last_name: v } : d.profile,
+                  } : d);
+                }}
+              />
             </div>
             <div>
               <div className="text-muted-foreground">Email</div>
