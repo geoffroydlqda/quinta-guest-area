@@ -320,15 +320,20 @@ const AdminContent = () => {
 
   const visibleUnscheduled = categoryFilter === "all" ? unscheduledEvents : [];
 
-  const toolStatus = (uid: string | null) => {
-    if (!uid) return { room: "—", trip: "—", food: "—" };
-    const room = data?.rooms.find((r) => r.user_id === uid);
-    const trip = data?.trips.find((t) => t.user_id === uid);
-    const food = data?.food.find((f) => f.user_id === uid);
+  const toolStatus = (uid: string | null, bookingId?: string | null) => {
+    const matchRoom = (r: any) =>
+      (bookingId && r.booking_id === bookingId) || (uid && r.user_id === uid);
+    const matchTrip = (t: any) =>
+      (bookingId && t.booking_id === bookingId) || (uid && t.user_id === uid);
+    const matchFood = (f: any) =>
+      (bookingId && f.booking_id === bookingId) || (uid && f.user_id === uid);
+    const room = data?.rooms.find(matchRoom);
+    const trip = data?.trips.find(matchTrip);
+    const food = data?.food.find(matchFood);
     const hasFood = food?.selections && Array.isArray(food.selections) &&
       (food.selections as any[]).some((s: any) => s.fullBoard || s.breakfast || s.lunch || s.dinner);
     return {
-      room: room ? room.status_roomsetup : "—",
+      room: room ? (room.status_roomsetup || "draft") : "—",
       trip: trip ? "set" : "—",
       food: hasFood ? (food?.status_food || "draft") : "—",
     };
