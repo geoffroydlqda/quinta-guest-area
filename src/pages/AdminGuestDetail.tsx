@@ -1680,3 +1680,98 @@ function NotesBlock({
 
 
 export default AdminGuestDetail;
+
+function NameField({
+  bookingId,
+  value,
+  placeholder,
+  onSaved,
+}: {
+  bookingId: string | null;
+  value: string | null;
+  placeholder: string;
+  onSaved: (next: string | null) => void;
+}) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(value ?? "");
+  }, [value, editing]);
+
+  if (!bookingId) {
+    return <div className="font-medium">{value || "—"}</div>;
+  }
+
+  const start = () => {
+    setDraft(value ?? "");
+    setEditing(true);
+  };
+
+  const cancel = () => {
+    setDraft(value ?? "");
+    setEditing(false);
+  };
+
+  const save = async () => {
+    const trimmed = draft.trim();
+    const next = trimmed.length ? trimmed : null;
+    if (next === (value ?? null)) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    const patch: Record<string, string | null> =
+      placeholder.toLowerCase().includes("first")
+        ? { first_name: next }
+        : { last_name: next };
+    const { error } = await supabase.from("bookings").update(patch).eq("id", bookingId);
+    setSaving(false);
+    if (error) {
+      toast({ title: "Could not save", description: error.message, variant: "destructive" });
+      return;
+    }
+    onSaved(next);
+    setEditing(false);
+    toast({ title: "Saved" });
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <Input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); save(); }
+            else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+          }}
+          disabled={saving}
+          placeholder={placeholder}
+          className="h-8"
+        />
+        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={save} disabled={saving} aria-label="Save">
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+        </Button>
+        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={cancel} disabled={saving} aria-label="Cancel">
+          <X className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={start}
+      className="group inline-flex items-center gap-2 text-left"
+      title="Click to edit"
+    >
+      <span className="font-medium">{value || "—"}</span>
+      <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+    </button>
+  );
+}
