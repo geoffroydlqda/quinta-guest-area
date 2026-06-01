@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check, ExternalLink } from "lucide-react";
+import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check, ExternalLink, Pencil } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -376,6 +376,28 @@ const AdminContent = () => {
     load({ silent: true });
   };
 
+  const renameBookingDirect = async (
+    bookingId: string,
+    patch: { first_name?: string | null; last_name?: string | null }
+  ) => {
+    const { error } = await supabase.from("bookings").update(patch).eq("id", bookingId);
+    if (error) {
+      toast({ title: "Could not save name", description: error.message, variant: "destructive" });
+      return;
+    }
+    setData((d) =>
+      d
+        ? {
+            ...d,
+            bookings: (d.bookings || []).map((b) =>
+              b.id === bookingId ? { ...b, ...patch } : b
+            ),
+          }
+        : d
+    );
+    toast({ title: "Saved" });
+  };
+
 
 
   if (loading || !data) {
@@ -451,6 +473,7 @@ const AdminContent = () => {
                     paymentForEvent={paymentForEvent}
                     onRowClick={(bookingId) => navigateToBooking(bookingId)}
                     onDeleteBooking={deleteBookingDirect}
+                    onRenameBooking={renameBookingDirect}
                     showLive
                   />
                 )}
@@ -478,6 +501,7 @@ const AdminContent = () => {
                       paymentForEvent={paymentForEvent}
                       onRowClick={(bookingId) => navigateToBooking(bookingId)}
                       onDeleteBooking={deleteBookingDirect}
+                    onRenameBooking={renameBookingDirect}
                     />
                   )
                 )}
@@ -494,6 +518,7 @@ const AdminContent = () => {
                   paymentForEvent={paymentForEvent}
                   onRowClick={(bookingId) => navigateToBooking(bookingId)}
                   onDeleteBooking={deleteBookingDirect}
+                    onRenameBooking={renameBookingDirect}
                 />
               </section>
             )}
@@ -1222,6 +1247,7 @@ function EventTable({
   paymentForEvent,
   onRowClick,
   onDeleteBooking,
+  onRenameBooking,
   showLive,
 }: {
   events: EventRowProps[];
@@ -1230,6 +1256,7 @@ function EventTable({
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
   onRowClick: (bookingId: string) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
+  onRenameBooking: (bookingId: string, patch: { first_name?: string | null; last_name?: string | null }) => Promise<void> | void;
   showLive?: boolean;
 }) {
   const { toast } = useToast();
@@ -1283,17 +1310,27 @@ function EventTable({
                 className="border-t border-border hover:bg-muted/40 cursor-pointer"
                 onClick={() => onRowClick(ev.bookingId)}
               >
-                <td className="px-3 py-2 underline-offset-2 hover:underline">
-                  <span className="inline-flex items-center gap-2">
-                    {ev.firstName}
+                <td className="px-3 py-2">
+                  <div className="inline-flex items-center gap-2">
+                    <InlineNameCell
+                      value={ev.firstName}
+                      placeholder="First"
+                      onSave={(v) => onRenameBooking(ev.bookingId, { first_name: v })}
+                    />
                     {isLive && (
                       <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 border border-green-300">
                         Live
                       </span>
                     )}
-                  </span>
+                  </div>
                 </td>
-                <td className="px-3 py-2">{ev.lastName}</td>
+                <td className="px-3 py-2">
+                  <InlineNameCell
+                    value={ev.lastName}
+                    placeholder="Last"
+                    onSave={(v) => onRenameBooking(ev.bookingId, { last_name: v })}
+                  />
+                </td>
                 <td className="px-3 py-2">{ev.email}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{ev.checkIn}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{ev.checkOut}</td>
@@ -1360,3 +1397,81 @@ function EventTable({
 
 
 
+
+function InlineNameCell({
+  value,
+  placeholder,
+  onSave,
+}: {
+  value: string | null;
+  placeholder: string;
+  onSave: (next: string | null) => Promise<void> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(value ?? "");
+  }, [value, editing]);
+
+  const start = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDraft(value ?? "");
+    setEditing(true);
+  };
+
+  const cancel = () => {
+    setDraft(value ?? "");
+    setEditing(false);
+  };
+
+  const commit = async () => {
+    const trimmed = draft.trim();
+    const next = trimmed.length ? trimmed : null;
+    if (next === (value ?? null)) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(next);
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+        }}
+        onBlur={commit}
+        disabled={saving}
+        placeholder={placeholder}
+        className="h-7 px-2 py-1 text-sm w-32"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={start}
+      className="group inline-flex items-center gap-1 text-left hover:underline underline-offset-2"
+      title="Click to edit"
+    >
+      <span>{value || <span className="text-muted-foreground italic">{placeholder}</span>}</span>
+      <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+    </button>
+  );
+}
