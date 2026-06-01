@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveBooking } from "@/contexts/BookingContext";
+import { isAdminEmail } from "@/lib/admin";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
@@ -17,7 +18,6 @@ export default function InvitePage() {
 
   const [status, setStatus] = useState<Status>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
-  const [bookingEmail, setBookingEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -31,6 +31,14 @@ export default function InvitePage() {
       return;
     }
 
+    if (isAdminEmail(user.email)) {
+      setStatus("error");
+      setErrorMsg(
+        "You are signed in as an admin. To view or edit this booking, use \"Open as guest\" from the Admin page instead of claiming the invitation."
+      );
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       setStatus("claiming");
@@ -41,7 +49,6 @@ export default function InvitePage() {
         if (cancelled) return;
 
         if (error) {
-          // Try to surface structured error payload
           const ctx: any = (error as any).context;
           let payload: any = null;
           try {
@@ -49,14 +56,13 @@ export default function InvitePage() {
           } catch {
             /* noop */
           }
-          if (payload?.error === "email_mismatch") {
-            setBookingEmail(payload.booking_email || null);
+          const rawMsg = payload?.message || payload?.error || error.message || "Failed to claim invitation.";
+          if (typeof rawMsg === "string" && rawMsg.toLowerCase().includes("already claimed")) {
             setErrorMsg(
-              payload.message ||
-                `This invitation is for a different email address. Please sign in with the invited email.`
+              "This booking has already been claimed by another account. If you think this is a mistake, contact hello@quintamor.com."
             );
           } else {
-            setErrorMsg(payload?.message || payload?.error || error.message || "Failed to claim invitation.");
+            setErrorMsg(rawMsg);
           }
           setStatus("error");
           return;
@@ -82,11 +88,6 @@ export default function InvitePage() {
       cancelled = true;
     };
   }, [authLoading, user, token, navigate, refresh, setActiveBookingId]);
-
-  const handleSignOutAndRetry = async () => {
-    await supabase.auth.signOut();
-    navigate(`/auth?redirectTo=/invite/${token}`, { replace: true });
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
@@ -138,23 +139,12 @@ export default function InvitePage() {
                 <div className="space-y-1">
                   <p className="font-medium">Couldn't claim invitation</p>
                   <p className="text-muted-foreground">{errorMsg}</p>
-                  {bookingEmail && user?.email && (
-                    <p className="text-muted-foreground">
-                      You are signed in as <strong>{user.email}</strong>.
-                    </p>
-                  )}
                 </div>
               </div>
               <div className="flex gap-2">
-                {bookingEmail ? (
-                  <Button onClick={handleSignOutAndRetry} className="flex-1">
-                    Sign in as {bookingEmail}
-                  </Button>
-                ) : (
-                  <Button asChild variant="outline" className="flex-1">
-                    <Link to="/dashboard">Go to dashboard</Link>
-                  </Button>
-                )}
+                <Button asChild variant="outline" className="flex-1">
+                  <Link to="/dashboard">Go to dashboard</Link>
+                </Button>
               </div>
             </>
           )}
