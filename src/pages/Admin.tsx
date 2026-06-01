@@ -473,6 +473,7 @@ const AdminContent = () => {
                     paymentForEvent={paymentForEvent}
                     onRowClick={(bookingId) => navigateToBooking(bookingId)}
                     onDeleteBooking={deleteBookingDirect}
+                    onRenameBooking={renameBookingDirect}
                     showLive
                   />
                 )}
@@ -500,6 +501,7 @@ const AdminContent = () => {
                       paymentForEvent={paymentForEvent}
                       onRowClick={(bookingId) => navigateToBooking(bookingId)}
                       onDeleteBooking={deleteBookingDirect}
+                    onRenameBooking={renameBookingDirect}
                     />
                   )
                 )}
@@ -516,6 +518,7 @@ const AdminContent = () => {
                   paymentForEvent={paymentForEvent}
                   onRowClick={(bookingId) => navigateToBooking(bookingId)}
                   onDeleteBooking={deleteBookingDirect}
+                    onRenameBooking={renameBookingDirect}
                 />
               </section>
             )}
