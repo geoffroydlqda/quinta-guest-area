@@ -114,31 +114,19 @@ const RoomSetup = () => {
 
         <MapLightbox open={mapOpen} onOpenChange={setMapOpen} />
 
-        {/* Info Callouts */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-xl bg-primary/10 border-2 border-primary/30 p-5">
-            <div className="flex items-start gap-3">
-              <Crown className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-base mb-1">King rooms</p>
-                <p className="text-sm text-muted-foreground">
-                  Rooms 1 & 6 are fixed King beds with en-suite bathrooms.
-                </p>
-              </div>
-            </div>
+        {/* Info Callouts - compact */}
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="rounded-lg bg-muted/50 border border-border px-3 py-2 flex items-start gap-2">
+            <Crown className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground leading-snug">
+              <span className="font-medium text-foreground">Rooms 1 & 6:</span> fixed King beds, en-suite.
+            </p>
           </div>
-
-          <div className="rounded-xl bg-primary/10 border-2 border-primary/30 p-5">
-            <div className="flex items-start gap-3">
-              <Info className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-base mb-1">Rooms 7 & 8</p>
-                <p className="text-sm text-muted-foreground">
-                  Upstairs, accessed through the kitchen. Their shared bathroom is slightly smaller. 
-                  These rooms are often reserved for facilitators and offer the best view.
-                </p>
-              </div>
-            </div>
+          <div className="rounded-lg bg-muted/50 border border-border px-3 py-2 flex items-start gap-2">
+            <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground leading-snug">
+              <span className="font-medium text-foreground">Rooms 7 & 8:</span> upstairs via kitchen, smaller shared bath, best view — often for facilitators.
+            </p>
           </div>
         </div>
 
@@ -146,19 +134,22 @@ const RoomSetup = () => {
         <RoomStats stats={stats} />
 
         {/* 5 Room Type Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 items-stretch">
           <RoomTypeCard 
             title="King (en-suite bathroom)" 
-            description="Rooms 1 & 6 are fixed King beds with en-suite bathrooms." 
+            bedLabel="King size bed"
+            bathroomLabel="En-suite bathroom"
+            roomsLabel="Rooms: 1 & 6"
             image={roomKingImage} 
             quantity={2} 
             isLocked={true} 
           />
           
           <RoomTypeCard 
-            title="Queen size (shared bathroom)" 
-            description="Rooms 2, 3, 4, 5, 7 or 8.  Queen size bed in a room with shared bathroom." 
-
+            title="King size (shared bathroom)" 
+            bedLabel="King size bed"
+            bathroomLabel="Shared bathroom"
+            roomsLabel="Rooms: 2, 3, 4, 5, 7 & 8"
             image={roomQueenImage} 
             quantity={roomSelection.queenSharedQty} 
             maxQuantity={remainingShared + roomSelection.queenSharedQty} 
@@ -169,7 +160,9 @@ const RoomSetup = () => {
           
           <RoomTypeCard 
             title="Twins (shared bathroom)" 
-            description="Rooms 2, 3, 4, 5, 7 or 8. Two single beds in a room with shared bathroom." 
+            bedLabel="Twin beds"
+            bathroomLabel="Shared bathroom"
+            roomsLabel="Rooms: 2, 3, 4, 5, 7 & 8"
             image={roomTwinsImage} 
             quantity={roomSelection.twinsSharedQty} 
             maxQuantity={remainingShared + roomSelection.twinsSharedQty} 
@@ -179,8 +172,10 @@ const RoomSetup = () => {
           />
 
           <RoomTypeCard 
-            title="Queen size (en-suite bathroom)" 
-            description="Rooms 9, 10 or 11. Queen size bed in a room with private en-suite bathroom." 
+            title="King size (en-suite bathroom)" 
+            bedLabel="King size bed"
+            bathroomLabel="En-suite bathroom"
+            roomsLabel="Rooms: 9, 10 & 11"
             image={roomQueenImage} 
             quantity={roomSelection.queenEnsuiteQty} 
             maxQuantity={remainingEnsuite + roomSelection.queenEnsuiteQty} 
@@ -191,7 +186,9 @@ const RoomSetup = () => {
 
           <RoomTypeCard 
             title="Twins (en-suite bathroom)" 
-            description="Rooms 9, 10 or 11. Two single beds in a room with private en-suite bathroom." 
+            bedLabel="Twin beds"
+            bathroomLabel="En-suite bathroom"
+            roomsLabel="Rooms: 9, 10 & 11"
             image={roomTwinsImage} 
             quantity={roomSelection.twinsEnsuiteQty} 
             maxQuantity={remainingEnsuite + roomSelection.twinsEnsuiteQty} 

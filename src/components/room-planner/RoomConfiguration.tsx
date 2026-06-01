@@ -110,20 +110,22 @@ export function RoomConfiguration({
       <RoomStats stats={stats} className="mb-6" />
 
       {/* 5 Room Type Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-6">
-        {/* Card 1: King rooms (fixed) */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-6 items-stretch">
         <RoomTypeCard 
           title="King (en-suite bathroom)" 
-          description="Rooms 1 & 6 are fixed King beds with en-suite bathrooms." 
+          bedLabel="King size bed"
+          bathroomLabel="En-suite bathroom"
+          roomsLabel="Rooms: 1 & 6"
           image={roomKingImage} 
           quantity={2} 
           isLocked={true} 
         />
         
-        {/* Card 2: Queen size bed rooms (shared bathroom) */}
         <RoomTypeCard 
-          title="Queen size (shared bathroom)" 
-          description="Queen size bed in a room with shared bathroom." 
+          title="King size (shared bathroom)" 
+          bedLabel="King size bed"
+          bathroomLabel="Shared bathroom"
+          roomsLabel="Rooms: 2, 3, 4, 5, 7 & 8"
           image={roomQueenImage} 
           quantity={roomSelection.queenSharedQty} 
           maxQuantity={remainingShared + roomSelection.queenSharedQty} 
@@ -131,10 +133,11 @@ export function RoomConfiguration({
           onDecrement={() => onSetQueenShared(roomSelection.queenSharedQty - 1)} 
         />
         
-        {/* Card 3: Twin beds rooms (shared bathroom) */}
         <RoomTypeCard 
           title="Twins (shared bathroom)" 
-          description="Two single beds in a room with shared bathroom." 
+          bedLabel="Twin beds"
+          bathroomLabel="Shared bathroom"
+          roomsLabel="Rooms: 2, 3, 4, 5, 7 & 8"
           image={roomTwinsImage} 
           quantity={roomSelection.twinsSharedQty} 
           maxQuantity={remainingShared + roomSelection.twinsSharedQty} 
@@ -142,10 +145,11 @@ export function RoomConfiguration({
           onDecrement={() => onSetTwinsShared(roomSelection.twinsSharedQty - 1)} 
         />
 
-        {/* Card 4: Queen size with en-suite bathroom (NEW) */}
         <RoomTypeCard 
-          title="Queen size (en-suite bathroom)" 
-          description="Queen size bed in a room with private en-suite bathroom." 
+          title="King size (en-suite bathroom)" 
+          bedLabel="King size bed"
+          bathroomLabel="En-suite bathroom"
+          roomsLabel="Rooms: 9, 10 & 11"
           image={roomQueenImage} 
           quantity={roomSelection.queenEnsuiteQty} 
           maxQuantity={remainingEnsuite + roomSelection.queenEnsuiteQty} 
@@ -153,10 +157,11 @@ export function RoomConfiguration({
           onDecrement={() => onSetQueenEnsuite(roomSelection.queenEnsuiteQty - 1)} 
         />
 
-        {/* Card 5: Twin size with en-suite bathroom (NEW) */}
         <RoomTypeCard 
           title="Twins (en-suite bathroom)" 
-          description="Two single beds in a room with private en-suite bathroom." 
+          bedLabel="Twin beds"
+          bathroomLabel="En-suite bathroom"
+          roomsLabel="Rooms: 9, 10 & 11"
           image={roomTwinsImage} 
           quantity={roomSelection.twinsEnsuiteQty} 
           maxQuantity={remainingEnsuite + roomSelection.twinsEnsuiteQty} 
