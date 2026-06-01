@@ -412,9 +412,7 @@ const AdminGuestDetailContent = () => {
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
             <BedDouble className="w-4 h-4 text-primary" /> Room Setup
           </h2>
-          {isPending ? (
-            <p className="text-sm text-muted-foreground italic">This booking has not been claimed by the guest yet.</p>
-          ) : room ? (
+          {room ? (
             <div className="text-sm space-y-1">
               <Row label="King (en-suite bathroom) — fixed" value="2" />
               <Row label="Queen (shared bathroom)" value={room.queen_shared_qty} />
