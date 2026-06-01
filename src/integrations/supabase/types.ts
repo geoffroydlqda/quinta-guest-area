@@ -160,7 +160,7 @@ export type Database = {
           selections: Json
           status_food: string
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           booking_id?: string | null
@@ -173,7 +173,7 @@ export type Database = {
           selections?: Json
           status_food?: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           booking_id?: string | null
@@ -186,13 +186,13 @@ export type Database = {
           selections?: Json
           status_food?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "food_plans_booking_id_fkey"
             columns: ["booking_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "bookings"
             referencedColumns: ["id"]
           },
@@ -317,7 +317,7 @@ export type Database = {
           twins_ensuite_qty: number
           twins_shared_qty: number
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           booking_id?: string | null
@@ -336,7 +336,7 @@ export type Database = {
           twins_ensuite_qty?: number
           twins_shared_qty?: number
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           booking_id?: string | null
@@ -355,13 +355,13 @@ export type Database = {
           twins_ensuite_qty?: number
           twins_shared_qty?: number
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "room_setups_booking_id_fkey"
             columns: ["booking_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "bookings"
             referencedColumns: ["id"]
           },
