@@ -1310,17 +1310,27 @@ function EventTable({
                 className="border-t border-border hover:bg-muted/40 cursor-pointer"
                 onClick={() => onRowClick(ev.bookingId)}
               >
-                <td className="px-3 py-2 underline-offset-2 hover:underline">
-                  <span className="inline-flex items-center gap-2">
-                    {ev.firstName}
+                <td className="px-3 py-2">
+                  <div className="inline-flex items-center gap-2">
+                    <InlineNameCell
+                      value={ev.firstName}
+                      placeholder="First"
+                      onSave={(v) => onRenameBooking(ev.bookingId, { first_name: v })}
+                    />
                     {isLive && (
                       <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 border border-green-300">
                         Live
                       </span>
                     )}
-                  </span>
+                  </div>
                 </td>
-                <td className="px-3 py-2">{ev.lastName}</td>
+                <td className="px-3 py-2">
+                  <InlineNameCell
+                    value={ev.lastName}
+                    placeholder="Last"
+                    onSave={(v) => onRenameBooking(ev.bookingId, { last_name: v })}
+                  />
+                </td>
                 <td className="px-3 py-2">{ev.email}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{ev.checkIn}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{ev.checkOut}</td>
