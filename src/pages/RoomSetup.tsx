@@ -9,12 +9,13 @@ import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 
 import { RoomConfigWarning } from '@/components/guest-area/RoomConfigWarning';
-import { RoomTypeCard } from '@/components/room-planner/RoomTypeCard';
 import { RoomStats } from '@/components/room-planner/RoomStats';
 import { MapLightbox } from '@/components/room-planner/MapLightbox';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Crown, Info, ZoomIn } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Loader2, Crown, Info, ZoomIn, Minus, Plus, Bed, Bath, ChevronLeft, ChevronRight } from 'lucide-react';
 import { MAX_SHARED_ROOMS, MAX_ENSUITE_ROOMS } from '@/types/room';
 import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
 import roomKingImage from '@/assets/room-king.jpg';
