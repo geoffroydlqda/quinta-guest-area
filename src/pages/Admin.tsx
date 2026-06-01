@@ -44,10 +44,10 @@ type Profile = {
   guests_count: number; status_overall: string; submitted_at: string | null;
 };
 
-type Room = { user_id: string; email: string; queen_shared_qty: number; twins_shared_qty: number; queen_ensuite_qty: number; twins_ensuite_qty: number; remarks_roomsetup: string | null; remarks: string | null; status_roomsetup: string };
+type Room = { user_id: string; booking_id?: string | null; email: string; queen_shared_qty: number; twins_shared_qty: number; queen_ensuite_qty: number; twins_ensuite_qty: number; remarks_roomsetup: string | null; remarks: string | null; status_roomsetup: string };
 type Passenger = { id: string; first_name: string; last_name?: string | null; phone: string | null; flight_number: string | null };
 type Trip = { id: string; user_id: string; booking_id?: string | null; trip_direction: string; pickup_location: string; dropoff_location: string; trip_date: string; trip_time: string; passengers_count: number; taxi_size: string; price_estimate: string; custom_price: number | null; google_calendar_event_id?: string | null; sync_status?: string | null; last_synced_at?: string | null; sync_error?: string | null; passengers?: Passenger[] };
-type FoodPlan = { user_id: string; selections: any; diet_preference: string | null; status_food: string };
+type FoodPlan = { user_id: string; booking_id?: string | null; selections: any; diet_preference: string | null; status_food: string };
 
 type BookingRow = {
   id: string; retreat_name: string; first_name: string | null; last_name: string | null;
@@ -320,15 +320,20 @@ const AdminContent = () => {
 
   const visibleUnscheduled = categoryFilter === "all" ? unscheduledEvents : [];
 
-  const toolStatus = (uid: string | null) => {
-    if (!uid) return { room: "—", trip: "—", food: "—" };
-    const room = data?.rooms.find((r) => r.user_id === uid);
-    const trip = data?.trips.find((t) => t.user_id === uid);
-    const food = data?.food.find((f) => f.user_id === uid);
+  const toolStatus = (uid: string | null, bookingId?: string | null) => {
+    const matchRoom = (r: any) =>
+      (bookingId && r.booking_id === bookingId) || (uid && r.user_id === uid);
+    const matchTrip = (t: any) =>
+      (bookingId && t.booking_id === bookingId) || (uid && t.user_id === uid);
+    const matchFood = (f: any) =>
+      (bookingId && f.booking_id === bookingId) || (uid && f.user_id === uid);
+    const room = data?.rooms.find(matchRoom);
+    const trip = data?.trips.find(matchTrip);
+    const food = data?.food.find(matchFood);
     const hasFood = food?.selections && Array.isArray(food.selections) &&
       (food.selections as any[]).some((s: any) => s.fullBoard || s.breakfast || s.lunch || s.dinner);
     return {
-      room: room ? room.status_roomsetup : "—",
+      room: room ? (room.status_roomsetup || "draft") : "—",
       trip: trip ? "set" : "—",
       food: hasFood ? (food?.status_food || "draft") : "—",
     };
@@ -427,7 +432,7 @@ const AdminContent = () => {
               <Button size="sm" variant="outline" onClick={() => downloadCSV("guests.csv", [
                 ["First name","Last name","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Submitted at","Claimed"],
                 ...filteredEvents.map((e) => {
-                  const ts = toolStatus(e.userId);
+                  const ts = toolStatus(e.userId, e.bookingId);
                   return [e.firstName||"", e.lastName||"", e.email, e.checkIn||"", e.checkOut||"", e.guestsCount, ts.room, ts.food, ts.trip, e.statusOverall, e.submittedAt||"", e.invitationClaimed ? "yes" : "no"];
                 }),
               ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
@@ -1220,7 +1225,7 @@ function EventTable({
   showLive,
 }: {
   events: EventRowProps[];
-  toolStatus: (uid: string | null) => { room: string; food: string; trip: string };
+  toolStatus: (uid: string | null, bookingId?: string | null) => { room: string; food: string; trip: string };
   categoryOf: (e: EventRowProps) => "upcoming" | "past" | "live" | "none";
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
   onRowClick: (bookingId: string) => void;
@@ -1268,7 +1273,7 @@ function EventTable({
         </thead>
         <tbody>
           {events.map((ev) => {
-            const ts = toolStatus(ev.userId);
+            const ts = toolStatus(ev.userId, ev.bookingId);
             const label = (`${ev.firstName ?? ""} ${ev.lastName ?? ""}`.trim() || ev.email);
             const isLive = showLive && categoryOf(ev) === "live";
             const payStatus = paymentForEvent(ev);
