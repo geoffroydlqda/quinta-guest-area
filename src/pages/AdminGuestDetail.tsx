@@ -521,9 +521,7 @@ const AdminGuestDetailContent = () => {
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
             <Car className="w-4 h-4 text-primary" /> Transportation
           </h2>
-          {isPending ? (
-            <p className="text-sm text-muted-foreground italic">This booking has not been claimed by the guest yet.</p>
-          ) : sortedTrips.length === 0 ? (
+          {sortedTrips.length === 0 ? (
             <p className="text-sm text-muted-foreground italic">No trips</p>
           ) : (
             <div className="space-y-3 text-sm">
