@@ -1225,7 +1225,7 @@ function EventTable({
   showLive,
 }: {
   events: EventRowProps[];
-  toolStatus: (uid: string | null) => { room: string; food: string; trip: string };
+  toolStatus: (uid: string | null, bookingId?: string | null) => { room: string; food: string; trip: string };
   categoryOf: (e: EventRowProps) => "upcoming" | "past" | "live" | "none";
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
   onRowClick: (bookingId: string) => void;
