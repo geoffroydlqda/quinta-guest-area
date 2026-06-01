@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GuestAreaHeader } from './GuestAreaHeader';
 import { EditLockBanner } from './EditLockBanner';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import type { GuestStatusInfo } from '@/lib/editLock';
 
 interface ToolPageLayoutProps {
@@ -17,7 +18,12 @@ interface ToolPageLayoutProps {
 
 export function ToolPageLayout({ title, description, isLocked = false, statusInfo, showOkButton = true, children }: ToolPageLayoutProps) {
   const navigate = useNavigate();
-  
+  const { isImpersonating, impersonatedBooking } = useActiveBooking();
+
+  const dashboardHref = isImpersonating && impersonatedBooking
+    ? `/dashboard?impersonate=${impersonatedBooking.id}`
+    : '/dashboard';
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Sticky header with back button */}
@@ -25,7 +31,7 @@ export function ToolPageLayout({ title, description, isLocked = false, statusInf
         <GuestAreaHeader />
         <div className="container mx-auto px-4 py-3">
           <Button asChild variant="ghost" size="sm" className="gap-2">
-            <Link to="/dashboard">
+            <Link to={dashboardHref}>
               <ArrowLeft className="w-4 h-4" />
               Back to Dashboard
             </Link>
@@ -51,7 +57,7 @@ export function ToolPageLayout({ title, description, isLocked = false, statusInf
         {showOkButton && (
           <div className="mt-8 flex justify-center">
             <Button 
-              onClick={() => navigate('/dashboard')} 
+              onClick={() => navigate(dashboardHref)}
               size="lg"
               className="min-w-32"
             >

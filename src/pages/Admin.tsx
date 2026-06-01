@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check } from "lucide-react";
+import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check, ExternalLink } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -371,22 +371,6 @@ const AdminContent = () => {
     load({ silent: true });
   };
 
-  const claimBookingAsAdmin = async (bookingId: string) => {
-    const ok = confirm(
-      "Attach this booking to your admin account so you can edit Room / Food / Transportation as the guest?\n\nYou can release it later from the guest detail page."
-    );
-    if (!ok) return;
-    const res = await supabase.functions.invoke("admin-claim-booking", {
-      body: { booking_id: bookingId },
-    });
-    if (res.error || (res.data && (res.data as any).error)) {
-      const msg = (res.data as any)?.error || res.error?.message || "Claim failed";
-      toast({ title: "Claim failed", description: String(msg), variant: "destructive" });
-      return;
-    }
-    toast({ title: "Booking attached to your account" });
-    load({ silent: true });
-  };
 
 
   if (loading || !data) {
@@ -462,7 +446,6 @@ const AdminContent = () => {
                     paymentForEvent={paymentForEvent}
                     onRowClick={(bookingId) => navigateToBooking(bookingId)}
                     onDeleteBooking={deleteBookingDirect}
-                    onClaimAsMe={claimBookingAsAdmin}
                     showLive
                   />
                 )}
@@ -490,7 +473,6 @@ const AdminContent = () => {
                       paymentForEvent={paymentForEvent}
                       onRowClick={(bookingId) => navigateToBooking(bookingId)}
                       onDeleteBooking={deleteBookingDirect}
-                    onClaimAsMe={claimBookingAsAdmin}
                     />
                   )
                 )}
@@ -507,7 +489,6 @@ const AdminContent = () => {
                   paymentForEvent={paymentForEvent}
                   onRowClick={(bookingId) => navigateToBooking(bookingId)}
                   onDeleteBooking={deleteBookingDirect}
-                    onClaimAsMe={claimBookingAsAdmin}
                 />
               </section>
             )}
@@ -1245,7 +1226,6 @@ function EventTable({
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
   onRowClick: (bookingId: string) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
-  onClaimAsMe: (bookingId: string) => void;
   showLive?: boolean;
 }) {
   const { toast } = useToast();
@@ -1271,12 +1251,17 @@ function EventTable({
     setTimeout(() => setCopiedId((c) => (c === bookingId ? null : c)), 2000);
   };
 
+  const openAsGuest = (e: React.MouseEvent, bookingId: string) => {
+    e.stopPropagation();
+    window.open(`/dashboard?impersonate=${bookingId}`, "_blank");
+  };
+
   return (
     <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-muted">
           <tr className="text-left">
-            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment","Invite",""].map((h, i) => (
+            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment","Actions"].map((h, i) => (
               <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -1287,7 +1272,6 @@ function EventTable({
             const label = (`${ev.firstName ?? ""} ${ev.lastName ?? ""}`.trim() || ev.email);
             const isLive = showLive && categoryOf(ev) === "live";
             const payStatus = paymentForEvent(ev);
-            const canCopyInvite = !ev.invitationClaimed;
             return (
               <tr
                 key={ev.bookingId}
@@ -1320,39 +1304,44 @@ function EventTable({
                   />
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
-                  {ev.invitationClaimed ? (
-                    <span className="text-xs text-muted-foreground">Claimed</span>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <Button size="sm" variant="outline" onClick={(e) => copyInvite(e, ev.invitationToken, ev.bookingId)}>
-                        {copiedId === ev.bookingId ? <Check className="w-3.5 h-3.5 mr-1" /> : <Copy className="w-3.5 h-3.5 mr-1" />}
-                        Copy invite link
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => { e.stopPropagation(); onClaimAsMe(ev.bookingId); }}
-                        title="Attach this booking to your admin account"
-                      >
-                        Claim as me
-                      </Button>
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <div className="w-8 flex justify-center">
+                      {!ev.invitationClaimed && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          onClick={(e) => copyInvite(e, ev.invitationToken, ev.bookingId)}
+                          aria-label="Copy invite link"
+                          title="Copy invite link"
+                        >
+                          {copiedId === ev.bookingId ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </Button>
+                      )}
                     </div>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    aria-label={`Delete ${label}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteBooking(ev.bookingId, ev.email);
-                    }}
-
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="min-w-[140px] justify-center"
+                      onClick={(e) => openAsGuest(e, ev.bookingId)}
+                      title="Open guest dashboard in a new tab"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                      Open as guest
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      aria-label={`Delete ${label}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteBooking(ev.bookingId, ev.email);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </td>
               </tr>
             );
