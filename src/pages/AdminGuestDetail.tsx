@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
-  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink,
+  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink, Printer, Copy,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
