@@ -256,6 +256,132 @@ const AdminGuestDetailContent = () => {
     (s: any) => s.fullBoard || s.breakfast || s.lunch || s.dinner
   ).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
+  const buildFoodSections = () => {
+    const mt = food?.meal_times;
+    const times: string[] = [];
+    if (mt?.breakfast_time) times.push(`Breakfast ${mt.breakfast_time}`);
+    if (mt?.lunch_time) times.push(`Lunch ${mt.lunch_time}`);
+    if (mt?.dinner_time) times.push(`Dinner ${mt.dinner_time}`);
+
+    const prefs = activeDiets.map((d) => `${d.label}: ${d.guests}`);
+
+    const days = activeFoodDays.map((s: any) => {
+      const meals: string[] = [];
+      if (s.fullBoard) meals.push("Full board");
+      else {
+        if (s.breakfast) meals.push("Breakfast");
+        if (s.lunch) meals.push("Lunch");
+        if (s.dinner) meals.push("Dinner (+ dessert)");
+      }
+      return { date: s.date, guests: s.guests_count_day, meals };
+    });
+
+    return { times, prefs, days, notes: food?.notes_food || "" };
+  };
+
+  const handleCopyFoodInfo = async () => {
+    if (!food) return;
+    try {
+      const { times, prefs, days, notes } = buildFoodSections();
+      const lines: string[] = [];
+      lines.push(`*Quinta do Amor — Food — ${fullName}*`);
+      lines.push(`📅 ${fmtDate(checkIn)} → ${fmtDate(checkOut)} · ${guestsCount} guests`);
+      if (times.length) {
+        lines.push("");
+        lines.push("🕐 *Meal times*");
+        lines.push(times.join(" · "));
+      }
+      if (prefs.length) {
+        lines.push("");
+        lines.push("🥗 *Preferences*");
+        lines.push(prefs.join(" · "));
+      }
+      if (days.length) {
+        lines.push("");
+        lines.push("📋 *Daily meals*");
+        for (const d of days) {
+          const g = typeof d.guests === "number" ? ` (${d.guests})` : "";
+          lines.push(`${fmtDateLong(d.date)}${g}: ${d.meals.join(", ")}`);
+        }
+      }
+      if (notes.trim()) {
+        lines.push("");
+        lines.push("⚠️ *Notes*");
+        lines.push(notes);
+      }
+      lines.push("");
+      lines.push(`💰 Food subtotal: €${foodCost.grandTotal}`);
+      await navigator.clipboard.writeText(lines.join("\n"));
+      toast({ title: "Food info copied" });
+    } catch (e) {
+      toast({ title: "Could not copy", description: String((e as any)?.message || e), variant: "destructive" });
+    }
+  };
+
+  const handlePrintFood = () => {
+    if (!food) return;
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const { times, prefs, days, notes } = buildFoodSections();
+
+    const sections: string[] = [];
+    if (times.length) {
+      sections.push(`<h2>Meal times</h2>`);
+      for (const t of times) {
+        const [label, ...rest] = t.split(" ");
+        sections.push(`<div class="row"><span>${esc(label)}</span><span>${esc(rest.join(" "))}</span></div>`);
+      }
+    }
+    if (prefs.length) {
+      sections.push(`<h2>Preferences</h2>`);
+      for (const d of activeDiets) {
+        sections.push(`<div class="row"><span>${esc(d.label)}</span><span>${d.guests} guest${d.guests !== 1 ? "s" : ""}</span></div>`);
+      }
+    }
+    if (days.length) {
+      sections.push(`<h2>Daily meals</h2>`);
+      for (const d of days) {
+        const g = typeof d.guests === "number" ? ` — ${d.guests} guest${d.guests !== 1 ? "s" : ""}` : "";
+        sections.push(
+          `<div class="day"><b>${esc(fmtDateLong(d.date))}${esc(g)}</b><ul>${d.meals
+            .map((m) => `<li>${esc(m)}</li>`)
+            .join("")}</ul></div>`
+        );
+      }
+    }
+    if (notes.trim()) {
+      sections.push(`<h2>Notes</h2><div class="notes">${esc(notes).replace(/\n/g, "<br/>")}</div>`);
+    }
+    sections.push(`<div class="total"><span>Food subtotal</span><span>€${foodCost.grandTotal}</span></div>`);
+
+    const w = window.open("", "_blank", "width=800,height=1000");
+    if (!w) {
+      toast({ title: "Allow pop-ups to print", variant: "destructive" });
+      return;
+    }
+    w.document.write(`<html><head><title>Food — ${esc(fullName)}</title>
+      <style>
+        body{font-family:system-ui,sans-serif;padding:32px;color:#1a1a1a;}
+        h1{font-size:20px;margin:0 0 4px;}
+        .sub{color:#666;margin:0 0 20px;font-size:14px;}
+        h2{font-size:13px;text-transform:uppercase;color:#888;margin:20px 0 6px;letter-spacing:.05em;}
+        .row{display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding:4px 0;font-size:14px;}
+        .day{margin:8px 0;font-size:14px;}
+        .day b{display:block;}
+        .day ul{margin:2px 0 0 18px;padding:0;color:#444;}
+        .total{display:flex;justify-content:space-between;font-weight:700;border-top:2px solid #333;margin-top:20px;padding-top:8px;font-size:15px;}
+        .notes{background:#faf8f0;border:1px solid #eee;border-radius:8px;padding:10px;font-size:14px;margin-top:8px;}
+      </style></head><body>
+      <h1>Quinta do Amor — Food</h1>
+      <p class="sub">${esc(fullName)} · ${esc(fmtDate(checkIn))} → ${esc(fmtDate(checkOut))} · ${guestsCount} guests</p>
+      ${sections.join("\n")}
+      </body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+
   const isAdminManagedByMe = !!booking?.admin_managed && !!user && booking?.user_id === user.id;
 
   const openAsGuest = () => {
