@@ -646,7 +646,7 @@ function WhatsAppGroupCard({ url }: { url: string | null }) {
         </div>
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-medium">Group chat</h2>
-          <p className="text-sm text-muted-foreground">Connect with your fellow guests</p>
+          <p className="text-sm text-muted-foreground">Communicate with the Quinta team before, during and after your stay</p>
         </div>
         <a href={url} target="_blank" rel="noopener noreferrer">
           <Button size="sm">Open WhatsApp group</Button>
