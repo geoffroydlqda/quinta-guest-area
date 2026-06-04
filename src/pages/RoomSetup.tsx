@@ -26,6 +26,10 @@ const TOTAL_ROOMS = 11;
 
 const MAX_GUESTS_PER_ROOM = 2;
 
+const BATHROOM_PARTNER: Record<number, number> = {
+  2: 3, 3: 2, 4: 5, 5: 4, 7: 8, 8: 7,
+};
+
 interface RoomCardProps {
   roomId: number;
   bathroomType: 'en-suite' | 'shared';
@@ -70,7 +74,13 @@ function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLock
         <ul className="space-y-1.5 text-sm text-muted-foreground mb-4">
           <li className="flex items-center gap-2">
             <ShowerHead className="w-4 h-4 flex-shrink-0" />
-            <span>{bathroomType === 'en-suite' ? 'En-suite bathroom' : 'Shared bathroom'}</span>
+            <span>
+              {bathroomType === 'en-suite'
+                ? 'En-suite bathroom'
+                : BATHROOM_PARTNER[roomId]
+                  ? `Shared bathroom · with Room ${BATHROOM_PARTNER[roomId]}`
+                  : 'Shared bathroom'}
+            </span>
           </li>
         </ul>
         <div className="mt-auto pt-4 border-t border-border space-y-3">
