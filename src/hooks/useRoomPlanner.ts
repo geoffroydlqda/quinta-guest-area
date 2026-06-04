@@ -77,7 +77,7 @@ function reconstructFromQuantities(
 
 export function useRoomPlanner() {
   const { user } = useAuth();
-  const { activeBookingId, isImpersonating, impersonatedBooking } = useActiveBooking();
+  const { activeBookingId, activeBooking, isImpersonating, impersonatedBooking } = useActiveBooking();
   const { toast } = useToast();
 
   const [roomBedMap, setRoomBedMap] = useState<RoomBedMap>(defaultRoomBedMap);
@@ -85,6 +85,15 @@ export function useRoomPlanner() {
   const [remarks, setRemarks] = useState('');
   const [recordId, setRecordId] = useState<string | null>(null);
   const [isLoadingRecord, setIsLoadingRecord] = useState(true);
+  const [disabledRooms, setDisabledRooms] = useState<number[]>(() => {
+    const initial = (activeBooking as any)?.disabled_rooms;
+    return Array.isArray(initial) ? initial.map(Number) : [];
+  });
+
+  const enabledRoomIds = useMemo(
+    () => ALL_ROOM_IDS.filter((id) => !disabledRooms.includes(id)),
+    [disabledRooms],
+  );
 
   const setRoomBed = useCallback((roomId: number, bedType: FlexibleBed) => {
     if (roomId === 1 || roomId === 6) return;
