@@ -128,10 +128,11 @@ export function useRoomPlanner() {
 
 
 
-  // Derived quantities from the per-room map
+  // Derived quantities from the per-room map (excluding disabled rooms)
   const derived = useMemo(() => {
     let queenSharedQty = 0, twinsSharedQty = 0, queenEnsuiteQty = 0, twinsEnsuiteQty = 0;
     FLEXIBLE_IDS.forEach((id) => {
+      if (disabledRooms.includes(id)) return;
       const bed = roomBedMap[id];
       const meta = FLEXIBLE_META[id];
       if (meta.bathroomType === 'shared') {
@@ -143,13 +144,14 @@ export function useRoomPlanner() {
       }
     });
     return { queenSharedQty, twinsSharedQty, queenEnsuiteQty, twinsEnsuiteQty };
-  }, [roomBedMap]);
+  }, [roomBedMap, disabledRooms]);
 
   const stats: RoomStats = useMemo(() => {
     const totalShared = derived.queenSharedQty + derived.twinsSharedQty;
     const totalEnsuite = derived.queenEnsuiteQty + derived.twinsEnsuiteQty;
+    const kingsFixed = FIXED_ROOMS.filter((r) => !disabledRooms.includes(r.id)).length;
     return {
-      kingsFixed: 2,
+      kingsFixed,
       queenSharedCount: derived.queenSharedQty,
       twinsSharedCount: derived.twinsSharedQty,
       queenEnsuiteCount: derived.queenEnsuiteQty,
@@ -158,11 +160,12 @@ export function useRoomPlanner() {
       totalEnsuite,
       notSetCount: Math.max(0, (MAX_SHARED_ROOMS - totalShared) + (MAX_ENSUITE_ROOMS - totalEnsuite)),
     };
-  }, [derived]);
+  }, [derived, disabledRooms]);
 
   const roomPlan: RoomPlan[] = useMemo(() => {
     const plan: RoomPlan[] = [];
     FIXED_ROOMS.forEach((r) => {
+      if (disabledRooms.includes(r.id)) return;
       plan.push({
         roomId: r.id,
         bedType: 'king',
@@ -171,6 +174,7 @@ export function useRoomPlanner() {
       });
     });
     FLEXIBLE_ROOMS_ORDER.forEach((r) => {
+      if (disabledRooms.includes(r.id)) return;
       plan.push({
         roomId: r.id,
         bedType: roomBedMap[r.id],
@@ -180,7 +184,7 @@ export function useRoomPlanner() {
       });
     });
     return plan.sort((a, b) => a.roomId - b.roomId);
-  }, [roomBedMap]);
+  }, [roomBedMap, disabledRooms]);
 
   const isSelectionValid = true;
 
