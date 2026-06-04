@@ -258,6 +258,10 @@ const RoomSetup = () => {
                   bedType="king"
                   isFixed
                   isLocked={isLocked}
+                  guests={roomGuestsMap[r.id] || []}
+                  onAddGuest={() => addGuestToRoom(r.id)}
+                  onUpdateGuest={(idx, name) => updateGuestName(r.id, idx, name)}
+                  onRemoveGuest={(idx) => removeGuestFromRoom(r.id, idx)}
                 />
               ) : (
                 <RoomCard
@@ -268,6 +272,10 @@ const RoomSetup = () => {
                   bedType={roomBedMap[r.id] || 'twin'}
                   isLocked={isLocked}
                   onChange={(bed) => setRoomBed(r.id, bed)}
+                  guests={roomGuestsMap[r.id] || []}
+                  onAddGuest={() => addGuestToRoom(r.id)}
+                  onUpdateGuest={(idx, name) => updateGuestName(r.id, idx, name)}
+                  onRemoveGuest={(idx) => removeGuestFromRoom(r.id, idx)}
                 />
               ),
             )}
