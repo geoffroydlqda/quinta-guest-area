@@ -100,7 +100,7 @@ const documentationSections = [
     title: 'Facilities',
     content: `
       **Accommodation:**
-      - 11 bedrooms (mix of King, Queen, and Twin configurations)
+      - 11 bedrooms (mix of King and Twin configurations)
       - Both en-suite and shared bathroom options
       - All rooms include fresh linens and towels
       

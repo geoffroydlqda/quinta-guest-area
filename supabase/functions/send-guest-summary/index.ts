@@ -256,9 +256,9 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                       ${roomSetup ? `
                       <table width="100%">
                         <tr><td style="padding: 8px 0; color: #333;">King (en-suite bathroom) — fixed</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">2</td></tr>
-                        <tr><td style="padding: 8px 0; color: #333;">Queen (shared bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${roomSetup.queenSharedCount}</td></tr>
+                        <tr><td style="padding: 8px 0; color: #333;">King size bed (shared bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${roomSetup.queenSharedCount}</td></tr>
                         <tr><td style="padding: 8px 0; color: #333;">Twins (shared bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${roomSetup.twinsSharedCount}</td></tr>
-                        <tr><td style="padding: 8px 0; color: #333;">Queen (en-suite bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${roomSetup.queenEnsuiteCount}</td></tr>
+                        <tr><td style="padding: 8px 0; color: #333;">King size bed (en-suite bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${roomSetup.queenEnsuiteCount}</td></tr>
                         <tr><td style="padding: 8px 0; color: #333;">Twins (en-suite bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${roomSetup.twinsEnsuiteCount}</td></tr>
                       </table>
                       ` : '<p style="color: #999; font-style: italic;">Not set</p>'}

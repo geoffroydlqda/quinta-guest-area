@@ -152,7 +152,7 @@ serve(async (req) => {
 
     // Rooms
     const roomRows: any[][] = [
-      ["Guest", "Email", "Queen shared", "Twin shared", "Queen ensuite", "Twin ensuite", "Remarks"],
+      ["Guest", "Email", "King shared", "Twin shared", "King ensuite", "Twin ensuite", "Remarks"],
       ...rooms.map((r: any) => [
         guestName(r.user_id), r.email,
         r.queen_shared_qty, r.twins_shared_qty, r.queen_ensuite_qty, r.twins_ensuite_qty,

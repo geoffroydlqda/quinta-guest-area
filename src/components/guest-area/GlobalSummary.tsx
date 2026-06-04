@@ -99,7 +99,7 @@ export function GlobalSummary({
                 <span className="font-semibold text-foreground">2</span>
               </div>
               <div className="flex justify-between">
-                <span>Queen (shared bathroom)</span>
+                <span>King size bed (shared bathroom)</span>
                 <span className="font-semibold text-foreground">{roomSetupData!.queenSharedCount}</span>
               </div>
               <div className="flex justify-between">
@@ -107,7 +107,7 @@ export function GlobalSummary({
                 <span className="font-semibold text-foreground">{roomSetupData!.twinsSharedCount}</span>
               </div>
               <div className="flex justify-between">
-                <span>Queen (en-suite bathroom)</span>
+                <span>King size bed (en-suite bathroom)</span>
                 <span className="font-semibold text-foreground">{roomSetupData!.queenEnsuiteCount}</span>
               </div>
               <div className="flex justify-between">

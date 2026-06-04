@@ -96,9 +96,9 @@ function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): s
                     <tr><td style="padding: 12px 0;">
                       <table width="100%">
                         <tr><td style="padding: 8px 0; color: #333;">King (en-suite bathroom) — fixed</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${stats.kingsFixed}</td></tr>
-                        <tr><td style="padding: 8px 0; color: #333;">Queen (shared bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${stats.queenSharedCount}</td></tr>
+                        <tr><td style="padding: 8px 0; color: #333;">King size bed (shared bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${stats.queenSharedCount}</td></tr>
                         <tr><td style="padding: 8px 0; color: #333;">Twins (shared bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${stats.twinsSharedCount}</td></tr>
-                        <tr><td style="padding: 8px 0; color: #333;">Queen (en-suite bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${stats.queenEnsuiteCount}</td></tr>
+                        <tr><td style="padding: 8px 0; color: #333;">King size bed (en-suite bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${stats.queenEnsuiteCount}</td></tr>
                         <tr><td style="padding: 8px 0; color: #333;">Twins (en-suite bathroom)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${stats.twinsEnsuiteCount}</td></tr>
                         <tr><td style="padding: 8px 0; color: #333;">Flexible (not set)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${stats.notSetCount}</td></tr>
                       </table>
