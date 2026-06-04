@@ -574,6 +574,50 @@ const AdminGuestDetailContent = () => {
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
             <BedDouble className="w-4 h-4 text-primary" /> Room Setup
           </h2>
+          {booking && (
+            <div className="mb-4 pb-4 border-b border-border">
+              <div className="text-muted-foreground text-xs uppercase mb-2">Available rooms for this stay</div>
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: 11 }, (_, i) => i + 1).map((roomId) => {
+                  const disabled = booking.disabled_rooms || [];
+                  const enabled = !disabled.includes(roomId);
+                  return (
+                    <label
+                      key={roomId}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs cursor-pointer select-none ${
+                        enabled ? 'bg-primary/10 border-primary/30 text-foreground' : 'bg-muted border-border text-muted-foreground'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5"
+                        checked={enabled}
+                        onChange={async (e) => {
+                          const checked = e.target.checked;
+                          const current = booking.disabled_rooms || [];
+                          const next = checked
+                            ? current.filter((r) => r !== roomId)
+                            : Array.from(new Set([...current, roomId])).sort((a, b) => a - b);
+                          const { error } = await supabase
+                            .from('bookings')
+                            .update({ disabled_rooms: next })
+                            .eq('id', booking.id);
+                          if (error) {
+                            toast({ title: 'Failed to save', description: error.message, variant: 'destructive' });
+                            return;
+                          }
+                          setData((d) => d && d.booking ? { ...d, booking: { ...d.booking, disabled_rooms: next } } : d);
+                          toast({ title: 'Saved' });
+                        }}
+                      />
+                      Room {roomId}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Unchecked rooms won't be shown to the guest.</p>
+            </div>
+          )}
           {room ? (
             <div className="text-sm space-y-1">
               <Row label="King (en-suite bathroom) — fixed" value="2" />
