@@ -18,6 +18,7 @@ import { FIXED_ROOMS, FLEXIBLE_ROOMS_ORDER } from '@/types/room';
 import { cn } from '@/lib/utils';
 import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
 import roomKingImage from '@/assets/room-king.jpg';
+import roomQueenImage from '@/assets/room-queen.jpg';
 import roomTwinsImage from '@/assets/room-twins.jpg';
 
 const TOTAL_ROOMS = 11;
@@ -33,7 +34,12 @@ interface RoomCardProps {
 }
 
 function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLocked, onChange }: RoomCardProps) {
-  const image = bedType === 'king' ? roomKingImage : roomTwinsImage;
+  const image =
+    roomId === 1 || roomId === 6
+      ? roomKingImage
+      : bedType === 'king'
+        ? roomQueenImage
+        : roomTwinsImage;
   const disabled = isLocked || isFixed;
 
   return (
