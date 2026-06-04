@@ -332,5 +332,7 @@ export function useRoomPlanner() {
     isLoadingRecord,
     isSelectionValid,
     autoSave,
+    disabledRooms,
+    enabledRoomIds,
   };
 }
