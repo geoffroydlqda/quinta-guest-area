@@ -22,6 +22,7 @@ export type Database = {
           created_at: string
           created_by_admin: boolean
           deposit_amount: number | null
+          disabled_rooms: number[]
           email: string
           first_name: string | null
           guest_count: number
@@ -47,6 +48,7 @@ export type Database = {
           created_at?: string
           created_by_admin?: boolean
           deposit_amount?: number | null
+          disabled_rooms?: number[]
           email: string
           first_name?: string | null
           guest_count?: number
@@ -72,6 +74,7 @@ export type Database = {
           created_at?: string
           created_by_admin?: boolean
           deposit_amount?: number | null
+          disabled_rooms?: number[]
           email?: string
           first_name?: string | null
           guest_count?: number
