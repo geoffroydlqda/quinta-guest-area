@@ -26,6 +26,10 @@ const TOTAL_ROOMS = 11;
 
 const MAX_GUESTS_PER_ROOM = 2;
 
+const BATHROOM_PARTNER: Record<number, number> = {
+  2: 3, 3: 2, 4: 5, 5: 4, 7: 8, 8: 7,
+};
+
 interface RoomCardProps {
   roomId: number;
   bathroomType: 'en-suite' | 'shared';
