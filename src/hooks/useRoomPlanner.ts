@@ -229,6 +229,20 @@ export function useRoomPlanner() {
         setRemarks(data.remarks_roomsetup || data.remarks || '');
         setRecordId(data.id);
       }
+
+      // Fetch disabled_rooms for the active booking (fallback if not in context)
+      if (activeBookingId) {
+        const { data: bk } = await supabase
+          .from('bookings')
+          .select('disabled_rooms')
+          .eq('id', activeBookingId)
+          .maybeSingle();
+        const dr = (bk as any)?.disabled_rooms;
+        setDisabledRooms(Array.isArray(dr) ? dr.map(Number) : []);
+      } else {
+        const ctxDr = (activeBooking as any)?.disabled_rooms;
+        setDisabledRooms(Array.isArray(ctxDr) ? ctxDr.map(Number) : []);
+      }
     } catch (error: any) {
       console.error('Error loading record:', error);
       toast({
