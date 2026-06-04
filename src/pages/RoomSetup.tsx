@@ -74,7 +74,13 @@ function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLock
         <ul className="space-y-1.5 text-sm text-muted-foreground mb-4">
           <li className="flex items-center gap-2">
             <ShowerHead className="w-4 h-4 flex-shrink-0" />
-            <span>{bathroomType === 'en-suite' ? 'En-suite bathroom' : 'Shared bathroom'}</span>
+            <span>
+              {bathroomType === 'en-suite'
+                ? 'En-suite bathroom'
+                : BATHROOM_PARTNER[roomId]
+                  ? `Shared bathroom · with Room ${BATHROOM_PARTNER[roomId]}`
+                  : 'Shared bathroom'}
+            </span>
           </li>
         </ul>
         <div className="mt-auto pt-4 border-t border-border space-y-3">
