@@ -172,6 +172,8 @@ const RoomSetup = () => {
     setRemarks,
     autoSave,
     isLoadingRecord,
+    disabledRooms,
+    enabledRoomIds,
   } = useRoomPlanner();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
