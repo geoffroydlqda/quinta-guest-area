@@ -15,6 +15,16 @@ import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 export type FlexibleBed = 'twin' | 'king';
 export type RoomBedMap = Record<number, FlexibleBed>;
+export type RoomGuestsMap = Record<number, string[]>;
+
+const ALL_ROOM_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+const MAX_GUESTS_PER_ROOM = 2;
+
+function defaultRoomGuestsMap(): RoomGuestsMap {
+  const map: RoomGuestsMap = {};
+  ALL_ROOM_IDS.forEach((id) => { map[id] = []; });
+  return map;
+}
 
 const FLEXIBLE_IDS = FLEXIBLE_ROOMS_ORDER.map((r) => r.id);
 const FLEXIBLE_META: Record<number, { bathroomType: 'shared' | 'en-suite'; note?: string }> =
@@ -71,6 +81,7 @@ export function useRoomPlanner() {
   const { toast } = useToast();
 
   const [roomBedMap, setRoomBedMap] = useState<RoomBedMap>(defaultRoomBedMap);
+  const [roomGuestsMap, setRoomGuestsMap] = useState<RoomGuestsMap>(defaultRoomGuestsMap);
   const [remarks, setRemarks] = useState('');
   const [recordId, setRecordId] = useState<string | null>(null);
   const [isLoadingRecord, setIsLoadingRecord] = useState(true);
@@ -79,6 +90,34 @@ export function useRoomPlanner() {
     if (roomId === 1 || roomId === 6) return;
     setRoomBedMap((prev) => ({ ...prev, [roomId]: bedType }));
   }, []);
+
+  const addGuestToRoom = useCallback((roomId: number) => {
+    setRoomGuestsMap((prev) => {
+      const current = prev[roomId] || [];
+      if (current.length >= MAX_GUESTS_PER_ROOM) return prev;
+      return { ...prev, [roomId]: [...current, ''] };
+    });
+  }, []);
+
+  const updateGuestName = useCallback((roomId: number, index: number, name: string) => {
+    setRoomGuestsMap((prev) => {
+      const current = prev[roomId] || [];
+      if (index < 0 || index >= current.length) return prev;
+      const next = [...current];
+      next[index] = name;
+      return { ...prev, [roomId]: next };
+    });
+  }, []);
+
+  const removeGuestFromRoom = useCallback((roomId: number, index: number) => {
+    setRoomGuestsMap((prev) => {
+      const current = prev[roomId] || [];
+      if (index < 0 || index >= current.length) return prev;
+      return { ...prev, [roomId]: current.filter((_, i) => i !== index) };
+    });
+  }, []);
+
+
 
   // Derived quantities from the per-room map
   const derived = useMemo(() => {
@@ -150,12 +189,18 @@ export function useRoomPlanner() {
       if (data) {
         const plan = Array.isArray(data.room_plan) ? (data.room_plan as any[]) : [];
         let map: RoomBedMap;
+        const guestsMap = defaultRoomGuestsMap();
         if (plan.length > 0) {
           map = defaultRoomBedMap();
           plan.forEach((entry) => {
             const id = Number(entry?.roomId);
             if (FLEXIBLE_IDS.includes(id)) {
               map[id] = entry?.bedType === 'king' ? 'king' : 'twin';
+            }
+            if (ALL_ROOM_IDS.includes(id) && Array.isArray(entry?.guests)) {
+              guestsMap[id] = entry.guests
+                .filter((g: any) => typeof g === 'string')
+                .slice(0, MAX_GUESTS_PER_ROOM);
             }
           });
         } else {
@@ -167,6 +212,7 @@ export function useRoomPlanner() {
           );
         }
         setRoomBedMap(map);
+        setRoomGuestsMap(guestsMap);
         setRemarks(data.remarks_roomsetup || data.remarks || '');
         setRecordId(data.id);
       }
@@ -201,6 +247,9 @@ export function useRoomPlanner() {
         bathroomType: room.bathroomType,
         isFixed: room.isFixed,
         note: room.note,
+        guests: (roomGuestsMap[room.roomId] || [])
+          .map((n) => (n || '').trim())
+          .filter((n) => n.length > 0),
       }));
 
       const recordData = {
@@ -240,11 +289,15 @@ export function useRoomPlanner() {
       console.error('Auto-save error:', error);
       return false;
     }
-  }, [user, activeBookingId, recordId, roomPlan, derived, remarks, isImpersonating, impersonatedBooking]);
+  }, [user, activeBookingId, recordId, roomPlan, roomGuestsMap, derived, remarks, isImpersonating, impersonatedBooking]);
 
   return {
     roomBedMap,
     setRoomBed,
+    roomGuestsMap,
+    addGuestToRoom,
+    updateGuestName,
+    removeGuestFromRoom,
     roomPlan,
     stats,
     remarks,
