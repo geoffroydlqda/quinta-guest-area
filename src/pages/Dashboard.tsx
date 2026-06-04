@@ -82,7 +82,7 @@ const DashboardContent = () => {
       const { data: roomData } = await scope(
         supabase
           .from('room_setups')
-          .select('queen_shared_qty, twins_shared_qty, queen_ensuite_qty, twins_ensuite_qty')
+          .select('queen_shared_qty, twins_shared_qty, queen_ensuite_qty, twins_ensuite_qty, room_plan')
       ).maybeSingle();
 
       if (roomData) {
@@ -91,6 +91,7 @@ const DashboardContent = () => {
           twinsSharedCount: roomData.twins_shared_qty,
           queenEnsuiteCount: roomData.queen_ensuite_qty,
           twinsEnsuiteCount: roomData.twins_ensuite_qty,
+          roomPlan: Array.isArray(roomData.room_plan) ? roomData.room_plan : null,
         });
       }
 
