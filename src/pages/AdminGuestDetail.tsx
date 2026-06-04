@@ -33,11 +33,24 @@ type Profile = {
   guests_count: number; status_overall: string;
   submitted_at: string | null; updated_at: string;
 };
+type RoomPlanEntry = {
+  roomId: number;
+  bedType: 'king' | 'queen' | 'twin' | null;
+  bathroomType: 'shared' | 'en-suite';
+  isFixed?: boolean;
+  note?: string;
+  guests?: string[];
+};
 type Room = {
   user_id: string; queen_shared_qty: number; twins_shared_qty: number;
   queen_ensuite_qty: number; twins_ensuite_qty: number;
   remarks_roomsetup: string | null; remarks: string | null; status_roomsetup: string;
   updated_at: string;
+  room_plan?: RoomPlanEntry[] | null;
+};
+
+const BATHROOM_PARTNER: Record<number, number> = {
+  2: 3, 3: 2, 4: 5, 5: 4, 7: 8, 8: 7,
 };
 type Trip = {
   id: string; user_id: string; trip_direction: string;
@@ -567,6 +580,38 @@ const AdminGuestDetailContent = () => {
               <Row label="Twin (shared bathroom)" value={room.twins_shared_qty} />
               <Row label="King size bed (en-suite bathroom)" value={room.queen_ensuite_qty} />
               <Row label="Twin (en-suite bathroom)" value={room.twins_ensuite_qty} />
+              {Array.isArray(room.room_plan) && room.room_plan.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-border">
+                  <div className="text-muted-foreground text-xs uppercase mb-1">Per-room arrangement</div>
+                  <ul className="space-y-1">
+                    {[...room.room_plan].sort((a, b) => a.roomId - b.roomId).map((r) => {
+                      const bedLabel = r.bedType === 'king'
+                        ? 'King'
+                        : r.bedType === 'queen'
+                          ? 'King size bed'
+                          : r.bedType === 'twin'
+                            ? 'Twin'
+                            : 'Not set';
+                      const partner = BATHROOM_PARTNER[r.roomId];
+                      const bathSuffix = r.bathroomType === 'shared'
+                        ? (partner ? `shared with Room ${partner}` : 'shared')
+                        : 'en-suite';
+                      const parts = [bedLabel, bathSuffix];
+                      if (r.note) parts.push(r.note);
+                      const guests = (r.guests || []).map((g) => g.trim()).filter(Boolean);
+                      return (
+                        <li key={r.roomId} className="text-sm">
+                          <span className="font-medium">Room {r.roomId}</span>
+                          <span className="text-muted-foreground"> · {parts.join(' · ')}</span>
+                          {guests.length > 0 && (
+                            <span className="text-muted-foreground"> · {guests.join(', ')}</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
               {(room.remarks_roomsetup || room.remarks) && (
                 <div className="mt-3 pt-3 border-t border-border">
                   <div className="text-muted-foreground text-xs uppercase mb-1">Remarks</div>
