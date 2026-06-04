@@ -3,115 +3,170 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActiveBooking } from '@/contexts/BookingContext';
-import { 
-  RoomSelection, 
-  RoomStats, 
+import {
+  RoomStats,
   RoomPlan,
-  initialRoomSelection,
-  generateRoomPlan,
+  FLEXIBLE_ROOMS_ORDER,
+  FIXED_ROOMS,
   MAX_SHARED_ROOMS,
-  MAX_ENSUITE_ROOMS
+  MAX_ENSUITE_ROOMS,
 } from '@/types/room';
 import { triggerSheetsSync } from '@/lib/sheetsSync';
+
+export type FlexibleBed = 'twin' | 'king';
+export type RoomBedMap = Record<number, FlexibleBed>;
+
+const FLEXIBLE_IDS = FLEXIBLE_ROOMS_ORDER.map((r) => r.id);
+const FLEXIBLE_META: Record<number, { bathroomType: 'shared' | 'en-suite'; note?: string }> =
+  FLEXIBLE_ROOMS_ORDER.reduce((acc, r) => {
+    acc[r.id] = { bathroomType: r.bathroomType, note: r.note };
+    return acc;
+  }, {} as Record<number, { bathroomType: 'shared' | 'en-suite'; note?: string }>);
+
+function defaultRoomBedMap(): RoomBedMap {
+  const map: RoomBedMap = {};
+  FLEXIBLE_IDS.forEach((id) => {
+    map[id] = 'twin';
+  });
+  return map;
+}
+
+function reconstructFromQuantities(
+  queenSharedQty: number,
+  twinsSharedQty: number,
+  queenEnsuiteQty: number,
+  twinsEnsuiteQty: number,
+): RoomBedMap {
+  const map = defaultRoomBedMap();
+  let qs = 0, ts = 0, qe = 0, te = 0;
+  FLEXIBLE_ROOMS_ORDER.forEach((room) => {
+    if (room.bathroomType === 'shared') {
+      if (qs < queenSharedQty) {
+        map[room.id] = 'king';
+        qs++;
+      } else if (ts < twinsSharedQty) {
+        map[room.id] = 'twin';
+        ts++;
+      } else {
+        map[room.id] = 'twin';
+      }
+    } else {
+      if (qe < queenEnsuiteQty) {
+        map[room.id] = 'king';
+        qe++;
+      } else if (te < twinsEnsuiteQty) {
+        map[room.id] = 'twin';
+        te++;
+      } else {
+        map[room.id] = 'twin';
+      }
+    }
+  });
+  return map;
+}
 
 export function useRoomPlanner() {
   const { user } = useAuth();
   const { activeBookingId, isImpersonating, impersonatedBooking } = useActiveBooking();
   const { toast } = useToast();
-  
-  const [roomSelection, setRoomSelection] = useState<RoomSelection>(initialRoomSelection);
+
+  const [roomBedMap, setRoomBedMap] = useState<RoomBedMap>(defaultRoomBedMap);
   const [remarks, setRemarks] = useState('');
   const [recordId, setRecordId] = useState<string | null>(null);
   const [isLoadingRecord, setIsLoadingRecord] = useState(true);
 
-  // Calculate room statistics
+  const setRoomBed = useCallback((roomId: number, bedType: FlexibleBed) => {
+    if (roomId === 1 || roomId === 6) return;
+    setRoomBedMap((prev) => ({ ...prev, [roomId]: bedType }));
+  }, []);
+
+  // Derived quantities from the per-room map
+  const derived = useMemo(() => {
+    let queenSharedQty = 0, twinsSharedQty = 0, queenEnsuiteQty = 0, twinsEnsuiteQty = 0;
+    FLEXIBLE_IDS.forEach((id) => {
+      const bed = roomBedMap[id];
+      const meta = FLEXIBLE_META[id];
+      if (meta.bathroomType === 'shared') {
+        if (bed === 'king') queenSharedQty++;
+        else twinsSharedQty++;
+      } else {
+        if (bed === 'king') queenEnsuiteQty++;
+        else twinsEnsuiteQty++;
+      }
+    });
+    return { queenSharedQty, twinsSharedQty, queenEnsuiteQty, twinsEnsuiteQty };
+  }, [roomBedMap]);
+
   const stats: RoomStats = useMemo(() => {
-    const totalShared = roomSelection.queenSharedQty + roomSelection.twinsSharedQty;
-    const totalEnsuite = roomSelection.queenEnsuiteQty + roomSelection.twinsEnsuiteQty;
-    const notSet = (MAX_SHARED_ROOMS - totalShared) + (MAX_ENSUITE_ROOMS - totalEnsuite);
-    
+    const totalShared = derived.queenSharedQty + derived.twinsSharedQty;
+    const totalEnsuite = derived.queenEnsuiteQty + derived.twinsEnsuiteQty;
     return {
       kingsFixed: 2,
-      queenSharedCount: roomSelection.queenSharedQty,
-      twinsSharedCount: roomSelection.twinsSharedQty,
-      queenEnsuiteCount: roomSelection.queenEnsuiteQty,
-      twinsEnsuiteCount: roomSelection.twinsEnsuiteQty,
+      queenSharedCount: derived.queenSharedQty,
+      twinsSharedCount: derived.twinsSharedQty,
+      queenEnsuiteCount: derived.queenEnsuiteQty,
+      twinsEnsuiteCount: derived.twinsEnsuiteQty,
       totalShared,
       totalEnsuite,
-      notSetCount: Math.max(0, notSet),
+      notSetCount: Math.max(0, (MAX_SHARED_ROOMS - totalShared) + (MAX_ENSUITE_ROOMS - totalEnsuite)),
     };
-  }, [roomSelection]);
+  }, [derived]);
 
-  // Generate room plan
   const roomPlan: RoomPlan[] = useMemo(() => {
-    return generateRoomPlan(roomSelection);
-  }, [roomSelection]);
+    const plan: RoomPlan[] = [];
+    FIXED_ROOMS.forEach((r) => {
+      plan.push({
+        roomId: r.id,
+        bedType: 'king',
+        bathroomType: r.bathroomType,
+        isFixed: true,
+      });
+    });
+    FLEXIBLE_ROOMS_ORDER.forEach((r) => {
+      plan.push({
+        roomId: r.id,
+        bedType: roomBedMap[r.id],
+        bathroomType: r.bathroomType,
+        isFixed: false,
+        note: r.note,
+      });
+    });
+    return plan.sort((a, b) => a.roomId - b.roomId);
+  }, [roomBedMap]);
 
-  // Shared bathroom constraint: max 6
-  const isSharedValid = useMemo(() => {
-    return roomSelection.queenSharedQty + roomSelection.twinsSharedQty <= MAX_SHARED_ROOMS;
-  }, [roomSelection]);
+  const isSelectionValid = true;
 
-  // En-suite constraint: max 3
-  const isEnsuiteValid = useMemo(() => {
-    return roomSelection.queenEnsuiteQty + roomSelection.twinsEnsuiteQty <= MAX_ENSUITE_ROOMS;
-  }, [roomSelection]);
-
-  const isSelectionValid = isSharedValid && isEnsuiteValid;
-
-  // Update room selection - Shared rooms
-  const setQueenShared = useCallback((qty: number) => {
-    setRoomSelection((prev) => ({
-      ...prev,
-      queenSharedQty: Math.max(0, Math.min(MAX_SHARED_ROOMS, qty)),
-    }));
-  }, []);
-
-  const setTwinsShared = useCallback((qty: number) => {
-    setRoomSelection((prev) => ({
-      ...prev,
-      twinsSharedQty: Math.max(0, Math.min(MAX_SHARED_ROOMS, qty)),
-    }));
-  }, []);
-
-  // Update room selection - En-suite rooms
-  const setQueenEnsuite = useCallback((qty: number) => {
-    setRoomSelection((prev) => ({
-      ...prev,
-      queenEnsuiteQty: Math.max(0, Math.min(MAX_ENSUITE_ROOMS, qty)),
-    }));
-  }, []);
-
-  const setTwinsEnsuite = useCallback((qty: number) => {
-    setRoomSelection((prev) => ({
-      ...prev,
-      twinsEnsuiteQty: Math.max(0, Math.min(MAX_ENSUITE_ROOMS, qty)),
-    }));
-  }, []);
-
-  // Load existing record for logged-in user
   const loadUserRecord = useCallback(async () => {
     if (!user) return;
-    
     setIsLoadingRecord(true);
-    
     try {
       const baseQuery = supabase.from('room_setups').select('*');
       const scopedQuery = activeBookingId
         ? baseQuery.eq('booking_id', activeBookingId)
         : baseQuery.eq('user_id', user.id);
       const { data, error } = await scopedQuery.maybeSingle();
-
       if (error) throw error;
 
       if (data) {
-        setRoomSelection({
-          kingRoomsQty: 2,
-          queenSharedQty: data.queen_shared_qty,
-          twinsSharedQty: data.twins_shared_qty,
-          queenEnsuiteQty: data.queen_ensuite_qty,
-          twinsEnsuiteQty: data.twins_ensuite_qty,
-        });
+        const plan = Array.isArray(data.room_plan) ? (data.room_plan as any[]) : [];
+        let map: RoomBedMap;
+        if (plan.length > 0) {
+          map = defaultRoomBedMap();
+          plan.forEach((entry) => {
+            const id = Number(entry?.roomId);
+            if (FLEXIBLE_IDS.includes(id)) {
+              map[id] = entry?.bedType === 'king' ? 'king' : 'twin';
+            }
+          });
+        } else {
+          map = reconstructFromQuantities(
+            data.queen_shared_qty || 0,
+            data.twins_shared_qty || 0,
+            data.queen_ensuite_qty || 0,
+            data.twins_ensuite_qty || 0,
+          );
+        }
+        setRoomBedMap(map);
         setRemarks(data.remarks_roomsetup || data.remarks || '');
         setRecordId(data.id);
       }
@@ -127,42 +182,37 @@ export function useRoomPlanner() {
     }
   }, [user, activeBookingId, toast]);
 
-  // Load user record on mount
   useEffect(() => {
-    if (user) {
-      loadUserRecord();
-    }
+    if (user) loadUserRecord();
   }, [user, activeBookingId, loadUserRecord]);
 
-  // Auto-save function (used by useAutoSave hook)
   const autoSave = useCallback(async (): Promise<boolean> => {
-    if (!user || !isSelectionValid) return false;
+    if (!user) return false;
     if (isImpersonating && !activeBookingId) return false;
-    
+
     const ownerUserId = isImpersonating
       ? (impersonatedBooking?.user_id ?? null)
       : user.id;
-    
+
     try {
-      // Convert room plan to JSON-compatible format
-      const roomPlanJson = roomPlan.map(room => ({
+      const roomPlanJson = roomPlan.map((room) => ({
         roomId: room.roomId,
         bedType: room.bedType,
         bathroomType: room.bathroomType,
         isFixed: room.isFixed,
         note: room.note,
       }));
-      
+
       const recordData = {
         user_id: ownerUserId,
         booking_id: activeBookingId,
         email: isImpersonating ? (impersonatedBooking?.email || '') : (user.email || ''),
-        full_name: '', // No longer collecting from room setup
+        full_name: '',
         remarks_roomsetup: remarks.trim() || null,
-        queen_shared_qty: roomSelection.queenSharedQty,
-        twins_shared_qty: roomSelection.twinsSharedQty,
-        queen_ensuite_qty: roomSelection.queenEnsuiteQty,
-        twins_ensuite_qty: roomSelection.twinsEnsuiteQty,
+        queen_shared_qty: derived.queenSharedQty,
+        twins_shared_qty: derived.twinsSharedQty,
+        queen_ensuite_qty: derived.queenEnsuiteQty,
+        twins_ensuite_qty: derived.twinsEnsuiteQty,
         room_plan: roomPlanJson,
         status: 'draft',
         edit_token: ownerUserId ? `user-${ownerUserId}` : `booking-${activeBookingId}`,
@@ -173,7 +223,6 @@ export function useRoomPlanner() {
           .from('room_setups')
           .update(recordData)
           .eq('id', recordId);
-        
         if (error) throw error;
       } else {
         const { data, error } = await supabase
@@ -181,7 +230,6 @@ export function useRoomPlanner() {
           .insert([recordData])
           .select()
           .single();
-        
         if (error) throw error;
         setRecordId(data.id);
       }
@@ -192,27 +240,17 @@ export function useRoomPlanner() {
       console.error('Auto-save error:', error);
       return false;
     }
-  }, [user, activeBookingId, recordId, roomSelection, roomPlan, remarks, isSelectionValid, isImpersonating, impersonatedBooking]);
+  }, [user, activeBookingId, recordId, roomPlan, derived, remarks, isImpersonating, impersonatedBooking]);
 
   return {
-    // State
-    roomSelection,
+    roomBedMap,
+    setRoomBed,
     roomPlan,
     stats,
     remarks,
     setRemarks,
     isLoadingRecord,
-    
-    // Validation
-    isSharedValid,
-    isEnsuiteValid,
     isSelectionValid,
-    
-    // Actions
-    setQueenShared,
-    setTwinsShared,
-    setQueenEnsuite,
-    setTwinsEnsuite,
     autoSave,
   };
 }
