@@ -38,8 +38,8 @@ function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLock
     roomId === 1 || roomId === 6
       ? roomKingImage
       : bedType === 'king'
-        ? roomQueenImage
-        : roomTwinsImage;
+        ? roomTwinsImage
+        : roomQueenImage;
   const disabled = isLocked || isFixed;
 
   return (
