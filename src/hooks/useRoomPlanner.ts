@@ -189,12 +189,18 @@ export function useRoomPlanner() {
       if (data) {
         const plan = Array.isArray(data.room_plan) ? (data.room_plan as any[]) : [];
         let map: RoomBedMap;
+        const guestsMap = defaultRoomGuestsMap();
         if (plan.length > 0) {
           map = defaultRoomBedMap();
           plan.forEach((entry) => {
             const id = Number(entry?.roomId);
             if (FLEXIBLE_IDS.includes(id)) {
               map[id] = entry?.bedType === 'king' ? 'king' : 'twin';
+            }
+            if (ALL_ROOM_IDS.includes(id) && Array.isArray(entry?.guests)) {
+              guestsMap[id] = entry.guests
+                .filter((g: any) => typeof g === 'string')
+                .slice(0, MAX_GUESTS_PER_ROOM);
             }
           });
         } else {
@@ -206,6 +212,7 @@ export function useRoomPlanner() {
           );
         }
         setRoomBedMap(map);
+        setRoomGuestsMap(guestsMap);
         setRemarks(data.remarks_roomsetup || data.remarks || '');
         setRecordId(data.id);
       }
@@ -240,6 +247,9 @@ export function useRoomPlanner() {
         bathroomType: room.bathroomType,
         isFixed: room.isFixed,
         note: room.note,
+        guests: (roomGuestsMap[room.roomId] || [])
+          .map((n) => (n || '').trim())
+          .filter((n) => n.length > 0),
       }));
 
       const recordData = {
@@ -279,11 +289,15 @@ export function useRoomPlanner() {
       console.error('Auto-save error:', error);
       return false;
     }
-  }, [user, activeBookingId, recordId, roomPlan, derived, remarks, isImpersonating, impersonatedBooking]);
+  }, [user, activeBookingId, recordId, roomPlan, roomGuestsMap, derived, remarks, isImpersonating, impersonatedBooking]);
 
   return {
     roomBedMap,
     setRoomBed,
+    roomGuestsMap,
+    addGuestToRoom,
+    updateGuestName,
+    removeGuestFromRoom,
     roomPlan,
     stats,
     remarks,
