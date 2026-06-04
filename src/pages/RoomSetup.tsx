@@ -250,6 +250,7 @@ const RoomSetup = () => {
           {/* All 11 rooms in numeric order */}
           {[...FIXED_ROOMS.map((r) => ({ ...r, isFixed: true as const, note: undefined as string | undefined })),
             ...FLEXIBLE_ROOMS_ORDER.map((r) => ({ ...r, isFixed: false as const }))]
+            .filter((r) => !disabledRooms.includes(r.id))
             .sort((a, b) => a.id - b.id)
             .map((r) =>
               r.isFixed ? (
