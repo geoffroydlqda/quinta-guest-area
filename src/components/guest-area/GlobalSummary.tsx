@@ -12,6 +12,13 @@ interface GlobalSummaryProps {
     twinsSharedCount: number;
     queenEnsuiteCount: number;
     twinsEnsuiteCount: number;
+    roomPlan?: Array<{
+      roomId: number;
+      bedType: 'king' | 'queen' | 'twin' | null;
+      bathroomType: 'en-suite' | 'shared';
+      isFixed?: boolean;
+      note?: string;
+    }> | null;
   };
   transportationData?: TransportationCostSummary;
   foodData?: {
