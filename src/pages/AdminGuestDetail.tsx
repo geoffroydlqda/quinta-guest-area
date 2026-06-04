@@ -33,11 +33,24 @@ type Profile = {
   guests_count: number; status_overall: string;
   submitted_at: string | null; updated_at: string;
 };
+type RoomPlanEntry = {
+  roomId: number;
+  bedType: 'king' | 'queen' | 'twin' | null;
+  bathroomType: 'shared' | 'en-suite';
+  isFixed?: boolean;
+  note?: string;
+  guests?: string[];
+};
 type Room = {
   user_id: string; queen_shared_qty: number; twins_shared_qty: number;
   queen_ensuite_qty: number; twins_ensuite_qty: number;
   remarks_roomsetup: string | null; remarks: string | null; status_roomsetup: string;
   updated_at: string;
+  room_plan?: RoomPlanEntry[] | null;
+};
+
+const BATHROOM_PARTNER: Record<number, number> = {
+  2: 3, 3: 2, 4: 5, 5: 4, 7: 8, 8: 7,
 };
 type Trip = {
   id: string; user_id: string; trip_direction: string;
