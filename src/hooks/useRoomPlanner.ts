@@ -253,7 +253,7 @@ export function useRoomPlanner() {
     } finally {
       setIsLoadingRecord(false);
     }
-  }, [user, activeBookingId, toast]);
+  }, [user, activeBookingId, activeBooking, toast]);
 
   useEffect(() => {
     if (user) loadUserRecord();
