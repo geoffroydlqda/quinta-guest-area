@@ -12,6 +12,13 @@ interface GlobalSummaryProps {
     twinsSharedCount: number;
     queenEnsuiteCount: number;
     twinsEnsuiteCount: number;
+    roomPlan?: Array<{
+      roomId: number;
+      bedType: 'king' | 'queen' | 'twin' | null;
+      bathroomType: 'en-suite' | 'shared';
+      isFixed?: boolean;
+      note?: string;
+    }> | null;
   };
   transportationData?: TransportationCostSummary;
   foodData?: {
@@ -93,28 +100,60 @@ export function GlobalSummary({
             <span className="font-semibold">Room Setup</span>
           </div>
           {hasRoomSetup ? (
-            <div className="text-sm text-muted-foreground space-y-1 pl-6">
-              <div className="flex justify-between">
-                <span>King (en-suite bathroom) — fixed</span>
-                <span className="font-semibold text-foreground">2</span>
-              </div>
-              <div className="flex justify-between">
-                <span>King size bed (shared bathroom)</span>
-                <span className="font-semibold text-foreground">{roomSetupData!.queenSharedCount}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Twins (shared bathroom)</span>
-                <span className="font-semibold text-foreground">{roomSetupData!.twinsSharedCount}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>King size bed (en-suite bathroom)</span>
-                <span className="font-semibold text-foreground">{roomSetupData!.queenEnsuiteCount}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Twins (en-suite bathroom)</span>
-                <span className="font-semibold text-foreground">{roomSetupData!.twinsEnsuiteCount}</span>
-              </div>
-            </div>
+            (() => {
+              const BATHROOM_PARTNER: Record<number, number> = { 2: 3, 3: 2, 4: 5, 5: 4, 7: 8, 8: 7 };
+              const plan = roomSetupData!.roomPlan;
+              if (plan && plan.length > 0) {
+                const sorted = [...plan].sort((a, b) => a.roomId - b.roomId);
+                const bedLabel = (b: 'king' | 'queen' | 'twin' | null) =>
+                  b === 'twin' ? 'Twin beds' : b === 'king' || b === 'queen' ? 'King size bed' : '—';
+                return (
+                  <div className="text-sm space-y-1 pl-6">
+                    {sorted.map((r) => {
+                      const isFixed = r.isFixed || r.roomId === 1 || r.roomId === 6;
+                      const suffixParts: string[] = [];
+                      if (r.bathroomType === 'en-suite') suffixParts.push('en-suite');
+                      else suffixParts.push(`shared with Room ${BATHROOM_PARTNER[r.roomId] ?? '?'}`);
+                      if (r.note === 'Upstairs') suffixParts.push('Upstairs');
+                      return (
+                        <div key={r.roomId} className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            Room {r.roomId} <span className="text-muted-foreground">· {suffixParts.join(' · ')}</span>
+                          </span>
+                          <span className="font-semibold text-foreground">
+                            {bedLabel(r.bedType)}{isFixed ? ' · fixed' : ''}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              }
+              return (
+                <div className="text-sm text-muted-foreground space-y-1 pl-6">
+                  <div className="flex justify-between">
+                    <span>King (en-suite bathroom) — fixed</span>
+                    <span className="font-semibold text-foreground">2</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>King size bed (shared bathroom)</span>
+                    <span className="font-semibold text-foreground">{roomSetupData!.queenSharedCount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Twins (shared bathroom)</span>
+                    <span className="font-semibold text-foreground">{roomSetupData!.twinsSharedCount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>King size bed (en-suite bathroom)</span>
+                    <span className="font-semibold text-foreground">{roomSetupData!.queenEnsuiteCount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Twins (en-suite bathroom)</span>
+                    <span className="font-semibold text-foreground">{roomSetupData!.twinsEnsuiteCount}</span>
+                  </div>
+                </div>
+              );
+            })()
           ) : (
             <Button asChild variant="outline" size="sm" className="ml-6">
               <Link to="/room-setup">
