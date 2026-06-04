@@ -86,6 +86,7 @@ type BookingRow = {
   whatsapp_group_url: string | null;
   admin_managed: boolean;
   internal_notes: string | null;
+  disabled_rooms: number[] | null;
 };
 
 interface Detail {
