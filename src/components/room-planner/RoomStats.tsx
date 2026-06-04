@@ -17,7 +17,7 @@ export function RoomStats({ stats, className }: RoomStatsProps) {
         </div>
         <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
           <div className="text-2xl font-semibold">{stats.queenSharedCount}</div>
-          <div className="text-xs text-muted-foreground font-medium">Queen (shared bathroom)</div>
+          <div className="text-xs text-muted-foreground font-medium">King size bed (shared bathroom)</div>
         </div>
         <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
           <div className="text-2xl font-semibold">{stats.twinsSharedCount}</div>
@@ -25,7 +25,7 @@ export function RoomStats({ stats, className }: RoomStatsProps) {
         </div>
         <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
           <div className="text-2xl font-semibold">{stats.queenEnsuiteCount}</div>
-          <div className="text-xs text-muted-foreground font-medium">Queen (en-suite bathroom)</div>
+          <div className="text-xs text-muted-foreground font-medium">King size bed (en-suite bathroom)</div>
         </div>
         <div className="bg-card rounded-xl p-4 text-center shadow-sm border border-border">
           <div className="text-2xl font-semibold">{stats.twinsEnsuiteCount}</div>

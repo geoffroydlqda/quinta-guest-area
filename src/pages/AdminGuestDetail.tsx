@@ -563,9 +563,9 @@ const AdminGuestDetailContent = () => {
           {room ? (
             <div className="text-sm space-y-1">
               <Row label="King (en-suite bathroom) — fixed" value="2" />
-              <Row label="Queen (shared bathroom)" value={room.queen_shared_qty} />
+              <Row label="King size bed (shared bathroom)" value={room.queen_shared_qty} />
               <Row label="Twin (shared bathroom)" value={room.twins_shared_qty} />
-              <Row label="Queen (en-suite bathroom)" value={room.queen_ensuite_qty} />
+              <Row label="King size bed (en-suite bathroom)" value={room.queen_ensuite_qty} />
               <Row label="Twin (en-suite bathroom)" value={room.twins_ensuite_qty} />
               {(room.remarks_roomsetup || room.remarks) && (
                 <div className="mt-3 pt-3 border-t border-border">

@@ -1186,14 +1186,14 @@ function RoomsView({ data, guestName }: { data: Data; guestName: (u: string) => 
     <div className="space-y-3">
       <div className="flex justify-end">
         <Button size="sm" variant="outline" onClick={() => downloadCSV("rooms.csv", [
-          ["Guest","Email","Queen shared","Twin shared","Queen ensuite","Twin ensuite","Remarks"],
+          ["Guest","Email","King shared","Twin shared","King ensuite","Twin ensuite","Remarks"],
           ...data.rooms.map((r) => [guestName(r.user_id), r.email, r.queen_shared_qty, r.twins_shared_qty, r.queen_ensuite_qty, r.twins_ensuite_qty, r.remarks_roomsetup || r.remarks || ""]),
         ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
       </div>
       <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-muted"><tr className="text-left">
-            {["Guest","Queen shared","Twin shared","Queen ensuite","Twin ensuite","Remarks"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
+            {["Guest","King shared","Twin shared","King ensuite","Twin ensuite","Remarks"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
           </tr></thead>
           <tbody>
             {data.rooms.map((r, i) => (
