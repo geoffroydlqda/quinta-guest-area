@@ -73,7 +73,7 @@ function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLock
             <span>{bathroomType === 'en-suite' ? 'En-suite bathroom' : 'Shared bathroom'}</span>
           </li>
         </ul>
-        <div className="mt-auto pt-4 border-t border-border">
+        <div className="mt-auto pt-4 border-t border-border space-y-3">
           {isFixed ? (
             <div className="flex items-center justify-center gap-2 text-sm font-medium">
               <Crown className="w-4 h-4 text-primary" />
@@ -103,6 +103,52 @@ function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLock
               </Button>
             </div>
           )}
+
+          {/* Guests assignment */}
+          <div className="space-y-2">
+            {guests.length > 0 && (
+              <div className="space-y-1.5">
+                {guests.map((name, idx) => (
+                  <div key={idx} className="flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    <Input
+                      type="text"
+                      value={name}
+                      placeholder="Guest name"
+                      readOnly={isLocked}
+                      disabled={isLocked}
+                      onChange={(e) => onUpdateGuest(idx, e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                    {!isLocked && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
+                        onClick={() => onRemoveGuest(idx)}
+                        aria-label="Remove guest"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {!isLocked && guests.length < MAX_GUESTS_PER_ROOM && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onAddGuest}
+                className="w-full h-8 text-xs text-muted-foreground hover:text-foreground gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add guest
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -117,6 +163,10 @@ const RoomSetup = () => {
   const {
     roomBedMap,
     setRoomBed,
+    roomGuestsMap,
+    addGuestToRoom,
+    updateGuestName,
+    removeGuestFromRoom,
     stats,
     remarks,
     setRemarks,
@@ -132,7 +182,7 @@ const RoomSetup = () => {
     if (!isLocked && !isLoadingRecord) {
       triggerSave();
     }
-  }, [roomBedMap, remarks]);
+  }, [roomBedMap, roomGuestsMap, remarks]);
 
   if (authLoading || isLoadingRecord) {
     return (
