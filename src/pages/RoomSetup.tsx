@@ -11,9 +11,10 @@ import { RoomStats } from '@/components/room-planner/RoomStats';
 import { MapLightbox } from '@/components/room-planner/MapLightbox';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock } from 'lucide-react';
+import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, User } from 'lucide-react';
 import { FIXED_ROOMS, FLEXIBLE_ROOMS_ORDER } from '@/types/room';
 import { cn } from '@/lib/utils';
 import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
@@ -23,6 +24,8 @@ import roomTwinsImage from '@/assets/room-twins.jpg';
 
 const TOTAL_ROOMS = 11;
 
+const MAX_GUESTS_PER_ROOM = 2;
+
 interface RoomCardProps {
   roomId: number;
   bathroomType: 'en-suite' | 'shared';
@@ -31,9 +34,13 @@ interface RoomCardProps {
   isFixed?: boolean;
   isLocked: boolean;
   onChange?: (bed: FlexibleBed) => void;
+  guests: string[];
+  onAddGuest: () => void;
+  onUpdateGuest: (index: number, name: string) => void;
+  onRemoveGuest: (index: number) => void;
 }
 
-function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLocked, onChange }: RoomCardProps) {
+function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLocked, onChange, guests, onAddGuest, onUpdateGuest, onRemoveGuest }: RoomCardProps) {
   const image =
     roomId === 1 || roomId === 6
       ? roomKingImage
