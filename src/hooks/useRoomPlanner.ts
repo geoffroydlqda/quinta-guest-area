@@ -15,6 +15,16 @@ import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 export type FlexibleBed = 'twin' | 'king';
 export type RoomBedMap = Record<number, FlexibleBed>;
+export type RoomGuestsMap = Record<number, string[]>;
+
+const ALL_ROOM_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+const MAX_GUESTS_PER_ROOM = 2;
+
+function defaultRoomGuestsMap(): RoomGuestsMap {
+  const map: RoomGuestsMap = {};
+  ALL_ROOM_IDS.forEach((id) => { map[id] = []; });
+  return map;
+}
 
 const FLEXIBLE_IDS = FLEXIBLE_ROOMS_ORDER.map((r) => r.id);
 const FLEXIBLE_META: Record<number, { bathroomType: 'shared' | 'en-suite'; note?: string }> =
@@ -71,6 +81,7 @@ export function useRoomPlanner() {
   const { toast } = useToast();
 
   const [roomBedMap, setRoomBedMap] = useState<RoomBedMap>(defaultRoomBedMap);
+  const [roomGuestsMap, setRoomGuestsMap] = useState<RoomGuestsMap>(defaultRoomGuestsMap);
   const [remarks, setRemarks] = useState('');
   const [recordId, setRecordId] = useState<string | null>(null);
   const [isLoadingRecord, setIsLoadingRecord] = useState(true);
@@ -79,6 +90,34 @@ export function useRoomPlanner() {
     if (roomId === 1 || roomId === 6) return;
     setRoomBedMap((prev) => ({ ...prev, [roomId]: bedType }));
   }, []);
+
+  const addGuestToRoom = useCallback((roomId: number) => {
+    setRoomGuestsMap((prev) => {
+      const current = prev[roomId] || [];
+      if (current.length >= MAX_GUESTS_PER_ROOM) return prev;
+      return { ...prev, [roomId]: [...current, ''] };
+    });
+  }, []);
+
+  const updateGuestName = useCallback((roomId: number, index: number, name: string) => {
+    setRoomGuestsMap((prev) => {
+      const current = prev[roomId] || [];
+      if (index < 0 || index >= current.length) return prev;
+      const next = [...current];
+      next[index] = name;
+      return { ...prev, [roomId]: next };
+    });
+  }, []);
+
+  const removeGuestFromRoom = useCallback((roomId: number, index: number) => {
+    setRoomGuestsMap((prev) => {
+      const current = prev[roomId] || [];
+      if (index < 0 || index >= current.length) return prev;
+      return { ...prev, [roomId]: current.filter((_, i) => i !== index) };
+    });
+  }, []);
+
+
 
   // Derived quantities from the per-room map
   const derived = useMemo(() => {
