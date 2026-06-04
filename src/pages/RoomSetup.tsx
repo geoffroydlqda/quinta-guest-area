@@ -172,6 +172,8 @@ const RoomSetup = () => {
     setRemarks,
     autoSave,
     isLoadingRecord,
+    disabledRooms,
+    enabledRoomIds,
   } = useRoomPlanner();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
@@ -200,7 +202,7 @@ const RoomSetup = () => {
       statusInfo={guestStatus}
     >
       <div className="max-w-5xl mx-auto space-y-6">
-        <RoomConfigWarning totalConfigured={TOTAL_ROOMS} targetTotal={TOTAL_ROOMS} />
+        <RoomConfigWarning totalConfigured={enabledRoomIds.length} targetTotal={enabledRoomIds.length} />
 
         <div className="flex justify-end">
           <AutoSaveIndicator status={saveStatus} />
@@ -248,6 +250,7 @@ const RoomSetup = () => {
           {/* All 11 rooms in numeric order */}
           {[...FIXED_ROOMS.map((r) => ({ ...r, isFixed: true as const, note: undefined as string | undefined })),
             ...FLEXIBLE_ROOMS_ORDER.map((r) => ({ ...r, isFixed: false as const }))]
+            .filter((r) => !disabledRooms.includes(r.id))
             .sort((a, b) => a.id - b.id)
             .map((r) =>
               r.isFixed ? (

@@ -77,7 +77,7 @@ function reconstructFromQuantities(
 
 export function useRoomPlanner() {
   const { user } = useAuth();
-  const { activeBookingId, isImpersonating, impersonatedBooking } = useActiveBooking();
+  const { activeBookingId, activeBooking, isImpersonating, impersonatedBooking } = useActiveBooking();
   const { toast } = useToast();
 
   const [roomBedMap, setRoomBedMap] = useState<RoomBedMap>(defaultRoomBedMap);
@@ -85,6 +85,15 @@ export function useRoomPlanner() {
   const [remarks, setRemarks] = useState('');
   const [recordId, setRecordId] = useState<string | null>(null);
   const [isLoadingRecord, setIsLoadingRecord] = useState(true);
+  const [disabledRooms, setDisabledRooms] = useState<number[]>(() => {
+    const initial = (activeBooking as any)?.disabled_rooms;
+    return Array.isArray(initial) ? initial.map(Number) : [];
+  });
+
+  const enabledRoomIds = useMemo(
+    () => ALL_ROOM_IDS.filter((id) => !disabledRooms.includes(id)),
+    [disabledRooms],
+  );
 
   const setRoomBed = useCallback((roomId: number, bedType: FlexibleBed) => {
     if (roomId === 1 || roomId === 6) return;
@@ -119,10 +128,11 @@ export function useRoomPlanner() {
 
 
 
-  // Derived quantities from the per-room map
+  // Derived quantities from the per-room map (excluding disabled rooms)
   const derived = useMemo(() => {
     let queenSharedQty = 0, twinsSharedQty = 0, queenEnsuiteQty = 0, twinsEnsuiteQty = 0;
     FLEXIBLE_IDS.forEach((id) => {
+      if (disabledRooms.includes(id)) return;
       const bed = roomBedMap[id];
       const meta = FLEXIBLE_META[id];
       if (meta.bathroomType === 'shared') {
@@ -134,13 +144,14 @@ export function useRoomPlanner() {
       }
     });
     return { queenSharedQty, twinsSharedQty, queenEnsuiteQty, twinsEnsuiteQty };
-  }, [roomBedMap]);
+  }, [roomBedMap, disabledRooms]);
 
   const stats: RoomStats = useMemo(() => {
     const totalShared = derived.queenSharedQty + derived.twinsSharedQty;
     const totalEnsuite = derived.queenEnsuiteQty + derived.twinsEnsuiteQty;
+    const kingsFixed = FIXED_ROOMS.filter((r) => !disabledRooms.includes(r.id)).length;
     return {
-      kingsFixed: 2,
+      kingsFixed,
       queenSharedCount: derived.queenSharedQty,
       twinsSharedCount: derived.twinsSharedQty,
       queenEnsuiteCount: derived.queenEnsuiteQty,
@@ -149,11 +160,12 @@ export function useRoomPlanner() {
       totalEnsuite,
       notSetCount: Math.max(0, (MAX_SHARED_ROOMS - totalShared) + (MAX_ENSUITE_ROOMS - totalEnsuite)),
     };
-  }, [derived]);
+  }, [derived, disabledRooms]);
 
   const roomPlan: RoomPlan[] = useMemo(() => {
     const plan: RoomPlan[] = [];
     FIXED_ROOMS.forEach((r) => {
+      if (disabledRooms.includes(r.id)) return;
       plan.push({
         roomId: r.id,
         bedType: 'king',
@@ -162,6 +174,7 @@ export function useRoomPlanner() {
       });
     });
     FLEXIBLE_ROOMS_ORDER.forEach((r) => {
+      if (disabledRooms.includes(r.id)) return;
       plan.push({
         roomId: r.id,
         bedType: roomBedMap[r.id],
@@ -171,7 +184,7 @@ export function useRoomPlanner() {
       });
     });
     return plan.sort((a, b) => a.roomId - b.roomId);
-  }, [roomBedMap]);
+  }, [roomBedMap, disabledRooms]);
 
   const isSelectionValid = true;
 
@@ -216,6 +229,20 @@ export function useRoomPlanner() {
         setRemarks(data.remarks_roomsetup || data.remarks || '');
         setRecordId(data.id);
       }
+
+      // Fetch disabled_rooms for the active booking (fallback if not in context)
+      if (activeBookingId) {
+        const { data: bk } = await supabase
+          .from('bookings')
+          .select('disabled_rooms')
+          .eq('id', activeBookingId)
+          .maybeSingle();
+        const dr = (bk as any)?.disabled_rooms;
+        setDisabledRooms(Array.isArray(dr) ? dr.map(Number) : []);
+      } else {
+        const ctxDr = (activeBooking as any)?.disabled_rooms;
+        setDisabledRooms(Array.isArray(ctxDr) ? ctxDr.map(Number) : []);
+      }
     } catch (error: any) {
       console.error('Error loading record:', error);
       toast({
@@ -226,7 +253,7 @@ export function useRoomPlanner() {
     } finally {
       setIsLoadingRecord(false);
     }
-  }, [user, activeBookingId, toast]);
+  }, [user, activeBookingId, activeBooking, toast]);
 
   useEffect(() => {
     if (user) loadUserRecord();
@@ -305,5 +332,7 @@ export function useRoomPlanner() {
     isLoadingRecord,
     isSelectionValid,
     autoSave,
+    disabledRooms,
+    enabledRoomIds,
   };
 }
