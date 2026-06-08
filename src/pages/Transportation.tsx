@@ -406,22 +406,67 @@ const Transportation = () => {
                   </div>
 
                   {/* Date & Time */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Date <span className="text-destructive">*</span></Label>
-                      <Input
-                        type="date"
-                        value={newTrip.trip_date}
-                        onChange={(e) => setNewTrip(prev => ({ ...prev, trip_date: e.target.value }))}
-                        className={validationErrors.includes('trip_date') ? 'border-destructive' : ''}
-                      />
-                      {validationErrors.includes('trip_date') && (
-                        <p className="text-xs text-destructive mt-1">Required</p>
-                      )}
-                    </div>
-                    <div>
-                      <Label>Time <span className="text-destructive">*</span></Label>
-                      <Input
+                  {(() => {
+                    const isRound = newTrip.trip_type === 'round_trip';
+                    const pickupLabel = (newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location) || 'pickup';
+                    const dropoffLabel = (newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location) || 'destination';
+                    return (
+                      <div className={`grid gap-4 ${isRound ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-2'}`}>
+                        <div>
+                          <Label>Date <span className="text-destructive">*</span></Label>
+                          <Input
+                            type="date"
+                            value={newTrip.trip_date}
+                            onChange={(e) => setNewTrip(prev => ({ ...prev, trip_date: e.target.value }))}
+                            className={validationErrors.includes('trip_date') ? 'border-destructive' : ''}
+                          />
+                          {validationErrors.includes('trip_date') && (
+                            <p className="text-xs text-destructive mt-1">Required</p>
+                          )}
+                        </div>
+                        <div>
+                          <Label>
+                            {isRound ? 'Pick-up time (outbound)' : 'Time'} <span className="text-destructive">*</span>
+                          </Label>
+                          <Input
+                            type="time"
+                            value={newTrip.trip_time}
+                            max={checkoutDate && newTrip.trip_date === checkoutDate ? MAX_CHECKOUT_TIME : undefined}
+                            onChange={(e) => setNewTrip(prev => ({ ...prev, trip_time: e.target.value }))}
+                            className={validationErrors.includes('trip_time') || validationErrors.includes('checkout_time') ? 'border-destructive' : ''}
+                          />
+                          {isRound && (
+                            <p className="text-xs text-muted-foreground mt-1">Pick-up at {pickupLabel} → {dropoffLabel}</p>
+                          )}
+                          {validationErrors.includes('trip_time') && (
+                            <p className="text-xs text-destructive mt-1">Required</p>
+                          )}
+                          {validationErrors.includes('checkout_time') && (
+                            <p className="text-xs text-destructive mt-1">Pick-up time on check-out day cannot be later than 11:00 AM.</p>
+                          )}
+                        </div>
+                        {isRound && (
+                          <div>
+                            <Label>Pick-up time (return) <span className="text-destructive">*</span></Label>
+                            <Input
+                              type="time"
+                              value={newTrip.return_time}
+                              max={checkoutDate && newTrip.trip_date === checkoutDate ? MAX_CHECKOUT_TIME : undefined}
+                              onChange={(e) => setNewTrip(prev => ({ ...prev, return_time: e.target.value }))}
+                              className={validationErrors.includes('return_time') || validationErrors.includes('checkout_time_return') ? 'border-destructive' : ''}
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">Pick-up at {dropoffLabel} → {pickupLabel}</p>
+                            {validationErrors.includes('return_time') && (
+                              <p className="text-xs text-destructive mt-1">Required</p>
+                            )}
+                            {validationErrors.includes('checkout_time_return') && (
+                              <p className="text-xs text-destructive mt-1">Return pick-up time on check-out day cannot be later than 11:00 AM.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                         type="time"
                         value={newTrip.trip_time}
                         max={checkoutDate && newTrip.trip_date === checkoutDate ? MAX_CHECKOUT_TIME : undefined}
