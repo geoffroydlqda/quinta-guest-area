@@ -568,19 +568,24 @@ function TripCard({
   trip,
   onDelete,
   onDuplicate,
+  onUpdate,
   onAddPassenger,
   onRemovePassenger,
+  checkoutDate,
   disabled,
 }: {
   trip: TransportationTrip;
   onDelete: () => void;
   onDuplicate: () => void;
+  onUpdate: (updates: Partial<TransportationTrip>) => Promise<boolean>;
   onAddPassenger: (p: { first_name: string; phone: string; flight_number?: string }) => void;
   onRemovePassenger: (id: string) => void;
+  checkoutDate?: string | null;
   disabled?: boolean;
 }) {
   const [showAddPassenger, setShowAddPassenger] = useState(false);
   const [newPassenger, setNewPassenger] = useState({ first_name: '', phone: '', flight_number: '' });
+  const [isEditing, setIsEditing] = useState(false);
 
   const handleAddPassenger = () => {
     if (!newPassenger.first_name || !newPassenger.phone) return;
@@ -588,6 +593,21 @@ function TripCard({
     setNewPassenger({ first_name: '', phone: '', flight_number: '' });
     setShowAddPassenger(false);
   };
+
+  if (isEditing) {
+    return (
+      <EditTripForm
+        trip={trip}
+        checkoutDate={checkoutDate || null}
+        onCancel={() => setIsEditing(false)}
+        onSave={async (updates) => {
+          const ok = await onUpdate(updates);
+          if (ok) setIsEditing(false);
+          return ok;
+        }}
+      />
+    );
+  }
 
   return (
     <Card>
@@ -601,6 +621,9 @@ function TripCard({
           </div>
           {!disabled && (
             <div className="flex gap-1">
+              <Button variant="ghost" size="icon" onClick={() => setIsEditing(true)} title="Edit trip">
+                <Pencil className="w-4 h-4 text-muted-foreground" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={onDuplicate} title="Duplicate trip">
                 <Copy className="w-4 h-4 text-muted-foreground" />
               </Button>
@@ -623,6 +646,10 @@ function TripCard({
           <div>
             <span className="text-muted-foreground">Taxi: </span>
             {trip.taxi_size}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Passengers: </span>
+            {trip.passengers_count}
           </div>
           <div>
             <span className="text-muted-foreground">Price: </span>
