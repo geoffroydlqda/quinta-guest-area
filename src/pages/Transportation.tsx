@@ -105,6 +105,9 @@ const Transportation = () => {
   const checkoutDate = profile?.check_out_date || null;
   const MAX_CHECKOUT_TIME = '11:00';
 
+  const deriveDirection = (dropoff: string): 'To Quinta' | 'From Quinta' =>
+    dropoff === 'Quinta do Amor' ? 'To Quinta' : 'From Quinta';
+
   const handleAddTrip = async () => {
     const pickup = newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location;
     const dropoff = newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location;
@@ -112,7 +115,6 @@ const Transportation = () => {
 
     // Validate required fields
     const errors: string[] = [];
-    if (!newTrip.trip_direction) errors.push('direction');
     if (!newTrip.pickup_location) errors.push('pickup_location');
     if (newTrip.pickup_location === 'Custom' && !newTrip.pickup_custom) errors.push('pickup_custom');
     if (!newTrip.dropoff_location) errors.push('dropoff_location');
@@ -142,7 +144,7 @@ const Transportation = () => {
     setValidationErrors([]);
 
     await addTrip({
-      trip_direction: newTrip.trip_direction,
+      trip_direction: deriveDirection(dropoff),
       pickup_location: pickup,
       dropoff_location: dropoff,
       trip_date: newTrip.trip_date,
@@ -152,9 +154,8 @@ const Transportation = () => {
     });
 
     if (isRound) {
-      const returnDirection = newTrip.trip_direction === 'To Quinta' ? 'From Quinta' : 'To Quinta';
       await addTrip({
-        trip_direction: returnDirection,
+        trip_direction: deriveDirection(pickup),
         pickup_location: dropoff,
         dropoff_location: pickup,
         trip_date: newTrip.trip_date,
@@ -167,7 +168,6 @@ const Transportation = () => {
     setShowAddTrip(false);
     setNewTrip({
       trip_type: 'one_way',
-      trip_direction: 'To Quinta',
       pickup_location: '',
       pickup_custom: '',
       dropoff_location: 'Quinta do Amor',
