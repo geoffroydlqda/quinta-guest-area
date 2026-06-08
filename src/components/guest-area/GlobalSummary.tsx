@@ -106,7 +106,9 @@ export function GlobalSummary({
               const BATHROOM_PARTNER: Record<number, number> = { 2: 3, 3: 2, 4: 5, 5: 4, 7: 8, 8: 7 };
               const plan = roomSetupData!.roomPlan;
               if (plan && plan.length > 0) {
-                const sorted = [...plan].sort((a, b) => a.roomId - b.roomId);
+                const sorted = plan
+                  .filter((r) => !(disabledRooms || []).includes(r.roomId))
+                  .sort((a, b) => a.roomId - b.roomId);
                 const bedLabel = (b: 'king' | 'queen' | 'twin' | null) =>
                   b === 'twin' ? 'Twin beds' : b === 'king' || b === 'queen' ? 'King size bed' : '—';
                 return (
