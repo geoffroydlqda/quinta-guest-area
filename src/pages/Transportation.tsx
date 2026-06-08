@@ -74,7 +74,6 @@ const Transportation = () => {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [newTrip, setNewTrip] = useState({
     trip_type: 'one_way' as 'one_way' | 'round_trip',
-    trip_direction: 'To Quinta' as 'To Quinta' | 'From Quinta',
     pickup_location: '',
     pickup_custom: '',
     dropoff_location: 'Quinta do Amor',
