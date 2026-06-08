@@ -109,6 +109,7 @@ const Transportation = () => {
   const handleAddTrip = async () => {
     const pickup = newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location;
     const dropoff = newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location;
+    const isRound = newTrip.trip_type === 'round_trip';
 
     // Validate required fields
     const errors: string[] = [];
@@ -119,6 +120,7 @@ const Transportation = () => {
     if (newTrip.dropoff_location === 'Custom' && !newTrip.dropoff_custom) errors.push('dropoff_custom');
     if (!newTrip.trip_date) errors.push('trip_date');
     if (!newTrip.trip_time) errors.push('trip_time');
+    if (isRound && !newTrip.return_time) errors.push('return_time');
     if (!newTrip.taxi_size) errors.push('taxi_size');
     if (!newTrip.passengers_count || newTrip.passengers_count < 1) errors.push('passengers_count');
 
@@ -127,9 +129,10 @@ const Transportation = () => {
       errors.push('passengers_capacity');
     }
 
-    // Check-out time validation
-    if (checkoutDate && newTrip.trip_date === checkoutDate && newTrip.trip_time && newTrip.trip_time > MAX_CHECKOUT_TIME) {
-      errors.push('checkout_time');
+    // Check-out time validation (apply to whichever leg lands on the checkout date)
+    if (checkoutDate && newTrip.trip_date === checkoutDate) {
+      if (newTrip.trip_time && newTrip.trip_time > MAX_CHECKOUT_TIME) errors.push('checkout_time');
+      if (isRound && newTrip.return_time && newTrip.return_time > MAX_CHECKOUT_TIME) errors.push('checkout_time_return');
     }
 
     if (errors.length > 0) {
@@ -149,8 +152,22 @@ const Transportation = () => {
       taxi_size: newTrip.taxi_size,
     });
 
+    if (isRound) {
+      const returnDirection = newTrip.trip_direction === 'To Quinta' ? 'From Quinta' : 'To Quinta';
+      await addTrip({
+        trip_direction: returnDirection,
+        pickup_location: dropoff,
+        dropoff_location: pickup,
+        trip_date: newTrip.trip_date,
+        trip_time: newTrip.return_time,
+        passengers_count: newTrip.passengers_count,
+        taxi_size: newTrip.taxi_size,
+      });
+    }
+
     setShowAddTrip(false);
     setNewTrip({
+      trip_type: 'one_way',
       trip_direction: 'To Quinta',
       pickup_location: '',
       pickup_custom: '',
@@ -158,6 +175,7 @@ const Transportation = () => {
       dropoff_custom: '',
       trip_date: profile?.check_in_date || todayLocalISO(),
       trip_time: '',
+      return_time: '',
       passengers_count: 1,
       taxi_size: '4 seats',
     });
