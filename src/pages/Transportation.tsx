@@ -261,10 +261,16 @@ const Transportation = () => {
         </div>
 
         {/* Existing Trips */}
-        {trips.length > 0 && (
+        {trips.length > 0 && (() => {
+          const sortedTrips = [...trips].sort((a, b) => {
+            const dateCmp = (a.trip_date || '').localeCompare(b.trip_date || '');
+            if (dateCmp !== 0) return dateCmp;
+            return (a.trip_time || '').localeCompare(b.trip_time || '');
+          });
+          return (
           <div className="space-y-4">
             <h2 className="text-lg font-medium">Your trips</h2>
-            {trips.map((trip) => (
+            {sortedTrips.map((trip) => (
               <TripCard
                 key={trip.id}
                 trip={trip}
