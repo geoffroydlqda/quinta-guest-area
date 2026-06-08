@@ -300,6 +300,23 @@ const Transportation = () => {
                     </div>
                   )}
 
+                  {/* Trip type */}
+                  <div>
+                    <Label>Trip type</Label>
+                    <Select
+                      value={newTrip.trip_type}
+                      onValueChange={(v) => setNewTrip(prev => ({ ...prev, trip_type: v as 'one_way' | 'round_trip' }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="one_way">One-way</SelectItem>
+                        <SelectItem value="round_trip">Round-trip (creates 2 trips)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   {/* Direction */}
                   <div>
                     <Label>Direction <span className="text-destructive">*</span></Label>
