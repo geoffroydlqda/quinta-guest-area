@@ -74,7 +74,6 @@ const Transportation = () => {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [newTrip, setNewTrip] = useState({
     trip_type: 'one_way' as 'one_way' | 'round_trip',
-    trip_direction: 'To Quinta' as 'To Quinta' | 'From Quinta',
     pickup_location: '',
     pickup_custom: '',
     dropoff_location: 'Quinta do Amor',
@@ -106,6 +105,9 @@ const Transportation = () => {
   const checkoutDate = profile?.check_out_date || null;
   const MAX_CHECKOUT_TIME = '11:00';
 
+  const deriveDirection = (dropoff: string): 'To Quinta' | 'From Quinta' =>
+    dropoff === 'Quinta do Amor' ? 'To Quinta' : 'From Quinta';
+
   const handleAddTrip = async () => {
     const pickup = newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location;
     const dropoff = newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location;
@@ -113,7 +115,6 @@ const Transportation = () => {
 
     // Validate required fields
     const errors: string[] = [];
-    if (!newTrip.trip_direction) errors.push('direction');
     if (!newTrip.pickup_location) errors.push('pickup_location');
     if (newTrip.pickup_location === 'Custom' && !newTrip.pickup_custom) errors.push('pickup_custom');
     if (!newTrip.dropoff_location) errors.push('dropoff_location');
@@ -143,7 +144,7 @@ const Transportation = () => {
     setValidationErrors([]);
 
     await addTrip({
-      trip_direction: newTrip.trip_direction,
+      trip_direction: deriveDirection(dropoff),
       pickup_location: pickup,
       dropoff_location: dropoff,
       trip_date: newTrip.trip_date,
@@ -153,9 +154,8 @@ const Transportation = () => {
     });
 
     if (isRound) {
-      const returnDirection = newTrip.trip_direction === 'To Quinta' ? 'From Quinta' : 'To Quinta';
       await addTrip({
-        trip_direction: returnDirection,
+        trip_direction: deriveDirection(pickup),
         pickup_location: dropoff,
         dropoff_location: pickup,
         trip_date: newTrip.trip_date,
@@ -168,7 +168,6 @@ const Transportation = () => {
     setShowAddTrip(false);
     setNewTrip({
       trip_type: 'one_way',
-      trip_direction: 'To Quinta',
       pickup_location: '',
       pickup_custom: '',
       dropoff_location: 'Quinta do Amor',
@@ -326,25 +325,8 @@ const Transportation = () => {
                     </Select>
                   </div>
 
-                  {/* Direction */}
-                  <div>
-                    <Label>Direction <span className="text-destructive">*</span></Label>
-                    <Select
-                      value={newTrip.trip_direction}
-                      onValueChange={(v) => setNewTrip(prev => ({ ...prev, trip_direction: v as any }))}
-                    >
-                      <SelectTrigger className={validationErrors.includes('direction') ? 'border-destructive' : ''}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="To Quinta">To Quinta do Amor</SelectItem>
-                        <SelectItem value="From Quinta">From Quinta do Amor</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {validationErrors.includes('direction') && (
-                      <p className="text-xs text-destructive mt-1">Required</p>
-                    )}
-                  </div>
+
+
 
                   {/* Pickup */}
                   <div>
@@ -751,7 +733,6 @@ function EditTripForm({
   const initialDropoffIsPreset = DROPOFF_OPTIONS.includes(trip.dropoff_location) && trip.dropoff_location !== 'Custom';
 
   const [form, setForm] = useState({
-    trip_direction: trip.trip_direction as 'To Quinta' | 'From Quinta',
     pickup_location: initialPickupIsPreset ? trip.pickup_location : 'Custom',
     pickup_custom: initialPickupIsPreset ? '' : trip.pickup_location,
     dropoff_location: initialDropoffIsPreset ? trip.dropoff_location : 'Custom',
@@ -769,7 +750,6 @@ function EditTripForm({
     const dropoff = form.dropoff_location === 'Custom' ? form.dropoff_custom : form.dropoff_location;
 
     const errors: string[] = [];
-    if (!form.trip_direction) errors.push('direction');
     if (!form.pickup_location) errors.push('pickup_location');
     if (form.pickup_location === 'Custom' && !form.pickup_custom) errors.push('pickup_custom');
     if (!form.dropoff_location) errors.push('dropoff_location');
@@ -790,7 +770,7 @@ function EditTripForm({
     setValidationErrors([]);
     setSaving(true);
     await onSave({
-      trip_direction: form.trip_direction,
+      trip_direction: dropoff === 'Quinta do Amor' ? 'To Quinta' : 'From Quinta',
       pickup_location: pickup,
       dropoff_location: dropoff,
       trip_date: form.trip_date,
@@ -819,21 +799,8 @@ function EditTripForm({
           </div>
         )}
 
-        <div>
-          <Label>Direction <span className="text-destructive">*</span></Label>
-          <Select
-            value={form.trip_direction}
-            onValueChange={(v) => setForm(p => ({ ...p, trip_direction: v as any }))}
-          >
-            <SelectTrigger className={validationErrors.includes('direction') ? 'border-destructive' : ''}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="To Quinta">To Quinta do Amor</SelectItem>
-              <SelectItem value="From Quinta">From Quinta do Amor</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+
+
 
         <div>
           <Label>Pickup location <span className="text-destructive">*</span></Label>
