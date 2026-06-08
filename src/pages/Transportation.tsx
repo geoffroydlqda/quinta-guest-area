@@ -750,7 +750,6 @@ function EditTripForm({
     const dropoff = form.dropoff_location === 'Custom' ? form.dropoff_custom : form.dropoff_location;
 
     const errors: string[] = [];
-    if (!form.trip_direction) errors.push('direction');
     if (!form.pickup_location) errors.push('pickup_location');
     if (form.pickup_location === 'Custom' && !form.pickup_custom) errors.push('pickup_custom');
     if (!form.dropoff_location) errors.push('dropoff_location');
