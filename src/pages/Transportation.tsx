@@ -467,20 +467,6 @@ const Transportation = () => {
                       </div>
                     );
                   })()}
-                        type="time"
-                        value={newTrip.trip_time}
-                        max={checkoutDate && newTrip.trip_date === checkoutDate ? MAX_CHECKOUT_TIME : undefined}
-                        onChange={(e) => setNewTrip(prev => ({ ...prev, trip_time: e.target.value }))}
-                        className={validationErrors.includes('trip_time') || validationErrors.includes('checkout_time') ? 'border-destructive' : ''}
-                      />
-                      {validationErrors.includes('trip_time') && (
-                        <p className="text-xs text-destructive mt-1">Required</p>
-                      )}
-                      {validationErrors.includes('checkout_time') && (
-                        <p className="text-xs text-destructive mt-1">Pick-up time on check-out day cannot be later than 11:00 AM.</p>
-                      )}
-                    </div>
-                  </div>
 
                   {/* Passengers & Taxi Size */}
                   <div className="grid grid-cols-2 gap-4">
