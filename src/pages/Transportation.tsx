@@ -73,6 +73,7 @@ const Transportation = () => {
   const [showAddTrip, setShowAddTrip] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [newTrip, setNewTrip] = useState({
+    trip_type: 'one_way' as 'one_way' | 'round_trip',
     trip_direction: 'To Quinta' as 'To Quinta' | 'From Quinta',
     pickup_location: '',
     pickup_custom: '',
@@ -80,6 +81,7 @@ const Transportation = () => {
     dropoff_custom: '',
     trip_date: defaultTripDate,
     trip_time: '',
+    return_time: '',
     passengers_count: 1,
     taxi_size: '4 seats' as '4 seats' | '6 seats' | '8 seats',
   });
@@ -107,6 +109,7 @@ const Transportation = () => {
   const handleAddTrip = async () => {
     const pickup = newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location;
     const dropoff = newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location;
+    const isRound = newTrip.trip_type === 'round_trip';
 
     // Validate required fields
     const errors: string[] = [];
@@ -117,6 +120,7 @@ const Transportation = () => {
     if (newTrip.dropoff_location === 'Custom' && !newTrip.dropoff_custom) errors.push('dropoff_custom');
     if (!newTrip.trip_date) errors.push('trip_date');
     if (!newTrip.trip_time) errors.push('trip_time');
+    if (isRound && !newTrip.return_time) errors.push('return_time');
     if (!newTrip.taxi_size) errors.push('taxi_size');
     if (!newTrip.passengers_count || newTrip.passengers_count < 1) errors.push('passengers_count');
 
@@ -125,9 +129,10 @@ const Transportation = () => {
       errors.push('passengers_capacity');
     }
 
-    // Check-out time validation
-    if (checkoutDate && newTrip.trip_date === checkoutDate && newTrip.trip_time && newTrip.trip_time > MAX_CHECKOUT_TIME) {
-      errors.push('checkout_time');
+    // Check-out time validation (apply to whichever leg lands on the checkout date)
+    if (checkoutDate && newTrip.trip_date === checkoutDate) {
+      if (newTrip.trip_time && newTrip.trip_time > MAX_CHECKOUT_TIME) errors.push('checkout_time');
+      if (isRound && newTrip.return_time && newTrip.return_time > MAX_CHECKOUT_TIME) errors.push('checkout_time_return');
     }
 
     if (errors.length > 0) {
@@ -147,8 +152,22 @@ const Transportation = () => {
       taxi_size: newTrip.taxi_size,
     });
 
+    if (isRound) {
+      const returnDirection = newTrip.trip_direction === 'To Quinta' ? 'From Quinta' : 'To Quinta';
+      await addTrip({
+        trip_direction: returnDirection,
+        pickup_location: dropoff,
+        dropoff_location: pickup,
+        trip_date: newTrip.trip_date,
+        trip_time: newTrip.return_time,
+        passengers_count: newTrip.passengers_count,
+        taxi_size: newTrip.taxi_size,
+      });
+    }
+
     setShowAddTrip(false);
     setNewTrip({
+      trip_type: 'one_way',
       trip_direction: 'To Quinta',
       pickup_location: '',
       pickup_custom: '',
@@ -156,6 +175,7 @@ const Transportation = () => {
       dropoff_custom: '',
       trip_date: profile?.check_in_date || todayLocalISO(),
       trip_time: '',
+      return_time: '',
       passengers_count: 1,
       taxi_size: '4 seats',
     });
@@ -280,6 +300,23 @@ const Transportation = () => {
                     </div>
                   )}
 
+                  {/* Trip type */}
+                  <div>
+                    <Label>Trip type</Label>
+                    <Select
+                      value={newTrip.trip_type}
+                      onValueChange={(v) => setNewTrip(prev => ({ ...prev, trip_type: v as 'one_way' | 'round_trip' }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="one_way">One-way</SelectItem>
+                        <SelectItem value="round_trip">Round-trip (creates 2 trips)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   {/* Direction */}
                   <div>
                     <Label>Direction <span className="text-destructive">*</span></Label>
@@ -369,36 +406,67 @@ const Transportation = () => {
                   </div>
 
                   {/* Date & Time */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Date <span className="text-destructive">*</span></Label>
-                      <Input
-                        type="date"
-                        value={newTrip.trip_date}
-                        onChange={(e) => setNewTrip(prev => ({ ...prev, trip_date: e.target.value }))}
-                        className={validationErrors.includes('trip_date') ? 'border-destructive' : ''}
-                      />
-                      {validationErrors.includes('trip_date') && (
-                        <p className="text-xs text-destructive mt-1">Required</p>
-                      )}
-                    </div>
-                    <div>
-                      <Label>Time <span className="text-destructive">*</span></Label>
-                      <Input
-                        type="time"
-                        value={newTrip.trip_time}
-                        max={checkoutDate && newTrip.trip_date === checkoutDate ? MAX_CHECKOUT_TIME : undefined}
-                        onChange={(e) => setNewTrip(prev => ({ ...prev, trip_time: e.target.value }))}
-                        className={validationErrors.includes('trip_time') || validationErrors.includes('checkout_time') ? 'border-destructive' : ''}
-                      />
-                      {validationErrors.includes('trip_time') && (
-                        <p className="text-xs text-destructive mt-1">Required</p>
-                      )}
-                      {validationErrors.includes('checkout_time') && (
-                        <p className="text-xs text-destructive mt-1">Pick-up time on check-out day cannot be later than 11:00 AM.</p>
-                      )}
-                    </div>
-                  </div>
+                  {(() => {
+                    const isRound = newTrip.trip_type === 'round_trip';
+                    const pickupLabel = (newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location) || 'pickup';
+                    const dropoffLabel = (newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location) || 'destination';
+                    return (
+                      <div className={`grid gap-4 ${isRound ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-2'}`}>
+                        <div>
+                          <Label>Date <span className="text-destructive">*</span></Label>
+                          <Input
+                            type="date"
+                            value={newTrip.trip_date}
+                            onChange={(e) => setNewTrip(prev => ({ ...prev, trip_date: e.target.value }))}
+                            className={validationErrors.includes('trip_date') ? 'border-destructive' : ''}
+                          />
+                          {validationErrors.includes('trip_date') && (
+                            <p className="text-xs text-destructive mt-1">Required</p>
+                          )}
+                        </div>
+                        <div>
+                          <Label>
+                            {isRound ? 'Pick-up time (outbound)' : 'Time'} <span className="text-destructive">*</span>
+                          </Label>
+                          <Input
+                            type="time"
+                            value={newTrip.trip_time}
+                            max={checkoutDate && newTrip.trip_date === checkoutDate ? MAX_CHECKOUT_TIME : undefined}
+                            onChange={(e) => setNewTrip(prev => ({ ...prev, trip_time: e.target.value }))}
+                            className={validationErrors.includes('trip_time') || validationErrors.includes('checkout_time') ? 'border-destructive' : ''}
+                          />
+                          {isRound && (
+                            <p className="text-xs text-muted-foreground mt-1">Pick-up at {pickupLabel} → {dropoffLabel}</p>
+                          )}
+                          {validationErrors.includes('trip_time') && (
+                            <p className="text-xs text-destructive mt-1">Required</p>
+                          )}
+                          {validationErrors.includes('checkout_time') && (
+                            <p className="text-xs text-destructive mt-1">Pick-up time on check-out day cannot be later than 11:00 AM.</p>
+                          )}
+                        </div>
+                        {isRound && (
+                          <div>
+                            <Label>Pick-up time (return) <span className="text-destructive">*</span></Label>
+                            <Input
+                              type="time"
+                              value={newTrip.return_time}
+                              max={checkoutDate && newTrip.trip_date === checkoutDate ? MAX_CHECKOUT_TIME : undefined}
+                              onChange={(e) => setNewTrip(prev => ({ ...prev, return_time: e.target.value }))}
+                              className={validationErrors.includes('return_time') || validationErrors.includes('checkout_time_return') ? 'border-destructive' : ''}
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">Pick-up at {dropoffLabel} → {pickupLabel}</p>
+                            {validationErrors.includes('return_time') && (
+                              <p className="text-xs text-destructive mt-1">Required</p>
+                            )}
+                            {validationErrors.includes('checkout_time_return') && (
+                              <p className="text-xs text-destructive mt-1">Return pick-up time on check-out day cannot be later than 11:00 AM.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Passengers & Taxi Size */}
                   <div className="grid grid-cols-2 gap-4">
