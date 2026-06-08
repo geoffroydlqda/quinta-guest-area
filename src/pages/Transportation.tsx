@@ -276,8 +276,10 @@ const Transportation = () => {
                 trip={trip}
                 onDelete={() => deleteTrip(trip.id)}
                 onDuplicate={() => handleDuplicateTrip(trip)}
+                onUpdate={(updates) => updateTrip(trip.id, updates)}
                 onAddPassenger={(passenger) => addPassenger(trip.id, passenger)}
                 onRemovePassenger={(passengerId) => removePassenger(passengerId, trip.id)}
+                checkoutDate={checkoutDate}
                 disabled={isLocked}
               />
             ))}
