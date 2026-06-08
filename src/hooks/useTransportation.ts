@@ -195,13 +195,20 @@ export function useTransportation() {
       const existing = trips.find(t => t.id === tripId);
       const eventId = (existing as any)?.google_calendar_event_id as string | undefined;
 
-      const { error } = await supabase
+      let delQuery = supabase
         .from('transportation_trips')
         .delete()
-        .eq('id', tripId)
-        .eq('user_id', user.id);
+        .eq('id', tripId);
+      delQuery = activeBookingId
+        ? delQuery.eq('booking_id', activeBookingId)
+        : delQuery.eq('user_id', user.id);
+      const { data: deletedRows, error } = await delQuery.select('id');
 
       if (error) throw error;
+      if (!deletedRows || deletedRows.length === 0) {
+        toast({ title: 'Could not delete trip', description: 'Please refresh and try again.', variant: 'destructive' });
+        return false;
+      }
 
       setTrips(prev => prev.filter(t => t.id !== tripId));
       triggerSheetsSync();
@@ -211,7 +218,7 @@ export function useTransportation() {
       console.error('Error deleting trip:', error);
       return false;
     }
-  }, [user, trips]);
+  }, [user, activeBookingId, trips, toast]);
 
 
   // Add passenger to trip
