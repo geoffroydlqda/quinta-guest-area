@@ -164,11 +164,14 @@ export function useTransportation() {
         }
       }
       
-      const { error } = await supabase
+      let updQuery = supabase
         .from('transportation_trips')
         .update({ ...updates, price_estimate: priceEstimate })
-        .eq('id', tripId)
-        .eq('user_id', user.id);
+        .eq('id', tripId);
+      updQuery = activeBookingId
+        ? updQuery.eq('booking_id', activeBookingId)
+        : updQuery.eq('user_id', user.id);
+      const { error } = await updQuery;
       
       if (error) throw error;
       
@@ -182,7 +185,7 @@ export function useTransportation() {
       console.error('Error updating trip:', error);
       return false;
     }
-  }, [user, trips]);
+  }, [user, activeBookingId, trips]);
 
   // Delete a trip
   const deleteTrip = useCallback(async (tripId: string): Promise<boolean> => {
