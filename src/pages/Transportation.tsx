@@ -73,6 +73,7 @@ const Transportation = () => {
   const [showAddTrip, setShowAddTrip] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [newTrip, setNewTrip] = useState({
+    trip_type: 'one_way' as 'one_way' | 'round_trip',
     trip_direction: 'To Quinta' as 'To Quinta' | 'From Quinta',
     pickup_location: '',
     pickup_custom: '',
@@ -80,6 +81,7 @@ const Transportation = () => {
     dropoff_custom: '',
     trip_date: defaultTripDate,
     trip_time: '',
+    return_time: '',
     passengers_count: 1,
     taxi_size: '4 seats' as '4 seats' | '6 seats' | '8 seats',
   });
