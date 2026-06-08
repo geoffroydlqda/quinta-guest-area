@@ -733,7 +733,6 @@ function EditTripForm({
   const initialDropoffIsPreset = DROPOFF_OPTIONS.includes(trip.dropoff_location) && trip.dropoff_location !== 'Custom';
 
   const [form, setForm] = useState({
-    trip_direction: trip.trip_direction as 'To Quinta' | 'From Quinta',
     pickup_location: initialPickupIsPreset ? trip.pickup_location : 'Custom',
     pickup_custom: initialPickupIsPreset ? '' : trip.pickup_location,
     dropoff_location: initialDropoffIsPreset ? trip.dropoff_location : 'Custom',
