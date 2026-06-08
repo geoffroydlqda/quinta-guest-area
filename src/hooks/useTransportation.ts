@@ -164,11 +164,14 @@ export function useTransportation() {
         }
       }
       
-      const { error } = await supabase
+      let updQuery = supabase
         .from('transportation_trips')
         .update({ ...updates, price_estimate: priceEstimate })
-        .eq('id', tripId)
-        .eq('user_id', user.id);
+        .eq('id', tripId);
+      updQuery = activeBookingId
+        ? updQuery.eq('booking_id', activeBookingId)
+        : updQuery.eq('user_id', user.id);
+      const { error } = await updQuery;
       
       if (error) throw error;
       
@@ -182,7 +185,7 @@ export function useTransportation() {
       console.error('Error updating trip:', error);
       return false;
     }
-  }, [user, trips]);
+  }, [user, activeBookingId, trips]);
 
   // Delete a trip
   const deleteTrip = useCallback(async (tripId: string): Promise<boolean> => {
@@ -192,13 +195,20 @@ export function useTransportation() {
       const existing = trips.find(t => t.id === tripId);
       const eventId = (existing as any)?.google_calendar_event_id as string | undefined;
 
-      const { error } = await supabase
+      let delQuery = supabase
         .from('transportation_trips')
         .delete()
-        .eq('id', tripId)
-        .eq('user_id', user.id);
+        .eq('id', tripId);
+      delQuery = activeBookingId
+        ? delQuery.eq('booking_id', activeBookingId)
+        : delQuery.eq('user_id', user.id);
+      const { data: deletedRows, error } = await delQuery.select('id');
 
       if (error) throw error;
+      if (!deletedRows || deletedRows.length === 0) {
+        toast({ title: 'Could not delete trip', description: 'Please refresh and try again.', variant: 'destructive' });
+        return false;
+      }
 
       setTrips(prev => prev.filter(t => t.id !== tripId));
       triggerSheetsSync();
@@ -208,7 +218,7 @@ export function useTransportation() {
       console.error('Error deleting trip:', error);
       return false;
     }
-  }, [user, trips]);
+  }, [user, activeBookingId, trips, toast]);
 
 
   // Add passenger to trip
@@ -249,11 +259,14 @@ export function useTransportation() {
     if (!user) return false;
     
     try {
-      const { error } = await supabase
+      let pDelQuery = supabase
         .from('transportation_passengers')
         .delete()
-        .eq('id', passengerId)
-        .eq('user_id', user.id);
+        .eq('id', passengerId);
+      pDelQuery = activeBookingId
+        ? pDelQuery.eq('booking_id', activeBookingId)
+        : pDelQuery.eq('user_id', user.id);
+      const { error } = await pDelQuery;
       
       if (error) throw error;
       
@@ -270,7 +283,7 @@ export function useTransportation() {
       console.error('Error removing passenger:', error);
       return false;
     }
-  }, [user]);
+  }, [user, activeBookingId]);
 
   // Update notes
   const updateNotes = useCallback((notes: string) => {
