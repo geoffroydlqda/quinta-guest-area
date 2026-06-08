@@ -32,6 +32,7 @@ interface GlobalSummaryProps {
     mealTimes?: { breakfast_time: string | null; lunch_time: string | null; dinner_time: string | null };
     selections?: { date: string; fullBoard: boolean; breakfast: boolean; lunch: boolean; dinner: boolean; guests_count_day?: number }[];
   };
+  disabledRooms?: number[];
 }
 
 function parseLocalDateLong(dateStr: string): string {
