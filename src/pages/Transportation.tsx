@@ -282,7 +282,8 @@ const Transportation = () => {
               />
             ))}
           </div>
-        )}
+          );
+        })()}
 
         {/* Add Trip Form */}
         {!isLocked && (
