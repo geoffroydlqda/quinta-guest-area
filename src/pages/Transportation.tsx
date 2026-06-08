@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Plus, Trash2, UserPlus, X, Car, Info, Copy, AlertCircle } from 'lucide-react';
+import { Loader2, Plus, Trash2, UserPlus, X, Car, Info, Copy, AlertCircle, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import type { TransportationTrip } from '@/types/guest';
 import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS, STANDARD_TAXI_PRICE_8_SEATS } from '@/types/guest';
@@ -276,8 +276,10 @@ const Transportation = () => {
                 trip={trip}
                 onDelete={() => deleteTrip(trip.id)}
                 onDuplicate={() => handleDuplicateTrip(trip)}
+                onUpdate={(updates) => updateTrip(trip.id, updates)}
                 onAddPassenger={(passenger) => addPassenger(trip.id, passenger)}
                 onRemovePassenger={(passengerId) => removePassenger(passengerId, trip.id)}
+                checkoutDate={checkoutDate}
                 disabled={isLocked}
               />
             ))}
@@ -566,19 +568,24 @@ function TripCard({
   trip,
   onDelete,
   onDuplicate,
+  onUpdate,
   onAddPassenger,
   onRemovePassenger,
+  checkoutDate,
   disabled,
 }: {
   trip: TransportationTrip;
   onDelete: () => void;
   onDuplicate: () => void;
+  onUpdate: (updates: Partial<TransportationTrip>) => Promise<boolean>;
   onAddPassenger: (p: { first_name: string; phone: string; flight_number?: string }) => void;
   onRemovePassenger: (id: string) => void;
+  checkoutDate?: string | null;
   disabled?: boolean;
 }) {
   const [showAddPassenger, setShowAddPassenger] = useState(false);
   const [newPassenger, setNewPassenger] = useState({ first_name: '', phone: '', flight_number: '' });
+  const [isEditing, setIsEditing] = useState(false);
 
   const handleAddPassenger = () => {
     if (!newPassenger.first_name || !newPassenger.phone) return;
@@ -586,6 +593,21 @@ function TripCard({
     setNewPassenger({ first_name: '', phone: '', flight_number: '' });
     setShowAddPassenger(false);
   };
+
+  if (isEditing) {
+    return (
+      <EditTripForm
+        trip={trip}
+        checkoutDate={checkoutDate || null}
+        onCancel={() => setIsEditing(false)}
+        onSave={async (updates) => {
+          const ok = await onUpdate(updates);
+          if (ok) setIsEditing(false);
+          return ok;
+        }}
+      />
+    );
+  }
 
   return (
     <Card>
@@ -599,6 +621,9 @@ function TripCard({
           </div>
           {!disabled && (
             <div className="flex gap-1">
+              <Button variant="ghost" size="icon" onClick={() => setIsEditing(true)} title="Edit trip">
+                <Pencil className="w-4 h-4 text-muted-foreground" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={onDuplicate} title="Duplicate trip">
                 <Copy className="w-4 h-4 text-muted-foreground" />
               </Button>
@@ -621,6 +646,10 @@ function TripCard({
           <div>
             <span className="text-muted-foreground">Taxi: </span>
             {trip.taxi_size}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Passengers: </span>
+            {trip.passengers_count}
           </div>
           <div>
             <span className="text-muted-foreground">Price: </span>
@@ -702,3 +731,232 @@ function TripCard({
 }
 
 export default Transportation;
+
+// Edit Trip Form Component
+function EditTripForm({
+  trip,
+  checkoutDate,
+  onSave,
+  onCancel,
+}: {
+  trip: TransportationTrip;
+  checkoutDate: string | null;
+  onSave: (updates: Partial<TransportationTrip>) => Promise<boolean>;
+  onCancel: () => void;
+}) {
+  const capacityOf = (size: string) => (size === '8 seats' ? 8 : size === '6 seats' ? 6 : 4);
+  const MAX_CHECKOUT_TIME = '11:00';
+
+  const initialPickupIsPreset = PICKUP_OPTIONS.includes(trip.pickup_location) && trip.pickup_location !== 'Custom';
+  const initialDropoffIsPreset = DROPOFF_OPTIONS.includes(trip.dropoff_location) && trip.dropoff_location !== 'Custom';
+
+  const [form, setForm] = useState({
+    trip_direction: trip.trip_direction as 'To Quinta' | 'From Quinta',
+    pickup_location: initialPickupIsPreset ? trip.pickup_location : 'Custom',
+    pickup_custom: initialPickupIsPreset ? '' : trip.pickup_location,
+    dropoff_location: initialDropoffIsPreset ? trip.dropoff_location : 'Custom',
+    dropoff_custom: initialDropoffIsPreset ? '' : trip.dropoff_location,
+    trip_date: trip.trip_date,
+    trip_time: trip.trip_time,
+    passengers_count: trip.passengers_count,
+    taxi_size: trip.taxi_size as '4 seats' | '6 seats' | '8 seats',
+  });
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const pickup = form.pickup_location === 'Custom' ? form.pickup_custom : form.pickup_location;
+    const dropoff = form.dropoff_location === 'Custom' ? form.dropoff_custom : form.dropoff_location;
+
+    const errors: string[] = [];
+    if (!form.trip_direction) errors.push('direction');
+    if (!form.pickup_location) errors.push('pickup_location');
+    if (form.pickup_location === 'Custom' && !form.pickup_custom) errors.push('pickup_custom');
+    if (!form.dropoff_location) errors.push('dropoff_location');
+    if (form.dropoff_location === 'Custom' && !form.dropoff_custom) errors.push('dropoff_custom');
+    if (!form.trip_date) errors.push('trip_date');
+    if (!form.trip_time) errors.push('trip_time');
+    if (!form.taxi_size) errors.push('taxi_size');
+    if (!form.passengers_count || form.passengers_count < 1) errors.push('passengers_count');
+    if (form.passengers_count > capacityOf(form.taxi_size)) errors.push('passengers_capacity');
+    if (checkoutDate && form.trip_date === checkoutDate && form.trip_time && form.trip_time > MAX_CHECKOUT_TIME) {
+      errors.push('checkout_time');
+    }
+
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    setValidationErrors([]);
+    setSaving(true);
+    await onSave({
+      trip_direction: form.trip_direction,
+      pickup_location: pickup,
+      dropoff_location: dropoff,
+      trip_date: form.trip_date,
+      trip_time: form.trip_time,
+      passengers_count: form.passengers_count,
+      taxi_size: form.taxi_size,
+    });
+    setSaving(false);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Pencil className="w-5 h-5" />
+          Edit Trip
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {validationErrors.length > 0 && (
+          <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-destructive font-medium">
+              Please fix the highlighted fields.
+            </p>
+          </div>
+        )}
+
+        <div>
+          <Label>Direction <span className="text-destructive">*</span></Label>
+          <Select
+            value={form.trip_direction}
+            onValueChange={(v) => setForm(p => ({ ...p, trip_direction: v as any }))}
+          >
+            <SelectTrigger className={validationErrors.includes('direction') ? 'border-destructive' : ''}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="To Quinta">To Quinta do Amor</SelectItem>
+              <SelectItem value="From Quinta">From Quinta do Amor</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label>Pickup location <span className="text-destructive">*</span></Label>
+          <Select
+            value={form.pickup_location}
+            onValueChange={(v) => setForm(p => ({ ...p, pickup_location: v }))}
+          >
+            <SelectTrigger className={validationErrors.includes('pickup_location') ? 'border-destructive' : ''}>
+              <SelectValue placeholder="Select pickup" />
+            </SelectTrigger>
+            <SelectContent>
+              {PICKUP_OPTIONS.map(opt => (
+                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {form.pickup_location === 'Custom' && (
+            <Input
+              className={`mt-2 ${validationErrors.includes('pickup_custom') ? 'border-destructive' : ''}`}
+              placeholder="Enter custom pickup location"
+              value={form.pickup_custom}
+              onChange={(e) => setForm(p => ({ ...p, pickup_custom: e.target.value }))}
+            />
+          )}
+        </div>
+
+        <div>
+          <Label>Dropoff location <span className="text-destructive">*</span></Label>
+          <Select
+            value={form.dropoff_location}
+            onValueChange={(v) => setForm(p => ({ ...p, dropoff_location: v }))}
+          >
+            <SelectTrigger className={validationErrors.includes('dropoff_location') ? 'border-destructive' : ''}>
+              <SelectValue placeholder="Select dropoff" />
+            </SelectTrigger>
+            <SelectContent>
+              {DROPOFF_OPTIONS.map(opt => (
+                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {form.dropoff_location === 'Custom' && (
+            <Input
+              className={`mt-2 ${validationErrors.includes('dropoff_custom') ? 'border-destructive' : ''}`}
+              placeholder="Enter custom dropoff location"
+              value={form.dropoff_custom}
+              onChange={(e) => setForm(p => ({ ...p, dropoff_custom: e.target.value }))}
+            />
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label>Date <span className="text-destructive">*</span></Label>
+            <Input
+              type="date"
+              value={form.trip_date}
+              onChange={(e) => setForm(p => ({ ...p, trip_date: e.target.value }))}
+              className={validationErrors.includes('trip_date') ? 'border-destructive' : ''}
+            />
+          </div>
+          <div>
+            <Label>Time <span className="text-destructive">*</span></Label>
+            <Input
+              type="time"
+              value={form.trip_time}
+              max={checkoutDate && form.trip_date === checkoutDate ? MAX_CHECKOUT_TIME : undefined}
+              onChange={(e) => setForm(p => ({ ...p, trip_time: e.target.value }))}
+              className={validationErrors.includes('trip_time') || validationErrors.includes('checkout_time') ? 'border-destructive' : ''}
+            />
+            {validationErrors.includes('checkout_time') && (
+              <p className="text-xs text-destructive mt-1">Pick-up time on check-out day cannot be later than 11:00 AM.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label>Number of passengers <span className="text-destructive">*</span></Label>
+            <Input
+              type="number"
+              min={1}
+              max={capacityOf(form.taxi_size)}
+              value={form.passengers_count}
+              onChange={(e) => setForm(p => ({ ...p, passengers_count: parseInt(e.target.value) || 1 }))}
+              className={validationErrors.includes('passengers_count') || validationErrors.includes('passengers_capacity') ? 'border-destructive' : ''}
+            />
+            {validationErrors.includes('passengers_capacity') && (
+              <p className="text-xs text-destructive mt-1">Passenger count cannot exceed vehicle capacity.</p>
+            )}
+          </div>
+          <div>
+            <Label>Taxi size <span className="text-destructive">*</span></Label>
+            <Select
+              value={form.taxi_size}
+              onValueChange={(v) => setForm(p => {
+                const cap = capacityOf(v);
+                return {
+                  ...p,
+                  taxi_size: v as any,
+                  passengers_count: p.passengers_count > cap ? cap : p.passengers_count,
+                };
+              })}
+            >
+              <SelectTrigger className={validationErrors.includes('taxi_size') ? 'border-destructive' : ''}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="4 seats">4-seat taxi</SelectItem>
+                <SelectItem value="6 seats">6-seat taxi</SelectItem>
+                <SelectItem value="8 seats">8-seat taxi</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-4">
+          <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
