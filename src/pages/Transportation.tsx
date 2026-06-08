@@ -325,25 +325,8 @@ const Transportation = () => {
                     </Select>
                   </div>
 
-                  {/* Direction */}
-                  <div>
-                    <Label>Direction <span className="text-destructive">*</span></Label>
-                    <Select
-                      value={newTrip.trip_direction}
-                      onValueChange={(v) => setNewTrip(prev => ({ ...prev, trip_direction: v as any }))}
-                    >
-                      <SelectTrigger className={validationErrors.includes('direction') ? 'border-destructive' : ''}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="To Quinta">To Quinta do Amor</SelectItem>
-                        <SelectItem value="From Quinta">From Quinta do Amor</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {validationErrors.includes('direction') && (
-                      <p className="text-xs text-destructive mt-1">Required</p>
-                    )}
-                  </div>
+
+
 
                   {/* Pickup */}
                   <div>
