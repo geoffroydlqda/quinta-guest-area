@@ -770,7 +770,7 @@ function EditTripForm({
     setValidationErrors([]);
     setSaving(true);
     await onSave({
-      trip_direction: form.trip_direction,
+      trip_direction: dropoff === 'Quinta do Amor' ? 'To Quinta' : 'From Quinta',
       pickup_location: pickup,
       dropoff_location: dropoff,
       trip_date: form.trip_date,
