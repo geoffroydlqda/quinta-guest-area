@@ -58,6 +58,7 @@ export function GlobalSummary({
   roomSetupData,
   transportationData,
   foodData,
+  disabledRooms,
 }: GlobalSummaryProps) {
   const hasDates = !!(profile.check_in_date && profile.check_out_date);
   const hasRoomSetup = toolStatuses.roomSetup !== 'not_set' && roomSetupData;
