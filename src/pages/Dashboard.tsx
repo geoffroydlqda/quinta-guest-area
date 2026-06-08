@@ -436,6 +436,7 @@ const DashboardContent = () => {
             roomSetupData={roomSetupData}
             transportationData={transportationData}
             foodData={foodData}
+            disabledRooms={((activeBooking as unknown as { disabled_rooms?: number[] | null })?.disabled_rooms ?? []) as number[]}
           />
 
           {/* Diet validation banner */}

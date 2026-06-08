@@ -32,6 +32,7 @@ interface GlobalSummaryProps {
     mealTimes?: { breakfast_time: string | null; lunch_time: string | null; dinner_time: string | null };
     selections?: { date: string; fullBoard: boolean; breakfast: boolean; lunch: boolean; dinner: boolean; guests_count_day?: number }[];
   };
+  disabledRooms?: number[];
 }
 
 function parseLocalDateLong(dateStr: string): string {
@@ -57,6 +58,7 @@ export function GlobalSummary({
   roomSetupData,
   transportationData,
   foodData,
+  disabledRooms,
 }: GlobalSummaryProps) {
   const hasDates = !!(profile.check_in_date && profile.check_out_date);
   const hasRoomSetup = toolStatuses.roomSetup !== 'not_set' && roomSetupData;
@@ -104,7 +106,9 @@ export function GlobalSummary({
               const BATHROOM_PARTNER: Record<number, number> = { 2: 3, 3: 2, 4: 5, 5: 4, 7: 8, 8: 7 };
               const plan = roomSetupData!.roomPlan;
               if (plan && plan.length > 0) {
-                const sorted = [...plan].sort((a, b) => a.roomId - b.roomId);
+                const sorted = plan
+                  .filter((r) => !(disabledRooms || []).includes(r.roomId))
+                  .sort((a, b) => a.roomId - b.roomId);
                 const bedLabel = (b: 'king' | 'queen' | 'twin' | null) =>
                   b === 'twin' ? 'Twin beds' : b === 'king' || b === 'queen' ? 'King size bed' : '—';
                 return (
