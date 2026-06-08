@@ -799,21 +799,8 @@ function EditTripForm({
           </div>
         )}
 
-        <div>
-          <Label>Direction <span className="text-destructive">*</span></Label>
-          <Select
-            value={form.trip_direction}
-            onValueChange={(v) => setForm(p => ({ ...p, trip_direction: v as any }))}
-          >
-            <SelectTrigger className={validationErrors.includes('direction') ? 'border-destructive' : ''}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="To Quinta">To Quinta do Amor</SelectItem>
-              <SelectItem value="From Quinta">From Quinta do Amor</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+
+
 
         <div>
           <Label>Pickup location <span className="text-destructive">*</span></Label>
