@@ -259,11 +259,14 @@ export function useTransportation() {
     if (!user) return false;
     
     try {
-      const { error } = await supabase
+      let pDelQuery = supabase
         .from('transportation_passengers')
         .delete()
-        .eq('id', passengerId)
-        .eq('user_id', user.id);
+        .eq('id', passengerId);
+      pDelQuery = activeBookingId
+        ? pDelQuery.eq('booking_id', activeBookingId)
+        : pDelQuery.eq('user_id', user.id);
+      const { error } = await pDelQuery;
       
       if (error) throw error;
       
@@ -280,7 +283,7 @@ export function useTransportation() {
       console.error('Error removing passenger:', error);
       return false;
     }
-  }, [user]);
+  }, [user, activeBookingId]);
 
   // Update notes
   const updateNotes = useCallback((notes: string) => {
