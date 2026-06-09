@@ -206,6 +206,32 @@ async function deleteEvent(eventId: string) {
   }
 }
 
+async function purgeAllCalendarEvents(): Promise<number> {
+  const headers = calendarHeaders();
+  let pageToken: string | undefined = undefined;
+  let deleted = 0;
+  do {
+    const url = new URL(`${CAL_GW}/calendars/${encodeURIComponent(CALENDAR_ID)}/events`);
+    url.searchParams.set("maxResults", "250");
+    url.searchParams.set("showDeleted", "false");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const r = await fetch(url.toString(), { method: "GET", headers });
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(`Calendar list ${r.status}: ${String(txt).slice(0, 300)}`);
+    }
+    const data = await r.json();
+    const items: any[] = data.items || [];
+    for (const ev of items) {
+      if (!ev.id) continue;
+      try { await deleteEvent(ev.id); deleted++; }
+      catch (e) { console.warn("purge delete failed", ev.id, e); }
+    }
+    pageToken = data.nextPageToken || undefined;
+  } while (pageToken);
+  return deleted;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -333,6 +359,17 @@ serve(async (req) => {
       }
       const { data: trips } = await query;
 
+      let purged = 0;
+      if (action === "force_resync") {
+        purged = await purgeAllCalendarEvents();
+        await admin.from("transportation_trips")
+          .update({ google_calendar_event_id: null })
+          .not("id", "is", null);
+        for (const t of (trips || [])) {
+          (t as any).google_calendar_event_id = null;
+        }
+      }
+
       const { data: bookings } = await admin
         .from("bookings")
         .select("id,first_name,last_name,retreat_name,email");
@@ -359,16 +396,6 @@ serve(async (req) => {
             p?.email || "Guest";
         }
 
-        // force_resync: drop the existing event so we recreate cleanly.
-        if (action === "force_resync" && trip.google_calendar_event_id) {
-          try {
-            await deleteEvent(trip.google_calendar_event_id);
-          } catch (e) {
-            console.warn(`[force_resync] delete failed for ${trip.id}:`, e);
-          }
-          trip.google_calendar_event_id = null;
-        }
-
         try {
           const newId = await syncOne(admin, trip, guestName);
           synced++;
@@ -386,7 +413,7 @@ serve(async (req) => {
         }
       }
       return new Response(
-        JSON.stringify({ ok: true, action, synced, failed, total: (trips || []).length, results }),
+        JSON.stringify({ ok: true, action, purged, synced, failed, total: (trips || []).length, results }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
