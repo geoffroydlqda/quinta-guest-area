@@ -174,32 +174,6 @@ const AdminContent = () => {
 
   useEffect(() => { load(); }, []);
 
-  // Auto-backfill any unsynced transportation trips on admin load (silent, fire-and-forget).
-  // Runs once per browser session to avoid hammering on every refresh.
-  useEffect(() => {
-    if (!data) return;
-    const KEY = "admin_calendar_backfilled_v1";
-    if (sessionStorage.getItem(KEY)) return;
-    const unsynced = data.trips.filter((t) => !t.google_calendar_event_id);
-    if (unsynced.length === 0) {
-      sessionStorage.setItem(KEY, "1");
-      return;
-    }
-    sessionStorage.setItem(KEY, "1");
-    console.log(`[admin] Auto-backfilling ${unsynced.length} unsynced trip(s) to Google Calendar`);
-    backfillTripCalendars().then((res) => {
-      if (res) {
-        console.log(`[admin] Auto-backfill complete: ${res.synced}/${res.total} synced, ${res.failed} failed`);
-        if (res.synced > 0) {
-          toast({
-            title: "Calendar synced",
-            description: `${res.synced} transportation trip(s) added to Google Calendar.`,
-          });
-          load();
-        }
-      }
-    });
-  }, [data]);
 
   const sync = async () => {
     setSyncing(true);
