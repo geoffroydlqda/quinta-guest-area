@@ -364,46 +364,24 @@ serve(async (req) => {
         }
       }
 
-      const { data: bookings } = await admin
-        .from("bookings")
-        .select("id,first_name,last_name,retreat_name,email");
-      const bookingMap = new Map((bookings || []).map((b: any) => [b.id, b]));
-
-      const { data: profiles } = await admin
-        .from("guest_profiles")
-        .select("user_id,full_name,first_name,last_name,email");
-      const profMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
-
       let synced = 0, failed = 0;
       const results: Array<{ trip_id: string; trip_date: string; guest: string; ok: boolean; event_id?: string; error?: string }> = [];
 
       for (const trip of (trips || [])) {
-        const bk: any = trip.booking_id ? bookingMap.get(trip.booking_id) : null;
-        let guestName =
-          (bk && ([bk.first_name, bk.last_name].filter(Boolean).join(" ").trim() ||
-            bk.retreat_name || bk.email)) || "";
-        if (!guestName) {
-          const p: any = profMap.get(trip.user_id);
-          guestName =
-            p?.full_name ||
-            [p?.first_name, p?.last_name].filter(Boolean).join(" ").trim() ||
-            p?.email || "Guest";
-        }
-
         try {
-          const newId = await syncOne(admin, trip, guestName);
+          const newId = await syncOne(admin, trip);
           synced++;
-          console.log(`[sync] OK trip=${trip.id} date=${trip.trip_date} guest="${guestName}" event=${newId}`);
-          results.push({ trip_id: trip.id, trip_date: trip.trip_date, guest: guestName, ok: true, event_id: newId });
+          console.log(`[sync] OK trip=${trip.id} date=${trip.trip_date} event=${newId}`);
+          results.push({ trip_id: trip.id, trip_date: trip.trip_date, guest: "", ok: true, event_id: newId });
         } catch (e: any) {
           failed++;
           const msg = String(e?.message || e).slice(0, 500);
-          console.error(`[sync] FAIL trip=${trip.id} date=${trip.trip_date} guest="${guestName}" err=${msg}`);
+          console.error(`[sync] FAIL trip=${trip.id} date=${trip.trip_date} err=${msg}`);
           await admin.from("transportation_trips").update({
             sync_status: "failed",
             sync_error: msg,
           }).eq("id", trip.id);
-          results.push({ trip_id: trip.id, trip_date: trip.trip_date, guest: guestName, ok: false, error: msg });
+          results.push({ trip_id: trip.id, trip_date: trip.trip_date, guest: "", ok: false, error: msg });
         }
       }
       return new Response(
