@@ -206,6 +206,32 @@ async function deleteEvent(eventId: string) {
   }
 }
 
+async function purgeAllCalendarEvents(): Promise<number> {
+  const headers = calendarHeaders();
+  let pageToken: string | undefined = undefined;
+  let deleted = 0;
+  do {
+    const url = new URL(`${CAL_GW}/calendars/${encodeURIComponent(CALENDAR_ID)}/events`);
+    url.searchParams.set("maxResults", "250");
+    url.searchParams.set("showDeleted", "false");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const r = await fetch(url.toString(), { method: "GET", headers });
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(`Calendar list ${r.status}: ${String(txt).slice(0, 300)}`);
+    }
+    const data = await r.json();
+    const items: any[] = data.items || [];
+    for (const ev of items) {
+      if (!ev.id) continue;
+      try { await deleteEvent(ev.id); deleted++; }
+      catch (e) { console.warn("purge delete failed", ev.id, e); }
+    }
+    pageToken = data.nextPageToken || undefined;
+  } while (pageToken);
+  return deleted;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
