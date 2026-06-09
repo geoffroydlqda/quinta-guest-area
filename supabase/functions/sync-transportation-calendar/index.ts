@@ -272,15 +272,34 @@ serve(async (req) => {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const { data: prof } = await admin
-        .from("guest_profiles")
-        .select("full_name,first_name,last_name,email")
-        .eq("user_id", trip.user_id)
-        .maybeSingle();
-      const guestName =
-        prof?.full_name ||
-        [prof?.first_name, prof?.last_name].filter(Boolean).join(" ") ||
-        prof?.email || "Guest";
+      let guestName = "Guest";
+      if (trip.booking_id) {
+        const { data: bk } = await admin
+          .from("bookings")
+          .select("first_name,last_name,retreat_name,email")
+          .eq("id", trip.booking_id)
+          .maybeSingle();
+        if (bk) {
+          guestName =
+            [bk.first_name, bk.last_name].filter(Boolean).join(" ").trim() ||
+            bk.retreat_name ||
+            bk.email ||
+            "Guest";
+        }
+      }
+      if (guestName === "Guest" && trip.user_id) {
+        const { data: prof } = await admin
+          .from("guest_profiles")
+          .select("full_name,first_name,last_name,email")
+          .eq("user_id", trip.user_id)
+          .maybeSingle();
+        if (prof) {
+          guestName =
+            prof.full_name ||
+            [prof.first_name, prof.last_name].filter(Boolean).join(" ").trim() ||
+            prof.email || "Guest";
+        }
+      }
       try {
         const newId = await syncOne(admin, trip, guestName);
         return new Response(JSON.stringify({ ok: true, eventId: newId }), {
@@ -314,6 +333,11 @@ serve(async (req) => {
       }
       const { data: trips } = await query;
 
+      const { data: bookings } = await admin
+        .from("bookings")
+        .select("id,first_name,last_name,retreat_name,email");
+      const bookingMap = new Map((bookings || []).map((b: any) => [b.id, b]));
+
       const { data: profiles } = await admin
         .from("guest_profiles")
         .select("user_id,full_name,first_name,last_name,email");
@@ -323,11 +347,17 @@ serve(async (req) => {
       const results: Array<{ trip_id: string; trip_date: string; guest: string; ok: boolean; event_id?: string; error?: string }> = [];
 
       for (const trip of (trips || [])) {
-        const p: any = profMap.get(trip.user_id);
-        const guestName =
-          p?.full_name ||
-          [p?.first_name, p?.last_name].filter(Boolean).join(" ") ||
-          p?.email || "Guest";
+        const bk: any = trip.booking_id ? bookingMap.get(trip.booking_id) : null;
+        let guestName =
+          (bk && ([bk.first_name, bk.last_name].filter(Boolean).join(" ").trim() ||
+            bk.retreat_name || bk.email)) || "";
+        if (!guestName) {
+          const p: any = profMap.get(trip.user_id);
+          guestName =
+            p?.full_name ||
+            [p?.first_name, p?.last_name].filter(Boolean).join(" ").trim() ||
+            p?.email || "Guest";
+        }
 
         // force_resync: drop the existing event so we recreate cleanly.
         if (action === "force_resync" && trip.google_calendar_event_id) {
