@@ -149,7 +149,7 @@ function buildEvent(opts: { guestName: string; trip: any; durationMin: number; p
   };
 }
 
-async function syncOne(admin: any, trip: any, guestName: string): Promise<string> {
+async function syncOne(admin: any, trip: any): Promise<string> {
   const headers = calendarHeaders();
   const durationMin = await computeDriveMinutes(trip.pickup_location, trip.dropoff_location);
   const { data: passengers } = await admin
@@ -157,6 +157,28 @@ async function syncOne(admin: any, trip: any, guestName: string): Promise<string
     .select("first_name,phone,flight_number,created_at")
     .eq("trip_id", trip.id)
     .order("created_at", { ascending: true });
+
+  const paxNames = (passengers || [])
+    .map((p: any) => (p.first_name || "").trim())
+    .filter(Boolean);
+  let guestName = "";
+  if (paxNames.length > 0) {
+    guestName = paxNames.join(", ");
+  }
+  if (!guestName && trip.booking_id) {
+    const { data: bk } = await admin
+      .from("bookings")
+      .select("first_name,last_name,retreat_name,email")
+      .eq("id", trip.booking_id)
+      .maybeSingle();
+    if (bk) {
+      guestName =
+        [bk.first_name, bk.last_name].filter(Boolean).join(" ").trim() ||
+        bk.retreat_name || bk.email || "";
+    }
+  }
+  if (!guestName) guestName = "Guest";
+
   const body = buildEvent({ guestName, trip, durationMin, passengers: passengers || [] });
 
   let eventId = (trip.google_calendar_event_id as string | null) || null;
@@ -298,36 +320,8 @@ serve(async (req) => {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      let guestName = "Guest";
-      if (trip.booking_id) {
-        const { data: bk } = await admin
-          .from("bookings")
-          .select("first_name,last_name,retreat_name,email")
-          .eq("id", trip.booking_id)
-          .maybeSingle();
-        if (bk) {
-          guestName =
-            [bk.first_name, bk.last_name].filter(Boolean).join(" ").trim() ||
-            bk.retreat_name ||
-            bk.email ||
-            "Guest";
-        }
-      }
-      if (guestName === "Guest" && trip.user_id) {
-        const { data: prof } = await admin
-          .from("guest_profiles")
-          .select("full_name,first_name,last_name,email")
-          .eq("user_id", trip.user_id)
-          .maybeSingle();
-        if (prof) {
-          guestName =
-            prof.full_name ||
-            [prof.first_name, prof.last_name].filter(Boolean).join(" ").trim() ||
-            prof.email || "Guest";
-        }
-      }
       try {
-        const newId = await syncOne(admin, trip, guestName);
+        const newId = await syncOne(admin, trip);
         return new Response(JSON.stringify({ ok: true, eventId: newId }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -370,46 +364,24 @@ serve(async (req) => {
         }
       }
 
-      const { data: bookings } = await admin
-        .from("bookings")
-        .select("id,first_name,last_name,retreat_name,email");
-      const bookingMap = new Map((bookings || []).map((b: any) => [b.id, b]));
-
-      const { data: profiles } = await admin
-        .from("guest_profiles")
-        .select("user_id,full_name,first_name,last_name,email");
-      const profMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
-
       let synced = 0, failed = 0;
       const results: Array<{ trip_id: string; trip_date: string; guest: string; ok: boolean; event_id?: string; error?: string }> = [];
 
       for (const trip of (trips || [])) {
-        const bk: any = trip.booking_id ? bookingMap.get(trip.booking_id) : null;
-        let guestName =
-          (bk && ([bk.first_name, bk.last_name].filter(Boolean).join(" ").trim() ||
-            bk.retreat_name || bk.email)) || "";
-        if (!guestName) {
-          const p: any = profMap.get(trip.user_id);
-          guestName =
-            p?.full_name ||
-            [p?.first_name, p?.last_name].filter(Boolean).join(" ").trim() ||
-            p?.email || "Guest";
-        }
-
         try {
-          const newId = await syncOne(admin, trip, guestName);
+          const newId = await syncOne(admin, trip);
           synced++;
-          console.log(`[sync] OK trip=${trip.id} date=${trip.trip_date} guest="${guestName}" event=${newId}`);
-          results.push({ trip_id: trip.id, trip_date: trip.trip_date, guest: guestName, ok: true, event_id: newId });
+          console.log(`[sync] OK trip=${trip.id} date=${trip.trip_date} event=${newId}`);
+          results.push({ trip_id: trip.id, trip_date: trip.trip_date, guest: "", ok: true, event_id: newId });
         } catch (e: any) {
           failed++;
           const msg = String(e?.message || e).slice(0, 500);
-          console.error(`[sync] FAIL trip=${trip.id} date=${trip.trip_date} guest="${guestName}" err=${msg}`);
+          console.error(`[sync] FAIL trip=${trip.id} date=${trip.trip_date} err=${msg}`);
           await admin.from("transportation_trips").update({
             sync_status: "failed",
             sync_error: msg,
           }).eq("id", trip.id);
-          results.push({ trip_id: trip.id, trip_date: trip.trip_date, guest: guestName, ok: false, error: msg });
+          results.push({ trip_id: trip.id, trip_date: trip.trip_date, guest: "", ok: false, error: msg });
         }
       }
       return new Response(
