@@ -584,11 +584,19 @@ function TripCard({
   const [newPassenger, setNewPassenger] = useState({ first_name: '', phone: '', flight_number: '' });
   const [isEditing, setIsEditing] = useState(false);
 
-  const handleAddPassenger = () => {
+  const [addingPassenger, setAddingPassenger] = useState(false);
+
+  const handleAddPassenger = async () => {
+    if (addingPassenger) return;
     if (!newPassenger.first_name || !newPassenger.phone) return;
-    onAddPassenger(newPassenger);
-    setNewPassenger({ first_name: '', phone: '', flight_number: '' });
-    setShowAddPassenger(false);
+    setAddingPassenger(true);
+    try {
+      await onAddPassenger(newPassenger);
+      setNewPassenger({ first_name: '', phone: '', flight_number: '' });
+      setShowAddPassenger(false);
+    } finally {
+      setAddingPassenger(false);
+    }
   };
 
   if (isEditing) {
