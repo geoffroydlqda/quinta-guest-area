@@ -111,6 +111,7 @@ const Transportation = () => {
     dropoff === 'Quinta do Amor' ? 'To Quinta' : 'From Quinta';
 
   const handleAddTrip = async () => {
+    if (submittingTrip) return;
     const pickup = newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location;
     const dropoff = newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location;
     const isRound = newTrip.trip_type === 'round_trip';
@@ -145,53 +146,64 @@ const Transportation = () => {
 
     setValidationErrors([]);
 
-    await addTrip({
-      trip_direction: deriveDirection(dropoff),
-      pickup_location: pickup,
-      dropoff_location: dropoff,
-      trip_date: newTrip.trip_date,
-      trip_time: newTrip.trip_time,
-      passengers_count: newTrip.passengers_count,
-      taxi_size: newTrip.taxi_size,
-    });
-
-    if (isRound) {
+    setSubmittingTrip(true);
+    try {
       await addTrip({
-        trip_direction: deriveDirection(pickup),
-        pickup_location: dropoff,
-        dropoff_location: pickup,
+        trip_direction: deriveDirection(dropoff),
+        pickup_location: pickup,
+        dropoff_location: dropoff,
         trip_date: newTrip.trip_date,
-        trip_time: newTrip.return_time,
+        trip_time: newTrip.trip_time,
         passengers_count: newTrip.passengers_count,
         taxi_size: newTrip.taxi_size,
       });
-    }
 
-    setShowAddTrip(false);
-    setNewTrip({
-      trip_type: 'one_way',
-      pickup_location: '',
-      pickup_custom: '',
-      dropoff_location: 'Quinta do Amor',
-      dropoff_custom: '',
-      trip_date: profile?.check_in_date || todayLocalISO(),
-      trip_time: '',
-      return_time: '',
-      passengers_count: 1,
-      taxi_size: '4 seats',
-    });
+      if (isRound) {
+        await addTrip({
+          trip_direction: deriveDirection(pickup),
+          pickup_location: dropoff,
+          dropoff_location: pickup,
+          trip_date: newTrip.trip_date,
+          trip_time: newTrip.return_time,
+          passengers_count: newTrip.passengers_count,
+          taxi_size: newTrip.taxi_size,
+        });
+      }
+
+      setShowAddTrip(false);
+      setNewTrip({
+        trip_type: 'one_way',
+        pickup_location: '',
+        pickup_custom: '',
+        dropoff_location: 'Quinta do Amor',
+        dropoff_custom: '',
+        trip_date: profile?.check_in_date || todayLocalISO(),
+        trip_time: '',
+        return_time: '',
+        passengers_count: 1,
+        taxi_size: '4 seats',
+      });
+    } finally {
+      setSubmittingTrip(false);
+    }
   };
 
   const handleDuplicateTrip = async (trip: TransportationTrip) => {
-    await addTrip({
-      trip_direction: trip.trip_direction,
-      pickup_location: trip.pickup_location,
-      dropoff_location: trip.dropoff_location,
-      trip_date: trip.trip_date,
-      trip_time: trip.trip_time,
-      passengers_count: trip.passengers_count,
-      taxi_size: trip.taxi_size,
-    });
+    if (duplicating) return;
+    setDuplicating(true);
+    try {
+      await addTrip({
+        trip_direction: trip.trip_direction,
+        pickup_location: trip.pickup_location,
+        dropoff_location: trip.dropoff_location,
+        trip_date: trip.trip_date,
+        trip_time: trip.trip_time,
+        passengers_count: trip.passengers_count,
+        taxi_size: trip.taxi_size,
+      });
+    } finally {
+      setDuplicating(false);
+    }
   };
 
   if (authLoading || isLoading) {
