@@ -396,16 +396,6 @@ serve(async (req) => {
             p?.email || "Guest";
         }
 
-        // force_resync: drop the existing event so we recreate cleanly.
-        if (action === "force_resync" && trip.google_calendar_event_id) {
-          try {
-            await deleteEvent(trip.google_calendar_event_id);
-          } catch (e) {
-            console.warn(`[force_resync] delete failed for ${trip.id}:`, e);
-          }
-          trip.google_calendar_event_id = null;
-        }
-
         try {
           const newId = await syncOne(admin, trip, guestName);
           synced++;
