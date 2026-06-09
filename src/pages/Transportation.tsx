@@ -525,7 +525,8 @@ const Transportation = () => {
                     <Button variant="outline" onClick={() => { setShowAddTrip(false); setValidationErrors([]); }}>
                       Cancel
                     </Button>
-                    <Button onClick={handleAddTrip}>
+                    <Button onClick={handleAddTrip} disabled={submittingTrip}>
+                      {submittingTrip ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
                       Add Trip
                     </Button>
                   </div>
