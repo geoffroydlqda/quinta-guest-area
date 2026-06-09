@@ -359,6 +359,17 @@ serve(async (req) => {
       }
       const { data: trips } = await query;
 
+      let purged = 0;
+      if (action === "force_resync") {
+        purged = await purgeAllCalendarEvents();
+        await admin.from("transportation_trips")
+          .update({ google_calendar_event_id: null })
+          .not("id", "is", null);
+        for (const t of (trips || [])) {
+          (t as any).google_calendar_event_id = null;
+        }
+      }
+
       const { data: bookings } = await admin
         .from("bookings")
         .select("id,first_name,last_name,retreat_name,email");
