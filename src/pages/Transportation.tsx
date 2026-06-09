@@ -72,6 +72,8 @@ const Transportation = () => {
 
   const [showAddTrip, setShowAddTrip] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [submittingTrip, setSubmittingTrip] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const [newTrip, setNewTrip] = useState({
     trip_type: 'one_way' as 'one_way' | 'round_trip',
     pickup_location: '',
