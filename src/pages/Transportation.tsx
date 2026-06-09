@@ -717,7 +717,8 @@ function TripCard({
                   <Button variant="outline" size="sm" onClick={() => setShowAddPassenger(false)}>
                     Cancel
                   </Button>
-                  <Button size="sm" onClick={handleAddPassenger}>
+                  <Button size="sm" onClick={handleAddPassenger} disabled={addingPassenger}>
+                    {addingPassenger ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
                     Add
                   </Button>
                 </div>
