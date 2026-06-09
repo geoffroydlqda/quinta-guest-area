@@ -149,7 +149,7 @@ function buildEvent(opts: { guestName: string; trip: any; durationMin: number; p
   };
 }
 
-async function syncOne(admin: any, trip: any, guestName: string): Promise<string> {
+async function syncOne(admin: any, trip: any): Promise<string> {
   const headers = calendarHeaders();
   const durationMin = await computeDriveMinutes(trip.pickup_location, trip.dropoff_location);
   const { data: passengers } = await admin
@@ -157,6 +157,28 @@ async function syncOne(admin: any, trip: any, guestName: string): Promise<string
     .select("first_name,phone,flight_number,created_at")
     .eq("trip_id", trip.id)
     .order("created_at", { ascending: true });
+
+  const paxNames = (passengers || [])
+    .map((p: any) => (p.first_name || "").trim())
+    .filter(Boolean);
+  let guestName = "";
+  if (paxNames.length > 0) {
+    guestName = paxNames.join(", ");
+  }
+  if (!guestName && trip.booking_id) {
+    const { data: bk } = await admin
+      .from("bookings")
+      .select("first_name,last_name,retreat_name,email")
+      .eq("id", trip.booking_id)
+      .maybeSingle();
+    if (bk) {
+      guestName =
+        [bk.first_name, bk.last_name].filter(Boolean).join(" ").trim() ||
+        bk.retreat_name || bk.email || "";
+    }
+  }
+  if (!guestName) guestName = "Guest";
+
   const body = buildEvent({ guestName, trip, durationMin, passengers: passengers || [] });
 
   let eventId = (trip.google_calendar_event_id as string | null) || null;
