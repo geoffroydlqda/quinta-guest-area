@@ -320,36 +320,8 @@ serve(async (req) => {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      let guestName = "Guest";
-      if (trip.booking_id) {
-        const { data: bk } = await admin
-          .from("bookings")
-          .select("first_name,last_name,retreat_name,email")
-          .eq("id", trip.booking_id)
-          .maybeSingle();
-        if (bk) {
-          guestName =
-            [bk.first_name, bk.last_name].filter(Boolean).join(" ").trim() ||
-            bk.retreat_name ||
-            bk.email ||
-            "Guest";
-        }
-      }
-      if (guestName === "Guest" && trip.user_id) {
-        const { data: prof } = await admin
-          .from("guest_profiles")
-          .select("full_name,first_name,last_name,email")
-          .eq("user_id", trip.user_id)
-          .maybeSingle();
-        if (prof) {
-          guestName =
-            prof.full_name ||
-            [prof.first_name, prof.last_name].filter(Boolean).join(" ").trim() ||
-            prof.email || "Guest";
-        }
-      }
       try {
-        const newId = await syncOne(admin, trip, guestName);
+        const newId = await syncOne(admin, trip);
         return new Response(JSON.stringify({ ok: true, eventId: newId }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
