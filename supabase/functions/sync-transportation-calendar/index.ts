@@ -413,7 +413,7 @@ serve(async (req) => {
         }
       }
       return new Response(
-        JSON.stringify({ ok: true, action, synced, failed, total: (trips || []).length, results }),
+        JSON.stringify({ ok: true, action, purged, synced, failed, total: (trips || []).length, results }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
