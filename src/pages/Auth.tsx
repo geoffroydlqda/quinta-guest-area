@@ -24,6 +24,7 @@ const Auth = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [confirmationSentTo, setConfirmationSentTo] = useState<string | null>(null);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -107,6 +108,13 @@ const Auth = () => {
           throw error;
         }
 
+        // If email confirmation is required, no session is returned.
+        if (!data.session) {
+          setConfirmationSentTo(email.trim());
+          setIsLoading(false);
+          return;
+        }
+
         toast({
           title: 'Account created',
           description: 'Welcome! Redirecting to your dashboard...',
@@ -148,6 +156,59 @@ const Auth = () => {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (confirmationSentTo) {
+    const next = searchParams.get('redirectTo');
+    const isInvite = next && next.startsWith('/invite/');
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <header className="p-4">
+          <Link to="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Link>
+        </header>
+        <main className="flex-1 flex items-center justify-center px-4">
+          <div className="max-w-md w-full space-y-6 animate-fade-up">
+            <div className="text-center">
+              <img src={qdaLogo} alt="Quinta do Amor" className="h-16 w-auto mx-auto mb-4" />
+              <h1 className="text-2xl font-semibold">Confirmation email sent</h1>
+            </div>
+            <div className="bg-card rounded-2xl shadow-elegant p-6 space-y-4">
+              <div className="flex justify-center">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Mail className="h-6 w-6 text-primary" />
+                </div>
+              </div>
+              <p className="text-center text-foreground">
+                We've sent a confirmation link to{' '}
+                <span className="font-semibold">{confirmationSentTo}</span>.
+              </p>
+              <p className="text-center text-sm text-muted-foreground">
+                Please check your inbox (and spam folder) and click the link to
+                activate your account, then come back and log in.
+              </p>
+              {isInvite && (
+                <p className="text-center text-sm text-muted-foreground border-t border-border pt-4">
+                  After confirming your email and logging in, you'll be able to
+                  claim your booking.
+                </p>
+              )}
+              <Button
+                asChild
+                size="lg"
+                className="w-full"
+              >
+                <Link to={`/auth?mode=login${next ? `&redirectTo=${encodeURIComponent(next)}` : ''}`}>
+                  Go to login
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
