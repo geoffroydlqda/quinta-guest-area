@@ -108,6 +108,13 @@ const Auth = () => {
           throw error;
         }
 
+        // If email confirmation is required, no session is returned.
+        if (!data.session) {
+          setConfirmationSentTo(email.trim());
+          setIsLoading(false);
+          return;
+        }
+
         toast({
           title: 'Account created',
           description: 'Welcome! Redirecting to your dashboard...',
