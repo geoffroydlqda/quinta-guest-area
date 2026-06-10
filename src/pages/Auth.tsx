@@ -24,6 +24,7 @@ const Auth = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [confirmationSentTo, setConfirmationSentTo] = useState<string | null>(null);
 
   // Redirect if already logged in
   useEffect(() => {
