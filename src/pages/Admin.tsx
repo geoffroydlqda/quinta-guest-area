@@ -788,7 +788,7 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
   }, []);
 
-  const groups = useMemo(() => {
+  const { groups, tripNames } = useMemo(() => {
     const bookingsById = new Map((data.bookings || []).map((b) => [b.id, b]));
     // pick a "primary" booking per user_id (latest by check_in_date) for trips with no booking_id
     const bookingsByUser = new Map<string, BookingRow>();
@@ -809,9 +809,27 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
       trips: Trip[];
     };
     const map = new Map<string, Group>();
+    const tripNames = new Map<string, string>();
 
     for (const t of data.trips) {
       const b = (t.booking_id && bookingsById.get(t.booking_id)) || bookingsByUser.get(t.user_id);
+
+      const paxNames = ((t as any).passengers || [])
+        .map((p: any) => (p.first_name || "").trim())
+        .filter(Boolean);
+      let name = "";
+      if (paxNames.length > 0) {
+        name = paxNames.join(", ");
+      } else if (b) {
+        name = [b.first_name, b.last_name].filter(Boolean).join(" ").trim()
+          || b.retreat_name || b.email || "";
+      }
+      if (!name) {
+        const g = guestName(t.user_id);
+        name = g && g !== "Unknown" ? g : "Guest";
+      }
+      tripNames.set(t.id, name);
+
       const key = b?.id || `user:${t.user_id}`;
       const retreatName = b?.retreat_name?.trim() || guestName(t.user_id);
       const checkIn = b?.check_in_date || null;
@@ -827,7 +845,7 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
       map.get(key)!.trips.push(t);
     }
 
-    return Array.from(map.values())
+    const groups = Array.from(map.values())
       .map((g) => ({
         ...g,
         trips: g.trips.sort((a, b) => `${a.trip_date} ${a.trip_time}`.localeCompare(`${b.trip_date} ${b.trip_time}`)),
@@ -835,7 +853,10 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
         isPast: g.sortKey.startsWith("2"),
       }))
       .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+    return { groups, tripNames };
   }, [data, guestName, todayIso]);
+
 
   const allTripsForCSV = useMemo(
     () => groups.flatMap((g) => g.trips),
