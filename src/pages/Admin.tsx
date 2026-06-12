@@ -961,7 +961,7 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
                     </tr></thead>
                     <tbody>
                       {g.trips.map((t) => {
-                        const gName = guestName(t.user_id);
+                        const gName = tripNames.get(t.id) || guestName(t.user_id);
                         const hasManualPrice = t.custom_price !== null && t.custom_price !== undefined;
                         const syncFailed = t.sync_status === "failed";
                         const handleSign = () => {
