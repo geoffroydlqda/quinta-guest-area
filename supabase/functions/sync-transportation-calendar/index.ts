@@ -236,6 +236,7 @@ async function purgeAllCalendarEvents(): Promise<number> {
     const url = new URL(`${CAL_GW}/calendars/${encodeURIComponent(CALENDAR_ID)}/events`);
     url.searchParams.set("maxResults", "250");
     url.searchParams.set("showDeleted", "false");
+    url.searchParams.set("singleEvents", "true");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
     const r = await fetch(url.toString(), { method: "GET", headers });
     if (!r.ok) {
