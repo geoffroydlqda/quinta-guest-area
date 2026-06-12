@@ -915,7 +915,7 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
           ["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Passengers","Price","Custom price (€)","Custom","Calendar event","Sync status"],
           ...allTripsForCSV.map((t) => {
             const isCustom = t.price_estimate?.toLowerCase().includes("custom");
-            return [t.trip_date, t.trip_time, guestName(t.user_id), t.trip_direction, t.pickup_location, t.dropoff_location, t.taxi_size, t.passengers_count, t.price_estimate, t.custom_price ?? "", isCustom ? "yes" : "", t.google_calendar_event_id ?? "", t.sync_status ?? ""];
+            return [t.trip_date, t.trip_time, tripNames.get(t.id) || guestName(t.user_id), t.trip_direction, t.pickup_location, t.dropoff_location, t.taxi_size, t.passengers_count, t.price_estimate, t.custom_price ?? "", isCustom ? "yes" : "", t.google_calendar_event_id ?? "", t.sync_status ?? ""];
           }),
         ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
       </div>
