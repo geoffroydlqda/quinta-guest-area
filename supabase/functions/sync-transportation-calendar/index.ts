@@ -142,7 +142,7 @@ function buildEvent(opts: { guestName: string; trip: any; durationMin: number; p
 
   return {
     summary: `${guestName} — Transportation`,
-    location: trip.pickup_location,
+    location: `${trip.pickup_location} → ${trip.dropoff_location}`,
     description,
     start: { dateTime: start, timeZone: TZ },
     end: { dateTime: end, timeZone: TZ },
