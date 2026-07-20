@@ -1,73 +1,35 @@
-# Welcome to your Lovable project
+# Quinta do Amor — Guest Area
 
-## Project info
+Espace invités de la Quinta do Amor : réservations, préparation des chambres, transports, repas et documentation pour les guests.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Stack
 
-## How can I edit this code?
+- **Front** : React 18 + Vite + TypeScript + Tailwind CSS + shadcn/ui
+- **Backend** : Supabase (base de données, auth, Edge Functions)
+- **Hébergement** : Vercel (déploiement automatique à chaque push sur `main`)
 
-There are several ways of editing your application.
+## Développement
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+npm install
+npm run dev      # serveur local sur le port 8080
+npm run build    # build de production
+npm test         # tests unitaires (vitest)
+npm run lint     # eslint
 ```
 
-**Edit a file directly in GitHub**
+Les variables d'environnement (URL et clé publique Supabase) sont dans `.env`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Déploiement
 
-**Use GitHub Codespaces**
+Chaque push sur la branche `main` déclenche automatiquement un déploiement Vercel.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Les Edge Functions Supabase (`supabase/functions/`) se déploient séparément avec la CLI Supabase :
 
-## What technologies are used for this project?
+```bash
+supabase functions deploy <nom-de-la-fonction>
+```
 
-This project is built with:
+## Historique
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Projet initialement créé avec Lovable, migré vers un workflow Claude Code + GitHub + Vercel en juillet 2026. Le tag `avant-migration-lovable` marque l'état du code avant la migration.
