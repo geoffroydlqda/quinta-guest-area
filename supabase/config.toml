@@ -1,4 +1,4 @@
-project_id = "qbxobojrftjnftfaymhl"
+project_id = "fnlgeeuohvethmfpsxpf"
 
 [functions.send-room-setup-emails]
 verify_jwt = false
