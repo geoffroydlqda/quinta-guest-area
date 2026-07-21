@@ -29,9 +29,15 @@ Interface utilisateur en **anglais**. Communication avec le propriétaire en **f
 - `supabase/migrations/` — migrations SQL versionnées
 - `supabase/functions/` — Edge Functions (voir ci-dessous)
 
+## Conventions Phase 0 (juillet 2026)
+
+- **Admins** : source de vérité = table `public.admin_users`. Les fonctions SQL `is_admin()`/`is_admin_email()` et toutes les Edge Functions la lisent. La liste dans `src/lib/admin.ts` est purement cosmétique (redirections front) — la tenir synchronisée.
+- **Tarifs** : source de vérité = table `public.pricing_settings` (clés `taxi`, `food`). Front : `src/lib/pricing.ts` (store chargé au démarrage, getters synchrones, défauts = seed). Ne JAMAIS re-coder un prix en dur.
+- Tarifs taxi en vigueur : 70 € (4 places) / 90 € (6 places) / 110 € (8 places).
+
 ## Base de données (tables principales)
 
-`bookings`, `guest_profiles`, `room_setups`, `transportation_requests`, `transportation_trips`, `transportation_passengers`, `food_plans`, `payment_installments`, `docs_ack`, `deleted_entries_log`. Fonctions SQL : `is_admin`, `is_admin_email`. Le schéma complet est dans `src/integrations/supabase/types.ts`.
+`admin_users`, `pricing_settings`, `bookings`, `guest_profiles`, `room_setups`, `transportation_requests`, `transportation_trips`, `transportation_passengers`, `food_plans`, `payment_installments`, `docs_ack`, `deleted_entries_log`. Fonctions SQL : `is_admin`, `is_admin_email`. Le schéma complet est dans `src/integrations/supabase/types.ts`.
 
 Toute modification de schéma passe par un fichier SQL dans `supabase/migrations/` (jamais de modification manuelle non versionnée).
 
