@@ -5,7 +5,7 @@ import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { useFoodPlan } from '@/hooks/useFoodPlan';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
-import { calculateFoodCostMulti, DIET_TYPES } from '@/lib/foodPricing';
+import { calculateFoodCostMulti, getDietTypes } from '@/lib/foodPricing';
 import { dietConfigTotal, BREAKFAST_TIME_OPTIONS, LUNCH_TIME_OPTIONS, DINNER_TIME_OPTIONS } from '@/types/guest';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
@@ -140,7 +140,7 @@ const Food = () => {
           </p>
 
           <div className="space-y-3">
-            {DIET_TYPES.map((meta) => {
+            {getDietTypes().map((meta) => {
               const value = dietConfig[meta.countKey] || 0;
               const setValue = (next: number) =>
                 updateDietConfig({ [meta.countKey]: Math.max(0, next) } as any);

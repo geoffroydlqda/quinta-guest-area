@@ -3,20 +3,35 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "npm:resend@2.0.0";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
+// Admin emails are centralized in the public.admin_users table (Phase 0).
+const _adminAuthClient = createClient(
+  Deno.env.get("SUPABASE_URL") ?? "",
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+);
+let _adminEmailsCache: string[] | null = null;
+async function getAdminEmails(): Promise<string[]> {
+  if (_adminEmailsCache) return _adminEmailsCache;
+  const { data } = await _adminAuthClient.from("admin_users").select("email");
+  _adminEmailsCache = (data ?? []).map((r: { email: string }) =>
+    String(r.email).normalize("NFC").toLowerCase().trim()
+  );
+  return _adminEmailsCache;
+}
+async function isAdminEmailDb(email?: string | null): Promise<boolean> {
+  if (!email) return false;
+  return (await getAdminEmails()).includes(email.normalize("NFC").toLowerCase().trim());
+}
+
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
 
-const ADMIN_EMAILS = ["hello@quintamor.com", "loïs@quintamor.com", "lois@quintamor.com", "977luisferreira@gmail.com"].map((e) =>
-  e.normalize("NFC").toLowerCase().trim()
-);
-const isAdmin = (email?: string | null) =>
-  !!email && ADMIN_EMAILS.includes(email.normalize("NFC").toLowerCase().trim());
 
 const FROM_EMAIL = "Quinta do Amor <noreply@quintamor.com>";
-const GUEST_AREA_URL = "https://quinta-guest-area.lovable.app/dashboard";
+const GUEST_AREA_URL = "https://quinta-guest-area.vercel.app/dashboard";
 const ADMIN_BCC = "hello@quintamor.com";
 
 const BodySchema = z.object({ user_id: z.string().uuid() });
@@ -29,10 +44,22 @@ function fixedPrice(pickup: string, dropoff: string, taxi: string): number | nul
   const std = ["Lisbon", "Lisbon Airport", "Quinta do Amor"];
   const ok = std.includes(pickup) && std.includes(dropoff) && pickup !== dropoff;
   if (!ok) return null;
-  if (taxi === "4 seats") return 80;
-  if (taxi === "6 seats") return 90;
-  if (taxi === "8 seats") return 100;
+  const taxiPrices = _taxiPricesCache ?? { seats4: 70, seats6: 90, seats8: 110 };
+  if (taxi === "4 seats") return taxiPrices.seats4;
+  if (taxi === "6 seats") return taxiPrices.seats6;
+  if (taxi === "8 seats") return taxiPrices.seats8;
   return null;
+}
+
+// Taxi prices are centralized in the public.pricing_settings table (Phase 0).
+let _taxiPricesCache: { seats4: number; seats6: number; seats8: number } | null = null;
+async function getTaxiPrices() {
+  if (_taxiPricesCache) return _taxiPricesCache;
+  const { data } = await _adminAuthClient
+    .from("pricing_settings").select("value").eq("key", "taxi").maybeSingle();
+  const v = (data?.value ?? {}) as Record<string, number>;
+  _taxiPricesCache = { seats4: v.seats4 ?? 70, seats6: v.seats6 ?? 90, seats8: v.seats8 ?? 110 };
+  return _taxiPricesCache;
 }
 
 function effectivePrice(t: any): number | null {
@@ -52,7 +79,7 @@ serve(async (req) => {
     }
     const userClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: authHeader } } });
     const { data: { user } } = await userClient.auth.getUser();
-    if (!user || !isAdmin(user.email)) {
+    if (!user || !(await isAdminEmailDb(user.email))) {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -71,6 +98,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Guest not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    await getTaxiPrices(); // warm the pricing cache before sync usage below
     const sorted = [...(trips || [])].sort((a, b) => `${a.trip_date} ${a.trip_time}`.localeCompare(`${b.trip_date} ${b.trip_time}`));
     let total = 0;
     let pending = 0;

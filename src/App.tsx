@@ -21,8 +21,13 @@ import AdminGuestDetail from "./pages/AdminGuestDetail";
 import BookingSelector from "./pages/BookingSelector";
 import InvitePage from "./pages/InvitePage";
 import NotFound from "./pages/NotFound";
+import { loadPricing } from "@/lib/pricing";
 
 const queryClient = new QueryClient();
+
+// Load centralized pricing (pricing_settings table) once at startup.
+// Getters fall back to defaults until this resolves.
+loadPricing();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

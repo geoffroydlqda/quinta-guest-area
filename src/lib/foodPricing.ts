@@ -1,18 +1,10 @@
 import type { DietPreference, FoodDaySelection, DietConfig, DietType } from '@/types/guest';
+import { getDietPricing, type DietPricing } from '@/lib/pricing';
 
-// Per-diet meal prices (per person per day or per meal)
-export interface DietPricing {
-  fullBoard: number;
-  breakfast: number;
-  lunch: number;
-  dinner: number;
-}
+export type { DietPricing } from '@/lib/pricing';
 
-export const DIET_PRICING: Record<DietType, DietPricing> = {
-  vegetarian:        { fullBoard: 70, breakfast: 20, lunch: 23, dinner: 27 },
-  meat_dinner:       { fullBoard: 78, breakfast: 20, lunch: 23, dinner: 35 },
-  meat_lunch_dinner: { fullBoard: 85, breakfast: 20, lunch: 30, dinner: 35 },
-};
+
+// Prices now come from src/lib/pricing.ts (pricing_settings table).
 
 export interface DietTypeMeta {
   type: DietType;
@@ -21,28 +13,13 @@ export interface DietTypeMeta {
   pricing: DietPricing;
 }
 
-export const DIET_TYPES: DietTypeMeta[] = [
-  { type: 'vegetarian',        label: 'Vegetarian',                          countKey: 'vegetarian_count',         pricing: DIET_PRICING.vegetarian },
-  { type: 'meat_dinner',       label: 'Meat or fish for dinner',             countKey: 'meat_dinner_count',        pricing: DIET_PRICING.meat_dinner },
-  { type: 'meat_lunch_dinner', label: 'Meat or fish for lunch and dinner',   countKey: 'meat_lunch_dinner_count',  pricing: DIET_PRICING.meat_lunch_dinner },
-];
-
-// ---- Legacy single-diet helpers (kept for backwards compat with old UI/utilities) ----
-export const FULL_BOARD_PRICES: Record<DietPreference, number> = {
-  'Vegetarian': 70,
-  'Meat or fish for dinner': 78,
-  'Meat or fish for dinner and lunch': 85,
-};
-export const BREAKFAST_PRICE = 20;
-export function getLunchPrice(diet: DietPreference | null): number {
-  return diet === 'Meat or fish for dinner and lunch' ? 30 : 23;
-}
-export function getDinnerPrice(diet: DietPreference | null): number {
-  return diet === 'Vegetarian' ? 27 : 35;
-}
-export function getFullBoardPrice(diet: DietPreference | null): number {
-  if (!diet) return 70;
-  return FULL_BOARD_PRICES[diet] || 70;
+export function getDietTypes(): DietTypeMeta[] {
+  const pricing = getDietPricing();
+  return [
+    { type: 'vegetarian',        label: 'Vegetarian',                        countKey: 'vegetarian_count',        pricing: pricing.vegetarian },
+    { type: 'meat_dinner',       label: 'Meat or fish for dinner',           countKey: 'meat_dinner_count',       pricing: pricing.meat_dinner },
+    { type: 'meat_lunch_dinner', label: 'Meat or fish for lunch and dinner', countKey: 'meat_lunch_dinner_count', pricing: pricing.meat_lunch_dinner },
+  ];
 }
 
 // ---- Multi-diet cost calculation ----
@@ -92,7 +69,7 @@ export function distributeDailyGuests(
   const total = (diet?.vegetarian_count || 0) + (diet?.meat_dinner_count || 0) + (diet?.meat_lunch_dinner_count || 0);
   if (dailyGuests <= 0 || total <= 0) return counts;
 
-  const raw: { type: DietType; floor: number; rem: number }[] = DIET_TYPES.map((meta) => {
+  const raw: { type: DietType; floor: number; rem: number }[] = getDietTypes().map((meta) => {
     const share = (diet[meta.countKey] || 0) / total * dailyGuests;
     const floor = Math.floor(share);
     return { type: meta.type, floor, rem: share - floor };
@@ -130,13 +107,13 @@ export function calculateFoodCostMulti(
       ? sel.guests_count_day
       : guestsCount;
     const distribution = distributeDailyGuests(dayGuests, diet);
-    DIET_TYPES.forEach((meta) => {
+    getDietTypes().forEach((meta) => {
       const dayPricePerPerson = dayCostPerPerson(sel, meta.pricing);
       dietTotals[meta.type] += dayPricePerPerson * distribution[meta.type];
     });
   });
 
-  const dietBreakdown: DietBreakdownItem[] = DIET_TYPES.map((meta) => {
+  const dietBreakdown: DietBreakdownItem[] = getDietTypes().map((meta) => {
     const guests = diet?.[meta.countKey] || 0;
     const perPerson = selections.reduce((sum, sel) => sum + dayCostPerPerson(sel, meta.pricing), 0);
     return { type: meta.type, label: meta.label, guests, perPerson, total: Math.round(dietTotals[meta.type]) };
@@ -159,28 +136,3 @@ export function calculateFoodCostMulti(
   };
 }
 
-// Legacy single-diet API kept for compatibility — delegates to multi when called by old code paths.
-export function calculateFoodCost(
-  selections: FoodDaySelection[],
-  diet: DietPreference | null,
-  guestsCount: number
-): FoodCostSummary {
-  // Map legacy single diet to a config with all guests assigned to that diet
-  const config: DietConfig = {
-    vegetarian_count: 0,
-    meat_dinner_count: 0,
-    meat_lunch_dinner_count: 0,
-  };
-  if (diet === 'Vegetarian') config.vegetarian_count = guestsCount;
-  else if (diet === 'Meat or fish for dinner') config.meat_dinner_count = guestsCount;
-  else if (diet === 'Meat or fish for dinner and lunch') config.meat_lunch_dinner_count = guestsCount;
-  else config.vegetarian_count = guestsCount; // default
-  return calculateFoodCostMulti(selections, config, guestsCount);
-}
-
-// Legacy diet options (still referenced by older code, kept for safety)
-export const DIET_OPTIONS_WITH_PRICES: { value: DietPreference; label: string; price: number }[] = [
-  { value: 'Vegetarian', label: 'Vegetarian', price: 70 },
-  { value: 'Meat or fish for dinner', label: 'Meat or fish for dinner', price: 78 },
-  { value: 'Meat or fish for dinner and lunch', label: 'Meat or fish for lunch and dinner', price: 85 },
-];

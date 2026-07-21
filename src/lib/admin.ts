@@ -1,5 +1,8 @@
 export const normalizeEmail = (email?: string | null) => email?.normalize('NFC').toLowerCase().trim() ?? '';
 
+// ⚠️ Source de vérité serveur = table public.admin_users (RLS + Edge Functions).
+// Cette liste front est purement cosmétique (redirections, badges) : pour
+// ajouter un admin -> INSERT dans admin_users PUIS mettre à jour cette liste.
 export const ADMIN_EMAILS = [
   'hello@quintamor.com',
   'loïs@quintamor.com',

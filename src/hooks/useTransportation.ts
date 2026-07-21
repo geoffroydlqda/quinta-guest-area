@@ -4,8 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useActiveBooking } from '@/contexts/BookingContext';
 import { useToast } from '@/hooks/use-toast';
 import type { TransportationTrip, TransportationPassenger, TransportationRequest } from '@/types/guest';
-import { calculateTripPrice } from '@/types/guest';
-import { triggerSheetsSync } from '@/lib/sheetsSync';
+import { getTripPrice } from '@/lib/transportationPricing';
 import { syncTripCalendar, deleteTripCalendarEvent } from '@/lib/calendarSync';
 
 export function useTransportation() {
@@ -105,7 +104,7 @@ export function useTransportation() {
     if (!user) return null;
     
     try {
-      const priceEstimate = calculateTripPrice(
+      const priceEstimate = getTripPrice(
         tripData.pickup_location || '',
         tripData.dropoff_location || '',
         tripData.taxi_size || '4 seats'
@@ -132,7 +131,6 @@ export function useTransportation() {
       
       const newTrip = { ...data, passengers: [] } as TransportationTrip;
       setTrips(prev => [...prev, newTrip]);
-      triggerSheetsSync();
       syncTripCalendar(newTrip.id);
       return newTrip;
     } catch (error: any) {
@@ -156,7 +154,7 @@ export function useTransportation() {
       if (updates.pickup_location || updates.dropoff_location || updates.taxi_size) {
         const trip = trips.find(t => t.id === tripId);
         if (trip) {
-          priceEstimate = calculateTripPrice(
+          priceEstimate = getTripPrice(
             updates.pickup_location || trip.pickup_location,
             updates.dropoff_location || trip.dropoff_location,
             updates.taxi_size || trip.taxi_size
@@ -178,7 +176,6 @@ export function useTransportation() {
       setTrips(prev => prev.map(t => 
         t.id === tripId ? { ...t, ...updates, price_estimate: priceEstimate || t.price_estimate } : t
       ));
-      triggerSheetsSync();
       syncTripCalendar(tripId);
       return true;
     } catch (error: any) {
@@ -211,7 +208,6 @@ export function useTransportation() {
       }
 
       setTrips(prev => prev.filter(t => t.id !== tripId));
-      triggerSheetsSync();
       if (eventId) deleteTripCalendarEvent(eventId);
       return true;
     } catch (error: any) {

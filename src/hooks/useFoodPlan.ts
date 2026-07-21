@@ -6,7 +6,6 @@ import { useToast } from '@/hooks/use-toast';
 import type { FoodPlan, FoodDaySelection, DietPreference, DietConfig, MealTimes } from '@/types/guest';
 import { EMPTY_DIET_CONFIG, EMPTY_MEAL_TIMES } from '@/types/guest';
 import { generateDatesInclusive } from '@/lib/localDate';
-import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 export function useFoodPlan(checkInDate: string | null, checkOutDate: string | null, defaultGuestsCount: number = 1) {
   const { user } = useAuth();
@@ -315,7 +314,6 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
         : updateQuery.eq('user_id', user.id));
 
       if (error) throw error;
-      triggerSheetsSync();
       return true;
     } catch (error: any) {
       console.error('Error auto-saving food plan:', error);

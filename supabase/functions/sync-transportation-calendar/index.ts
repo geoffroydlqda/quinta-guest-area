@@ -4,6 +4,26 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://esm.sh/zod@3.23.8";
 
+// Admin emails are centralized in the public.admin_users table (Phase 0).
+const _adminAuthClient = createClient(
+  Deno.env.get("SUPABASE_URL") ?? "",
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+);
+let _adminEmailsCache: string[] | null = null;
+async function getAdminEmails(): Promise<string[]> {
+  if (_adminEmailsCache) return _adminEmailsCache;
+  const { data } = await _adminAuthClient.from("admin_users").select("email");
+  _adminEmailsCache = (data ?? []).map((r: { email: string }) =>
+    String(r.email).normalize("NFC").toLowerCase().trim()
+  );
+  return _adminEmailsCache;
+}
+async function isAdminEmailDb(email?: string | null): Promise<boolean> {
+  if (!email) return false;
+  return (await getAdminEmails()).includes(email.normalize("NFC").toLowerCase().trim());
+}
+
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -16,14 +36,6 @@ const CAL_GW = "https://connector-gateway.lovable.dev/google_calendar/calendar/v
 const MAPS_GW = "https://connector-gateway.lovable.dev/google_maps";
 const FALLBACK_MINUTES = 60;
 
-const ADMIN_EMAILS = [
-  "hello@quintamor.com",
-  "loïs@quintamor.com",
-  "lois@quintamor.com",
-  "977luisferreira@gmail.com",
-].map((e) => e.normalize("NFC").toLowerCase().trim());
-const isAdmin = (e?: string | null) =>
-  !!e && ADMIN_EMAILS.includes(e.normalize("NFC").toLowerCase().trim());
 
 const BodySchema = z.object({
   action: z.enum(["upsert", "delete", "backfill", "force_resync"]),
@@ -285,7 +297,7 @@ serve(async (req) => {
       });
     }
     const { action, tripId, eventId } = parsed.data;
-    const userIsAdmin = isAdmin(user.email);
+    const userIsAdmin = await isAdminEmailDb(user.email);
 
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,

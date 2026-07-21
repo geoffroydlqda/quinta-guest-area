@@ -1,5 +1,6 @@
 import type { TransportationTrip } from '@/types/guest';
-import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS, STANDARD_TAXI_PRICE_8_SEATS, CUSTOM_OFFER_TEXT, type TaxiSize } from '@/types/guest';
+import { CUSTOM_OFFER_TEXT, type TaxiSize } from '@/types/guest';
+import { getTaxiPrices } from '@/lib/pricing';
 
 export interface TransportationCostSummary {
   /** Total of all confirmed prices from live trip records using manual override precedence. */
@@ -36,9 +37,10 @@ export function getFixedTripPriceNumeric(
   taxiSize: TaxiSize
 ): number | null {
   if (isFixedRoute(pickupLocation, dropoffLocation)) {
-    if (taxiSize === '4 seats') return STANDARD_TAXI_PRICE_4_SEATS;
-    if (taxiSize === '6 seats') return STANDARD_TAXI_PRICE_6_SEATS;
-    if (taxiSize === '8 seats') return STANDARD_TAXI_PRICE_8_SEATS;
+    const prices = getTaxiPrices();
+    if (taxiSize === '4 seats') return prices.seats4;
+    if (taxiSize === '6 seats') return prices.seats6;
+    if (taxiSize === '8 seats') return prices.seats8;
   }
   return null;
 }

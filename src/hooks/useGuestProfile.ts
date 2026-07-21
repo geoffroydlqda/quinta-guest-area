@@ -4,7 +4,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useActiveBooking } from '@/contexts/BookingContext';
 import type { GuestProfile, ToolStatuses } from '@/types/guest';
 import { formatDateForDatabase } from '@/lib/localDate';
-import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 // Timeout for profile loading (8 seconds)
 const PROFILE_LOAD_TIMEOUT = 8000;
@@ -373,7 +372,6 @@ export function useGuestProfile() {
         .eq('user_id', user.id);
 
       if (error) throw error;
-      triggerSheetsSync();
 
       setState(prev => ({
         ...prev,
@@ -405,7 +403,6 @@ export function useGuestProfile() {
         .eq('id', activeBookingId);
 
       if (error) throw error;
-      triggerSheetsSync();
       await refreshBookings();
 
       checkOutChangeSourceRef.current = 'user_check_in_change';
@@ -433,7 +430,6 @@ export function useGuestProfile() {
         .eq('id', activeBookingId);
 
       if (error) throw error;
-      triggerSheetsSync();
       await refreshBookings();
 
       checkOutChangeSourceRef.current = 'user_check_out_change';
@@ -460,7 +456,6 @@ export function useGuestProfile() {
         .eq('id', activeBookingId);
 
       if (error) throw error;
-      triggerSheetsSync();
       await refreshBookings();
 
       setState(prev => ({
@@ -496,7 +491,6 @@ export function useGuestProfile() {
         .eq('id', activeBookingId);
 
       if (error) throw error;
-      triggerSheetsSync();
       await refreshBookings();
 
       checkOutChangeSourceRef.current = 'combined_stay_update';
@@ -535,7 +529,6 @@ export function useGuestProfile() {
         .eq('user_id', user.id);
 
       if (error) throw error;
-      triggerSheetsSync();
 
       setState(prev => ({
         ...prev,
@@ -568,7 +561,6 @@ export function useGuestProfile() {
         .eq('user_id', user.id);
 
       if (error) throw error;
-      triggerSheetsSync();
 
       setState(prev => ({
         ...prev,

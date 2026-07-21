@@ -11,7 +11,6 @@ import {
   MAX_SHARED_ROOMS,
   MAX_ENSUITE_ROOMS,
 } from '@/types/room';
-import { triggerSheetsSync } from '@/lib/sheetsSync';
 
 export type FlexibleBed = 'twin' | 'king';
 export type RoomBedMap = Record<number, FlexibleBed>;
@@ -310,7 +309,6 @@ export function useRoomPlanner() {
         setRecordId(data.id);
       }
 
-      triggerSheetsSync();
       return true;
     } catch (error: any) {
       console.error('Auto-save error:', error);

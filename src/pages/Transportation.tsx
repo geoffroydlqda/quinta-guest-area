@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Plus, Trash2, UserPlus, X, Car, Info, Copy, AlertCircle, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import type { TransportationTrip } from '@/types/guest';
-import { STANDARD_TAXI_PRICE_4_SEATS, STANDARD_TAXI_PRICE_6_SEATS, STANDARD_TAXI_PRICE_8_SEATS } from '@/types/guest';
+import { getTaxiPrices } from '@/lib/pricing';
 
 // Parse a YYYY-MM-DD calendar date into a local Date (no timezone shift).
 function parseLocalDate(d: string): Date {
@@ -264,9 +264,9 @@ const Transportation = () => {
             <div className="text-sm">
               <p className="font-medium mb-2">Taxi pricing</p>
               <ul className="space-y-1 text-muted-foreground">
-                <li>• 4-seat taxi: <strong>€{STANDARD_TAXI_PRICE_4_SEATS}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
-                <li>• 6-seat taxi: <strong>€{STANDARD_TAXI_PRICE_6_SEATS}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
-                <li>• 8-seat taxi: <strong>€{STANDARD_TAXI_PRICE_8_SEATS}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
+                <li>• 4-seat taxi: <strong>€{getTaxiPrices().seats4}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
+                <li>• 6-seat taxi: <strong>€{getTaxiPrices().seats6}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
+                <li>• 8-seat taxi: <strong>€{getTaxiPrices().seats8}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
                 <li>• Other routes: Custom offer</li>
               </ul>
             </div>

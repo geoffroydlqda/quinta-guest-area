@@ -129,30 +129,8 @@ export interface ToolStatuses {
   documentation: boolean; // viewed or not
 }
 
-// Price calculation helpers
-export const STANDARD_TAXI_PRICE_4_SEATS = 60;
-export const STANDARD_TAXI_PRICE_6_SEATS = 80;
-export const STANDARD_TAXI_PRICE_8_SEATS = 100;
+// Taxi prices now live in src/lib/pricing.ts (backed by the pricing_settings table).
 export const CUSTOM_OFFER_TEXT = 'Custom offer';
 
 export type TaxiSize = '4 seats' | '6 seats' | '8 seats';
 
-export function calculateTripPrice(
-  pickupLocation: string,
-  dropoffLocation: string,
-  taxiSize: TaxiSize
-): string {
-  const standardLocations = ['Lisbon', 'Lisbon Airport', 'Quinta do Amor'];
-  const isStandardRoute =
-    standardLocations.includes(pickupLocation) &&
-    standardLocations.includes(dropoffLocation) &&
-    pickupLocation !== dropoffLocation;
-
-  if (isStandardRoute) {
-    if (taxiSize === '4 seats') return `€${STANDARD_TAXI_PRICE_4_SEATS}`;
-    if (taxiSize === '6 seats') return `€${STANDARD_TAXI_PRICE_6_SEATS}`;
-    return `€${STANDARD_TAXI_PRICE_8_SEATS}`;
-  }
-
-  return CUSTOM_OFFER_TEXT;
-}

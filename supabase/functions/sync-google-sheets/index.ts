@@ -1,6 +1,26 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Admin emails are centralized in the public.admin_users table (Phase 0).
+const _adminAuthClient = createClient(
+  Deno.env.get("SUPABASE_URL") ?? "",
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+);
+let _adminEmailsCache: string[] | null = null;
+async function getAdminEmails(): Promise<string[]> {
+  if (_adminEmailsCache) return _adminEmailsCache;
+  const { data } = await _adminAuthClient.from("admin_users").select("email");
+  _adminEmailsCache = (data ?? []).map((r: { email: string }) =>
+    String(r.email).normalize("NFC").toLowerCase().trim()
+  );
+  return _adminEmailsCache;
+}
+async function isAdminEmailDb(email?: string | null): Promise<boolean> {
+  if (!email) return false;
+  return (await getAdminEmails()).includes(email.normalize("NFC").toLowerCase().trim());
+}
+
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -89,10 +109,9 @@ serve(async (req) => {
       admin.from("food_plans").select("*"),
     ]);
 
-    const ADMIN_EMAILS = ['hello@quintamor.com', 'loïs@quintamor.com', 'lois@quintamor.com', '977luisferreira@gmail.com']
-      .map((e) => e.normalize('NFC').toLowerCase().trim());
+    const _admins = await getAdminEmails();
     const isAdminEmail = (email?: string | null) =>
-      !!email && ADMIN_EMAILS.includes(email.normalize('NFC').toLowerCase().trim());
+      !!email && _admins.includes((email ?? '').normalize('NFC').toLowerCase().trim());
 
     const allProfiles: Profile[] = profilesRes.data || [];
     const adminUserIds = new Set(allProfiles.filter((p: any) => isAdminEmail(p.email)).map((p: any) => p.user_id));

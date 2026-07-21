@@ -2,17 +2,32 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://esm.sh/zod@3.23.8";
 
+// Admin emails are centralized in the public.admin_users table (Phase 0).
+const _adminAuthClient = createClient(
+  Deno.env.get("SUPABASE_URL") ?? "",
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+);
+let _adminEmailsCache: string[] | null = null;
+async function getAdminEmails(): Promise<string[]> {
+  if (_adminEmailsCache) return _adminEmailsCache;
+  const { data } = await _adminAuthClient.from("admin_users").select("email");
+  _adminEmailsCache = (data ?? []).map((r: { email: string }) =>
+    String(r.email).normalize("NFC").toLowerCase().trim()
+  );
+  return _adminEmailsCache;
+}
+async function isAdminEmailDb(email?: string | null): Promise<boolean> {
+  if (!email) return false;
+  return (await getAdminEmails()).includes(email.normalize("NFC").toLowerCase().trim());
+}
+
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
 
-const ADMIN_EMAILS = ["hello@quintamor.com", "loïs@quintamor.com", "lois@quintamor.com", "977luisferreira@gmail.com"].map((e) =>
-  e.normalize("NFC").toLowerCase().trim()
-);
-const isAdmin = (email?: string | null) =>
-  !!email && ADMIN_EMAILS.includes(email.normalize("NFC").toLowerCase().trim());
 
 // Scoped delete: removes ONE booking and all of its child rows.
 // Does NOT touch guest_profiles or the auth user — a guest may have
@@ -37,7 +52,7 @@ serve(async (req) => {
     );
     const { data: { user }, error: authErr } = await userClient.auth.getUser();
     const adminEmail = (user?.email || "").normalize("NFC").toLowerCase().trim();
-    if (authErr || !user || !isAdmin(adminEmail)) {
+    if (authErr || !user || !(await isAdminEmailDb(adminEmail))) {
       return json({ error: "Forbidden" }, 403);
     }
 

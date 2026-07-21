@@ -13,7 +13,7 @@ const corsHeaders = {
 
 const ADMIN_EMAIL = "hello@quintamor.com";
 const FROM_EMAIL = "Quinta do Amor <noreply@quintamor.com>";
-const GUEST_AREA_URL = "https://quinta-guest-area.lovable.app/dashboard";
+const GUEST_AREA_URL = "https://quinta-guest-area.vercel.app/dashboard";
 
 const FoodSelectionSchema = z.object({
   date: z.string(),
