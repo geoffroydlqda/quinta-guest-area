@@ -11,7 +11,7 @@ Interface utilisateur en **anglais**. Communication avec le propriétaire en **f
 ## Stack et workflow
 
 - React 18 + Vite + TypeScript + Tailwind + shadcn/ui (dans `src/components/ui/`)
-- Supabase : base de données, auth, Edge Functions — projet `qbxobojrftjnftfaymhl`
+- Supabase : base de données, auth, Edge Functions — projet `fnlgeeuohvethmfpsxpf` (Supabase personnel, migré depuis Lovable Cloud)
 - Hébergement : Vercel, déploiement auto à chaque push sur `main`
 - Tests : vitest (`npm test`), lint : eslint
 - **Workflow** : GitHub est la source de vérité unique. Toujours `npm run build` + `npm test` avant de pousser. Le tag `avant-migration-lovable` = état pré-migration (juillet 2026, projet créé à l'origine avec Lovable).
