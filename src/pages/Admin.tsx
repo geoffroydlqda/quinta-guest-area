@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
 import { CreateBookingDialog } from "@/components/admin/CreateBookingDialog";
+import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
 import { CalendarCheck, AlertTriangle } from "lucide-react";
@@ -499,6 +500,7 @@ const AdminContent = () => {
           </TabsContent>
 
           <TabsContent value="payments">
+            <PaymentRemindersCard />
             <PaymentsView
               bookings={data.bookings || []}
               installments={installments}
@@ -1278,6 +1280,25 @@ function EventTable({
     setTimeout(() => setCopiedId((c) => (c === bookingId ? null : c)), 2000);
   };
 
+  const [sendingInviteId, setSendingInviteId] = useState<string | null>(null);
+  const sendInvite = async (e: React.MouseEvent, bookingId: string, guestLabel: string) => {
+    e.stopPropagation();
+    if (!window.confirm(`Send the invitation email to ${guestLabel}?`)) return;
+    setSendingInviteId(bookingId);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-invite-email", {
+        body: { booking_id: bookingId },
+      });
+      if (error || data?.error) {
+        toast({ title: "Invitation not sent", description: error?.message || data?.error || "Unknown error", variant: "destructive" });
+      } else {
+        toast({ title: "Invitation sent", description: `Email sent to ${data.sent_to}` });
+      }
+    } finally {
+      setSendingInviteId(null);
+    }
+  };
+
   const openAsGuest = (e: React.MouseEvent, bookingId: string) => {
     e.stopPropagation();
     window.open(`/dashboard?impersonate=${bookingId}`, "_blank");
@@ -1342,18 +1363,31 @@ function EventTable({
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
                   <div className="flex items-center gap-1.5 justify-end">
-                    <div className="w-8 flex justify-center">
+                    <div className="w-16 flex justify-center gap-0.5">
                       {!ev.invitationClaimed && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          onClick={(e) => copyInvite(e, ev.invitationToken, ev.bookingId)}
-                          aria-label="Copy invite link"
-                          title="Copy invite link"
-                        >
-                          {copiedId === ev.bookingId ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                        </Button>
+                        <>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={(e) => copyInvite(e, ev.invitationToken, ev.bookingId)}
+                            aria-label="Copy invite link"
+                            title="Copy invite link"
+                          >
+                            {copiedId === ev.bookingId ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            disabled={sendingInviteId === ev.bookingId}
+                            onClick={(e) => sendInvite(e, ev.bookingId, label)}
+                            aria-label="Send invitation email"
+                            title="Send invitation email"
+                          >
+                            {sendingInviteId === ev.bookingId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                          </Button>
+                        </>
                       )}
                     </div>
                     <Button

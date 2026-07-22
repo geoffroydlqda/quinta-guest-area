@@ -8,3 +8,5 @@ verify_jwt = false
 
 [functions.ensure-guest-profile]
 verify_jwt = false
+[functions.payment-reminders]
+verify_jwt = false

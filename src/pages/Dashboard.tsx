@@ -277,8 +277,8 @@ const DashboardContent = () => {
       if (response.error) throw response.error;
 
       toast({
-        title: 'Information submitted',
-        description: 'A confirmation email has been sent to you.',
+        title: 'Summary sent',
+        description: 'A confirmation email has been sent to you. You can keep editing until 3 days before arrival.',
       });
 
       refreshProfile();
@@ -333,6 +333,33 @@ const DashboardContent = () => {
             Log out
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  // No booking linked to this account: show a clear explanation instead of
+  // half-working tools (dates would silently fail to save without a booking).
+  if (!activeBookingId && bookingsPersonal.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <GuestAreaHeader />
+        <main className="flex-1 flex items-center justify-center px-4">
+          <div className="max-w-md w-full text-center space-y-4 bg-card rounded-2xl border border-border p-8">
+            <h2 className="text-xl font-medium">No stay linked to your account yet</h2>
+            <p className="text-muted-foreground">
+              Your Guest Area activates once your booking is connected. If you received
+              an <strong>invitation link</strong> from us, open it while logged in with
+              this account ({profile.email}).
+            </p>
+            <p className="text-muted-foreground">
+              No invitation yet? Write to us at{' '}
+              <a href="mailto:hello@quintamor.com" className="text-primary underline">
+                hello@quintamor.com
+              </a>{' '}
+              and we'll connect your stay.
+            </p>
+          </div>
+        </main>
       </div>
     );
   }
@@ -462,7 +489,7 @@ const DashboardContent = () => {
               ) : (
                 <Send className="w-4 h-4" />
               )}
-              Submit information
+              Send summary
             </Button>
             <p className="text-sm text-muted-foreground mt-3">
               {guestStatus.message}

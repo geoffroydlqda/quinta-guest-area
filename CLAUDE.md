@@ -35,15 +35,22 @@ Interface utilisateur en **anglais**. Communication avec le propriétaire en **f
 - **Tarifs** : source de vérité = table `public.pricing_settings` (clés `taxi`, `food`). Front : `src/lib/pricing.ts` (store chargé au démarrage, getters synchrones, défauts = seed). Ne JAMAIS re-coder un prix en dur.
 - Tarifs taxi en vigueur : 70 € (4 places) / 90 € (6 places) / 110 € (8 places).
 
+## Conventions Phase 1 (juillet 2026)
+
+- **Rappels de paiement** : Edge Function `payment-reminders`, appelée chaque jour à 08:00 UTC par pg_cron (job `payment-reminders-daily`, authentifié par le header `x-cron-key` = `app_settings.internal.cron_key`, jamais dans le repo). **Interrupteur global** : `app_settings.payment_reminders.enabled` (false par défaut — AUCUN envoi tant que Geoffroy ne l'active pas explicitement). Cadence : J-7 avant échéance + J+3 de retard, un seul envoi par (type, échéance) grâce à `reminder_log` (index unique). Aperçu dry-run : invoquer la fonction avec `{preview: true}` (admin) — c'est ce que fait la carte "Automatic payment reminders" de l'onglet Payments.
+- **Invitations** : bouton Mail dans le tableau admin → Edge Function `send-invite-email` (action manuelle uniquement, jamais automatique). Tout envoi est journalisé dans `reminder_log`.
+- Le bouton guest « Submit information » a été renommé « Send summary » (choix produit : pas de verrouillage à la soumission, l'édition reste ouverte jusqu'à J-3).
+- Compte sans réservation : le Dashboard affiche un écran d'explication dédié (plus de champs qui ne sauvegardent rien).
+
 ## Base de données (tables principales)
 
-`admin_users`, `pricing_settings`, `bookings`, `guest_profiles`, `room_setups`, `transportation_requests`, `transportation_trips`, `transportation_passengers`, `food_plans`, `payment_installments`, `docs_ack`, `deleted_entries_log`. Fonctions SQL : `is_admin`, `is_admin_email`. Le schéma complet est dans `src/integrations/supabase/types.ts`.
+`admin_users`, `app_settings`, `pricing_settings`, `reminder_log`, `bookings`, `guest_profiles`, `room_setups`, `transportation_requests`, `transportation_trips`, `transportation_passengers`, `food_plans`, `payment_installments`, `docs_ack`, `deleted_entries_log`. Fonctions SQL : `is_admin`, `is_admin_email`. Le schéma complet est dans `src/integrations/supabase/types.ts`.
 
 Toute modification de schéma passe par un fichier SQL dans `supabase/migrations/` (jamais de modification manuelle non versionnée).
 
 ## Edge Functions (supabase/functions/)
 
-`admin-claim-booking`, `admin-delete-guest`, `admin-generate-invite-token`, `admin-guest-detail`, `admin-list-data`, `claim-booking`, `create-booking`, `ensure-guest-profile`, `notify-transport-pricing`, `qa-tests`, `send-guest-summary`, `send-room-setup-emails`, `sync-google-sheets`, `sync-transportation-calendar`.
+`admin-claim-booking`, `admin-delete-guest`, `admin-generate-invite-token`, `admin-guest-detail`, `admin-list-data`, `claim-booking`, `create-booking`, `ensure-guest-profile`, `notify-transport-pricing`, `qa-tests`, `send-guest-summary`, `payment-reminders`, `send-invite-email`, `send-room-setup-emails`, `sync-google-sheets`, `sync-transportation-calendar`.
 
 ⚠️ Elles ne se déploient PAS via le push GitHub : `supabase functions deploy <nom>` (CLI Supabase). Si une fonction est modifiée dans le repo, penser à la redéployer. Certaines ont `verify_jwt = false` dans `supabase/config.toml`.
 
