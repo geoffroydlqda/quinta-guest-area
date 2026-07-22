@@ -29,8 +29,11 @@ const Auth = () => {
   useEffect(() => {
     if (!authLoading && user) {
       const next = searchParams.get('redirectTo');
+      const pendingInvite = !isAdminEmail(user.email) ? localStorage.getItem('qda_pending_invite') : null;
       const fallback = isAdminEmail(user.email) ? '/admin' : '/dashboard';
-      const target = next && next.startsWith('/') ? next : fallback;
+      const target = (next && next.startsWith('/'))
+        ? next
+        : (pendingInvite ? `/invite/${pendingInvite}` : fallback);
       navigate(target, { replace: true, state: { from: location.pathname } });
     }
   }, [user, authLoading, navigate, searchParams, location.pathname]);

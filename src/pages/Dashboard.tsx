@@ -340,6 +340,10 @@ const DashboardContent = () => {
   // No booking linked to this account: show a clear explanation instead of
   // half-working tools (dates would silently fail to save without a booking).
   if (!activeBookingId && bookingsPersonal.length === 0) {
+    const pendingInvite = localStorage.getItem('qda_pending_invite');
+    if (pendingInvite) {
+      return <Navigate to={`/invite/${pendingInvite}`} replace />;
+    }
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <GuestAreaHeader />

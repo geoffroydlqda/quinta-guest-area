@@ -27,9 +27,13 @@ export default function InvitePage() {
       return;
     }
     if (!user) {
+      // Mémorise l'invitation : si la connexion (Google notamment) ne revient
+      // pas sur cette page, Auth/Dashboard reprendront le claim automatiquement.
+      localStorage.setItem("qda_pending_invite", token);
       setStatus("needs_auth");
       return;
     }
+    localStorage.removeItem("qda_pending_invite");
 
     if (isAdminEmail(user.email)) {
       setStatus("error");
