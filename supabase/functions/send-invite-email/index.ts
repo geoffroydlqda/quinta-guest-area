@@ -61,7 +61,7 @@ serve(async (req) => {
 
     const { data: booking, error: findErr } = await admin
       .from("bookings")
-      .select("id, email, first_name, retreat_name, check_in_date, invitation_token, invitation_claimed")
+      .select("id, email, first_name, retreat_name, check_in_date, check_out_date, invitation_token, invitation_claimed")
       .eq("id", booking_id)
       .maybeSingle();
     if (findErr) return json({ error: findErr.message }, 500);
@@ -79,24 +79,42 @@ serve(async (req) => {
 
     const inviteUrl = `${GUEST_AREA_ORIGIN}/invite/${token}`;
     const firstName = escapeHtml(booking.first_name || "there");
-    const retreat = escapeHtml(booking.retreat_name || "your stay");
+
+    // "from 1 to 8 January 2027" — plage humaine, robuste aux dates manquantes
+    const fmtDay = (iso: string) => new Date(iso + "T12:00:00Z").getUTCDate();
+    const fmtFull = (iso: string) =>
+      new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })
+        .format(new Date(iso + "T12:00:00Z"));
+    let stayLine = "at Quinta do Amor";
+    const ci = booking.check_in_date ? String(booking.check_in_date) : null;
+    const co = booking.check_out_date ? String(booking.check_out_date) : null;
+    if (ci && co) {
+      const sameMonth = ci.slice(0, 7) === co.slice(0, 7);
+      stayLine = sameMonth
+        ? `at Quinta do Amor from ${fmtDay(ci)} to ${fmtFull(co)}`
+        : `at Quinta do Amor from ${fmtFull(ci)} to ${fmtFull(co)}`;
+    } else if (ci) {
+      stayLine = `at Quinta do Amor from ${fmtFull(ci)}`;
+    }
+
     const subject = `Your invitation to the Quinta do Amor Guest Area`;
+    const FONT = "font-family: Helvetica, Arial, sans-serif; font-size: 12pt; line-height: 1.5; color: #000;";
     const html = `
-    <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 560px; margin: 0 auto; color: #222;">
-      <h2 style="color:#4a5a3a;">Quinta do Amor</h2>
-      <p>Hi ${firstName},</p>
-      <p>We're delighted to welcome you for <strong>${retreat}</strong>${booking.check_in_date ? ` starting on <strong>${escapeHtml(String(booking.check_in_date))}</strong>` : ""}.</p>
-      <p>Your personal Guest Area is ready: it's where you can set your stay dates,
-        choose your room setup, plan your meals and arrange transportation.</p>
-      <p style="text-align:center;margin:24px 0;">
+    <div style="${FONT} text-align: left;">
+      <p style="margin: 0 0 14px;">Hi ${firstName},</p>
+      <p style="margin: 0 0 14px;">We're happy to support you in creating magical moments ${stayLine}.</p>
+      <p style="margin: 0 0 14px;">Your personal Guest Area is ready. It's where you can choose your room
+        setup, plan your meals and arrange your transportation.</p>
+      <p style="margin: 20px 0;">
         <a href="${inviteUrl}"
-           style="background:#4a5a3a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;">
+           style="${FONT} background: #4a5a3a; color: #ffffff; padding: 10px 22px; border-radius: 6px; text-decoration: none; display: inline-block;">
           Open my Guest Area
         </a>
       </p>
-      <p style="font-size:13px;color:#555;">If the button doesn't work, copy this link into your browser:<br/>
-        <a href="${inviteUrl}" style="color:#4a5a3a;">${inviteUrl}</a></p>
-      <p>See you soon,<br/>Quinta do Amor</p>
+      <p style="margin: 0 0 14px; font-size: 10pt; color: #555;">If the button doesn't work, copy this link into your browser:<br/>
+        <a href="${inviteUrl}" style="color: #4a5a3a; word-break: break-all;">${inviteUrl}</a></p>
+      <p style="margin: 0 0 14px;">Please let me know if you have any questions!</p>
+      <p style="margin: 0;">Geo<br/>Quinta do Amor</p>
     </div>`;
 
     const res = await resend.emails.send({
