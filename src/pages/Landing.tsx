@@ -1,7 +1,14 @@
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import qdaLogo from '@/assets/qda-logo.png';
+import { useAuth } from '@/contexts/AuthContext';
+import { isAdminEmail } from '@/lib/admin';
 const Landing = () => {
+  const { user, isLoading } = useAuth();
+  // Signed-in visitors skip the landing page: admins go to /admin, guests to /dashboard.
+  if (!isLoading && user) {
+    return <Navigate to={isAdminEmail(user.email) ? '/admin' : '/dashboard'} replace />;
+  }
   return <div className="min-h-screen bg-background flex flex-col">
       <main className="flex-1 flex items-center justify-center px-4">
         <div className="max-w-md w-full text-center space-y-8 animate-fade-up">

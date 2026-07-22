@@ -17,6 +17,7 @@ import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
 import { ProfileCompletionModal } from '@/components/guest-area/ProfileCompletionModal';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { featureFlags } from '@/lib/featureFlags';
+import { isAdminEmail } from '@/lib/admin';
 import { Button } from '@/components/ui/button';
 import { Loader2, Send, RefreshCw, LogOut, AlertCircle, CreditCard, Download, Utensils, Car, FileText, MessageCircle, Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, CloudFog } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -27,7 +28,7 @@ import { usePaymentData, type PaymentInstallment } from '@/hooks/usePaymentData'
 const DashboardContent = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
-  const { bookingsPersonal, activeBookingId, activeBooking, isLoading: bookingsLoading } = useActiveBooking();
+  const { bookingsPersonal, activeBookingId, activeBooking, isImpersonating, isLoading: bookingsLoading } = useActiveBooking();
   const queryClient = useQueryClient();
   
   const { 
@@ -297,6 +298,12 @@ const DashboardContent = () => {
   const handleLogout = async () => {
     await signOut();
   };
+
+  // Admins land on their own dashboard: send them to /admin unless they are
+  // deliberately impersonating a guest ("Open as guest").
+  if (user && isAdminEmail(user.email) && !isImpersonating) {
+    return <Navigate to="/admin" replace />;
+  }
 
   // Multi-booking: route to selector if user has >1 bookings and none is active
   if (!bookingsLoading && bookingsPersonal.length > 1 && !activeBookingId) {

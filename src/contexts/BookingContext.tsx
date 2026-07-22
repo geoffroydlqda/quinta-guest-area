@@ -75,6 +75,11 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     if (urlImpersonateId && urlImpersonateId !== impersonateId) {
       sessionStorage.setItem(IMPERSONATION_KEY, urlImpersonateId);
       setImpersonateId(urlImpersonateId);
+    } else if (!urlImpersonateId && !impersonateId) {
+      // Session admin arrivée après le premier rendu : restaure une éventuelle
+      // impersonation en cours (sessionStorage), sinon l'initialisation l'a ratée.
+      const stored = sessionStorage.getItem(IMPERSONATION_KEY);
+      if (stored) setImpersonateId(stored);
     }
   }, [urlImpersonateId, isAdmin, impersonateId]);
 
@@ -167,14 +172,18 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     setImpersonatedBooking(null);
   }, []);
 
-  const isImpersonating = isAdmin && !!impersonateId;
+  // L'intention d'impersonation est lue de façon SYNCHRONE (URL en priorité) :
+  // impersonateId (state) peut être en retard d'un rendu quand la session auth
+  // arrive tard, ce qui envoyait le chargement de profil sur le mauvais chemin.
+  const currentImpersonateId = isAdmin ? (urlImpersonateId ?? impersonateId) : null;
+  const isImpersonating = isAdmin && !!currentImpersonateId;
 
   const effectiveActiveBooking = isImpersonating
     ? impersonatedBooking
     : (bookings.find((b) => b.id === activeBookingId) ?? null);
 
   const effectiveActiveBookingId = isImpersonating
-    ? (impersonatedBooking?.id ?? impersonateId)
+    ? (impersonatedBooking?.id ?? currentImpersonateId)
     : activeBookingId;
 
   const bookingsPersonal = useMemo(() => bookings.filter((b) => !b.admin_managed), [bookings]);
