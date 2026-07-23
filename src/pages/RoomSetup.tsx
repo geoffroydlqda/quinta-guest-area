@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, User, Users, BedDouble, BedSingle, AlertTriangle } from 'lucide-react';
+import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, User, Users, BedDouble, BedSingle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { FIXED_ROOMS, FLEXIBLE_ROOMS_ORDER } from '@/types/room';
 import { cn } from '@/lib/utils';
 import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
@@ -57,6 +57,8 @@ interface RoomCardProps {
   bathroomType: 'en-suite' | 'shared';
   note?: string;
   bedType: FlexibleBed;
+  isExpanded: boolean;
+  onToggle: () => void;
   isFixed?: boolean;
   isLocked: boolean;
   onChange?: (bed: FlexibleBed) => void;
@@ -66,7 +68,7 @@ interface RoomCardProps {
   onRemoveGuest: (index: number) => void;
 }
 
-function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLocked, onChange, guests, onAddGuest, onUpdateGuest, onRemoveGuest }: RoomCardProps) {
+function RoomCard({ roomId, bathroomType, note, bedType, isExpanded, onToggle, isFixed = false, isLocked, onChange, guests, onAddGuest, onUpdateGuest, onRemoveGuest }: RoomCardProps) {
   const image =
     roomId === 1 || roomId === 6
       ? roomKingImage
@@ -74,10 +76,57 @@ function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLock
         ? roomTwinsImage
         : roomQueenImage;
   const disabled = isLocked || isFixed;
+  const namedGuests = guests.filter((n) => n && n.trim().length > 0);
+
+  // ---- Vue compacte (par défaut) : une ligne dense, clic pour déplier ----
+  if (!isExpanded) {
+    return (
+      <button
+        type="button"
+        id={`room-card-${roomId}`}
+        onClick={onToggle}
+        className="w-full bg-card rounded-xl border border-border shadow-sm hover:shadow-md hover:border-primary/40 transition-all scroll-mt-24 text-left"
+      >
+        <div className="flex items-center gap-3 p-2.5">
+          <img src={image} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Room {roomId}</span>
+              {isFixed ? (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Crown className="w-3 h-3 text-primary" />King</span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  {bedType === 'twin'
+                    ? (<><span className="flex -space-x-0.5"><BedSingle className="w-3 h-3" /><BedSingle className="w-3 h-3" /></span>Twin</>)
+                    : (<><BedDouble className="w-3 h-3" />King</>)}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <ShowerHead className="w-3 h-3" />
+                {bathroomType === 'en-suite' ? 'En-suite' : `Shared`}
+                {BATHROOM_PAIR_COLOR[roomId] && (
+                  <span className={cn('inline-block w-2 h-2 rounded-full', BATHROOM_PAIR_COLOR[roomId])} />
+                )}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
+              {namedGuests.length > 0
+                ? namedGuests.join(', ')
+                : 'No guests yet'}
+            </p>
+          </div>
+          {namedGuests.length > 0 && (
+            <Badge variant="secondary" className="flex-shrink-0 gap-1"><User className="w-3 h-3" />{namedGuests.length}</Badge>
+          )}
+          <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        </div>
+      </button>
+    );
+  }
 
   return (
-    <div id={`room-card-${roomId}`} className="bg-card rounded-2xl shadow-elegant overflow-hidden border border-border flex flex-col h-full scroll-mt-24">
-      <div className="relative aspect-square w-full overflow-hidden">
+    <div id={`room-card-${roomId}`} className="bg-card rounded-2xl shadow-elegant overflow-hidden border-2 border-primary/40 flex flex-col sm:flex-row scroll-mt-24">
+      <div className="relative w-full sm:w-64 h-48 sm:h-auto sm:self-stretch flex-shrink-0 overflow-hidden">
         <img src={image} alt={`Room ${roomId}`} className="w-full h-full object-cover transition-opacity" />
         {isFixed && (
           <Badge
@@ -95,6 +144,9 @@ function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLock
             Room {roomId}
             {note && <span className="text-sm text-muted-foreground font-normal"> · {note}</span>}
           </h3>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={onToggle} aria-label="Collapse">
+            <ChevronUp className="w-4 h-4" />
+          </Button>
         </div>
         <ul className="space-y-1.5 text-sm text-muted-foreground mb-4">
           <li className="flex items-center gap-2">
@@ -224,6 +276,16 @@ const RoomSetup = () => {
   } = useRoomPlanner();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
+  // Vue compacte par défaut ; chaque chambre se déplie individuellement
+  const [expandedRooms, setExpandedRooms] = useState<Set<number>>(new Set());
+  const toggleRoom = (id: number) =>
+    setExpandedRooms((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  const expandRoom = (id: number) =>
+    setExpandedRooms((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
 
   // Progression : guests placés vs nombre de guests du séjour
   const guestsPlaced = Object.values(roomGuestsMap)
@@ -310,7 +372,10 @@ const RoomSetup = () => {
                     title={`Room ${roomId}${hasGuests ? ' — guests assigned' : ' — no guests yet'}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      document.getElementById(`room-card-${roomId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      expandRoom(roomId);
+                      setTimeout(() => {
+                        document.getElementById(`room-card-${roomId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 60);
                     }}
                     className={cn(
                       'absolute -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full text-xs font-semibold shadow-md transition-transform hover:scale-125 focus:outline-none focus:ring-2 focus:ring-primary',
@@ -353,7 +418,23 @@ const RoomSetup = () => {
 
         <RoomStats stats={stats} />
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 items-stretch">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">Tap a room to open it</p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-xs"
+            onClick={() =>
+              setExpandedRooms((prev) =>
+                prev.size > 0 ? new Set() : new Set(enabledRoomIds)
+              )
+            }
+          >
+            {expandedRooms.size > 0 ? 'Collapse all' : 'Expand all'}
+          </Button>
+        </div>
+        <div className="space-y-2">
           {/* All 11 rooms in numeric order */}
           {[...FIXED_ROOMS.map((r) => ({ ...r, isFixed: true as const, note: undefined as string | undefined })),
             ...FLEXIBLE_ROOMS_ORDER.map((r) => ({ ...r, isFixed: false as const }))]
@@ -366,6 +447,8 @@ const RoomSetup = () => {
                   roomId={r.id}
                   bathroomType={r.bathroomType}
                   bedType="king"
+                  isExpanded={expandedRooms.has(r.id)}
+                  onToggle={() => toggleRoom(r.id)}
                   isFixed
                   isLocked={isLocked}
                   guests={roomGuestsMap[r.id] || []}
@@ -380,6 +463,8 @@ const RoomSetup = () => {
                   bathroomType={r.bathroomType}
                   note={r.note}
                   bedType={roomBedMap[r.id] || 'twin'}
+                  isExpanded={expandedRooms.has(r.id)}
+                  onToggle={() => toggleRoom(r.id)}
                   isLocked={isLocked}
                   onChange={(bed) => setRoomBed(r.id, bed)}
                   guests={roomGuestsMap[r.id] || []}
