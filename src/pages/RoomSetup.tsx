@@ -6,15 +6,15 @@ import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
-import { RoomConfigWarning } from '@/components/guest-area/RoomConfigWarning';
 import { RoomStats } from '@/components/room-planner/RoomStats';
 import { MapLightbox } from '@/components/room-planner/MapLightbox';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, User } from 'lucide-react';
+import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, User, Users, BedDouble, BedSingle, AlertTriangle } from 'lucide-react';
 import { FIXED_ROOMS, FLEXIBLE_ROOMS_ORDER } from '@/types/room';
 import { cn } from '@/lib/utils';
 import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
@@ -28,6 +28,28 @@ const MAX_GUESTS_PER_ROOM = 2;
 
 const BATHROOM_PARTNER: Record<number, number> = {
   2: 3, 3: 2, 4: 5, 5: 4, 7: 8, 8: 7,
+};
+
+// Couleur par paire de salle de bain partagée (repère visuel entre cartes jumelles)
+const BATHROOM_PAIR_COLOR: Record<number, string> = {
+  2: 'bg-sky-500', 3: 'bg-sky-500',
+  4: 'bg-rose-400', 5: 'bg-rose-400',
+  7: 'bg-amber-500', 8: 'bg-amber-500',
+};
+
+// Position des pastilles sur le plan (pourcentages de l'image)
+const MAP_PINS: Record<number, { x: number; y: number }> = {
+  1: { x: 18.4, y: 39.6 },
+  2: { x: 18.4, y: 54.5 },
+  3: { x: 18.4, y: 67.9 },
+  4: { x: 18.4, y: 83.6 },
+  5: { x: 29.2, y: 83.6 },
+  6: { x: 46.1, y: 83.6 },
+  7: { x: 24.4, y: 5.0 },
+  8: { x: 24.4, y: 24.3 },
+  9: { x: 60.4, y: 9.3 },
+  10: { x: 71.5, y: 9.3 },
+  11: { x: 83.5, y: 9.3 },
 };
 
 interface RoomCardProps {
@@ -54,13 +76,16 @@ function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLock
   const disabled = isLocked || isFixed;
 
   return (
-    <div className="bg-card rounded-2xl shadow-elegant overflow-hidden border border-border flex flex-col h-full">
+    <div id={`room-card-${roomId}`} className="bg-card rounded-2xl shadow-elegant overflow-hidden border border-border flex flex-col h-full scroll-mt-24">
       <div className="relative aspect-square w-full overflow-hidden">
         <img src={image} alt={`Room ${roomId}`} className="w-full h-full object-cover transition-opacity" />
         {isFixed && (
-          <Badge className="absolute top-3 right-3 bg-primary text-primary-foreground gap-1">
+          <Badge
+            className="absolute top-3 right-3 bg-primary text-primary-foreground gap-1 cursor-help"
+            title="This room always has a fixed King bed — the bed type cannot be changed."
+          >
             <Lock className="w-3 h-3" />
-            Locked
+            Fixed King
           </Badge>
         )}
       </div>
@@ -74,13 +99,23 @@ function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLock
         <ul className="space-y-1.5 text-sm text-muted-foreground mb-4">
           <li className="flex items-center gap-2">
             <ShowerHead className="w-4 h-4 flex-shrink-0" />
-            <span>
+            <span className="flex items-center gap-1.5">
               {bathroomType === 'en-suite'
                 ? 'En-suite bathroom'
                 : BATHROOM_PARTNER[roomId]
                   ? `Shared bathroom · with Room ${BATHROOM_PARTNER[roomId]}`
                   : 'Shared bathroom'}
+              {BATHROOM_PAIR_COLOR[roomId] && (
+                <span
+                  className={cn('inline-block w-2.5 h-2.5 rounded-full flex-shrink-0', BATHROOM_PAIR_COLOR[roomId])}
+                  title={`Same bathroom as Room ${BATHROOM_PARTNER[roomId]}`}
+                />
+              )}
             </span>
+          </li>
+          <li className="flex items-center gap-2">
+            <Users className="w-4 h-4 flex-shrink-0" />
+            <span>Sleeps up to {MAX_GUESTS_PER_ROOM}</span>
           </li>
         </ul>
         <div className="mt-auto pt-4 border-t border-border space-y-3">
@@ -97,8 +132,9 @@ function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLock
                 size="sm"
                 disabled={disabled}
                 onClick={() => onChange?.('twin')}
-                className={cn(bedType === 'twin' && 'pointer-events-none')}
+                className={cn('gap-1.5', bedType === 'twin' && 'pointer-events-none')}
               >
+                <span className="flex -space-x-1"><BedSingle className="w-3.5 h-3.5" /><BedSingle className="w-3.5 h-3.5" /></span>
                 Twin
               </Button>
               <Button
@@ -107,8 +143,9 @@ function RoomCard({ roomId, bathroomType, note, bedType, isFixed = false, isLock
                 size="sm"
                 disabled={disabled}
                 onClick={() => onChange?.('king')}
-                className={cn(bedType === 'king' && 'pointer-events-none')}
+                className={cn('gap-1.5', bedType === 'king' && 'pointer-events-none')}
               >
+                <BedDouble className="w-3.5 h-3.5" />
                 King
               </Button>
             </div>
@@ -187,6 +224,17 @@ const RoomSetup = () => {
   } = useRoomPlanner();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
+
+  // Progression : guests placés vs nombre de guests du séjour
+  const guestsPlaced = Object.values(roomGuestsMap)
+    .flat()
+    .filter((n) => typeof n === 'string' && n.trim().length > 0).length;
+  const roomsWithGuests = enabledRoomIds.filter(
+    (id) => (roomGuestsMap[id] || []).some((n) => typeof n === 'string' && n.trim().length > 0)
+  ).length;
+  const targetGuests = profile?.guests_count ?? null;
+  const overAssigned = targetGuests !== null && guestsPlaced > targetGuests;
+  const remainingGuests = targetGuests !== null ? Math.max(0, targetGuests - guestsPlaced) : 0;
   const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || 'draft');
   const isLocked = guestStatus.isEditingLocked;
 
@@ -212,29 +260,78 @@ const RoomSetup = () => {
       statusInfo={guestStatus}
     >
       <div className="max-w-5xl mx-auto space-y-6">
-        <RoomConfigWarning totalConfigured={enabledRoomIds.length} targetTotal={enabledRoomIds.length} />
+        {targetGuests !== null && (
+          <div className="bg-card rounded-2xl border border-border p-4 space-y-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-sm font-medium">
+                {guestsPlaced} of {targetGuests} guest{targetGuests !== 1 ? 's' : ''} placed
+                <span className="text-muted-foreground font-normal"> · {roomsWithGuests} room{roomsWithGuests !== 1 ? 's' : ''} with guests</span>
+              </p>
+              <AutoSaveIndicator status={saveStatus} />
+            </div>
+            <Progress value={Math.min(100, targetGuests > 0 ? (guestsPlaced / targetGuests) * 100 : 0)} />
+            {overAssigned && (
+              <p className="text-sm text-destructive flex items-start gap-1.5">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                You've placed more guests than the {targetGuests} declared for your stay — please review the assignments.
+              </p>
+            )}
+            {!overAssigned && remainingGuests > 0 && (
+              <p className="text-sm text-muted-foreground flex items-start gap-1.5">
+                <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                {remainingGuests} guest{remainingGuests !== 1 ? 's' : ''} still to place — anyone left unassigned will be arranged by our team.
+              </p>
+            )}
+          </div>
+        )}
+        {targetGuests === null && (
+          <div className="flex justify-end">
+            <AutoSaveIndicator status={saveStatus} />
+          </div>
+        )}
 
-        <div className="flex justify-end">
-          <AutoSaveIndicator status={saveStatus} />
-        </div>
-
-        <div
-          className="rounded-xl overflow-hidden border border-border bg-card cursor-pointer group"
-          onClick={() => setMapOpen(true)}
-        >
-          <div className="relative">
+        <div className="rounded-xl overflow-hidden border border-border bg-white group">
+          <div className="relative w-fit mx-auto cursor-pointer" onClick={() => setMapOpen(true)}>
             <img
               src={roomsArrangement}
               alt="Rooms map"
-              className="w-full h-auto max-h-80 object-contain bg-white"
+              className="block h-auto max-h-96 w-auto"
             />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-card/90 rounded-full px-4 py-2 flex items-center gap-2 shadow-lg">
-                <ZoomIn className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium">Click to enlarge</span>
-              </div>
+            {/* Pastilles interactives : vert plein = guests placés, contour = à faire */}
+            {Object.entries(MAP_PINS)
+              .filter(([id]) => !disabledRooms.includes(Number(id)))
+              .map(([id, pos]) => {
+                const roomId = Number(id);
+                const hasGuests = (roomGuestsMap[roomId] || []).some((n) => n && n.trim().length > 0);
+                return (
+                  <button
+                    key={roomId}
+                    type="button"
+                    title={`Room ${roomId}${hasGuests ? ' — guests assigned' : ' — no guests yet'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      document.getElementById(`room-card-${roomId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }}
+                    className={cn(
+                      'absolute -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full text-xs font-semibold shadow-md transition-transform hover:scale-125 focus:outline-none focus:ring-2 focus:ring-primary',
+                      hasGuests
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-white text-primary border-2 border-primary'
+                    )}
+                    style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+                  >
+                    {roomId}
+                  </button>
+                );
+              })}
+            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-card/90 rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-lg pointer-events-none">
+              <ZoomIn className="w-3.5 h-3.5 text-primary" />
+              <span className="text-xs font-medium">Click to enlarge</span>
             </div>
           </div>
+          <p className="text-center text-xs text-muted-foreground pb-2">
+            Tap a room number to jump to it · <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary align-middle" /> guests assigned · <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-primary bg-white align-middle" /> still empty
+          </p>
         </div>
 
         <MapLightbox open={mapOpen} onOpenChange={setMapOpen} />
