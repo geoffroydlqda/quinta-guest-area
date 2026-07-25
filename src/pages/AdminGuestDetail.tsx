@@ -723,7 +723,7 @@ const AdminGuestDetailContent = () => {
             <h2 className="text-base font-semibold flex items-center gap-2">
               <Utensils className="w-4 h-4 text-primary" /> Food
             </h2>
-            {food && !isPending && (
+            {food && (
               <div className="flex items-center gap-1">
                 <Button size="sm" variant="outline" onClick={handleCopyFoodInfo}>
                   <Copy className="w-3.5 h-3.5 mr-1" /> Copy info
