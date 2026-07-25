@@ -1273,7 +1273,8 @@ function EventTable({
       }
       t = data.token;
     }
-    const url = `${window.location.origin}/invite/${t}`;
+    // Domaine officiel des invitations (indépendant de l'URL d'accès à l'admin)
+    const url = `https://guest.quintamor.com/invite/${t}`;
     await navigator.clipboard.writeText(url);
     setCopiedId(bookingId);
     toast({ title: "Invite link copied" });
