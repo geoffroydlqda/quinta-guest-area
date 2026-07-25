@@ -15,10 +15,11 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, Check, User, Users, BedDouble, BedSingle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, Check, User, Users, BedDouble, BedSingle, AlertTriangle, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import { FIXED_ROOMS, FLEXIBLE_ROOMS_ORDER } from '@/types/room';
 import { cn } from '@/lib/utils';
 import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
+import { downloadRoomMapPdf } from '@/lib/roomMapPdf';
 import roomKingImage from '@/assets/room-king.jpg';
 import roomQueenImage from '@/assets/room-queen.jpg';
 import roomTwinsImage from '@/assets/room-twins.jpg';
@@ -310,6 +311,7 @@ const RoomSetup = () => {
   const { isLoading: authLoading } = useAuth();
   const { profile } = useGuestProfile();
   const [mapOpen, setMapOpen] = useState(false);
+  const [downloadingMap, setDownloadingMap] = useState(false);
 
   const {
     roomBedMap,
@@ -449,9 +451,37 @@ const RoomSetup = () => {
               <span className="text-xs font-medium">Click to enlarge</span>
             </div>
           </div>
-          <p className="text-center text-xs text-muted-foreground pb-2">
-            Tap a room number to jump to it · <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary align-middle" /> guests assigned · <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-primary bg-white align-middle" /> still empty
-          </p>
+          <div className="flex items-center justify-center gap-3 pb-2 flex-wrap">
+            <p className="text-center text-xs text-muted-foreground">
+              Tap a room number to jump to it · <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary align-middle" /> guests assigned · <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-primary bg-white align-middle" /> still empty
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5"
+              disabled={downloadingMap}
+              onClick={async (e) => {
+                e.stopPropagation();
+                setDownloadingMap(true);
+                try {
+                  await downloadRoomMapPdf(
+                    roomsArrangement,
+                    enabledRoomIds.map((id) => ({
+                      roomId: id,
+                      guests: (roomGuestsMap[id] || []).map((n) => (n || '').trim()).filter(Boolean),
+                    })),
+                    { subtitle: 'Who sleeps where — bring this along for an easy check-in.' },
+                  );
+                } finally {
+                  setDownloadingMap(false);
+                }
+              }}
+            >
+              {downloadingMap ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              Download map (PDF)
+            </Button>
+          </div>
         </div>
 
         <MapLightbox open={mapOpen} onOpenChange={setMapOpen} />
