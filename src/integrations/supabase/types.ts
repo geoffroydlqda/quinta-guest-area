@@ -104,6 +104,7 @@ export type Database = {
       bookings: {
         Row: {
           admin_managed: boolean
+          edit_lock_override: boolean
           check_in_date: string | null
           check_out_date: string | null
           created_at: string
@@ -130,6 +131,7 @@ export type Database = {
         }
         Insert: {
           admin_managed?: boolean
+          edit_lock_override?: boolean
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string
@@ -156,6 +158,7 @@ export type Database = {
         }
         Update: {
           admin_managed?: boolean
+          edit_lock_override?: boolean
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string

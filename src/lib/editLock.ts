@@ -80,6 +80,25 @@ export const formatFinalSubmissionDate = formatHumanDate;
 export function getGuestStatus(
   checkInDate: string | null,
   _statusOverall: 'draft' | 'submitted' | string = 'draft',
+  opts?: { unlocked?: boolean },
+): GuestStatusInfo {
+  if (opts?.unlocked) {
+    const base = getGuestStatusInternal(checkInDate, _statusOverall);
+    if (base.isEditingLocked) {
+      return {
+        ...base,
+        isEditingLocked: false,
+        message: 'Editing has been re-opened by Quinta do Amor — you can update your details.',
+      };
+    }
+    return base;
+  }
+  return getGuestStatusInternal(checkInDate, _statusOverall);
+}
+
+function getGuestStatusInternal(
+  checkInDate: string | null,
+  _statusOverall: 'draft' | 'submitted' | string = 'draft',
 ): GuestStatusInfo {
   const today = startOfToday();
   const checkIn = safeParse(checkInDate);

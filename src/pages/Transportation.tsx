@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { useTransportation } from '@/hooks/useTransportation';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
@@ -59,7 +60,10 @@ const Transportation = () => {
   } = useTransportation();
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
-  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft");
+  const lockCtx = useActiveBooking();
+  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || "draft", {
+    unlocked: lockCtx.isImpersonating || !!lockCtx.activeBooking?.edit_lock_override,
+  });
   const isLocked = guestStatus.isEditingLocked;
 
   // Calculate cost summary

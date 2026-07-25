@@ -59,7 +59,9 @@ const DashboardContent = () => {
   const bookingCheckOut = activeBooking?.check_out_date ?? null;
   const bookingGuestsCount = activeBooking?.guest_count ?? 1;
 
-  const guestStatus = getGuestStatus(bookingCheckIn, profile?.status_overall ?? 'draft');
+  const guestStatus = getGuestStatus(bookingCheckIn, profile?.status_overall ?? 'draft', {
+    unlocked: isImpersonating || !!activeBooking?.edit_lock_override,
+  });
   const isLocked = guestStatus.isEditingLocked;
 
   const transportationData = useMemo(() => {

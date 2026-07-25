@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
+import { useActiveBooking } from '@/contexts/BookingContext';
 import { useRoomPlanner, FlexibleBed } from '@/hooks/useRoomPlanner';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
@@ -297,7 +298,10 @@ const RoomSetup = () => {
   const targetGuests = profile?.guests_count ?? null;
   const overAssigned = targetGuests !== null && guestsPlaced > targetGuests;
   const remainingGuests = targetGuests !== null ? Math.max(0, targetGuests - guestsPlaced) : 0;
-  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || 'draft');
+  const lockCtx = useActiveBooking();
+  const guestStatus = getGuestStatus(profile?.check_in_date || null, profile?.status_overall || 'draft', {
+    unlocked: lockCtx.isImpersonating || !!lockCtx.activeBooking?.edit_lock_override,
+  });
   const isLocked = guestStatus.isEditingLocked;
 
   useEffect(() => {

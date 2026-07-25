@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
-  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink, Printer, Copy,
+  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink, Printer, Copy, Lock, LockOpen,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -87,6 +87,7 @@ type BookingRow = {
   admin_managed: boolean;
   internal_notes: string | null;
   disabled_rooms: number[] | null;
+  edit_lock_override: boolean;
 };
 
 interface Detail {
@@ -127,6 +128,8 @@ const AdminGuestDetailContent = () => {
   const [resending, setResending] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [releasing, setReleasing] = useState(false);
+  const [togglingLock, setTogglingLock] = useState(false);
+  const [lockOverride, setLockOverride] = useState<boolean | null>(null);
 
   const load = async () => {
     if (!guestId && !bookingIdParam) return;
@@ -446,6 +449,41 @@ const AdminGuestDetailContent = () => {
               title="Open guest dashboard in a new tab"
             >
               <ExternalLink className="w-4 h-4 mr-1" /> Open as guest
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={togglingLock || !booking}
+              title="When unlocked, the guest can keep editing even within 3 days of arrival."
+              onClick={async () => {
+                if (!booking) return;
+                const next = !(lockOverride ?? booking.edit_lock_override);
+                setTogglingLock(true);
+                const { error } = await supabase
+                  .from("bookings")
+                  .update({ edit_lock_override: next })
+                  .eq("id", booking.id);
+                setTogglingLock(false);
+                if (error) {
+                  toast({ title: "Could not update lock", description: error.message, variant: "destructive" });
+                } else {
+                  setLockOverride(next);
+                  (booking as BookingRow).edit_lock_override = next;
+                  toast({
+                    title: next ? "Editing unlocked" : "Editing lock restored",
+                    description: next
+                      ? "The guest can now make last-minute changes."
+                      : "Standard rules apply again (locked from 3 days before arrival).",
+                  });
+                }
+              }}
+            >
+              {togglingLock
+                ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                : (lockOverride ?? booking?.edit_lock_override)
+                  ? <Lock className="w-4 h-4 mr-1" />
+                  : <LockOpen className="w-4 h-4 mr-1" />}
+              {(lockOverride ?? booking?.edit_lock_override) ? "Restore lock" : "Unlock editing"}
             </Button>
             <Button size="sm" variant="outline" onClick={resendEmail} disabled={resending || !data?.profile}>
               {resending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />}

@@ -18,6 +18,7 @@ export interface Booking {
   updated_at: string;
   whatsapp_group_url: string | null;
   admin_managed: boolean;
+  edit_lock_override: boolean;
 }
 
 interface BookingContextValue {
