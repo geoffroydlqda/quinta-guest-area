@@ -56,35 +56,63 @@ export async function downloadRoomMapPdf(
   const fontPx = Math.round(W * 0.016);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  ctx.font = `600 ${fontPx}px Helvetica, Arial, sans-serif`;
 
+  // 1) Préparer toutes les étiquettes (un nom par ligne = boîtes étroites)
+  interface LabelBox { x: number; y: number; w: number; h: number; lines: string[] }
+  const lineH = fontPx * 1.45;
+  const padX = fontPx * 0.6;
+  const padY = fontPx * 0.35;
+  const boxes: LabelBox[] = [];
   for (const entry of entries) {
     const pin = PINS[entry.roomId];
     if (!pin || entry.guests.length === 0) continue;
-    const label = entry.guests.join(' & ');
-    const x = (pin.x / 100) * W;
-    // Étiquette sous la pastille (les numéros sont déjà dessinés sur l'image)
-    const y = (pin.y / 100) * H + H * 0.045;
+    const lines = entry.guests;
+    const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + padX * 2;
+    const h = lines.length * lineH + padY * 2;
+    boxes.push({
+      x: (pin.x / 100) * W,
+      y: (pin.y / 100) * H + H * 0.045 + h / 2,
+      w,
+      h,
+      lines,
+    });
+  }
 
-    ctx.font = `600 ${fontPx}px Helvetica, Arial, sans-serif`;
-    const textW = ctx.measureText(label).width;
-    const padX = fontPx * 0.6;
-    const boxW = textW + padX * 2;
-    const boxH = fontPx * 1.7;
-    const r = boxH / 2;
+  // 2) Résolution de collisions : si deux étiquettes se chevauchent,
+  //    décaler la seconde vers le bas jusqu'à libération
+  const overlaps = (a: LabelBox, b: LabelBox) =>
+    Math.abs(a.x - b.x) < (a.w + b.w) / 2 + fontPx * 0.4 &&
+    Math.abs(a.y - b.y) < (a.h + b.h) / 2 + fontPx * 0.3;
+  const placed: LabelBox[] = [];
+  for (const box of boxes.sort((a, b) => a.y - b.y || a.x - b.x)) {
+    let guard = 0;
+    while (placed.some((p) => overlaps(p, box)) && guard < 20) {
+      box.y += lineH * 0.9;
+      guard++;
+    }
+    placed.push(box);
+  }
 
-    // Fond arrondi
+  // 3) Dessin
+  for (const box of placed) {
+    const { x, y, w, h, lines } = box;
+    const r = Math.min(h / 2, fontPx * 0.9);
     ctx.beginPath();
-    ctx.moveTo(x - boxW / 2 + r, y - boxH / 2);
-    ctx.arcTo(x + boxW / 2, y - boxH / 2, x + boxW / 2, y + boxH / 2, r);
-    ctx.arcTo(x + boxW / 2, y + boxH / 2, x - boxW / 2, y + boxH / 2, r);
-    ctx.arcTo(x - boxW / 2, y + boxH / 2, x - boxW / 2, y - boxH / 2, r);
-    ctx.arcTo(x - boxW / 2, y - boxH / 2, x + boxW / 2, y - boxH / 2, r);
+    ctx.moveTo(x - w / 2 + r, y - h / 2);
+    ctx.arcTo(x + w / 2, y - h / 2, x + w / 2, y + h / 2, r);
+    ctx.arcTo(x + w / 2, y + h / 2, x - w / 2, y + h / 2, r);
+    ctx.arcTo(x - w / 2, y + h / 2, x - w / 2, y - h / 2, r);
+    ctx.arcTo(x - w / 2, y - h / 2, x + w / 2, y - h / 2, r);
     ctx.closePath();
     ctx.fillStyle = GREEN;
     ctx.fill();
 
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(label, x, y + fontPx * 0.05);
+    lines.forEach((line, i) => {
+      const ly = y - h / 2 + padY + lineH * (i + 0.5);
+      ctx.fillText(line, x, ly + fontPx * 0.05);
+    });
   }
 
   // PDF A4 paysage : titre + plan
