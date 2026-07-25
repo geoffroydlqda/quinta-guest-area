@@ -88,6 +88,7 @@ type BookingRow = {
   internal_notes: string | null;
   disabled_rooms: number[] | null;
   edit_lock_override: boolean;
+  retreat_name?: string | null;
 };
 
 interface Detail {
@@ -300,9 +301,18 @@ const AdminGuestDetailContent = () => {
     if (!food) return;
     try {
       const { times, prefs, days, notes } = buildFoodSections();
+      // Émojis par repas — format pensé pour un copier-coller WhatsApp vers l'équipe
+      const mealEmoji = (m: string) =>
+        m === "Full board" ? "🍳🥘🍽️ Full board"
+        : m === "Breakfast" ? "🍳 Breakfast"
+        : m === "Lunch" ? "🥘 Lunch"
+        : `🍽️ ${m}`;
       const lines: string[] = [];
-      lines.push(`*Quinta do Amor — Food — ${fullName}*`);
-      lines.push(`📅 ${fmtDate(checkIn)} → ${fmtDate(checkOut)} · ${guestsCount} guests`);
+      lines.push("🌿 *Quinta do Amor — Catering*");
+      const who = [fullName, booking?.retreat_name].filter(Boolean).join(" · ");
+      lines.push(`👤 ${who}`);
+      lines.push(`📅 ${fmtDate(checkIn)} → ${fmtDate(checkOut)}`);
+      lines.push(`👥 ${guestsCount} guests`);
       if (times.length) {
         lines.push("");
         lines.push("🕐 *Meal times*");
@@ -310,26 +320,26 @@ const AdminGuestDetailContent = () => {
       }
       if (prefs.length) {
         lines.push("");
-        lines.push("🥗 *Preferences*");
-        lines.push(prefs.join(" · "));
+        lines.push("🥗 *Dietary preferences*");
+        for (const p of prefs) lines.push(`• ${p}`);
       }
       if (days.length) {
         lines.push("");
-        lines.push("📋 *Daily meals*");
+        lines.push("📋 *Day by day*");
         for (const d of days) {
-          const g = typeof d.guests === "number" ? ` (${d.guests})` : "";
-          lines.push(`${fmtDateLong(d.date)}${g}: ${d.meals.join(", ")}`);
+          const g = typeof d.guests === "number" ? ` — ${d.guests} guests` : "";
+          lines.push("");
+          lines.push(`*${fmtDateLong(d.date)}*${g}`);
+          lines.push(d.meals.map(mealEmoji).join(" · "));
         }
       }
       if (notes.trim()) {
         lines.push("");
         lines.push("⚠️ *Notes*");
-        lines.push(notes);
+        lines.push(notes.trim());
       }
-      lines.push("");
-      lines.push(`💰 Food subtotal: €${foodCost.grandTotal}`);
       await navigator.clipboard.writeText(lines.join("\n"));
-      toast({ title: "Food info copied" });
+      toast({ title: "Catering info copied", description: "Ready to paste in WhatsApp." });
     } catch (e) {
       toast({ title: "Could not copy", description: String((e as any)?.message || e), variant: "destructive" });
     }
