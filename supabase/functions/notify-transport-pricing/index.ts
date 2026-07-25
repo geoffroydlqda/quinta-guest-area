@@ -31,7 +31,7 @@ const corsHeaders = {
 
 
 const FROM_EMAIL = "Quinta do Amor <noreply@quintamor.com>";
-const GUEST_AREA_URL = "https://quinta-guest-area.vercel.app/dashboard";
+const GUEST_AREA_URL = "https://guest.quintamor.com/dashboard";
 const ADMIN_BCC = "hello@quintamor.com";
 
 const BodySchema = z.object({ user_id: z.string().uuid() });

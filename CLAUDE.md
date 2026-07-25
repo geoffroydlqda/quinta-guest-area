@@ -12,7 +12,7 @@ Interface utilisateur en **anglais**. Communication avec le propriétaire en **f
 
 - React 18 + Vite + TypeScript + Tailwind + shadcn/ui (dans `src/components/ui/`)
 - Supabase : base de données, auth, Edge Functions — projet `fnlgeeuohvethmfpsxpf` (Supabase personnel, migré depuis Lovable Cloud)
-- Hébergement : Vercel, déploiement auto à chaque push sur `main`
+- Hébergement : Vercel, déploiement auto à chaque push sur `main` — domaine officiel **https://guest.quintamor.com** (CNAME chez Squarespace ; quinta-guest-area.vercel.app reste actif en secours)
 - Tests : vitest (`npm test`), lint : eslint
 - **Workflow** : GitHub est la source de vérité unique. Toujours `npm run build` + `npm test` avant de pousser. Le tag `avant-migration-lovable` = état pré-migration (juillet 2026, projet créé à l'origine avec Lovable).
 

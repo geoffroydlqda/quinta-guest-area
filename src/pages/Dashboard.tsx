@@ -418,18 +418,7 @@ const DashboardContent = () => {
           {/* WhatsApp group link (if admin set one) */}
           <WhatsAppGroupCard url={activeBooking?.whatsapp_group_url ?? null} />
 
-          {/* Weather block (Arrábida) */}
-          <WeatherCard
-            checkIn={bookingCheckIn}
-            checkOut={bookingCheckOut}
-            bookingId={activeBookingId ?? null}
-          />
-
-          {/* Payment Overview (read-only) */}
-          <PaymentOverview bookingId={activeBookingId} />
-
-
-          {/* Section 2: Tool Tiles */}
+          {/* Section 2: Tool Tiles — Room Setup, Food, Transportation */}
           <div>
             <h2 className="text-xl font-medium mb-4">Your setup</h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -442,20 +431,20 @@ const DashboardContent = () => {
                 disabled={isLocked}
               />
               <ToolTile
-                title="Transportation"
-                description="Arrange taxi transfers"
-                icon="transport"
-                status={toolStatuses.transportation}
-                href="/transportation"
-                disabled={isLocked}
-              />
-              <ToolTile
                 title="Food"
                 description="Plan your meals"
                 icon="food"
                 status={toolStatuses.food}
                 href="/food"
                 disabled={!hasDatesSet || isLocked}
+              />
+              <ToolTile
+                title="Transportation"
+                description="Arrange taxi transfers"
+                icon="transport"
+                status={toolStatuses.transportation}
+                href="/transportation"
+                disabled={isLocked}
               />
               {featureFlags.showDocumentation && (
                 <ToolTile
@@ -468,6 +457,17 @@ const DashboardContent = () => {
               )}
             </div>
           </div>
+
+          {/* Weather block (Arrábida) */}
+          <WeatherCard
+            checkIn={bookingCheckIn}
+            checkOut={bookingCheckOut}
+            bookingId={activeBookingId ?? null}
+          />
+
+          {/* Payment Overview (read-only) */}
+          <PaymentOverview bookingId={activeBookingId} />
+
 
           {/* Section 3: Global Summary */}
           <GlobalSummary

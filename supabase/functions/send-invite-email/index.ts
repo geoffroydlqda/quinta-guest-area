@@ -12,7 +12,7 @@ const corsHeaders = {
 
 const FROM_EMAIL = "Quinta do Amor <noreply@quintamor.com>";
 const ADMIN_EMAIL = "hello@quintamor.com";
-const GUEST_AREA_ORIGIN = "https://quinta-guest-area.vercel.app";
+const GUEST_AREA_ORIGIN = "https://guest.quintamor.com";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
