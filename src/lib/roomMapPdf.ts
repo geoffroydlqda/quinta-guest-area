@@ -8,6 +8,8 @@ import { jsPDF } from 'jspdf';
 export interface RoomMapEntry {
   roomId: number;
   guests: string[];
+  /** 'king' | 'twin' — affiché sous les noms pour un check d'un coup d'œil */
+  bedType?: 'king' | 'twin';
 }
 
 // Position des pastilles en pourcentage de l'image (mêmes valeurs que RoomSetup)
@@ -36,11 +38,11 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-export async function downloadRoomMapPdf(
+/** Rendu du plan annoté (noms + type de lit) — utilisé en direct ET pour le PDF. */
+export async function renderRoomMapCanvas(
   imageSrc: string,
   entries: RoomMapEntry[],
-  opts?: { title?: string; subtitle?: string },
-): Promise<void> {
+): Promise<HTMLCanvasElement> {
   const img = await loadImage(imageSrc);
   const W = img.naturalWidth;
   const H = img.naturalHeight;
@@ -58,24 +60,33 @@ export async function downloadRoomMapPdf(
   ctx.textBaseline = 'middle';
   ctx.font = `600 ${fontPx}px Helvetica, Arial, sans-serif`;
 
-  // 1) Préparer toutes les étiquettes (un nom par ligne = boîtes étroites)
-  interface LabelBox { x: number; y: number; w: number; h: number; lines: string[] }
+  // 1) Préparer toutes les étiquettes : noms (un par ligne) + type de lit
+  interface LabelBox { x: number; y: number; w: number; h: number; lines: string[]; bedLine: string | null }
+  const bedFontPx = Math.round(fontPx * 0.78);
   const lineH = fontPx * 1.45;
+  const bedLineH = bedFontPx * 1.5;
   const padX = fontPx * 0.6;
   const padY = fontPx * 0.35;
   const boxes: LabelBox[] = [];
   for (const entry of entries) {
     const pin = PINS[entry.roomId];
-    if (!pin || entry.guests.length === 0) continue;
+    if (!pin) continue;
+    const bedLine = entry.bedType ? (entry.bedType === 'twin' ? 'Twin beds' : 'King bed') : null;
     const lines = entry.guests;
-    const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + padX * 2;
-    const h = lines.length * lineH + padY * 2;
+    if (lines.length === 0 && !bedLine) continue;
+    ctx.font = `600 ${fontPx}px Helvetica, Arial, sans-serif`;
+    const namesW = lines.length ? Math.max(...lines.map((l) => ctx.measureText(l).width)) : 0;
+    ctx.font = `italic ${bedFontPx}px Helvetica, Arial, sans-serif`;
+    const bedW = bedLine ? ctx.measureText(bedLine).width : 0;
+    const w = Math.max(namesW, bedW) + padX * 2;
+    const h = lines.length * lineH + (bedLine ? bedLineH : 0) + padY * 2;
     boxes.push({
       x: (pin.x / 100) * W,
       y: (pin.y / 100) * H + H * 0.045 + h / 2,
       w,
       h,
       lines,
+      bedLine,
     });
   }
 
@@ -109,11 +120,30 @@ export async function downloadRoomMapPdf(
     ctx.fill();
 
     ctx.fillStyle = '#ffffff';
+    ctx.font = `600 ${fontPx}px Helvetica, Arial, sans-serif`;
     lines.forEach((line, i) => {
       const ly = y - h / 2 + padY + lineH * (i + 0.5);
       ctx.fillText(line, x, ly + fontPx * 0.05);
     });
+    if (box.bedLine) {
+      ctx.font = `italic ${bedFontPx}px Helvetica, Arial, sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      const by = y - h / 2 + padY + lines.length * lineH + bedLineH * 0.5;
+      ctx.fillText(box.bedLine, x, by + bedFontPx * 0.05);
+    }
   }
+
+  return canvas;
+}
+
+export async function downloadRoomMapPdf(
+  imageSrc: string,
+  entries: RoomMapEntry[],
+  opts?: { title?: string; subtitle?: string },
+): Promise<void> {
+  const canvas = await renderRoomMapCanvas(imageSrc, entries);
+  const W = canvas.width;
+  const H = canvas.height;
 
   // PDF A4 paysage : titre + plan
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });

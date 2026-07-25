@@ -19,7 +19,7 @@ import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, Check, User, U
 import { FIXED_ROOMS, FLEXIBLE_ROOMS_ORDER } from '@/types/room';
 import { cn } from '@/lib/utils';
 import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
-import { downloadRoomMapPdf } from '@/lib/roomMapPdf';
+import { downloadRoomMapPdf, renderRoomMapCanvas, type RoomMapEntry } from '@/lib/roomMapPdf';
 import roomKingImage from '@/assets/room-king.jpg';
 import roomQueenImage from '@/assets/room-queen.jpg';
 import roomTwinsImage from '@/assets/room-twins.jpg';
@@ -312,6 +312,7 @@ const RoomSetup = () => {
   const { profile } = useGuestProfile();
   const [mapOpen, setMapOpen] = useState(false);
   const [downloadingMap, setDownloadingMap] = useState(false);
+  const [liveMapUrl, setLiveMapUrl] = useState<string | null>(null);
 
   const {
     roomBedMap,
@@ -328,6 +329,13 @@ const RoomSetup = () => {
     disabledRooms,
     enabledRoomIds,
   } = useRoomPlanner();
+
+  const buildMapEntries = (): RoomMapEntry[] =>
+    enabledRoomIds.map((id) => ({
+      roomId: id,
+      guests: (roomGuestsMap[id] || []).map((n) => (n || '').trim()).filter(Boolean),
+      bedType: id === 1 || id === 6 ? 'king' : ((roomBedMap[id] || 'twin') as 'king' | 'twin'),
+    }));
 
   const { status: saveStatus, triggerSave } = useAutoSave({ onSave: autoSave });
   // Vue compacte par défaut ; chaque chambre se déplie individuellement
@@ -362,6 +370,20 @@ const RoomSetup = () => {
       triggerSave();
     }
   }, [roomBedMap, roomGuestsMap, remarks]);
+
+  // Plan annoté en direct : même rendu que le PDF (noms + type de lit)
+  useEffect(() => {
+    if (isLoadingRecord) return;
+    const t = setTimeout(async () => {
+      try {
+        const canvas = await renderRoomMapCanvas(roomsArrangement, buildMapEntries());
+        setLiveMapUrl(canvas.toDataURL('image/jpeg', 0.85));
+      } catch {
+        /* le plan brut reste affiché */
+      }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [roomBedMap, roomGuestsMap, disabledRooms, isLoadingRecord]);
 
   if (authLoading || isLoadingRecord) {
     return (
@@ -412,9 +434,9 @@ const RoomSetup = () => {
         <div className="rounded-xl overflow-hidden border border-border bg-white group">
           <div className="relative w-fit mx-auto cursor-pointer" onClick={() => setMapOpen(true)}>
             <img
-              src={roomsArrangement}
+              src={liveMapUrl ?? roomsArrangement}
               alt="Rooms map"
-              className="block h-auto max-h-96 w-auto"
+              className="block h-auto max-h-[520px] w-auto"
             />
             {/* Pastilles interactives : vert plein = guests placés, contour = à faire */}
             {Object.entries(MAP_PINS)
@@ -467,10 +489,7 @@ const RoomSetup = () => {
                 try {
                   await downloadRoomMapPdf(
                     roomsArrangement,
-                    enabledRoomIds.map((id) => ({
-                      roomId: id,
-                      guests: (roomGuestsMap[id] || []).map((n) => (n || '').trim()).filter(Boolean),
-                    })),
+                    buildMapEntries(),
                     { subtitle: 'Who sleeps where — bring this along for an easy check-in.' },
                   );
                 } finally {
