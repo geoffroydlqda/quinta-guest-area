@@ -7,9 +7,11 @@ import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
 interface MapLightboxProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Rendu annoté (noms + type de lit) — si fourni, remplace le plan brut */
+  imageSrc?: string | null;
 }
 
-export function MapLightbox({ open, onOpenChange }: MapLightboxProps) {
+export function MapLightbox({ open, onOpenChange, imageSrc }: MapLightboxProps) {
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -209,7 +211,7 @@ export function MapLightbox({ open, onOpenChange }: MapLightboxProps) {
           style={{ cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
         >
           <img
-            src={roomsArrangement}
+            src={imageSrc ?? roomsArrangement}
             alt="Rooms map (1-11)"
             className="max-w-full max-h-full select-none"
             style={{

@@ -503,7 +503,7 @@ const RoomSetup = () => {
           </div>
         </div>
 
-        <MapLightbox open={mapOpen} onOpenChange={setMapOpen} />
+        <MapLightbox open={mapOpen} onOpenChange={setMapOpen} imageSrc={liveMapUrl} />
 
         <div className="grid gap-2 md:grid-cols-2">
           <div className="rounded-lg bg-muted/50 border border-border px-3 py-2 flex items-start gap-2">
