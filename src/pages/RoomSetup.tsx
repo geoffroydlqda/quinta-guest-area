@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, User, Users, BedDouble, BedSingle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, Check, User, Users, BedDouble, BedSingle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { FIXED_ROOMS, FLEXIBLE_ROOMS_ORDER } from '@/types/room';
 import { cn } from '@/lib/utils';
 import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
@@ -78,6 +78,15 @@ function RoomCard({ roomId, bathroomType, note, bedType, isExpanded, onToggle, i
         : roomQueenImage;
   const disabled = isLocked || isFixed;
   const namedGuests = guests.filter((n) => n && n.trim().length > 0);
+  const [editingGuestIdx, setEditingGuestIdx] = useState<number | null>(null);
+  const commitGuest = (idx: number, name: string) => {
+    if (name.trim().length === 0) {
+      onRemoveGuest(idx);
+    } else {
+      onUpdateGuest(idx, name.trim());
+    }
+    setEditingGuestIdx(null);
+  };
 
   // ---- Vue compacte (par défaut) : une ligne dense, clic pour déplier ----
   if (!isExpanded) {
@@ -204,36 +213,78 @@ function RoomCard({ roomId, bathroomType, note, bedType, isExpanded, onToggle, i
             </div>
           )}
 
-          {/* Guests assignment */}
+          {/* Guests assignment : Enter ou "Assign" valide, le nom devient un badge */}
           <div className="space-y-2">
             {guests.length > 0 && (
               <div className="space-y-1.5">
-                {guests.map((name, idx) => (
-                  <div key={idx} className="flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                    <Input
-                      type="text"
-                      value={name}
-                      placeholder="Guest name"
-                      readOnly={isLocked}
-                      disabled={isLocked}
-                      onChange={(e) => onUpdateGuest(idx, e.target.value)}
-                      className="h-8 text-sm"
-                    />
-                    {!isLocked && (
+                {guests.map((name, idx) => {
+                  const isEditing = editingGuestIdx === idx || name.trim().length === 0;
+                  return isEditing && !isLocked ? (
+                    <div key={idx} className="flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                      <Input
+                        type="text"
+                        value={name}
+                        placeholder="Guest name"
+                        autoFocus
+                        onChange={(e) => onUpdateGuest(idx, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            commitGuest(idx, name);
+                          }
+                        }}
+                        className="h-8 text-sm"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 px-2.5 text-xs gap-1 flex-shrink-0"
+                        disabled={name.trim().length === 0}
+                        onClick={() => commitGuest(idx, name)}
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Assign
+                      </Button>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
-                        onClick={() => onRemoveGuest(idx)}
+                        onClick={() => { setEditingGuestIdx(null); onRemoveGuest(idx); }}
                         aria-label="Remove guest"
                       >
                         <X className="w-3.5 h-3.5" />
                       </Button>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  ) : (
+                    <div key={idx} className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={isLocked}
+                        onClick={() => !isLocked && setEditingGuestIdx(idx)}
+                        title={isLocked ? undefined : 'Click to edit'}
+                        className="flex-1 flex items-center gap-2 h-8 px-2.5 rounded-md bg-primary/10 border border-primary/25 text-sm text-left"
+                      >
+                        <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                        <span className="truncate font-medium">{name}</span>
+                        <span className="ml-auto text-[10px] uppercase tracking-wide text-primary/80">Assigned</span>
+                      </button>
+                      {!isLocked && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
+                          onClick={() => onRemoveGuest(idx)}
+                          aria-label="Remove guest"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {!isLocked && guests.length < MAX_GUESTS_PER_ROOM && (
@@ -241,7 +292,7 @@ function RoomCard({ roomId, bathroomType, note, bedType, isExpanded, onToggle, i
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={onAddGuest}
+                onClick={() => { setEditingGuestIdx(guests.length); onAddGuest(); }}
                 className="w-full h-8 text-xs text-muted-foreground hover:text-foreground gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
