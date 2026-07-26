@@ -237,6 +237,7 @@ const AdminContent = () => {
     invitationClaimed: boolean;
     invitationToken: string | null;
     paymentStatusOverride: string | null;
+    eventType: string;
   };
 
   const events: EventRow[] = useMemo(() => {
@@ -263,7 +264,7 @@ const AdminContent = () => {
         invitationClaimed: b.invitation_claimed,
         invitationToken: b.invitation_token,
         paymentStatusOverride: b.payment_status_override ?? null,
-        
+        eventType: b.event_type ?? "retreat",
       });
     }
     return list;
@@ -376,6 +377,17 @@ const AdminContent = () => {
     load({ silent: true });
   };
 
+  const setEventTypeDirect = async (bookingId: string, v: string) => {
+    const { error } = await supabase.from("bookings").update({ event_type: v } as any).eq("id", bookingId);
+    if (error) {
+      toast({ title: "Could not save event type", description: error.message, variant: "destructive" });
+      return;
+    }
+    setData((d) =>
+      d ? { ...d, bookings: (d.bookings || []).map((b) => b.id === bookingId ? { ...b, event_type: v } : b) } : d
+    );
+  };
+
   const renameBookingDirect = async (
     bookingId: string,
     patch: { first_name?: string | null; last_name?: string | null }
@@ -482,6 +494,7 @@ const AdminContent = () => {
                     onRowClick={(bookingId) => navigateToBooking(bookingId)}
                     onDeleteBooking={deleteBookingDirect}
                     onRenameBooking={renameBookingDirect}
+                    onSetEventType={setEventTypeDirect}
                     showLive
                   />
                 )}
@@ -510,6 +523,7 @@ const AdminContent = () => {
                       onRowClick={(bookingId) => navigateToBooking(bookingId)}
                       onDeleteBooking={deleteBookingDirect}
                     onRenameBooking={renameBookingDirect}
+                    onSetEventType={setEventTypeDirect}
                     />
                   )
                 )}
@@ -527,6 +541,7 @@ const AdminContent = () => {
                   onRowClick={(bookingId) => navigateToBooking(bookingId)}
                   onDeleteBooking={deleteBookingDirect}
                     onRenameBooking={renameBookingDirect}
+                    onSetEventType={setEventTypeDirect}
                 />
               </section>
             )}
@@ -1682,7 +1697,7 @@ type EventRowProps = {
   invitationClaimed: boolean;
   invitationToken: string | null;
   paymentStatusOverride: string | null;
-  
+  eventType: string;
 };
 
 function EventTable({
@@ -1693,6 +1708,7 @@ function EventTable({
   onRowClick,
   onDeleteBooking,
   onRenameBooking,
+  onSetEventType,
   showLive,
 }: {
   events: EventRowProps[];
@@ -1702,6 +1718,7 @@ function EventTable({
   onRowClick: (bookingId: string) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
   onRenameBooking: (bookingId: string, patch: { first_name?: string | null; last_name?: string | null }) => Promise<void> | void;
+  onSetEventType: (bookingId: string, v: string) => Promise<void> | void;
   showLive?: boolean;
 }) {
   const { toast } = useToast();
@@ -1758,14 +1775,13 @@ function EventTable({
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-muted">
           <tr className="text-left">
-            {["First","Last","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Payment","Actions"].map((h, i) => (
+            {["First","Last","Email","Type","Check-in","Check-out","Guests","Status","Payment","Actions"].map((h, i) => (
               <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {events.map((ev) => {
-            const ts = toolStatus(ev.userId, ev.bookingId);
             const label = (`${ev.firstName ?? ""} ${ev.lastName ?? ""}`.trim() || ev.email);
             const isLive = showLive && categoryOf(ev) === "live";
             const payStatus = paymentForEvent(ev);
@@ -1797,12 +1813,21 @@ function EventTable({
                   />
                 </td>
                 <td className="px-3 py-2">{ev.email}</td>
+                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <select
+                    className="h-7 rounded-md border border-input bg-background px-1.5 text-xs"
+                    value={ev.eventType}
+                    onChange={(e) => onSetEventType(ev.bookingId, e.target.value)}
+                  >
+                    <option value="retreat">Retreat</option>
+                    <option value="wedding">Wedding</option>
+                    <option value="other">Other</option>
+                    <option value="day_retreat">Day retreat</option>
+                  </select>
+                </td>
                 <td className="px-3 py-2 whitespace-nowrap">{ev.checkIn}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{ev.checkOut}</td>
                 <td className="px-3 py-2">{ev.guestsCount}</td>
-                <td className="px-3 py-2">{ts.room}</td>
-                <td className="px-3 py-2">{ts.food}</td>
-                <td className="px-3 py-2">{ts.trip}</td>
                 <td className="px-3 py-2"><StatusBadge checkIn={ev.checkIn} statusOverall={ev.statusOverall} /></td>
                 <td className="px-3 py-2">
                   <PaymentBadge
