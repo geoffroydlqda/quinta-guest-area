@@ -23,6 +23,7 @@ import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
 import { CalendarCheck, AlertTriangle } from "lucide-react";
 import { calculateTransportationCost } from "@/lib/transportationPricing";
+import { getDietPricing } from "@/lib/pricing";
 import type { TransportationTrip } from "@/types/guest";
 
 const STATUS_BADGE: Record<GuestStatusKind, { label: string; className: string }> = {
@@ -62,7 +63,11 @@ type BookingRow = {
   user_id: string | null; created_at: string;
   payment_status_override?: string | null;
   total_rental_price?: number | null;
-  
+  event_type?: string | null;
+};
+
+const EVENT_TYPE_LABEL: Record<string, string> = {
+  retreat: "Retreat", wedding: "Wedding", other: "Other", day_retreat: "Day",
 };
 
 type Installment = {
@@ -718,14 +723,47 @@ function DashboardView({
       const vat = cat === "catering" ? 1.13 : 1.23;
       actual[cat] += i.amount_excl_vat != null ? Number(i.amount_excl_vat) : Number(i.amount_due || 0) / vat;
     }
+    // Catering ATTENDU (projection) : retraites pas encore commencées, sans
+    // catering validé — 14 participants × prix moyen des 3 formules :
+    // dîner le jour d'arrivée + full board les jours pleins + petit-déj au départ.
+    const dp = getDietPricing();
+    const avg = {
+      fullBoard: (dp.vegetarian.fullBoard + dp.meat_dinner.fullBoard + dp.meat_lunch_dinner.fullBoard) / 3,
+      dinner: (dp.vegetarian.dinner + dp.meat_dinner.dinner + dp.meat_lunch_dinner.dinner) / 3,
+      breakfast: (dp.vegetarian.breakfast + dp.meat_dinner.breakfast + dp.meat_lunch_dinner.breakfast) / 3,
+    };
+    const hasCatering = new Set(
+      installments.filter((i) => i.category === "catering").map((i) => i.booking_id)
+    );
+    let expectedCateringTvac = 0;
+    for (const b of bookings) {
+      if ((b.event_type ?? "retreat") !== "retreat") continue;
+      if (!b.check_in_date || !b.check_out_date) continue;
+      if (!b.check_in_date.startsWith(year)) continue;
+      if (b.check_in_date <= todayIso) continue; // déjà commencé / passé
+      if (hasCatering.has(b.id)) continue;       // catering déjà validé
+      const nights = Math.round(
+        (new Date(`${b.check_out_date}T12:00:00`).getTime() - new Date(`${b.check_in_date}T12:00:00`).getTime()) / 86400000
+      );
+      if (nights <= 0) continue;
+      const perPax = avg.dinner + Math.max(0, nights - 1) * avg.fullBoard + avg.breakfast;
+      expectedCateringTvac += 14 * perPax;
+    }
+    const expectedCatering = expectedCateringTvac / 1.13; // HT (TVA food 13 %)
+
     const total = actual.rental + actual.catering + actual.extra;
     const rows = [
-      { label: "Rental", actual: actual.rental, target: cfg.rental ?? null },
-      { label: "Catering", actual: actual.catering, target: cfg.catering ?? null },
-      { label: "Extras", actual: actual.extra, target: cfg.extras ?? null },
+      { label: "Rental", actual: actual.rental, target: cfg.rental ?? null, expected: 0 },
+      { label: "Catering", actual: actual.catering, target: cfg.catering ?? null, expected: expectedCatering },
+      { label: "Extras", actual: actual.extra, target: cfg.extras ?? null, expected: 0 },
     ];
-    return { target: cfg.net_revenue, actual: total, pct: (total / cfg.net_revenue) * 100, rows };
-  }, [installments, bookingById, targets, year]);
+    return {
+      target: cfg.net_revenue,
+      actual: total,
+      pct: ((total + expectedCatering) / cfg.net_revenue) * 100,
+      rows,
+    };
+  }, [installments, bookings, bookingById, targets, year, todayIso]);
 
   const Tile = ({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "danger" | "success" }) => (
     <div className="rounded-xl border border-border bg-card p-4">
@@ -822,23 +860,35 @@ function DashboardView({
             <div className="flex items-baseline gap-3 mt-2">
               <div className="text-3xl font-semibold">{Math.round(targetStats.pct)}%</div>
               <div className="text-xs text-muted-foreground">
-                {fmtMoney(targetStats.actual)} of {fmtMoney(targetStats.target)}
+                {fmtMoney(targetStats.actual)} contracted
+                {targetStats.rows.some((r) => r.expected > 0) &&
+                  ` + ${fmtMoney(targetStats.rows.reduce((s, r) => s + r.expected, 0))} expected`}
+                {" "}of {fmtMoney(targetStats.target)}
               </div>
             </div>
             <div className="mt-2 space-y-2">
               {targetStats.rows.map((r) => {
                 const pct = r.target ? (r.actual / r.target) * 100 : null;
+                const pctExp = r.target ? (r.expected / r.target) * 100 : 0;
                 return (
                   <div key={r.label}>
                     <div className="flex items-baseline justify-between text-xs">
                       <span className="text-muted-foreground">{r.label}</span>
                       <span>
                         {fmtMoney(r.actual)}
-                        {r.target != null && <span className="text-muted-foreground"> / {fmtMoney(r.target)} · {Math.round(pct!)}%</span>}
+                        {r.expected > 0 && <span className="text-muted-foreground"> + {fmtMoney(r.expected)} expected</span>}
+                        {r.target != null && (
+                          <span className="text-muted-foreground">
+                            {" "}/ {fmtMoney(r.target)} · {Math.round((pct ?? 0) + pctExp)}%
+                          </span>
+                        )}
                       </span>
                     </div>
-                    <div className="mt-1 h-2 rounded-full bg-[#dfe5d2] overflow-hidden">
-                      <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
+                    <div className="mt-1 h-2 rounded-full bg-[#dfe5d2] overflow-hidden flex">
+                      <div className="h-full bg-primary" style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
+                      {r.expected > 0 && (
+                        <div className="h-full bg-primary/40" style={{ width: `${Math.max(0, Math.min(100, (pct ?? 0) + pctExp) - Math.min(100, pct ?? 0))}%` }} />
+                      )}
                     </div>
                   </div>
                 );
@@ -905,7 +955,12 @@ function DashboardView({
                     onClick={() => onOpen(e.bookingId)}
                     className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm hover:bg-muted/60 text-left"
                   >
-                    <span className="font-medium min-w-0 truncate">{eventName(e.bookingId)}</span>
+                    <span className="min-w-0 flex items-center gap-1.5">
+                      <span className="font-medium truncate">{eventName(e.bookingId)}</span>
+                      <span className="shrink-0 text-[10px] uppercase px-1.5 py-0.5 rounded-full border border-border bg-muted text-muted-foreground">
+                        {EVENT_TYPE_LABEL[bookingById.get(e.bookingId)?.event_type ?? "retreat"] ?? "Retreat"}
+                      </span>
+                    </span>
                     <span className="shrink-0 text-muted-foreground">
                       {fmtShort(e.checkIn)} → {fmtShort(e.checkOut)} · {e.guestsCount} guests
                     </span>

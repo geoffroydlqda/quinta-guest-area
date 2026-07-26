@@ -591,6 +591,29 @@ const AdminGuestDetailContent = () => {
                   : getGuestStatus(checkIn, profile!.status_overall).label}
               </div>
             </div>
+            <div>
+              <div className="text-muted-foreground">Event type</div>
+              <select
+                className="mt-0.5 h-8 rounded-md border border-input bg-background px-2 text-sm font-medium"
+                value={(booking as any)?.event_type ?? "retreat"}
+                disabled={!booking}
+                onChange={async (e) => {
+                  if (!booking) return;
+                  const v = e.target.value;
+                  const { error } = await supabase.from("bookings").update({ event_type: v } as any).eq("id", booking.id);
+                  if (error) toast({ title: "Failed to save", description: error.message, variant: "destructive" });
+                  else {
+                    (booking as any).event_type = v;
+                    toast({ title: "Event type saved" });
+                  }
+                }}
+              >
+                <option value="retreat">Retreat</option>
+                <option value="wedding">Wedding</option>
+                <option value="other">Other</option>
+                <option value="day_retreat">Day retreat</option>
+              </select>
+            </div>
           </div>
           <div className="mt-4 pt-4 border-t border-border">
             <WhatsAppLinkEditor
