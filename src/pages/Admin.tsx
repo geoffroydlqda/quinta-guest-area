@@ -601,7 +601,12 @@ function DashboardView({
       (bookingById.get(i.booking_id)?.check_in_date || "").startsWith(year)
     );
     const contracted = thisYear.reduce((s, i) => s + Number(i.amount_due || 0), 0);
-    const contractedHt = thisYear.reduce((s, i) => s + Number(i.amount_excl_vat ?? 0), 0);
+    // Même règle que la carte "Revenue vs target" : HT manquant estimé
+    // (13 % catering, 23 % ailleurs) pour que les deux chiffres concordent.
+    const contractedHt = thisYear.reduce((s, i) =>
+      s + (i.amount_excl_vat != null
+        ? Number(i.amount_excl_vat)
+        : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23)), 0);
     const collected = thisYear.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const overdue = installments.filter((i) => i.status !== "paid" && i.due_date && i.due_date < todayIso);
     const overdueTotal = overdue.reduce((s, i) => s + Number(i.amount_due || 0), 0);
