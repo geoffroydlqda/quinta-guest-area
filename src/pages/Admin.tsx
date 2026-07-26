@@ -687,7 +687,7 @@ function DashboardView({
         <Tile
           label="On site now"
           value={String(kpis.live.length)}
-          sub={`${kpis.live.reduce((s, e) => s + (e.guestsCount || 0), 0)} guests`}
+          sub={(() => { const n = kpis.live.reduce((s, e) => s + (e.guestsCount || 0), 0); return `${n} guest${n === 1 ? "" : "s"}`; })()}
         />
         <Tile
           label="Next 30 days"
