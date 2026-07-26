@@ -64,6 +64,7 @@ type BookingRow = {
   payment_status_override?: string | null;
   total_rental_price?: number | null;
   event_type?: string | null;
+  catering_expected?: boolean | null;
 };
 
 const EVENT_TYPE_LABEL: Record<string, string> = {
@@ -738,6 +739,7 @@ function DashboardView({
     let expectedCateringTvac = 0;
     for (const b of bookings) {
       if ((b.event_type ?? "retreat") !== "retreat") continue;
+      if (b.catering_expected === false) continue; // organisateur sans catering
       if (!b.check_in_date || !b.check_out_date) continue;
       if (!b.check_in_date.startsWith(year)) continue;
       if (b.check_in_date <= todayIso) continue; // déjà commencé / passé

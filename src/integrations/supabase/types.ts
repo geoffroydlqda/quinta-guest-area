@@ -106,6 +106,7 @@ export type Database = {
           admin_managed: boolean
           edit_lock_override: boolean
           event_type: string
+          catering_expected: boolean
           check_in_date: string | null
           check_out_date: string | null
           created_at: string
@@ -134,6 +135,7 @@ export type Database = {
           admin_managed?: boolean
           edit_lock_override?: boolean
           event_type?: string
+          catering_expected?: boolean
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string
@@ -162,6 +164,7 @@ export type Database = {
           admin_managed?: boolean
           edit_lock_override?: boolean
           event_type?: string
+          catering_expected?: boolean
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string

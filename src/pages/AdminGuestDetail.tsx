@@ -614,6 +614,29 @@ const AdminGuestDetailContent = () => {
                 <option value="day_retreat">Day retreat</option>
               </select>
             </div>
+            <div>
+              <div className="text-muted-foreground">Expected catering</div>
+              <label className="mt-1.5 flex items-center gap-2 text-sm font-medium cursor-pointer select-none">
+                <Checkbox
+                  checked={(booking as any)?.catering_expected !== false}
+                  disabled={!booking}
+                  onCheckedChange={async (v) => {
+                    if (!booking) return;
+                    const next = v === true;
+                    const { error } = await supabase.from("bookings").update({ catering_expected: next } as any).eq("id", booking.id);
+                    if (error) toast({ title: "Failed to save", description: error.message, variant: "destructive" });
+                    else {
+                      (booking as any).catering_expected = next;
+                      setData((d) => d ? { ...d } : d);
+                      toast({ title: next ? "Included in expected catering" : "Excluded from expected catering" });
+                    }
+                  }}
+                />
+                <span className="text-xs text-muted-foreground font-normal">
+                  Include in the dashboard catering projection
+                </span>
+              </label>
+            </div>
           </div>
           <div className="mt-4 pt-4 border-t border-border">
             <WhatsAppLinkEditor
