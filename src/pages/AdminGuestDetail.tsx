@@ -989,6 +989,7 @@ type Installment = {
   booking_id: string;
   label: string;
   amount_due: number;
+  amount_excl_vat: number | null;
   due_date: string | null;
   status: "pending" | "paid";
   category: "rental" | "extra";
@@ -996,6 +997,9 @@ type Installment = {
   invoice_file_name: string | null;
   notes: string | null;
 };
+
+const fmtEUR = (v: number | string) =>
+  `€${Number(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 type BookingStatus = "pending" | "deposit_paid" | "paid_in_full" | "overdue";
 
@@ -1078,7 +1082,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
     const iRes = await supabase
       .from("payment_installments")
-      .select("id,booking_id,label,amount_due,due_date,status,category,invoice_file_url,invoice_file_name,notes")
+      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes")
       .eq("booking_id", b.id)
       .order("due_date", { ascending: true, nullsFirst: false });
     if (!iRes.error) setInstallments((iRes.data || []) as Installment[]);
@@ -1160,7 +1164,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const upsertInstallment = async (
     id: string | null,
-    values: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null },
+    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null },
     file?: File | null
   ) => {
     if (!booking) return false;
@@ -1168,6 +1172,7 @@ function PaymentSection({ userId }: { userId: string }) {
       booking_id: booking.id,
       label: values.label,
       amount_due: values.amount_due,
+      amount_excl_vat: values.amount_excl_vat,
       due_date: values.due_date,
       status: values.status,
       category: values.category,
@@ -1377,7 +1382,14 @@ function PaymentSection({ userId }: { userId: string }) {
             </Button>
           </div>
         </div>
-        <Row label="Amount" value={`€${inst.amount_due}`} />
+        <Row
+          label="Amount"
+          value={
+            inst.amount_excl_vat != null
+              ? `${fmtEUR(inst.amount_due)} incl. VAT · ${fmtEUR(inst.amount_excl_vat)} excl. VAT`
+              : fmtEUR(inst.amount_due)
+          }
+        />
         <Row label="Due date" value={fmtDate(inst.due_date)} />
         {inst.notes && (
           <p className="text-xs italic text-muted-foreground whitespace-pre-wrap">{inst.notes}</p>
@@ -1554,12 +1566,13 @@ function InstallmentForm({
   checkInDate?: string | null;
   onCancel: () => void;
   onSave: (
-    v: { label: string; amount_due: number; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null },
+    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null },
     file?: File | null
   ) => Promise<void> | void;
 }) {
   const [label, setLabel] = useState(initial?.label || "");
   const [amountDue, setAmountDue] = useState(initial?.amount_due != null ? String(initial.amount_due) : "");
+  const [amountExclVat, setAmountExclVat] = useState(initial?.amount_excl_vat != null ? String(initial.amount_excl_vat) : "");
   const [dueDate, setDueDate] = useState(initial?.due_date || "");
   const [dueDateTouched, setDueDateTouched] = useState(!!initial?.due_date);
   const [notes, setNotes] = useState(initial?.notes || "");
@@ -1593,6 +1606,7 @@ function InstallmentForm({
       {
         label: label.trim(),
         amount_due: Number(amountDue),
+        amount_excl_vat: amountExclVat.trim() === "" ? null : Number(amountExclVat),
         due_date: dueDate || null,
         status,
         category,
@@ -1628,8 +1642,12 @@ function InstallmentForm({
           <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Deposit, balance, food, taxi, etc." />
         </label>
         <label className="space-y-1">
-          <div className="text-xs text-muted-foreground">Amount (€) *</div>
+          <div className="text-xs text-muted-foreground">Amount incl. VAT (€) *</div>
           <Input type="number" min="0" step="0.01" value={amountDue} onChange={(e) => setAmountDue(e.target.value)} />
+        </label>
+        <label className="space-y-1">
+          <div className="text-xs text-muted-foreground">Amount excl. VAT (€)</div>
+          <Input type="number" min="0" step="0.01" value={amountExclVat} onChange={(e) => setAmountExclVat(e.target.value)} placeholder="Optional" />
         </label>
         <label className="space-y-1">
           <div className="text-xs text-muted-foreground">Due date</div>

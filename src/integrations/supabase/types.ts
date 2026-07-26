@@ -342,6 +342,7 @@ export type Database = {
       payment_installments: {
         Row: {
           amount_due: number
+          amount_excl_vat: number | null
           booking_id: string
           category: string
           created_at: string
@@ -356,6 +357,7 @@ export type Database = {
         }
         Insert: {
           amount_due: number
+          amount_excl_vat?: number | null
           booking_id: string
           category?: string
           created_at?: string
@@ -370,6 +372,7 @@ export type Database = {
         }
         Update: {
           amount_due?: number
+          amount_excl_vat?: number | null
           booking_id?: string
           category?: string
           created_at?: string
