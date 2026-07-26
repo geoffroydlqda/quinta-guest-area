@@ -72,6 +72,7 @@ const App = () => (
               } />
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/guest/:guestId" element={<AdminGuestDetail />} />
+              <Route path="/admin/:section" element={<Admin />} />
               {/* Legacy route redirect */}
               <Route path="/setup" element={
                 <ProtectedRoute>

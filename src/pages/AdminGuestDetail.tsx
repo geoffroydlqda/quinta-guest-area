@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 import { calculateFoodCostMulti } from "@/lib/foodPricing";
 import { calculateTransportationCost, getFixedTripPriceNumeric, getEffectiveTripPrice } from "@/lib/transportationPricing";
 import { CustomPriceEditor } from "@/pages/Admin";
@@ -1780,7 +1781,9 @@ function InvoiceFileControl({
 const AdminGuestDetail = () => (
   <ProtectedRoute>
     <AdminGuard>
-      <AdminGuestDetailContent />
+      <AdminLayout>
+        <AdminGuestDetailContent />
+      </AdminLayout>
     </AdminGuard>
   </ProtectedRoute>
 );

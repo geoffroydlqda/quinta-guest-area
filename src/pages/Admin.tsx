@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, LogOut, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check, ExternalLink, Pencil } from "lucide-react";
+import { Loader2, Download, RefreshCw, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check, ExternalLink, Pencil } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
 import { CreateBookingDialog } from "@/components/admin/CreateBookingDialog";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
@@ -62,9 +62,23 @@ type BookingRow = {
 };
 
 type Installment = {
-  id: string; booking_id: string; amount_due: number;
+  id: string; booking_id: string; label?: string | null; amount_due: number;
+  amount_excl_vat?: number | null;
   due_date: string | null; status: string; category?: string | null;
 };
+
+const SECTION_TITLES: Record<string, string> = {
+  dashboard: "Dashboard",
+  bookings: "Bookings",
+  users: "Users",
+  payments: "Payments",
+  transportation: "Transportation",
+  food: "Food planning",
+  rooms: "Room setup",
+};
+
+const fmtMoney = (v: number) =>
+  `€${v.toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
 interface Data {
   profiles: Profile[]; rooms: Room[]; trips: Trip[]; food: FoodPlan[];
@@ -133,7 +147,6 @@ function downloadCSV(filename: string, rows: any[][]) {
 }
 
 const AdminContent = () => {
-  const { signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -146,7 +159,8 @@ const AdminContent = () => {
   const [pastCollapsed, setPastCollapsed] = useState(true);
   
   const [createBookingOpen, setCreateBookingOpen] = useState(false);
-  const [tab, setTab] = useState<string>("overview");
+  const { section } = useParams<{ section?: string }>();
+  const view = section && SECTION_TITLES[section] ? section : "dashboard";
 
   const [installments, setInstallments] = useState<Installment[]>([]);
 
@@ -155,7 +169,7 @@ const AdminContent = () => {
     if (!silent) setLoading(true);
     const [res, instRes] = await Promise.all([
       supabase.functions.invoke("admin-list-data"),
-      supabase.from("payment_installments").select("id,booking_id,amount_due,due_date,status,category"),
+      supabase.from("payment_installments").select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category"),
     ]);
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });
@@ -377,42 +391,50 @@ const AdminContent = () => {
 
   if (loading || !data) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <AdminLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </AdminLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card sticky top-0 z-20">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <h1 className="text-xl font-medium">Admin · Quinta do Amor</h1>
+    <AdminLayout>
+      <main className="px-4 md:px-6 py-6 max-w-[1400px]">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
+          <h1 className="text-xl font-semibold">{SECTION_TITLES[view]}</h1>
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => setCreateBookingOpen(true)}>
               <Plus className="w-4 h-4 mr-1" />New booking
             </Button>
             <Button size="sm" variant="outline" onClick={() => load()}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button>
-            <Button size="sm" variant="outline" onClick={sync} disabled={syncing}>
-              {syncing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-              Sync to Google Sheets
-            </Button>
-            <Button size="sm" variant="ghost" onClick={signOut}><LogOut className="w-4 h-4" /></Button>
+            {view === "bookings" && (
+              <Button size="sm" variant="outline" onClick={sync} disabled={syncing}>
+                {syncing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                Sync to Google Sheets
+              </Button>
+            )}
           </div>
         </div>
-      </header>
 
-      <main className="container mx-auto px-4 py-6">
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="mb-4 flex flex-wrap">
-            <TabsTrigger value="overview">Guests Overview</TabsTrigger>
-            <TabsTrigger value="payments">Payments</TabsTrigger>
-            <TabsTrigger value="food">Food Planning</TabsTrigger>
-            <TabsTrigger value="transport">Transportation</TabsTrigger>
-            <TabsTrigger value="rooms">Room Setup</TabsTrigger>
-          </TabsList>
+        {view === "dashboard" && (
+          <DashboardView
+            data={data}
+            installments={installments}
+            events={events}
+            categoryOf={categoryOfEvent}
+            todayIso={todayIso}
+            onOpen={navigateToBooking}
+          />
+        )}
 
-          <TabsContent value="overview">
+        {view === "users" && (
+          <UsersView bookings={data.bookings || []} onOpen={navigateToBooking} />
+        )}
+
+        {view === "bookings" && (
+          <div>
             <div className="flex flex-wrap gap-2 mb-3">
               <Input placeholder="Search name or email" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="border border-border rounded-md px-3 py-2 text-sm bg-background">
@@ -497,9 +519,11 @@ const AdminContent = () => {
                 />
               </section>
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="payments">
+        {view === "payments" && (
+          <div>
             <PaymentRemindersCard />
             <PaymentsView
               bookings={data.bookings || []}
@@ -507,36 +531,273 @@ const AdminContent = () => {
               guestName={(uid) => uid ? guestName(uid) : ""}
               onOpen={navigateToBooking}
             />
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="food">
-            <FoodView data={data} guestName={guestName} />
-          </TabsContent>
+        {view === "food" && <FoodView data={data} guestName={guestName} />}
 
-          <TabsContent value="transport">
-            <TransportView data={data} guestName={guestName} onTripPatched={patchTrip} onReload={() => load({ silent: true })} onInvalidateTransport={(bookingId, userId) => Promise.all([
-              queryClient.invalidateQueries({ queryKey: ['transportation_trips', bookingId ?? userId] }),
-              queryClient.invalidateQueries({ queryKey: ['booking_summary', bookingId ?? userId] }),
-              queryClient.invalidateQueries({ queryKey: ['guest_overview', bookingId ?? userId] }),
-              queryClient.invalidateQueries({ queryKey: ['booking_totals', bookingId ?? userId] }),
-            ]).then(() => undefined)} />
-          </TabsContent>
+        {view === "transportation" && (
+          <TransportView data={data} guestName={guestName} onTripPatched={patchTrip} onReload={() => load({ silent: true })} onInvalidateTransport={(bookingId, userId) => Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['transportation_trips', bookingId ?? userId] }),
+            queryClient.invalidateQueries({ queryKey: ['booking_summary', bookingId ?? userId] }),
+            queryClient.invalidateQueries({ queryKey: ['guest_overview', bookingId ?? userId] }),
+            queryClient.invalidateQueries({ queryKey: ['booking_totals', bookingId ?? userId] }),
+          ]).then(() => undefined)} />
+        )}
 
-          <TabsContent value="rooms">
-            <RoomsView data={data} guestName={guestName} />
-          </TabsContent>
-        </Tabs>
+        {view === "rooms" && <RoomsView data={data} guestName={guestName} />}
       </main>
-
 
       <CreateBookingDialog
         open={createBookingOpen}
         onOpenChange={setCreateBookingOpen}
         onCreated={load}
       />
-    </div>
+    </AdminLayout>
   );
 };
+
+// ---------------------------------------------------------------- Dashboard
+function DashboardView({
+  data, installments, events, categoryOf, todayIso, onOpen,
+}: {
+  data: Data;
+  installments: Installment[];
+  events: { bookingId: string; firstName: string | null; lastName: string | null; email: string; checkIn: string | null; checkOut: string | null; guestsCount: number }[];
+  categoryOf: (e: any) => "upcoming" | "past" | "live" | "none";
+  todayIso: string;
+  onOpen: (bookingId: string) => void;
+}) {
+  const bookings = data.bookings || [];
+  const bookingById = useMemo(() => new Map(bookings.map((b) => [b.id, b])), [bookings]);
+  const year = todayIso.slice(0, 4);
+  const in30Iso = useMemo(() => {
+    const d = new Date(`${todayIso}T12:00:00`);
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().slice(0, 10);
+  }, [todayIso]);
+
+  const eventName = (bookingId: string) => {
+    const b = bookingById.get(bookingId);
+    if (!b) return "Unknown";
+    return b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email;
+  };
+
+  const kpis = useMemo(() => {
+    const rentals = installments.filter((i) => (i.category ?? "rental") === "rental");
+    const thisYear = rentals.filter((i) =>
+      (bookingById.get(i.booking_id)?.check_in_date || "").startsWith(year)
+    );
+    const contracted = thisYear.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    const contractedHt = thisYear.reduce((s, i) => s + Number(i.amount_excl_vat ?? 0), 0);
+    const collected = thisYear.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    const overdue = rentals.filter((i) => i.status !== "paid" && i.due_date && i.due_date < todayIso);
+    const overdueTotal = overdue.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    const outstanding = rentals.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
+
+    const live = events.filter((e) => categoryOf(e) === "live");
+    const next30 = events.filter((e) => e.checkIn && e.checkIn > todayIso && e.checkIn <= in30Iso);
+    const upcoming = events
+      .filter((e) => e.checkIn && e.checkIn > todayIso)
+      .sort((a, b) => (a.checkIn || "").localeCompare(b.checkIn || ""))
+      .slice(0, 5);
+    const overdueRows = overdue
+      .sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""))
+      .slice(0, 8);
+    return {
+      contracted, contractedHt, collected, overdueTotal, outstanding,
+      overdueCount: overdue.length,
+      live, next30, upcoming, overdueRows,
+    };
+  }, [installments, bookingById, events, categoryOf, todayIso, in30Iso, year]);
+
+  const Tile = ({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "danger" | "success" }) => (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={`text-2xl font-semibold mt-1 ${tone === "danger" ? "text-destructive" : tone === "success" ? "text-primary" : ""}`}>
+        {value}
+      </div>
+      {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
+    </div>
+  );
+
+  const fmtShort = (d: string | null) =>
+    d ? new Date(`${d}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—";
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <Tile
+          label="On site now"
+          value={String(kpis.live.length)}
+          sub={`${kpis.live.reduce((s, e) => s + (e.guestsCount || 0), 0)} guests`}
+        />
+        <Tile
+          label="Next 30 days"
+          value={String(kpis.next30.length)}
+          sub={`${kpis.next30.reduce((s, e) => s + (e.guestsCount || 0), 0)} guests arriving`}
+        />
+        <Tile
+          label={`Revenue ${year} (incl. VAT)`}
+          value={fmtMoney(kpis.contracted)}
+          sub={`${fmtMoney(kpis.contractedHt)} excl. VAT`}
+        />
+        <Tile
+          label={`Collected ${year}`}
+          value={fmtMoney(kpis.collected)}
+          sub={kpis.contracted > 0 ? `${Math.round((kpis.collected / kpis.contracted) * 100)}% of contracted` : undefined}
+          tone="success"
+        />
+        <Tile
+          label="Overdue"
+          value={fmtMoney(kpis.overdueTotal)}
+          sub={`${kpis.overdueCount} payment${kpis.overdueCount === 1 ? "" : "s"} late · ${fmtMoney(kpis.outstanding)} outstanding total`}
+          tone={kpis.overdueTotal > 0 ? "danger" : undefined}
+        />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <section className="rounded-xl border border-border bg-card">
+          <div className="px-4 py-3 border-b border-border font-medium text-sm">Overdue payments</div>
+          {kpis.overdueRows.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground italic">Nothing overdue. 🎉</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {kpis.overdueRows.map((i) => (
+                <li key={i.id}>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(i.booking_id)}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm hover:bg-muted/60 text-left"
+                  >
+                    <span className="min-w-0">
+                      <span className="font-medium">{eventName(i.booking_id)}</span>
+                      <span className="text-muted-foreground"> · {i.label || "Payment"}</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="font-medium">{fmtMoney(Number(i.amount_due))}</span>
+                      <span className="text-destructive text-xs ml-2">due {fmtShort(i.due_date)}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-border bg-card">
+          <div className="px-4 py-3 border-b border-border font-medium text-sm">Upcoming check-ins</div>
+          {kpis.upcoming.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground italic">No upcoming events.</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {kpis.upcoming.map((e) => (
+                <li key={e.bookingId}>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(e.bookingId)}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm hover:bg-muted/60 text-left"
+                  >
+                    <span className="font-medium min-w-0 truncate">{eventName(e.bookingId)}</span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {fmtShort(e.checkIn)} → {fmtShort(e.checkOut)} · {e.guestsCount} guests
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Users
+function UsersView({ bookings, onOpen }: { bookings: BookingRow[]; onOpen: (bookingId: string) => void }) {
+  const [search, setSearch] = useState("");
+
+  type UserRow = {
+    key: string;
+    name: string;
+    email: string;
+    bookingsCount: number;
+    lastCheckIn: string | null;
+    nextCheckIn: string | null;
+    totalSpend: number;
+    latestBookingId: string;
+  };
+
+  const rows: UserRow[] = useMemo(() => {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const byEmail = new Map<string, BookingRow[]>();
+    for (const b of bookings) {
+      const key = (b.email || "").toLowerCase();
+      const arr = byEmail.get(key) || [];
+      arr.push(b);
+      byEmail.set(key, arr);
+    }
+    const list: UserRow[] = [];
+    for (const [key, bs] of byEmail) {
+      const sorted = [...bs].sort((a, b) => (a.check_in_date || "").localeCompare(b.check_in_date || ""));
+      const past = sorted.filter((b) => b.check_in_date && b.check_in_date <= todayIso);
+      const future = sorted.filter((b) => b.check_in_date && b.check_in_date > todayIso);
+      const ref = sorted[sorted.length - 1];
+      list.push({
+        key,
+        name: `${ref.first_name ?? ""} ${ref.last_name ?? ""}`.trim() || ref.retreat_name || ref.email,
+        email: ref.email,
+        bookingsCount: bs.length,
+        lastCheckIn: past.length ? past[past.length - 1].check_in_date : null,
+        nextCheckIn: future.length ? future[0].check_in_date : null,
+        totalSpend: bs.reduce((s, b) => s + Number(b.total_rental_price || 0), 0),
+        latestBookingId: (future[0] ?? ref).id,
+      });
+    }
+    const s = search.toLowerCase().trim();
+    return list
+      .filter((r) => !s || r.name.toLowerCase().includes(s) || r.email.toLowerCase().includes(s))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [bookings, search]);
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <Input placeholder="Search name or email" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
+        <span className="text-sm text-muted-foreground">{rows.length} client{rows.length === 1 ? "" : "s"}</span>
+      </div>
+      <div className="border border-border rounded-xl bg-card overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
+              <th className="px-4 py-2.5 font-medium">Name</th>
+              <th className="px-4 py-2.5 font-medium">Email</th>
+              <th className="px-4 py-2.5 font-medium">Bookings</th>
+              <th className="px-4 py-2.5 font-medium">Last stay</th>
+              <th className="px-4 py-2.5 font-medium">Next stay</th>
+              <th className="px-4 py-2.5 font-medium text-right">Total rental</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((r) => (
+              <tr key={r.key} className="hover:bg-muted/50 cursor-pointer" onClick={() => onOpen(r.latestBookingId)}>
+                <td className="px-4 py-2.5 font-medium">{r.name}</td>
+                <td className="px-4 py-2.5 text-muted-foreground">{r.email}</td>
+                <td className="px-4 py-2.5">{r.bookingsCount}</td>
+                <td className="px-4 py-2.5">{r.lastCheckIn ?? "—"}</td>
+                <td className="px-4 py-2.5">{r.nextCheckIn ?? "—"}</td>
+                <td className="px-4 py-2.5 text-right">{fmtMoney(r.totalSpend)}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-6 text-center text-muted-foreground italic">No clients found.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function PaymentsView({
   bookings,
