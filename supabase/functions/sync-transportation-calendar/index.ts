@@ -32,8 +32,10 @@ const corsHeaders = {
 const CALENDAR_ID =
   "c_df9857682cb149faf3d73da4798ccc4f246c69fd587faa7bafd56f133005f1a6@group.calendar.google.com";
 const TZ = "Europe/Lisbon";
-const CAL_GW = "https://connector-gateway.lovable.dev/google_calendar/calendar/v3";
-const MAPS_GW = "https://connector-gateway.lovable.dev/google_maps";
+// API Google directes (la passerelle Lovable est morte — migration juillet 2026).
+// Auth calendrier : service account (secrets GOOGLE_SA_EMAIL + GOOGLE_SA_PRIVATE_KEY),
+// le calendrier doit être partagé avec l'email du service account.
+const CAL_API = "https://www.googleapis.com/calendar/v3";
 const FALLBACK_MINUTES = 60;
 
 
@@ -43,38 +45,69 @@ const BodySchema = z.object({
   eventId: z.string().min(1).max(1024).optional(),
 });
 
-function calendarHeaders() {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  const GCAL_KEY = Deno.env.get("GOOGLE_CALENDAR_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-  if (!GCAL_KEY) throw new Error("GOOGLE_CALENDAR_API_KEY is not configured");
-  return {
-    Authorization: `Bearer ${LOVABLE_API_KEY}`,
-    "X-Connection-Api-Key": GCAL_KEY,
-    "Content-Type": "application/json",
-  };
+// ---- OAuth2 service account (JWT RS256 -> access token, mis en cache) ------
+let _gTok: { token: string; exp: number } | null = null;
+async function googleAccessToken(): Promise<string> {
+  const email = Deno.env.get("GOOGLE_SA_EMAIL");
+  let key = Deno.env.get("GOOGLE_SA_PRIVATE_KEY");
+  if (!email || !key) {
+    throw new Error("Google service account not configured (secrets GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY)");
+  }
+  key = key.replace(/\\n/g, "\n");
+  const now = Math.floor(Date.now() / 1000);
+  if (_gTok && _gTok.exp - 60 > now) return _gTok.token;
+  const b64url = (bytes: Uint8Array) =>
+    btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const encJson = (o: unknown) => b64url(new TextEncoder().encode(JSON.stringify(o)));
+  const header = encJson({ alg: "RS256", typ: "JWT" });
+  const claims = encJson({
+    iss: email,
+    scope: "https://www.googleapis.com/auth/calendar",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+  });
+  const pem = key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, "");
+  const der = Uint8Array.from(atob(pem), (c) => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"],
+  );
+  const sig = new Uint8Array(
+    await crypto.subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, new TextEncoder().encode(`${header}.${claims}`)),
+  );
+  const jwt = `${header}.${claims}.${b64url(sig)}`;
+  const r = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt }),
+  });
+  if (!r.ok) throw new Error(`Google token ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const d = await r.json();
+  _gTok = { token: d.access_token, exp: now + Number(d.expires_in ?? 3600) };
+  return _gTok.token;
 }
 
-function mapsHeaders(extra: Record<string, string> = {}) {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  const MAPS_KEY = Deno.env.get("GOOGLE_MAPS_API_KEY");
-  if (!LOVABLE_API_KEY || !MAPS_KEY) return null;
+async function calendarHeaders() {
   return {
-    Authorization: `Bearer ${LOVABLE_API_KEY}`,
-    "X-Connection-Api-Key": MAPS_KEY,
+    Authorization: `Bearer ${await googleAccessToken()}`,
     "Content-Type": "application/json",
-    ...extra,
   };
 }
 
 async function computeDriveMinutes(origin: string, destination: string): Promise<number> {
   if (!origin || !destination) return FALLBACK_MINUTES;
-  const headers = mapsHeaders({ "X-Goog-FieldMask": "routes.duration" });
-  if (!headers) return FALLBACK_MINUTES;
+  // Clé API Google Maps classique (Routes API activée). Optionnelle :
+  // sans clé, durée par défaut de 60 minutes.
+  const mapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+  if (!mapsKey) return FALLBACK_MINUTES;
   try {
-    const r = await fetch(`${MAPS_GW}/routes/directions/v2:computeRoutes`, {
+    const r = await fetch(`https://routes.googleapis.com/directions/v2:computeRoutes`, {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": mapsKey,
+        "X-Goog-FieldMask": "routes.duration",
+      },
       body: JSON.stringify({
         origin: { address: origin },
         destination: { address: destination },
@@ -162,7 +195,7 @@ function buildEvent(opts: { guestName: string; trip: any; durationMin: number; p
 }
 
 async function syncOne(admin: any, trip: any): Promise<string> {
-  const headers = calendarHeaders();
+  const headers = await calendarHeaders();
   const durationMin = await computeDriveMinutes(trip.pickup_location, trip.dropoff_location);
   const { data: passengers } = await admin
     .from("transportation_passengers")
@@ -198,7 +231,7 @@ async function syncOne(admin: any, trip: any): Promise<string> {
 
   if (eventId) {
     response = await fetch(
-      `${CAL_GW}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`,
+      `${CAL_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`,
       { method: "PATCH", headers, body: JSON.stringify(body) },
     );
     // Upstream event was deleted — fall through to create.
@@ -209,7 +242,7 @@ async function syncOne(admin: any, trip: any): Promise<string> {
   }
   if (!eventId) {
     response = await fetch(
-      `${CAL_GW}/calendars/${encodeURIComponent(CALENDAR_ID)}/events`,
+      `${CAL_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events`,
       { method: "POST", headers, body: JSON.stringify(body) },
     );
   }
@@ -229,9 +262,9 @@ async function syncOne(admin: any, trip: any): Promise<string> {
 }
 
 async function deleteEvent(eventId: string) {
-  const headers = calendarHeaders();
+  const headers = await calendarHeaders();
   const r = await fetch(
-    `${CAL_GW}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`,
+    `${CAL_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`,
     { method: "DELETE", headers },
   );
   if (!r.ok && r.status !== 404 && r.status !== 410) {
@@ -241,11 +274,11 @@ async function deleteEvent(eventId: string) {
 }
 
 async function purgeAllCalendarEvents(): Promise<number> {
-  const headers = calendarHeaders();
+  const headers = await calendarHeaders();
   let pageToken: string | undefined = undefined;
   let deleted = 0;
   do {
-    const url = new URL(`${CAL_GW}/calendars/${encodeURIComponent(CALENDAR_ID)}/events`);
+    const url = new URL(`${CAL_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events`);
     url.searchParams.set("maxResults", "250");
     url.searchParams.set("showDeleted", "false");
     url.searchParams.set("singleEvents", "true");
