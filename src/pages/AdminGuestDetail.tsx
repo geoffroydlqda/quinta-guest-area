@@ -993,14 +993,17 @@ type Installment = {
   amount_excl_vat: number | null;
   due_date: string | null;
   status: "pending" | "paid";
-  category: "rental" | "catering" | "extra";
+  category: "rental" | "catering" | "extra" | "discount";
   invoice_file_url: string | null;
   invoice_file_name: string | null;
   notes: string | null;
 };
 
-const fmtEUR = (v: number | string) =>
-  `€${Number(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtEUR = (v: number | string) => {
+  const n = Number(v);
+  const s = Math.abs(n).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${n < 0 ? "−" : ""}€${s}`;
+};
 
 type BookingStatus = "pending" | "deposit_paid" | "paid_in_full" | "overdue";
 
@@ -1092,8 +1095,8 @@ function PaymentSection({ userId }: { userId: string }) {
 
   useEffect(() => { loadAll(); }, [userId, bookingIdParam]);
 
-  const rentalInst = useMemo(() => installments.filter((i) => i.category === "rental"), [installments]);
-  const extraInst = useMemo(() => installments.filter((i) => i.category !== "rental"), [installments]);
+  const rentalInst = useMemo(() => installments.filter((i) => i.category === "rental" || i.category === "discount"), [installments]);
+  const extraInst = useMemo(() => installments.filter((i) => i.category !== "rental" && i.category !== "discount"), [installments]);
 
   const totals = useMemo(() => {
     const totalDue = rentalInst.reduce((s, i) => s + Number(i.amount_due || 0), 0);
@@ -1165,7 +1168,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const upsertInstallment = async (
     id: string | null,
-    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra"; notes: string | null },
+    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null },
     file?: File | null
   ) => {
     if (!booking) return false;
@@ -1567,18 +1570,18 @@ function InstallmentForm({
   checkInDate?: string | null;
   onCancel: () => void;
   onSave: (
-    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra"; notes: string | null },
+    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null },
     file?: File | null
   ) => Promise<void> | void;
 }) {
   const [label, setLabel] = useState(initial?.label || "");
-  const [amountDue, setAmountDue] = useState(initial?.amount_due != null ? String(initial.amount_due) : "");
-  const [amountExclVat, setAmountExclVat] = useState(initial?.amount_excl_vat != null ? String(initial.amount_excl_vat) : "");
+  const [amountDue, setAmountDue] = useState(initial?.amount_due != null ? String(Math.abs(initial.amount_due)) : "");
+  const [amountExclVat, setAmountExclVat] = useState(initial?.amount_excl_vat != null ? String(Math.abs(initial.amount_excl_vat)) : "");
   const [dueDate, setDueDate] = useState(initial?.due_date || "");
   const [dueDateTouched, setDueDateTouched] = useState(!!initial?.due_date);
   const [notes, setNotes] = useState(initial?.notes || "");
   const [status, setStatus] = useState<"pending" | "paid">(initial?.status ?? "pending");
-  const [category, setCategory] = useState<"rental" | "catering" | "extra">(initial?.category ?? "rental");
+  const [category, setCategory] = useState<"rental" | "catering" | "extra" | "discount">(initial?.category ?? "rental");
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
@@ -1603,13 +1606,17 @@ function InstallmentForm({
   const submit = async () => {
     if (!label.trim() || !amountDue) return;
     setSaving(true);
+    // Remise : saisie en positif, stockée en négatif, toujours 'paid'
+    // (jamais en attente, jamais de rappel) — se déduit du revenu.
+    const isDiscount = category === "discount";
+    const sign = isDiscount ? -1 : 1;
     await onSave(
       {
         label: label.trim(),
-        amount_due: Number(amountDue),
-        amount_excl_vat: amountExclVat.trim() === "" ? null : Number(amountExclVat),
-        due_date: dueDate || null,
-        status,
+        amount_due: sign * Math.abs(Number(amountDue)),
+        amount_excl_vat: amountExclVat.trim() === "" ? null : sign * Math.abs(Number(amountExclVat)),
+        due_date: isDiscount ? null : (dueDate || null),
+        status: isDiscount ? "paid" : status,
         category,
         notes: notes.trim() || null,
       },
@@ -1624,7 +1631,7 @@ function InstallmentForm({
       <div className="space-y-1">
         <div className="text-xs text-muted-foreground">Category *</div>
         <div className="inline-flex rounded-md border border-input overflow-hidden">
-          {(["rental", "catering", "extra"] as const).map((c) => (
+          {(["rental", "catering", "extra", "discount"] as const).map((c) => (
             <button
               key={c}
               type="button"
@@ -1650,25 +1657,34 @@ function InstallmentForm({
           <div className="text-xs text-muted-foreground">Amount excl. VAT (€)</div>
           <Input type="number" min="0" step="0.01" value={amountExclVat} onChange={(e) => setAmountExclVat(e.target.value)} placeholder="Optional" />
         </label>
-        <label className="space-y-1">
-          <div className="text-xs text-muted-foreground">Due date</div>
-          <Input
-            type="date"
-            value={dueDate}
-            onChange={(e) => { setDueDate(e.target.value); setDueDateTouched(true); }}
-          />
-        </label>
-        <label className="space-y-1">
-          <div className="text-xs text-muted-foreground">Status</div>
-          <select
-            className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as "pending" | "paid")}
-          >
-            <option value="pending">Pending</option>
-            <option value="paid">Paid</option>
-          </select>
-        </label>
+        {category !== "discount" && (
+          <label className="space-y-1">
+            <div className="text-xs text-muted-foreground">Due date</div>
+            <Input
+              type="date"
+              value={dueDate}
+              onChange={(e) => { setDueDate(e.target.value); setDueDateTouched(true); }}
+            />
+          </label>
+        )}
+        {category !== "discount" && (
+          <label className="space-y-1">
+            <div className="text-xs text-muted-foreground">Status</div>
+            <select
+              className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+              value={status}
+              onChange={(e) => setStatus(e.target.value as "pending" | "paid")}
+            >
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+            </select>
+          </label>
+        )}
+        {category === "discount" && (
+          <div className="sm:col-span-2 text-xs text-muted-foreground italic self-end pb-1">
+            Enter the discount as a positive amount — it is stored as a deduction and reduces revenue.
+          </div>
+        )}
       </div>
 
       <div className="space-y-1">

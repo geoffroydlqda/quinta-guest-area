@@ -41,9 +41,9 @@ export interface PayInstallment {
 type Bucket = "paid" | "overdue" | "upcoming";
 
 const fmt2 = (v: number) =>
-  `€${v.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  `${v < 0 ? "−" : ""}€${Math.abs(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmt0 = (v: number) =>
-  `€${v.toLocaleString("en-GB", { maximumFractionDigits: 0 })}`;
+  `${v < 0 ? "−" : ""}€${Math.abs(v).toLocaleString("en-GB", { maximumFractionDigits: 0 })}`;
 
 function fmtDate(d: string | null): string {
   if (!d) return "—";
@@ -72,7 +72,7 @@ export function PaymentsPage({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Bucket>("all");
   const [yearFilter, setYearFilter] = useState<string>("all");
-  const [catFilter, setCatFilter] = useState<"all" | "rental" | "catering" | "extra">("all");
+  const [catFilter, setCatFilter] = useState<"all" | "rental" | "catering" | "extra" | "discount">("all");
   const [lastReminder, setLastReminder] = useState<Map<string, string>>(new Map());
   const [busyId, setBusyId] = useState<string | null>(null);
   const uploadTarget = useRef<PayInstallment | null>(null);
@@ -325,6 +325,7 @@ export function PaymentsPage({
           <option value="rental">Rental</option>
           <option value="catering">Catering</option>
           <option value="extra">Extras</option>
+          <option value="discount">Discounts</option>
         </select>
         <div className="inline-flex rounded-md border border-input overflow-hidden">
           {(["all", "overdue", "upcoming", "paid"] as const).map((s) => (
@@ -435,10 +436,14 @@ export function PaymentsPage({
                     </div>
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <Checkbox
-                      checked={r.inst.status === "paid"}
-                      onCheckedChange={(v) => togglePaid(r, v === true)}
-                    />
+                    {r.inst.category === "discount" ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : (
+                      <Checkbox
+                        checked={r.inst.status === "paid"}
+                        onCheckedChange={(v) => togglePaid(r, v === true)}
+                      />
+                    )}
                   </td>
                 </tr>
               );
