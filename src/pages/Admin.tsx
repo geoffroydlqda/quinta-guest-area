@@ -677,11 +677,28 @@ function DashboardView({
         d.setDate(d.getDate() + 1);
       }
     }
+    // Nuit de turnaround : la nuit du jour de check-out est bloquée (ménage,
+    // pas de check-in le même jour) — comptée seulement si elle est dans la
+    // saison et pas déjà occupée par un autre séjour.
+    const turnaround = new Set<string>();
+    for (const b of bookings) {
+      if (!b.check_out_date) continue;
+      const d = new Date(`${b.check_out_date}T12:00:00`);
+      const iso = d.toISOString().slice(0, 10);
+      if (d >= s && d < e && !occupied.has(iso)) turnaround.add(iso);
+    }
     const inSeasonMonths = Array.from({ length: 12 }, (_, m) => {
       const mid = new Date(Number(year), m, 15, 12);
       return mid >= s && mid < e;
     });
-    return { start, end, totalNights, nights: occupied.size, pct: (occupied.size / totalNights) * 100, inSeasonMonths };
+    return {
+      start, end, totalNights,
+      nights: occupied.size,
+      pct: (occupied.size / totalNights) * 100,
+      turnaround: turnaround.size,
+      pctBlocked: ((occupied.size + turnaround.size) / totalNights) * 100,
+      inSeasonMonths,
+    };
   }, [bookings, year, targets]);
 
   const targetStats = useMemo(() => {
@@ -777,12 +794,19 @@ function DashboardView({
             <div className="font-medium text-sm">Season occupancy · {year}</div>
             <div className="text-xs text-muted-foreground">{fmtShort(seasonStats.start)} → {fmtShort(seasonStats.end)}</div>
           </div>
-          <div className="text-3xl font-semibold mt-2">{Math.round(seasonStats.pct)}%</div>
-          <div className="mt-2.5 h-2.5 rounded-full bg-[#dfe5d2] overflow-hidden">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, seasonStats.pct)}%` }} />
+          <div className="flex items-baseline gap-3 mt-2">
+            <div className="text-3xl font-semibold">{Math.round(seasonStats.pct)}%</div>
+            <div className="text-xs text-muted-foreground">
+              {Math.round(seasonStats.pctBlocked)}% incl. turnaround
+            </div>
+          </div>
+          <div className="mt-2.5 h-2.5 rounded-full bg-[#dfe5d2] overflow-hidden flex">
+            <div className="h-full bg-primary" style={{ width: `${Math.min(100, seasonStats.pct)}%` }} />
+            <div className="h-full bg-primary/40" style={{ width: `${Math.max(0, Math.min(100, seasonStats.pctBlocked) - Math.min(100, seasonStats.pct))}%` }} />
           </div>
           <div className="text-xs text-muted-foreground mt-1.5">
             {seasonStats.nights} of {seasonStats.totalNights} season nights with guests on site
+            {seasonStats.turnaround > 0 && ` · +${seasonStats.turnaround} blocked for cleaning`}
           </div>
         </section>
         {targetStats ? (
