@@ -35,6 +35,14 @@ Interface utilisateur en **anglais**. Communication avec le propriétaire en **f
 - **Tarifs** : source de vérité = table `public.pricing_settings` (clés `taxi`, `food`). Front : `src/lib/pricing.ts` (store chargé au démarrage, getters synchrones, défauts = seed). Ne JAMAIS re-coder un prix en dur.
 - Tarifs taxi en vigueur : 70 € (4 places) / 90 € (6 places) / 110 € (8 places).
 
+## Refonte admin (juillet 2026)
+
+- **Layout** : sidebar fixe (`AdminLayout`), police Inter (classe `.admin-ui`), pages routées `/admin` (Dashboard), `/admin/bookings|users|payments|transportation|food|rooms`. La guest area garde le branding typewriter.
+- **Dashboard** : KPI + graphiques SVG maison (`DashboardCharts`, palette olive validée par le skill dataviz), sélecteur d'année.
+- **Payments** (`PaymentsPage`) : échéancier global — remplace l'ancien Google Sheet de suivi. Une ligne par `payment_installment` : TVAC (`amount_due`) / HT (`amount_excl_vat`), statut, facture (bucket `invoices`), **`payment_link`** (lien Wise collé manuellement ; affiché en bouton "Pay now" dans les emails de rappel), marquer payé, rappel manuel.
+- **Rappels manuels** : `payment-reminders` avec `{send_installment: id}` (admin) → type `payment_manual` dans `reminder_log` (renvoyable, hors dédoublonnage). Les emails `internal+…@quintamor.com` (bookings gérés en interne) sont exclus de tout envoi automatique.
+- **Toggle rappels automatiques** : bouton Enable/Disable dans la carte (écrit `app_settings.payment_reminders` — RLS admin).
+
 ## Conventions Phase 1 (juillet 2026)
 
 - **Rappels de paiement** : Edge Function `payment-reminders`, appelée chaque jour à 08:00 UTC par pg_cron (job `payment-reminders-daily`, authentifié par le header `x-cron-key` = `app_settings.internal.cron_key`, jamais dans le repo). **Interrupteur global** : `app_settings.payment_reminders.enabled` (false par défaut — AUCUN envoi tant que Geoffroy ne l'active pas explicitement). Cadence : J-7 avant échéance + J+3 de retard, un seul envoi par (type, échéance) grâce à `reminder_log` (index unique). Aperçu dry-run : invoquer la fonction avec `{preview: true}` (admin) — c'est ce que fait la carte "Automatic payment reminders" de l'onglet Payments.
@@ -52,7 +60,7 @@ Toute modification de schéma passe par un fichier SQL dans `supabase/migrations
 
 `admin-claim-booking`, `admin-delete-guest`, `admin-generate-invite-token`, `admin-guest-detail`, `admin-list-data`, `claim-booking`, `create-booking`, `ensure-guest-profile`, `notify-transport-pricing`, `qa-tests`, `send-guest-summary`, `payment-reminders`, `send-invite-email`, `send-room-setup-emails`, `sync-google-sheets`, `sync-transportation-calendar`.
 
-⚠️ Elles ne se déploient PAS via le push GitHub : `supabase functions deploy <nom>` (CLI Supabase). Si une fonction est modifiée dans le repo, penser à la redéployer. Certaines ont `verify_jwt = false` dans `supabase/config.toml`.
+⚠️ Elles ne se déploient PAS via le push GitHub. Depuis que les connecteurs MCP Supabase/Vercel sont branchés sur la session, utiliser `mcp__Supabase__deploy_edge_function` (et `apply_migration` pour le SQL). Si une fonction est modifiée dans le repo, penser à la redéployer. Certaines ont `verify_jwt = false` dans `supabase/config.toml` (dont `payment-reminders`, appelée par le cron avec `x-cron-key`).
 
 ## Authentification
 
