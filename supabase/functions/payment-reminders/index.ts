@@ -8,8 +8,11 @@
 // Sécurité d'envoi :
 //  - app_settings.payment_reminders.enabled = false  => AUCUN email ne part, jamais.
 //    La fonction retourne seulement la liste de ce qui serait envoyé.
-//  - Dédoublonnage : un rappel (type, échéance) n'est envoyé qu'une fois
-//    (index unique sur reminder_log + vérification applicative).
+//  - Dédoublonnage : un rappel automatique (type, échéance) n'est envoyé qu'une
+//    fois (index unique sur reminder_log + vérification applicative).
+//  - { send_installment: id } : rappel MANUEL explicite (admin), indépendant de
+//    l'interrupteur global, journalisé en type 'payment_manual' (renvoyable).
+//  - payment_installments.payment_link : si présent, bouton "Pay now" dans l'email.
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "npm:resend@2.0.0";
@@ -46,6 +49,7 @@ interface ReminderCandidate {
   label: string;
   amount_due: number;
   due_date: string;
+  payment_link?: string | null;
 }
 
 function lisbonToday(): string {
@@ -64,7 +68,9 @@ function escapeHtml(s: string): string {
 
 function reminderHtml(c: ReminderCandidate): string {
   const isOverdue = c.type === "payment_overdue";
-  const intro = isOverdue
+  const intro = !c.due_date || c.due_date === "—"
+    ? `This is a friendly reminder about the payment below.`
+    : isOverdue
     ? `This is a friendly follow-up: the payment below was due on <strong>${escapeHtml(c.due_date)}</strong> and is still marked as pending.`
     : `This is a friendly reminder that the payment below is due on <strong>${escapeHtml(c.due_date)}</strong>.`;
   return `
@@ -77,6 +83,13 @@ function reminderHtml(c: ReminderCandidate): string {
       <tr><td style="padding:0 16px 4px;">Amount: <strong>€${Number(c.amount_due).toFixed(2)}</strong></td></tr>
       <tr><td style="padding:0 16px 12px;">Due date: ${escapeHtml(c.due_date)}</td></tr>
     </table>
+    ${c.payment_link && /^https?:\/\//i.test(c.payment_link) ? `
+    <p style="margin:20px 0;">
+      <a href="${escapeHtml(c.payment_link)}"
+         style="background:#4a5a3a;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:6px;display:inline-block;">
+        Pay now
+      </a>
+    </p>` : ""}
     <p>You can review your payment details anytime in your
       <a href="${GUEST_AREA_URL}" style="color:#4a5a3a;">Guest Area</a>.</p>
     <p>If you have already made this payment, please disregard this message — it can
@@ -115,10 +128,68 @@ serve(async (req) => {
     }
 
     let preview = false;
+    let sendInstallment: string | null = null;
     try {
       const body = await req.json();
       preview = body?.preview === true;
+      if (typeof body?.send_installment === "string") sendInstallment = body.send_installment;
     } catch { /* corps vide */ }
+
+    // ------------------------------------------------- rappel manuel (admin)
+    // Action explicite depuis la page Payments : envoie UN rappel pour UNE
+    // échéance, indépendamment de l'interrupteur global (qui ne gouverne que
+    // les envois automatiques). Jamais accessible au cron.
+    if (sendInstallment) {
+      if (isCron) return json({ error: "Manual send is admin-only" }, 403);
+      const { data: inst, error: instErr } = await admin
+        .from("payment_installments")
+        .select("id, booking_id, label, amount_due, due_date, status, payment_link, bookings:booking_id (id, email, first_name)")
+        .eq("id", sendInstallment)
+        .maybeSingle();
+      if (instErr) return json({ error: instErr.message }, 500);
+      if (!inst) return json({ error: "Installment not found" }, 404);
+      if (inst.status === "paid") return json({ error: "This installment is already paid" }, 400);
+      const b = (inst as any).bookings;
+      if (!b?.email) return json({ error: "No email on this booking" }, 400);
+      if (/^internal\+/i.test(String(b.email))) {
+        return json({ error: "Internal booking (no real client email)" }, 400);
+      }
+      const today = lisbonToday();
+      const due = inst.due_date ? String(inst.due_date) : "—";
+      const c: ReminderCandidate = {
+        type: due !== "—" && due < today ? "payment_overdue" : "payment_upcoming",
+        installment_id: String(inst.id),
+        booking_id: String(b.id),
+        recipient: String(b.email),
+        first_name: String(b.first_name ?? ""),
+        retreat_name: "",
+        label: String(inst.label ?? "Payment"),
+        amount_due: Number(inst.amount_due ?? 0),
+        due_date: due,
+        payment_link: (inst as any).payment_link ?? null,
+      };
+      const subject = c.type === "payment_overdue"
+        ? `Payment follow-up — ${c.label} — Quinta do Amor`
+        : `Payment reminder — ${c.label} — Quinta do Amor`;
+      try {
+        const res = await resend.emails.send({
+          from: FROM_EMAIL, to: [c.recipient], reply_to: ADMIN_EMAIL,
+          subject, html: reminderHtml(c),
+        });
+        if ((res as any)?.error) throw new Error(JSON.stringify((res as any).error));
+        await admin.from("reminder_log").insert({
+          type: "payment_manual", installment_id: c.installment_id, booking_id: c.booking_id,
+          recipient: c.recipient, subject, status: "sent",
+        });
+        return json({ mode: "manual", sent: 1, recipient: c.recipient });
+      } catch (e) {
+        await admin.from("reminder_log").insert({
+          type: "payment_manual", installment_id: c.installment_id, booking_id: c.booking_id,
+          recipient: c.recipient, subject, status: "error", error: String(e).slice(0, 500),
+        });
+        return json({ error: `Send failed: ${String(e).slice(0, 200)}` }, 500);
+      }
+    }
 
     // -------------------------------------------------------------- settings
     const { data: settingsRow } = await admin
@@ -135,7 +206,7 @@ serve(async (req) => {
 
     const { data: installments, error: instErr } = await admin
       .from("payment_installments")
-      .select("id, booking_id, label, amount_due, due_date, status, bookings:booking_id (id, email, first_name, retreat_name, invitation_claimed)")
+      .select("id, booking_id, label, amount_due, due_date, status, payment_link, bookings:booking_id (id, email, first_name, retreat_name, invitation_claimed)")
       .eq("status", "pending")
       .not("due_date", "is", null);
     if (instErr) return json({ error: instErr.message }, 500);
@@ -144,6 +215,9 @@ serve(async (req) => {
     for (const inst of installments ?? []) {
       const b = (inst as any).bookings;
       if (!b?.email) continue;
+      // Bookings gérés en interne (email internal+xxx@quintamor.com) : jamais de
+      // rappel automatique — il n'y a pas de vrai client derrière cette adresse.
+      if (/^internal\+/i.test(String(b.email))) continue;
       const due = String(inst.due_date);
       let type: ReminderCandidate["type"] | null = null;
       // Rappel "à venir" : échéance dans la fenêtre [demain .. J+days_before]
@@ -161,6 +235,7 @@ serve(async (req) => {
         label: String(inst.label ?? "Payment"),
         amount_due: Number(inst.amount_due ?? 0),
         due_date: due,
+        payment_link: (inst as any).payment_link ?? null,
       });
     }
 

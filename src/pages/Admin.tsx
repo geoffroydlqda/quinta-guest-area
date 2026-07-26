@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CreateBookingDialog } from "@/components/admin/CreateBookingDialog";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { MonthlyRevenueChart, OccupancyChart } from "@/components/admin/DashboardCharts";
+import { PaymentsPage } from "@/components/admin/PaymentsPage";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
@@ -66,6 +67,8 @@ type Installment = {
   id: string; booking_id: string; label?: string | null; amount_due: number;
   amount_excl_vat?: number | null;
   due_date: string | null; status: string; category?: string | null;
+  invoice_file_url?: string | null; invoice_file_name?: string | null;
+  payment_link?: string | null;
 };
 
 const SECTION_TITLES: Record<string, string> = {
@@ -170,7 +173,7 @@ const AdminContent = () => {
     if (!silent) setLoading(true);
     const [res, instRes] = await Promise.all([
       supabase.functions.invoke("admin-list-data"),
-      supabase.from("payment_installments").select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category"),
+      supabase.from("payment_installments").select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,payment_link"),
     ]);
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });
@@ -526,10 +529,10 @@ const AdminContent = () => {
         {view === "payments" && (
           <div>
             <PaymentRemindersCard />
-            <PaymentsView
+            <PaymentsPage
               bookings={data.bookings || []}
               installments={installments}
-              guestName={(uid) => uid ? guestName(uid) : ""}
+              onReload={() => load({ silent: true })}
               onOpen={navigateToBooking}
             />
           </div>
@@ -861,166 +864,6 @@ function UsersView({ bookings, onOpen }: { bookings: BookingRow[]; onOpen: (book
               <tr><td colSpan={6} className="px-4 py-6 text-center text-muted-foreground italic">No clients found.</td></tr>
             )}
           </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function PaymentsView({
-  bookings,
-  installments,
-  guestName,
-  onOpen,
-}: {
-  bookings: BookingRow[];
-  installments: Installment[];
-  guestName: (uid: string | null) => string;
-  onOpen: (bookingId: string) => void;
-}) {
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"check_in" | "status">("check_in");
-
-  const instByBooking = useMemo(() => {
-    const m = new Map<string, Installment[]>();
-    for (const i of installments) {
-      const arr = m.get(i.booking_id) || [];
-      arr.push(i);
-      m.set(i.booking_id, arr);
-    }
-    return m;
-  }, [installments]);
-
-  type Row = {
-    booking: BookingRow;
-    name: string;
-    total: number;
-    accomPaid: number;
-    accomRemaining: number;
-    extrasTotal: number;
-    extrasPaid: number;
-    status: ResolvedPaymentStatus;
-  };
-
-  const rows: Row[] = useMemo(() => {
-    return bookings.map((b) => {
-      const inst = instByBooking.get(b.id) || [];
-      const rentals = inst.filter((i) => (i.category ?? "rental") === "rental");
-      const extras = inst.filter((i) => i.category === "extra");
-      const accomPaid = rentals
-        .filter((i) => i.status === "paid")
-        .reduce((s, i) => s + Number(i.amount_due || 0), 0);
-      const extrasTotal = extras.reduce((s, i) => s + Number(i.amount_due || 0), 0);
-      const extrasPaid = extras
-        .filter((i) => i.status === "paid")
-        .reduce((s, i) => s + Number(i.amount_due || 0), 0);
-      const total = Number(b.total_rental_price || 0);
-      const name = b.user_id
-        ? guestName(b.user_id)
-        : `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email;
-      return {
-        booking: b,
-        name,
-        total,
-        accomPaid,
-        accomRemaining: Math.max(0, total - accomPaid),
-        extrasTotal,
-        extrasPaid,
-        status: resolvePaymentStatus({ payment_status_override: b.payment_status_override }, inst),
-      };
-    });
-  }, [bookings, instByBooking, guestName]);
-
-  const filtered = useMemo(() => {
-    const s = search.toLowerCase().trim();
-    let list = rows.filter((r) => {
-      if (!s) return true;
-      return (
-        r.name.toLowerCase().includes(s) ||
-        (r.booking.email || "").toLowerCase().includes(s) ||
-        (r.booking.retreat_name || "").toLowerCase().includes(s)
-      );
-    });
-    if (sortBy === "check_in") {
-      list = [...list].sort((a, b) => (a.booking.check_in_date || "").localeCompare(b.booking.check_in_date || ""));
-    } else {
-      const order: Record<ResolvedPaymentStatus, number> = { overdue: 0, pending: 1, deposit_paid: 2, paid_in_full: 3 };
-      list = [...list].sort((a, b) => order[a.status] - order[b.status]);
-    }
-    return list;
-  }, [rows, search, sortBy]);
-
-  const totals = useMemo(() => {
-    let expected = 0, collected = 0;
-    for (const r of rows) {
-      expected += r.total;
-      collected += r.accomPaid + r.extrasPaid;
-    }
-    return { expected, collected, outstanding: Math.max(0, expected - collected) };
-  }, [rows]);
-
-  const fmt = (n: number) => `€${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        <Input placeholder="Search name, email or retreat" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="border border-border rounded-md px-3 py-2 text-sm bg-background">
-          <option value="check_in">Sort by check-in</option>
-          <option value="status">Sort by status</option>
-        </select>
-      </div>
-
-      <div className="overflow-x-auto border border-border rounded-md bg-card">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr className="text-left">
-              <th className="px-3 py-2 font-medium">Retreat / Guest</th>
-              <th className="px-3 py-2 font-medium">Check-in</th>
-              <th className="px-3 py-2 font-medium text-right">Total</th>
-              <th className="px-3 py-2 font-medium text-right">Accom. paid</th>
-              <th className="px-3 py-2 font-medium text-right">Accom. remaining</th>
-              <th className="px-3 py-2 font-medium text-right">Extras total</th>
-              <th className="px-3 py-2 font-medium text-right">Extras paid</th>
-              <th className="px-3 py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr><td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">No bookings</td></tr>
-            ) : filtered.map((r) => (
-              <tr
-                key={r.booking.id}
-                onClick={() => onOpen(r.booking.id)}
-                className="border-t border-border hover:bg-muted/40 cursor-pointer"
-              >
-                <td className="px-3 py-2">
-                  <div className="font-medium">{r.name}</div>
-                  <div className="text-xs text-muted-foreground">{r.booking.retreat_name || "—"} · {r.booking.email}</div>
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap">{r.booking.check_in_date || "—"}</td>
-                <td className="px-3 py-2 text-right whitespace-nowrap">{r.total > 0 ? fmt(r.total) : "—"}</td>
-                <td className="px-3 py-2 text-right whitespace-nowrap">{fmt(r.accomPaid)}</td>
-                <td className="px-3 py-2 text-right whitespace-nowrap">{fmt(r.accomRemaining)}</td>
-                <td className="px-3 py-2 text-right whitespace-nowrap">{fmt(r.extrasTotal)}</td>
-                <td className="px-3 py-2 text-right whitespace-nowrap">{fmt(r.extrasPaid)}</td>
-                <td className="px-3 py-2"><PaymentBadge status={r.status} /></td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-border bg-muted/30 font-medium">
-              <td className="px-3 py-2" colSpan={2}>Totals ({filtered.length} bookings)</td>
-              <td className="px-3 py-2 text-right whitespace-nowrap">{fmt(totals.expected)}</td>
-              <td className="px-3 py-2 text-right whitespace-nowrap" colSpan={2}>
-                <span className="text-muted-foreground">Collected:</span> {fmt(totals.collected)}
-              </td>
-              <td className="px-3 py-2 text-right whitespace-nowrap" colSpan={2}>
-                <span className="text-muted-foreground">Outstanding:</span> {fmt(totals.outstanding)}
-              </td>
-              <td />
-            </tr>
-          </tfoot>
         </table>
       </div>
     </div>

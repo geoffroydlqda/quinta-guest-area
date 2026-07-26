@@ -30,6 +30,7 @@ interface PreviewResponse {
 export function PaymentRemindersCard() {
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -47,6 +48,31 @@ export function PaymentRemindersCard() {
     load();
   }, [load]);
 
+  const toggleEnabled = async () => {
+    if (!preview) return;
+    const next = !preview.enabled;
+    const overdueCount = preview.would_send.filter((r) => r.type === 'payment_overdue').length;
+    const msg = next
+      ? `Enable automatic payment reminders?\n\nFrom the next daily run (08:00 UTC), guests get an email ${preview.settings.days_before} days before a due date and a follow-up ${preview.settings.days_overdue} days after.` +
+        (overdueCount > 0 ? `\n\n⚠️ ${overdueCount} overdue follow-up${overdueCount === 1 ? '' : 's'} in the preview below would go out on the first run.` : '')
+      : 'Disable automatic payment reminders? Nothing will be sent until you re-enable them.';
+    if (!window.confirm(msg)) return;
+    setToggling(true);
+    const { error: upError } = await supabase
+      .from('app_settings')
+      .update({
+        value: {
+          enabled: next,
+          days_before: preview.settings.days_before,
+          days_overdue: preview.settings.days_overdue,
+        },
+      })
+      .eq('key', 'payment_reminders');
+    setToggling(false);
+    if (upError) setError(upError.message);
+    else load();
+  };
+
   return (
     <section className="mb-6 border border-border rounded-lg bg-card p-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -59,10 +85,24 @@ export function PaymentRemindersCard() {
             </Badge>
           )}
         </div>
-        <Button size="sm" variant="ghost" onClick={load} disabled={loading} className="gap-1.5">
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {preview && (
+            <Button
+              size="sm"
+              variant={preview.enabled ? 'outline' : 'default'}
+              onClick={toggleEnabled}
+              disabled={toggling || loading}
+              className="gap-1.5"
+            >
+              {toggling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : preview.enabled ? <BellOff className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}
+              {preview.enabled ? 'Disable' : 'Enable reminders'}
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={load} disabled={loading} className="gap-1.5">
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {preview && (
