@@ -3,7 +3,7 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard, CalendarRange, Users, Wallet, Car,
-  UtensilsCrossed, BedDouble, LogOut, ExternalLink,
+  BedDouble, LogOut, ExternalLink,
 } from "lucide-react";
 
 /**
@@ -16,7 +16,6 @@ const NAV = [
   { to: "/admin/users", label: "Users", icon: Users },
   { to: "/admin/payments", label: "Payments", icon: Wallet },
   { to: "/admin/transportation", label: "Transportation", icon: Car },
-  { to: "/admin/food", label: "Food planning", icon: UtensilsCrossed },
   { to: "/admin/rooms", label: "Room setup", icon: BedDouble },
 ] as const;
 

@@ -16,6 +16,8 @@ import { CreateBookingDialog } from "@/components/admin/CreateBookingDialog";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { MonthlyRevenueChart, OccupancyChart } from "@/components/admin/DashboardCharts";
 import { PaymentsPage } from "@/components/admin/PaymentsPage";
+import { renderRoomMapCanvas, downloadRoomMapPdf, type RoomMapEntry } from "@/lib/roomMapPdf";
+import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
@@ -77,7 +79,6 @@ const SECTION_TITLES: Record<string, string> = {
   users: "Users",
   payments: "Payments",
   transportation: "Transportation",
-  food: "Food planning",
   rooms: "Room setup",
 };
 
@@ -538,8 +539,6 @@ const AdminContent = () => {
           </div>
         )}
 
-        {view === "food" && <FoodView data={data} guestName={guestName} />}
-
         {view === "transportation" && (
           <TransportView data={data} guestName={guestName} onTripPatched={patchTrip} onReload={() => load({ silent: true })} onInvalidateTransport={(bookingId, userId) => Promise.all([
             queryClient.invalidateQueries({ queryKey: ['transportation_trips', bookingId ?? userId] }),
@@ -549,7 +548,7 @@ const AdminContent = () => {
           ]).then(() => undefined)} />
         )}
 
-        {view === "rooms" && <RoomsView data={data} guestName={guestName} />}
+        {view === "rooms" && <RoomsView data={data} onOpen={navigateToBooking} />}
       </main>
 
       <CreateBookingDialog
@@ -1007,87 +1006,6 @@ function UsersView({ bookings, onOpen }: { bookings: BookingRow[]; onOpen: (book
   );
 }
 
-function FoodView({ data, guestName }: { data: Data; guestName: (u: string) => string }) {
-  const rows = useMemo(() => {
-    const out: { date: string; guest: string; guests: number; diet: string; meals: string }[] = [];
-    for (const fp of data.food) {
-      const sels = Array.isArray(fp.selections) ? fp.selections : [];
-      const p = data.profiles.find((pp) => pp.user_id === fp.user_id);
-      const gc = p?.guests_count ?? 1;
-      for (const s of sels as any[]) {
-        const meals = s.fullBoard ? "Full board" : ["breakfast","lunch","dinner"].filter((m) => s[m]).join(", ");
-        if (!meals) continue;
-        out.push({ date: s.date, guest: guestName(fp.user_id), guests: gc, diet: fp.diet_preference || "", meals });
-      }
-    }
-    return out.sort((a, b) => a.date.localeCompare(b.date));
-  }, [data, guestName]);
-
-  const totalsByDate = useMemo(() => {
-    const map = new Map<string, { breakfast: number; lunch: number; dinner: number; fullBoard: number }>();
-    for (const fp of data.food) {
-      const p = data.profiles.find((pp) => pp.user_id === fp.user_id);
-      const gc = p?.guests_count ?? 1;
-      const sels = Array.isArray(fp.selections) ? fp.selections : [];
-      for (const s of sels as any[]) {
-        const t = map.get(s.date) || { breakfast: 0, lunch: 0, dinner: 0, fullBoard: 0 };
-        if (s.fullBoard) t.fullBoard += gc;
-        else { if (s.breakfast) t.breakfast += gc; if (s.lunch) t.lunch += gc; if (s.dinner) t.dinner += gc; }
-        map.set(s.date, t);
-      }
-    }
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [data]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={() => downloadCSV("food.csv", [
-          ["Date","Guest","Guests","Diet","Meals"],
-          ...rows.map((r) => [r.date, r.guest, r.guests, r.diet, r.meals]),
-        ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
-      </div>
-      <div className="overflow-auto border border-border rounded-lg bg-card max-h-[40vh]">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-muted"><tr className="text-left">
-            {["Date","Guest","Guests","Diet","Meals"].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-t border-border">
-                <td className="px-3 py-2">{r.date}</td>
-                <td className="px-3 py-2">{r.guest}</td>
-                <td className="px-3 py-2">{r.guests}</td>
-                <td className="px-3 py-2">{r.diet}</td>
-                <td className="px-3 py-2">{r.meals}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <h3 className="font-medium mt-6">Totals per day</h3>
-      <div className="overflow-auto border border-border rounded-lg bg-card">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-muted"><tr className="text-left">
-            {["Date","Breakfast","Lunch","Dinner","Full board"].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {totalsByDate.map(([date, t]) => (
-              <tr key={date} className="border-t border-border">
-                <td className="px-3 py-2">{date}</td>
-                <td className="px-3 py-2">{t.breakfast}</td>
-                <td className="px-3 py-2">{t.lunch}</td>
-                <td className="px-3 py-2">{t.dinner}</td>
-                <td className="px-3 py-2">{t.fullBoard}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateTransport }: { data: Data; guestName: (u: string) => string; onTripPatched: (id: string, patch: Partial<Trip>) => void; onReload: () => void; onInvalidateTransport: (bookingId: string | null | undefined, userId: string) => Promise<void> }) {
   const { toast } = useToast();
   const [syncingAll, setSyncingAll] = useState(false);
@@ -1487,34 +1405,158 @@ function NotifyGuestButton({ userId, guestName }: { userId: string; guestName: s
   );
 }
 
-function RoomsView({ data, guestName }: { data: Data; guestName: (u: string) => string }) {
+/**
+ * Room setup admin : un plan de chambres annoté par séjour.
+ * Le prochain séjour est mis en avant (plan affiché + téléchargement PDF) ;
+ * les autres séjours sont listés et affichables/téléchargeables d'un clic.
+ */
+function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) => void }) {
+  type StayPlan = {
+    booking: BookingRow;
+    name: string;
+    entries: RoomMapEntry[];
+    guestsPlaced: number;
+    remarks: string | null;
+  };
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const stays: StayPlan[] = useMemo(() => {
+    const list: StayPlan[] = [];
+    for (const b of data.bookings || []) {
+      const room: any = (data.rooms as any[]).find(
+        (r) => r.booking_id === b.id || (b.user_id && r.user_id === b.user_id && !r.booking_id)
+      );
+      const plan = Array.isArray(room?.room_plan) ? (room.room_plan as any[]) : [];
+      if (plan.length === 0) continue;
+      const disabled = new Set<number>((b as any).disabled_rooms || []);
+      const entries: RoomMapEntry[] = plan
+        .filter((e) => Number.isFinite(Number(e?.roomId)) && !disabled.has(Number(e.roomId)))
+        .map((e) => ({
+          roomId: Number(e.roomId),
+          guests: Array.isArray(e.guests) ? e.guests.filter((g: unknown) => typeof g === "string" && g.trim()) : [],
+          bedType: Number(e.roomId) === 1 || Number(e.roomId) === 6 ? "king" : (e.bedType === "king" ? "king" : "twin"),
+        }));
+      if (entries.length === 0) continue;
+      list.push({
+        booking: b,
+        name: b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email,
+        entries,
+        guestsPlaced: entries.reduce((s, e) => s + e.guests.length, 0),
+        remarks: room?.remarks_roomsetup || room?.remarks || null,
+      });
+    }
+    // Prochains séjours d'abord (check-in croissant), puis passés (décroissant)
+    const upcoming = list.filter((s) => (s.booking.check_out_date ?? s.booking.check_in_date ?? "") >= todayIso)
+      .sort((a, b) => (a.booking.check_in_date ?? "").localeCompare(b.booking.check_in_date ?? ""));
+    const past = list.filter((s) => (s.booking.check_out_date ?? s.booking.check_in_date ?? "") < todayIso)
+      .sort((a, b) => (b.booking.check_in_date ?? "").localeCompare(a.booking.check_in_date ?? ""));
+    return [...upcoming, ...past];
+  }, [data, todayIso]);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = stays.find((s) => s.booking.id === selectedId) ?? stays[0] ?? null;
+  const isNext = selected != null && stays[0] != null && selected.booking.id === stays[0].booking.id;
+
+  const [mapUrl, setMapUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setMapUrl(null);
+    if (!selected) return;
+    renderRoomMapCanvas(roomsArrangement, selected.entries)
+      .then((canvas) => { if (!cancelled) setMapUrl(canvas.toDataURL("image/jpeg", 0.85)); })
+      .catch(() => { if (!cancelled) setMapUrl(null); });
+    return () => { cancelled = true; };
+  }, [selected?.booking.id, stays.length]);
+
+  const fmtD = (d: string | null) =>
+    d ? new Date(`${d}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
+
+  const download = (s: StayPlan) =>
+    downloadRoomMapPdf(roomsArrangement, s.entries, {
+      title: `Quinta do Amor — Room map — ${s.name}`,
+      subtitle: `${fmtD(s.booking.check_in_date)} → ${fmtD(s.booking.check_out_date)} · ${s.guestsPlaced} guests placed`,
+    });
+
+  if (stays.length === 0) {
+    return (
+      <div className="border border-border rounded-xl bg-card p-8 text-center text-sm text-muted-foreground">
+        No room plans yet — plans appear here once a guest (or you, via "Open as guest") assigns rooms in Room Setup.
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3">
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={() => downloadCSV("rooms.csv", [
-          ["Guest","Email","King shared","Twin shared","King ensuite","Twin ensuite","Remarks"],
-          ...data.rooms.map((r) => [guestName(r.user_id), r.email, r.queen_shared_qty, r.twins_shared_qty, r.queen_ensuite_qty, r.twins_ensuite_qty, r.remarks_roomsetup || r.remarks || ""]),
-        ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
-      </div>
-      <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-muted"><tr className="text-left">
-            {["Guest","King shared","Twin shared","King ensuite","Twin ensuite","Remarks"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {data.rooms.map((r, i) => (
-              <tr key={i} className="border-t border-border">
-                <td className="px-3 py-2">{guestName(r.user_id)}</td>
-                <td className="px-3 py-2">{r.queen_shared_qty}</td>
-                <td className="px-3 py-2">{r.twins_shared_qty}</td>
-                <td className="px-3 py-2">{r.queen_ensuite_qty}</td>
-                <td className="px-3 py-2">{r.twins_ensuite_qty}</td>
-                <td className="px-3 py-2">{r.remarks_roomsetup || r.remarks || ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div className="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
+      {/* Plan mis en avant */}
+      <section className="rounded-xl border border-border bg-card p-4">
+        {selected && (
+          <>
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <button type="button" className="font-semibold hover:underline" onClick={() => onOpen(selected.booking.id)}>
+                    {selected.name}
+                  </button>
+                  {isNext && (
+                    <span className="text-[10px] uppercase px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground font-medium">
+                      Next stay
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {fmtD(selected.booking.check_in_date)} → {fmtD(selected.booking.check_out_date)} · {selected.guestsPlaced}/{selected.booking.guest_count} guests placed
+                </div>
+              </div>
+              <Button size="sm" onClick={() => download(selected)}>
+                <FileDown className="w-4 h-4 mr-1" /> Download PDF
+              </Button>
+            </div>
+            {mapUrl ? (
+              <img src={mapUrl} alt={`Room map — ${selected.name}`} className="w-full h-auto rounded-lg border border-border" />
+            ) : (
+              <div className="h-64 flex items-center justify-center text-muted-foreground">
+                <Loader2 className="w-6 h-6 animate-spin" />
+              </div>
+            )}
+            {selected.remarks && (
+              <p className="text-xs text-muted-foreground italic mt-2 whitespace-pre-wrap">{selected.remarks}</p>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* Liste des séjours */}
+      <section className="rounded-xl border border-border bg-card">
+        <div className="px-4 py-3 border-b border-border font-medium text-sm">Stays with a room plan</div>
+        <ul className="divide-y divide-border max-h-[70vh] overflow-y-auto">
+          {stays.map((s, i) => (
+            <li key={s.booking.id}>
+              <div
+                className={`flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer ${selected?.booking.id === s.booking.id ? "bg-primary/10" : "hover:bg-muted/60"}`}
+                onClick={() => setSelectedId(s.booking.id)}
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {s.name}
+                    {i === 0 && <span className="ml-1.5 text-[10px] uppercase text-primary font-semibold">next</span>}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {fmtD(s.booking.check_in_date)} · {s.guestsPlaced} guests placed
+                  </div>
+                </div>
+                <Button
+                  size="icon" variant="ghost" className="h-7 w-7 shrink-0"
+                  title="Download PDF"
+                  onClick={(e) => { e.stopPropagation(); download(s); }}
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }
