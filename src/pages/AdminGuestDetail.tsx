@@ -993,7 +993,7 @@ type Installment = {
   amount_excl_vat: number | null;
   due_date: string | null;
   status: "pending" | "paid";
-  category: "rental" | "extra";
+  category: "rental" | "catering" | "extra";
   invoice_file_url: string | null;
   invoice_file_name: string | null;
   notes: string | null;
@@ -1093,7 +1093,7 @@ function PaymentSection({ userId }: { userId: string }) {
   useEffect(() => { loadAll(); }, [userId, bookingIdParam]);
 
   const rentalInst = useMemo(() => installments.filter((i) => i.category === "rental"), [installments]);
-  const extraInst = useMemo(() => installments.filter((i) => i.category === "extra"), [installments]);
+  const extraInst = useMemo(() => installments.filter((i) => i.category !== "rental"), [installments]);
 
   const totals = useMemo(() => {
     const totalDue = rentalInst.reduce((s, i) => s + Number(i.amount_due || 0), 0);
@@ -1165,7 +1165,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const upsertInstallment = async (
     id: string | null,
-    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null },
+    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra"; notes: string | null },
     file?: File | null
   ) => {
     if (!booking) return false;
@@ -1567,7 +1567,7 @@ function InstallmentForm({
   checkInDate?: string | null;
   onCancel: () => void;
   onSave: (
-    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "extra"; notes: string | null },
+    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra"; notes: string | null },
     file?: File | null
   ) => Promise<void> | void;
 }) {
@@ -1578,7 +1578,7 @@ function InstallmentForm({
   const [dueDateTouched, setDueDateTouched] = useState(!!initial?.due_date);
   const [notes, setNotes] = useState(initial?.notes || "");
   const [status, setStatus] = useState<"pending" | "paid">(initial?.status ?? "pending");
-  const [category, setCategory] = useState<"rental" | "extra">(initial?.category ?? "rental");
+  const [category, setCategory] = useState<"rental" | "catering" | "extra">(initial?.category ?? "rental");
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
@@ -1587,7 +1587,7 @@ function InstallmentForm({
   useEffect(() => {
     if (initial) return;
     if (dueDateTouched) return;
-    if (category === "extra" && checkInDate) {
+    if (category !== "rental" && checkInDate) {
       setDueDate(shiftDaysIso(checkInDate, -7));
     } else if (category === "rental") {
       setDueDate("");
@@ -1624,7 +1624,7 @@ function InstallmentForm({
       <div className="space-y-1">
         <div className="text-xs text-muted-foreground">Category *</div>
         <div className="inline-flex rounded-md border border-input overflow-hidden">
-          {(["rental", "extra"] as const).map((c) => (
+          {(["rental", "catering", "extra"] as const).map((c) => (
             <button
               key={c}
               type="button"

@@ -2,12 +2,16 @@ import { useMemo, useState } from "react";
 
 /**
  * Graphiques du dashboard admin — SVG maison, sans dépendance.
- * Palette validée (scripts/validate_palette.js du skill dataviz, mode light,
- * surface #f0e7e1) : ramp ordinal une teinte — collected #5e6d3f (foncé),
- * outstanding #899b53 (clair, 2.50:1 vs surface → labels de cap en relief).
+ * Palettes validées (scripts/validate_palette.js du skill dataviz, mode light,
+ * surface #f0e7e1) :
+ * - catégorielle 3 slots (revenu par catégorie) : rental #57761f, catering
+ *   #2a78d6, extra #c2622f — 6 checks PASS (ordre d'empilement = adjacence).
+ * - occupation : #5e6d3f (mono-série).
  */
+const C_RENTAL = "#57761f";
+const C_CATERING = "#2a78d6";
+const C_EXTRA = "#c2622f";
 const C_COLLECTED = "#5e6d3f";
-const C_OUTSTANDING = "#899b53";
 const C_GRID = "#ddd4cc";
 const C_TEXT_MUTED = "#5a5a55";
 
@@ -67,70 +71,80 @@ function ChartTooltip({ t }: { t: TooltipState }) {
 export function MonthlyRevenueChart({
   months,
 }: {
-  /** 12 entrées, index 0 = janvier ; montants TVAC. */
-  months: { collected: number; outstanding: number }[];
+  /** 12 entrées, index 0 = janvier ; montants TVAC par catégorie. */
+  months: { rental: number; catering: number; extra: number; collected: number }[];
 }) {
   const [tip, setTip] = useState<TooltipState | null>(null);
   const [hover, setHover] = useState<number | null>(null);
 
   const W = 720, H = 240, mL = 46, mR = 8, mT = 16, mB = 24;
   const plotW = W - mL - mR, plotH = H - mT - mB;
-  const max = niceMax(Math.max(...months.map((m) => m.collected + m.outstanding), 1));
+  const totalOf = (m: { rental: number; catering: number; extra: number }) => m.rental + m.catering + m.extra;
+  const max = niceMax(Math.max(...months.map(totalOf), 1));
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * max);
   const slot = plotW / 12;
   const barW = Math.min(24, slot * 0.55);
-  const y = (v: number) => mT + plotH - (v / max) * plotH;
+
+  const SERIES = [
+    { key: "rental" as const, label: "Rental", color: C_RENTAL },
+    { key: "catering" as const, label: "Catering", color: C_CATERING },
+    { key: "extra" as const, label: "Extras", color: C_EXTRA },
+  ];
 
   return (
     <div className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Monthly revenue, collected vs outstanding">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Monthly revenue by category (rental, catering, extras)">
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={mL} x2={W - mR} y1={y(t)} y2={y(t)} stroke={C_GRID} strokeWidth="1" />
-            <text x={mL - 6} y={y(t) + 3} textAnchor="end" fontSize="10" fill={C_TEXT_MUTED}>
+            <line x1={mL} x2={W - mR} y1={mT + plotH - (t / max) * plotH} y2={mT + plotH - (t / max) * plotH} stroke={C_GRID} strokeWidth="1" />
+            <text x={mL - 6} y={mT + plotH - (t / max) * plotH + 3} textAnchor="end" fontSize="10" fill={C_TEXT_MUTED}>
               {compact(t)}
             </text>
           </g>
         ))}
         {months.map((m, i) => {
-          const total = m.collected + m.outstanding;
+          const total = totalOf(m);
           const x = mL + i * slot + (slot - barW) / 2;
-          const hCol = (m.collected / max) * plotH;
-          const hOut = (m.outstanding / max) * plotH;
-          const gap = hCol > 0 && hOut > 0 ? 2 : 0;
-          const yCol = mT + plotH - hCol;
-          const yOut = yCol - gap - hOut;
+          // Empilement bas -> haut : rental, catering, extra ; gaps de 2px ;
+          // seul le segment sommital est arrondi (base carrée partout).
+          const segs = SERIES
+            .map((s) => ({ ...s, value: m[s.key], h: (m[s.key] / max) * plotH }))
+            .filter((s) => s.h > 0);
+          let cursor = mT + plotH;
+          const drawn = segs.map((s, idx) => {
+            const yTop = cursor - s.h;
+            cursor = yTop - 2; // gap surface entre segments
+            return { ...s, yTop, isTop: idx === segs.length - 1 };
+          });
+          const yTopmost = drawn.length ? drawn[drawn.length - 1].yTop : mT + plotH;
           const isHover = hover === i;
           const show = () => {
             setHover(i);
             setTip({
               leftPct: ((x + barW / 2) / W) * 100,
-              topPct: ((Math.min(yOut, yCol) - 6) / H) * 100,
+              topPct: ((yTopmost - 6) / H) * 100,
               title: MONTHS[i],
               rows: [
-                { label: "collected", value: fmtEUR0(m.collected), color: C_COLLECTED },
-                { label: "outstanding", value: fmtEUR0(m.outstanding), color: C_OUTSTANDING },
+                ...SERIES.map((s) => ({ label: s.label.toLowerCase(), value: fmtEUR0(m[s.key]), color: s.color })),
                 { label: "total", value: fmtEUR0(total) },
+                { label: "collected", value: fmtEUR0(m.collected) },
               ],
             });
           };
           const hide = () => { setHover(null); setTip(null); };
           return (
             <g key={i} opacity={hover !== null && !isHover ? 0.75 : 1}>
-              {/* segment collected (base) — arrondi seulement s'il est au sommet */}
-              {hCol > 0 && (hOut > 0
-                ? <rect x={x} y={yCol} width={barW} height={hCol} fill={C_COLLECTED} />
-                : <path d={roundedTopRect(x, yCol, barW, hCol, 4)} fill={C_COLLECTED} />)}
-              {hOut > 0 && <path d={roundedTopRect(x, yOut, barW, hOut, 4)} fill={C_OUTSTANDING} />}
+              {drawn.map((s) => s.isTop
+                ? <path key={s.key} d={roundedTopRect(x, s.yTop, barW, s.h, 4)} fill={s.color} />
+                : <rect key={s.key} x={x} y={s.yTop} width={barW} height={s.h} fill={s.color} />)}
               {total > 0 && (
-                <text x={x + barW / 2} y={Math.min(yOut, yCol) - 4} textAnchor="middle" fontSize="9.5" fill={C_TEXT_MUTED}>
+                <text x={x + barW / 2} y={yTopmost - 4} textAnchor="middle" fontSize="9.5" fill={C_TEXT_MUTED}>
                   {compact(total)}
                 </text>
               )}
               <text x={mL + i * slot + slot / 2} y={H - 8} textAnchor="middle" fontSize="10" fill={C_TEXT_MUTED}>
                 {MONTHS[i]}
               </text>
-              {/* zone de hit plus large que la marque */}
               <rect
                 x={mL + i * slot} y={mT} width={slot} height={plotH} fill="transparent"
                 tabIndex={total > 0 ? 0 : -1}
@@ -142,12 +156,11 @@ export function MonthlyRevenueChart({
       </svg>
       {tip && <ChartTooltip t={tip} />}
       <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-[2px]" style={{ background: C_COLLECTED }} /> Collected
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-[2px]" style={{ background: C_OUTSTANDING }} /> Outstanding
-        </span>
+        {SERIES.map((s) => (
+          <span key={s.key} className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-[2px]" style={{ background: s.color }} /> {s.label}
+          </span>
+        ))}
       </div>
     </div>
   );

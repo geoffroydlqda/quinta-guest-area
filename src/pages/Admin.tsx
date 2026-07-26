@@ -597,16 +597,15 @@ function DashboardView({
   };
 
   const kpis = useMemo(() => {
-    const rentals = installments.filter((i) => (i.category ?? "rental") === "rental");
-    const thisYear = rentals.filter((i) =>
+    const thisYear = installments.filter((i) =>
       (bookingById.get(i.booking_id)?.check_in_date || "").startsWith(year)
     );
     const contracted = thisYear.reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const contractedHt = thisYear.reduce((s, i) => s + Number(i.amount_excl_vat ?? 0), 0);
     const collected = thisYear.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
-    const overdue = rentals.filter((i) => i.status !== "paid" && i.due_date && i.due_date < todayIso);
+    const overdue = installments.filter((i) => i.status !== "paid" && i.due_date && i.due_date < todayIso);
     const overdueTotal = overdue.reduce((s, i) => s + Number(i.amount_due || 0), 0);
-    const outstanding = rentals.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    const outstanding = installments.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
 
     const live = events.filter((e) => categoryOf(e) === "live");
     const next30 = events.filter((e) => e.checkIn && e.checkIn > todayIso && e.checkIn <= in30Iso);
@@ -625,15 +624,16 @@ function DashboardView({
   }, [installments, bookingById, events, categoryOf, todayIso, in30Iso, year]);
 
   const charts = useMemo(() => {
-    const rev = Array.from({ length: 12 }, () => ({ collected: 0, outstanding: 0 }));
-    const rentals = installments.filter((i) => (i.category ?? "rental") === "rental");
-    for (const i of rentals) {
+    const rev = Array.from({ length: 12 }, () => ({ rental: 0, catering: 0, extra: 0, collected: 0 }));
+    for (const i of installments) {
       const ci = bookingById.get(i.booking_id)?.check_in_date || "";
       if (!ci.startsWith(year)) continue;
       const m = Number(ci.slice(5, 7)) - 1;
       if (m < 0 || m > 11) continue;
-      if (i.status === "paid") rev[m].collected += Number(i.amount_due || 0);
-      else rev[m].outstanding += Number(i.amount_due || 0);
+      const cat = i.category === "catering" ? "catering" : i.category === "extra" ? "extra" : "rental";
+      const amount = Number(i.amount_due || 0);
+      rev[m][cat] += amount;
+      if (i.status === "paid") rev[m].collected += amount;
     }
     const yNum = Number(year);
     const occupied: Set<string>[] = Array.from({ length: 12 }, () => new Set());
@@ -652,7 +652,7 @@ function DashboardView({
   }, [installments, bookings, bookingById, year]);
 
   // Objectifs P&L + saison d'exploitation (app_settings key='targets')
-  type TargetsCfg = Record<string, { net_revenue?: number; season_start?: string; season_end?: string }>;
+  type TargetsCfg = Record<string, { net_revenue?: number; rental?: number; catering?: number; extras?: number; season_start?: string; season_end?: string }>;
   const [targets, setTargets] = useState<TargetsCfg | null>(null);
   useEffect(() => {
     supabase.from("app_settings").select("value").eq("key", "targets").maybeSingle()
@@ -685,17 +685,25 @@ function DashboardView({
   }, [bookings, year, targets]);
 
   const targetStats = useMemo(() => {
-    const t = targets?.[year]?.net_revenue;
-    if (!t) return null;
-    // CA contracté HT de l'année (rental + extras) vs objectif "CA net" du P&L.
-    // Quand le HT n'est pas renseigné (certains extras), estimation à TVA 23 %.
-    let actual = 0;
+    const cfg = targets?.[year];
+    if (!cfg?.net_revenue) return null;
+    // CA contracté HT de l'année, ventilé rental / catering / extras, vs P&L.
+    // HT manquant : estimation à TVA 23 % (13 % pour le catering — taux food PT).
+    const actual = { rental: 0, catering: 0, extra: 0 };
     for (const i of installments) {
       const ci = bookingById.get(i.booking_id)?.check_in_date || "";
       if (!ci.startsWith(year)) continue;
-      actual += i.amount_excl_vat != null ? Number(i.amount_excl_vat) : Number(i.amount_due || 0) / 1.23;
+      const cat = i.category === "catering" ? "catering" : i.category === "extra" ? "extra" : "rental";
+      const vat = cat === "catering" ? 1.13 : 1.23;
+      actual[cat] += i.amount_excl_vat != null ? Number(i.amount_excl_vat) : Number(i.amount_due || 0) / vat;
     }
-    return { target: t, actual, pct: (actual / t) * 100 };
+    const total = actual.rental + actual.catering + actual.extra;
+    const rows = [
+      { label: "Rental", actual: actual.rental, target: cfg.rental ?? null },
+      { label: "Catering", actual: actual.catering, target: cfg.catering ?? null },
+      { label: "Extras", actual: actual.extra, target: cfg.extras ?? null },
+    ];
+    return { target: cfg.net_revenue, actual: total, pct: (total / cfg.net_revenue) * 100, rows };
   }, [installments, bookingById, targets, year]);
 
   const Tile = ({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "danger" | "success" }) => (
@@ -783,12 +791,30 @@ function DashboardView({
               <div className="font-medium text-sm">Revenue vs target · {year}</div>
               <div className="text-xs text-muted-foreground">net of VAT (P&L)</div>
             </div>
-            <div className="text-3xl font-semibold mt-2">{Math.round(targetStats.pct)}%</div>
-            <div className="mt-2.5 h-2.5 rounded-full bg-[#dfe5d2] overflow-hidden">
-              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, targetStats.pct)}%` }} />
+            <div className="flex items-baseline gap-3 mt-2">
+              <div className="text-3xl font-semibold">{Math.round(targetStats.pct)}%</div>
+              <div className="text-xs text-muted-foreground">
+                {fmtMoney(targetStats.actual)} of {fmtMoney(targetStats.target)}
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground mt-1.5">
-              {fmtMoney(targetStats.actual)} contracted of {fmtMoney(targetStats.target)} target
+            <div className="mt-2 space-y-2">
+              {targetStats.rows.map((r) => {
+                const pct = r.target ? (r.actual / r.target) * 100 : null;
+                return (
+                  <div key={r.label}>
+                    <div className="flex items-baseline justify-between text-xs">
+                      <span className="text-muted-foreground">{r.label}</span>
+                      <span>
+                        {fmtMoney(r.actual)}
+                        {r.target != null && <span className="text-muted-foreground"> / {fmtMoney(r.target)} · {Math.round(pct!)}%</span>}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-2 rounded-full bg-[#dfe5d2] overflow-hidden">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
         ) : (

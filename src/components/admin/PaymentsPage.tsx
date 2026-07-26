@@ -72,7 +72,7 @@ export function PaymentsPage({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Bucket>("all");
   const [yearFilter, setYearFilter] = useState<string>("all");
-  const [catFilter, setCatFilter] = useState<"all" | "rental" | "extra">("all");
+  const [catFilter, setCatFilter] = useState<"all" | "rental" | "catering" | "extra">("all");
   const [lastReminder, setLastReminder] = useState<Map<string, string>>(new Map());
   const [busyId, setBusyId] = useState<string | null>(null);
   const uploadTarget = useRef<PayInstallment | null>(null);
@@ -321,9 +321,10 @@ export function PaymentsPage({
           {years.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
         <select value={catFilter} onChange={(e) => setCatFilter(e.target.value as any)} className="border border-border rounded-md px-2.5 py-2 text-sm bg-background">
-          <option value="all">Rental + extras</option>
-          <option value="rental">Rental only</option>
-          <option value="extra">Extras only</option>
+          <option value="all">All categories</option>
+          <option value="rental">Rental</option>
+          <option value="catering">Catering</option>
+          <option value="extra">Extras</option>
         </select>
         <div className="inline-flex rounded-md border border-input overflow-hidden">
           {(["all", "overdue", "upcoming", "paid"] as const).map((s) => (
@@ -371,8 +372,8 @@ export function PaymentsPage({
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {r.inst.label || "Payment"}
-                    {(r.inst.category ?? "rental") === "extra" && (
-                      <span className="ml-1.5 text-[10px] uppercase px-1 py-0.5 rounded border border-border bg-muted text-muted-foreground">extra</span>
+                    {(r.inst.category ?? "rental") !== "rental" && (
+                      <span className="ml-1.5 text-[10px] uppercase px-1 py-0.5 rounded border border-border bg-muted text-muted-foreground">{r.inst.category}</span>
                     )}
                     <button
                       type="button"
