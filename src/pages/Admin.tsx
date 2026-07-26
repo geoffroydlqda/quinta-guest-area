@@ -651,6 +651,53 @@ function DashboardView({
     return { rev, occ };
   }, [installments, bookings, bookingById, year]);
 
+  // Objectifs P&L + saison d'exploitation (app_settings key='targets')
+  type TargetsCfg = Record<string, { net_revenue?: number; season_start?: string; season_end?: string }>;
+  const [targets, setTargets] = useState<TargetsCfg | null>(null);
+  useEffect(() => {
+    supabase.from("app_settings").select("value").eq("key", "targets").maybeSingle()
+      .then(({ data }) => setTargets((data?.value as TargetsCfg) ?? null));
+  }, []);
+
+  const seasonStats = useMemo(() => {
+    const cfg = targets?.[year];
+    const start = cfg?.season_start ?? `${year}-05-01`;
+    const end = cfg?.season_end ?? `${year}-11-01`;
+    const s = new Date(`${start}T12:00:00`);
+    const e = new Date(`${end}T12:00:00`);
+    const totalNights = Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000));
+    const occupied = new Set<string>();
+    for (const b of bookings) {
+      if (!b.check_in_date || !b.check_out_date) continue;
+      const d = new Date(`${b.check_in_date}T12:00:00`);
+      const endB = new Date(`${b.check_out_date}T12:00:00`);
+      while (d < endB) {
+        if (d >= s && d < e) occupied.add(d.toISOString().slice(0, 10));
+        if (d > e) break;
+        d.setDate(d.getDate() + 1);
+      }
+    }
+    const inSeasonMonths = Array.from({ length: 12 }, (_, m) => {
+      const mid = new Date(Number(year), m, 15, 12);
+      return mid >= s && mid < e;
+    });
+    return { start, end, totalNights, nights: occupied.size, pct: (occupied.size / totalNights) * 100, inSeasonMonths };
+  }, [bookings, year, targets]);
+
+  const targetStats = useMemo(() => {
+    const t = targets?.[year]?.net_revenue;
+    if (!t) return null;
+    // CA contracté HT de l'année (rental + extras) vs objectif "CA net" du P&L.
+    // Quand le HT n'est pas renseigné (certains extras), estimation à TVA 23 %.
+    let actual = 0;
+    for (const i of installments) {
+      const ci = bookingById.get(i.booking_id)?.check_in_date || "";
+      if (!ci.startsWith(year)) continue;
+      actual += i.amount_excl_vat != null ? Number(i.amount_excl_vat) : Number(i.amount_due || 0) / 1.23;
+    }
+    return { target: t, actual, pct: (actual / t) * 100 };
+  }, [installments, bookingById, targets, year]);
+
   const Tile = ({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "danger" | "success" }) => (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
@@ -718,12 +765,47 @@ function DashboardView({
 
       <div className="grid lg:grid-cols-2 gap-4">
         <section className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-baseline justify-between gap-2 flex-wrap">
+            <div className="font-medium text-sm">Season occupancy · {year}</div>
+            <div className="text-xs text-muted-foreground">{fmtShort(seasonStats.start)} → {fmtShort(seasonStats.end)}</div>
+          </div>
+          <div className="text-3xl font-semibold mt-2">{Math.round(seasonStats.pct)}%</div>
+          <div className="mt-2.5 h-2.5 rounded-full bg-[#dfe5d2] overflow-hidden">
+            <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, seasonStats.pct)}%` }} />
+          </div>
+          <div className="text-xs text-muted-foreground mt-1.5">
+            {seasonStats.nights} of {seasonStats.totalNights} season nights with guests on site
+          </div>
+        </section>
+        {targetStats ? (
+          <section className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-baseline justify-between gap-2 flex-wrap">
+              <div className="font-medium text-sm">Revenue vs target · {year}</div>
+              <div className="text-xs text-muted-foreground">net of VAT (P&L)</div>
+            </div>
+            <div className="text-3xl font-semibold mt-2">{Math.round(targetStats.pct)}%</div>
+            <div className="mt-2.5 h-2.5 rounded-full bg-[#dfe5d2] overflow-hidden">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, targetStats.pct)}%` }} />
+            </div>
+            <div className="text-xs text-muted-foreground mt-1.5">
+              {fmtMoney(targetStats.actual)} contracted of {fmtMoney(targetStats.target)} target
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-xl border border-border bg-card p-4 flex items-center justify-center text-sm text-muted-foreground italic">
+            No revenue target set for {year}.
+          </section>
+        )}
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <section className="rounded-xl border border-border bg-card p-4">
           <div className="font-medium text-sm mb-2">Revenue by month · {year} <span className="text-muted-foreground font-normal">(incl. VAT)</span></div>
           <MonthlyRevenueChart months={charts.rev} />
         </section>
         <section className="rounded-xl border border-border bg-card p-4">
-          <div className="font-medium text-sm mb-2">Occupancy · {year} <span className="text-muted-foreground font-normal">(nights with guests on site)</span></div>
-          <OccupancyChart months={charts.occ} />
+          <div className="font-medium text-sm mb-2">Occupancy · {year} <span className="text-muted-foreground font-normal">(nights with guests on site — off-season dimmed)</span></div>
+          <OccupancyChart months={charts.occ} inSeason={seasonStats.inSeasonMonths} />
         </section>
       </div>
 

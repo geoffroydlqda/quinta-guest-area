@@ -156,9 +156,12 @@ export function MonthlyRevenueChart({
 // ---------------------------------------------------------------- Occupancy
 export function OccupancyChart({
   months,
+  inSeason,
 }: {
   /** 12 entrées : nuits occupées + nombre de jours du mois. */
   months: { nights: number; days: number }[];
+  /** Mois dans la saison d'exploitation — les autres sont estompés. */
+  inSeason?: boolean[];
 }) {
   const [tip, setTip] = useState<TooltipState | null>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -183,12 +186,14 @@ export function OccupancyChart({
           const x = mL + i * slot + (slot - barW) / 2;
           const h = (pct / 100) * plotH;
           const isHover = hover === i;
+          const dim = inSeason ? !inSeason[i] : false;
+          const baseOpacity = dim ? 0.35 : 1;
           const show = () => {
             setHover(i);
             setTip({
               leftPct: ((x + barW / 2) / W) * 100,
               topPct: ((y(pct) - 6) / H) * 100,
-              title: MONTHS[i],
+              title: `${MONTHS[i]}${dim ? " (off-season)" : ""}`,
               rows: [
                 { label: "occupancy", value: `${Math.round(pct)}%`, color: C_COLLECTED },
                 { label: `of ${m.days} nights`, value: String(m.nights) },
@@ -197,7 +202,7 @@ export function OccupancyChart({
           };
           const hide = () => { setHover(null); setTip(null); };
           return (
-            <g key={i} opacity={hover !== null && !isHover ? 0.75 : 1}>
+            <g key={i} opacity={(hover !== null && !isHover ? 0.75 : 1) * baseOpacity}>
               {h > 0 && <path d={roundedTopRect(x, y(pct), barW, h, 4)} fill={C_COLLECTED} />}
               {pct > 0 && (
                 <text x={x + barW / 2} y={y(pct) - 4} textAnchor="middle" fontSize="9.5" fill={C_TEXT_MUTED}>
