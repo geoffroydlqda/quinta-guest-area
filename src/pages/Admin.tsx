@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 
 import { CreateBookingDialog } from "@/components/admin/CreateBookingDialog";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { MonthlyRevenueChart, OccupancyChart } from "@/components/admin/DashboardCharts";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
@@ -570,7 +571,16 @@ function DashboardView({
 }) {
   const bookings = data.bookings || [];
   const bookingById = useMemo(() => new Map(bookings.map((b) => [b.id, b])), [bookings]);
-  const year = todayIso.slice(0, 4);
+  const years = useMemo(() => {
+    const ys = new Set<string>();
+    for (const b of bookings) if (b.check_in_date) ys.add(b.check_in_date.slice(0, 4));
+    return [...ys].sort();
+  }, [bookings]);
+  const currentYear = todayIso.slice(0, 4);
+  const [year, setYear] = useState(currentYear);
+  useEffect(() => {
+    if (years.length && !years.includes(year)) setYear(years.includes(currentYear) ? currentYear : years[years.length - 1]);
+  }, [years, year, currentYear]);
   const in30Iso = useMemo(() => {
     const d = new Date(`${todayIso}T12:00:00`);
     d.setDate(d.getDate() + 30);
@@ -611,6 +621,33 @@ function DashboardView({
     };
   }, [installments, bookingById, events, categoryOf, todayIso, in30Iso, year]);
 
+  const charts = useMemo(() => {
+    const rev = Array.from({ length: 12 }, () => ({ collected: 0, outstanding: 0 }));
+    const rentals = installments.filter((i) => (i.category ?? "rental") === "rental");
+    for (const i of rentals) {
+      const ci = bookingById.get(i.booking_id)?.check_in_date || "";
+      if (!ci.startsWith(year)) continue;
+      const m = Number(ci.slice(5, 7)) - 1;
+      if (m < 0 || m > 11) continue;
+      if (i.status === "paid") rev[m].collected += Number(i.amount_due || 0);
+      else rev[m].outstanding += Number(i.amount_due || 0);
+    }
+    const yNum = Number(year);
+    const occupied: Set<string>[] = Array.from({ length: 12 }, () => new Set());
+    for (const b of bookings) {
+      if (!b.check_in_date || !b.check_out_date) continue;
+      const d = new Date(`${b.check_in_date}T12:00:00`);
+      const end = new Date(`${b.check_out_date}T12:00:00`);
+      while (d < end) {
+        if (d.getFullYear() === yNum) occupied[d.getMonth()].add(d.toISOString().slice(0, 10));
+        d.setDate(d.getDate() + 1);
+        if (d.getFullYear() > yNum) break;
+      }
+    }
+    const occ = occupied.map((s, m) => ({ nights: s.size, days: new Date(yNum, m + 1, 0).getDate() }));
+    return { rev, occ };
+  }, [installments, bookings, bookingById, year]);
+
   const Tile = ({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "danger" | "success" }) => (
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
@@ -626,6 +663,26 @@ function DashboardView({
 
   return (
     <div className="space-y-6">
+      {years.length > 1 && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm text-muted-foreground mr-1">Year</span>
+          {years.map((y) => (
+            <button
+              key={y}
+              type="button"
+              onClick={() => setYear(y)}
+              className={`rounded-full px-3 py-1 text-sm border transition-colors ${
+                y === year
+                  ? "bg-primary text-primary-foreground border-primary font-medium"
+                  : "bg-background border-border hover:bg-muted"
+              }`}
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Tile
           label="On site now"
@@ -654,6 +711,17 @@ function DashboardView({
           sub={`${kpis.overdueCount} payment${kpis.overdueCount === 1 ? "" : "s"} late · ${fmtMoney(kpis.outstanding)} outstanding total`}
           tone={kpis.overdueTotal > 0 ? "danger" : undefined}
         />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <section className="rounded-xl border border-border bg-card p-4">
+          <div className="font-medium text-sm mb-2">Revenue by month · {year} <span className="text-muted-foreground font-normal">(incl. VAT)</span></div>
+          <MonthlyRevenueChart months={charts.rev} />
+        </section>
+        <section className="rounded-xl border border-border bg-card p-4">
+          <div className="font-medium text-sm mb-2">Occupancy · {year} <span className="text-muted-foreground font-normal">(nights with guests on site)</span></div>
+          <OccupancyChart months={charts.occ} />
+        </section>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
