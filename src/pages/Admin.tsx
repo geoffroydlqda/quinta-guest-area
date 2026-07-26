@@ -1446,17 +1446,28 @@ function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) =
         remarks: room?.remarks_roomsetup || room?.remarks || null,
       });
     }
-    // Prochains séjours d'abord (check-in croissant), puis passés (décroissant)
-    const upcoming = list.filter((s) => (s.booking.check_out_date ?? s.booking.check_in_date ?? "") >= todayIso)
-      .sort((a, b) => (a.booking.check_in_date ?? "").localeCompare(b.booking.check_in_date ?? ""));
-    const past = list.filter((s) => (s.booking.check_out_date ?? s.booking.check_in_date ?? "") < todayIso)
-      .sort((a, b) => (b.booking.check_in_date ?? "").localeCompare(a.booking.check_in_date ?? ""));
-    return [...upcoming, ...past];
+    return list;
   }, [data, todayIso]);
 
+  // "Next" = premier séjour dont le check-in est à venir (un séjour en cours
+  // n'est pas "next" : il est live, et rejoint le groupe replié avec les passés).
+  const upcoming = useMemo(
+    () => stays.filter((s) => (s.booking.check_in_date ?? "") > todayIso)
+      .sort((a, b) => (a.booking.check_in_date ?? "").localeCompare(b.booking.check_in_date ?? "")),
+    [stays, todayIso]
+  );
+  const pastAndLive = useMemo(
+    () => stays.filter((s) => (s.booking.check_in_date ?? "") <= todayIso)
+      .sort((a, b) => (b.booking.check_in_date ?? "").localeCompare(a.booking.check_in_date ?? "")),
+    [stays, todayIso]
+  );
+  const isLive = (s: StayPlan) =>
+    (s.booking.check_in_date ?? "") <= todayIso && (s.booking.check_out_date ?? s.booking.check_in_date ?? "") >= todayIso;
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = stays.find((s) => s.booking.id === selectedId) ?? stays[0] ?? null;
-  const isNext = selected != null && stays[0] != null && selected.booking.id === stays[0].booking.id;
+  const [pastOpen, setPastOpen] = useState(false);
+  const selected = stays.find((s) => s.booking.id === selectedId) ?? upcoming[0] ?? pastAndLive[0] ?? null;
+  const isNext = selected != null && upcoming[0] != null && selected.booking.id === upcoming[0].booking.id;
 
   const [mapUrl, setMapUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -1503,6 +1514,11 @@ function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) =
                       Next stay
                     </span>
                   )}
+                  {!isNext && isLive(selected) && (
+                    <span className="text-[10px] uppercase px-1.5 py-0.5 rounded-full border border-primary text-primary font-medium">
+                      Live now
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
                   {fmtD(selected.booking.check_in_date)} → {fmtD(selected.booking.check_out_date)} · {selected.guestsPlaced}/{selected.booking.guest_count} guests placed
@@ -1528,37 +1544,61 @@ function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) =
 
       {/* Liste des séjours */}
       <section className="rounded-xl border border-border bg-card">
-        <div className="px-4 py-3 border-b border-border font-medium text-sm">Stays with a room plan</div>
+        <div className="px-4 py-3 border-b border-border font-medium text-sm">Upcoming stays</div>
         <ul className="divide-y divide-border max-h-[70vh] overflow-y-auto">
-          {stays.map((s, i) => (
+          {upcoming.length === 0 && (
+            <li className="px-4 py-3 text-sm text-muted-foreground italic">No upcoming stay with a room plan.</li>
+          )}
+          {upcoming.map((s, i) => (
             <li key={s.booking.id}>
-              <div
-                className={`flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer ${selected?.booking.id === s.booking.id ? "bg-primary/10" : "hover:bg-muted/60"}`}
-                onClick={() => setSelectedId(s.booking.id)}
-              >
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">
-                    {s.name}
-                    {i === 0 && <span className="ml-1.5 text-[10px] uppercase text-primary font-semibold">next</span>}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {fmtD(s.booking.check_in_date)} · {s.guestsPlaced} guests placed
-                  </div>
-                </div>
-                <Button
-                  size="icon" variant="ghost" className="h-7 w-7 shrink-0"
-                  title="Download PDF"
-                  onClick={(e) => { e.stopPropagation(); download(s); }}
-                >
-                  <FileDown className="w-3.5 h-3.5" />
-                </Button>
-              </div>
+              <StayRow s={s} tag={i === 0 ? "next" : null} />
+            </li>
+          ))}
+          <li>
+            <button
+              type="button"
+              onClick={() => setPastOpen((v) => !v)}
+              className="w-full flex items-center gap-1 px-4 py-2.5 text-sm font-medium hover:bg-muted/60"
+            >
+              {pastOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              Past & current stays <span className="text-muted-foreground font-normal">({pastAndLive.length})</span>
+            </button>
+          </li>
+          {pastOpen && pastAndLive.map((s) => (
+            <li key={s.booking.id}>
+              <StayRow s={s} tag={isLive(s) ? "live" : null} />
             </li>
           ))}
         </ul>
       </section>
     </div>
   );
+
+  function StayRow({ s, tag }: { s: StayPlan; tag: "next" | "live" | null }) {
+    return (
+      <div
+        className={`flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer ${selected?.booking.id === s.booking.id ? "bg-primary/10" : "hover:bg-muted/60"}`}
+        onClick={() => setSelectedId(s.booking.id)}
+      >
+        <div className="min-w-0">
+          <div className="text-sm font-medium truncate">
+            {s.name}
+            {tag && <span className="ml-1.5 text-[10px] uppercase text-primary font-semibold">{tag}</span>}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {fmtD(s.booking.check_in_date)} · {s.guestsPlaced} guests placed
+          </div>
+        </div>
+        <Button
+          size="icon" variant="ghost" className="h-7 w-7 shrink-0"
+          title="Download PDF"
+          onClick={(e) => { e.stopPropagation(); download(s); }}
+        >
+          <FileDown className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    );
+  }
 }
 
 const Admin = () => (
