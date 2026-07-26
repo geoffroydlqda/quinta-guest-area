@@ -60,6 +60,8 @@ Toute modification de schéma passe par un fichier SQL dans `supabase/migrations
 
 `admin-claim-booking`, `admin-delete-guest`, `admin-generate-invite-token`, `admin-guest-detail`, `admin-list-data`, `claim-booking`, `create-booking`, `ensure-guest-profile`, `notify-transport-pricing`, `qa-tests`, `send-guest-summary`, `payment-reminders`, `send-invite-email`, `send-room-setup-emails`, `sync-google-sheets`, `sync-transportation-calendar`.
 
+`sync-transportation-calendar` parle directement aux API Google (service account : secrets `GOOGLE_SA_EMAIL`/`GOOGLE_SA_PRIVATE_KEY`, calendrier partagé avec l'email du SA ; Maps Routes API via `GOOGLE_MAPS_API_KEY`, optionnelle). `sync-google-sheets` appelle encore la passerelle Lovable morte (à réécrire ou retirer).
+
 ⚠️ Elles ne se déploient PAS via le push GitHub. Depuis que les connecteurs MCP Supabase/Vercel sont branchés sur la session, utiliser `mcp__Supabase__deploy_edge_function` (et `apply_migration` pour le SQL). Si une fonction est modifiée dans le repo, penser à la redéployer. Certaines ont `verify_jwt = false` dans `supabase/config.toml` (dont `payment-reminders`, appelée par le cron avec `x-cron-key`).
 
 ## Authentification
