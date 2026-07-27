@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check, ExternalLink, Pencil } from "lucide-react";
+import { Loader2, Download, RefreshCw, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check, ExternalLink, Pencil, Phone, MapPin, Globe2, ReceiptText } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,7 +82,7 @@ type Installment = {
 const SECTION_TITLES: Record<string, string> = {
   dashboard: "Dashboard",
   bookings: "Bookings",
-  users: "Users",
+  guests: "Guests",
   payments: "Payments",
   transportation: "Transportation",
   rooms: "Room setup",
@@ -171,7 +171,9 @@ const AdminContent = () => {
   
   const [createBookingOpen, setCreateBookingOpen] = useState(false);
   const { section } = useParams<{ section?: string }>();
-  const view = section && SECTION_TITLES[section] ? section : "dashboard";
+  // "users" est l'ancien nom de l'onglet Guests — on garde la redirection.
+  const normalizedSection = section === "users" ? "guests" : section;
+  const view = normalizedSection && SECTION_TITLES[normalizedSection] ? normalizedSection : "dashboard";
 
   const [installments, setInstallments] = useState<Installment[]>([]);
 
@@ -452,8 +454,8 @@ const AdminContent = () => {
           />
         )}
 
-        {view === "users" && (
-          <UsersView bookings={data.bookings || []} onOpen={navigateToBooking} />
+        {view === "guests" && (
+          <GuestsView bookings={data.bookings || []} installments={installments} onOpen={navigateToBooking} />
         )}
 
         {view === "bookings" && (
@@ -992,22 +994,79 @@ function DashboardView({
   );
 }
 
-// ---------------------------------------------------------------- Users
-function UsersView({ bookings, onOpen }: { bookings: BookingRow[]; onOpen: (bookingId: string) => void }) {
-  const [search, setSearch] = useState("");
+// ---------------------------------------------------------------- Guests
+// Fiche client façon "PMS" : liste à gauche, profil + historique à droite.
+// Coordonnées (phone, tax number, address, nationality) stockées dans
+// public.client_profiles (une ligne par email, admin only).
 
-  type UserRow = {
+type ClientProfile = {
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  tax_number: string | null;
+  address: string | null;
+  nationality: string | null;
+};
+
+const EMPTY_CLIENT: Omit<ClientProfile, "email"> = {
+  first_name: null, last_name: null, phone: null, tax_number: null, address: null, nationality: null,
+};
+
+function GuestsView({ bookings, installments, onOpen }: {
+  bookings: BookingRow[];
+  installments: Installment[];
+  onOpen: (bookingId: string) => void;
+}) {
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<Map<string, ClientProfile>>(new Map());
+  const [form, setForm] = useState<Omit<ClientProfile, "email">>(EMPTY_CLIENT);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    supabase.from("client_profiles").select("email,first_name,last_name,phone,tax_number,address,nationality")
+      .then(({ data, error }) => {
+        if (!error && data) setProfiles(new Map((data as ClientProfile[]).map((p) => [p.email.toLowerCase(), p])));
+      });
+  }, []);
+
+  type SpendSplit = { rental: number; catering: number; extra: number; total: number };
+  const splitFor = (instList: Installment[]): SpendSplit => {
+    const s: SpendSplit = { rental: 0, catering: 0, extra: 0, total: 0 };
+    for (const i of instList) {
+      const amt = Number(i.amount_due || 0);
+      const cat = i.category ?? "rental";
+      // Les discounts (montants négatifs) sont aujourd'hui tous liés au rental.
+      if (cat === "rental" || cat === "discount") s.rental += amt;
+      else if (cat === "catering") s.catering += amt;
+      else s.extra += amt;
+      s.total += amt;
+    }
+    return s;
+  };
+
+  type GuestRow = {
     key: string;
     name: string;
     email: string;
-    bookingsCount: number;
-    lastCheckIn: string | null;
+    bookings: BookingRow[];
+    spend: SpendSplit;
     nextCheckIn: string | null;
-    totalSpend: number;
-    latestBookingId: string;
   };
 
-  const rows: UserRow[] = useMemo(() => {
+  const instByBooking = useMemo(() => {
+    const m = new Map<string, Installment[]>();
+    for (const i of installments) {
+      const arr = m.get(i.booking_id) || [];
+      arr.push(i);
+      m.set(i.booking_id, arr);
+    }
+    return m;
+  }, [installments]);
+
+  const rows: GuestRow[] = useMemo(() => {
     const todayIso = new Date().toISOString().slice(0, 10);
     const byEmail = new Map<string, BookingRow[]>();
     for (const b of bookings) {
@@ -1016,64 +1075,229 @@ function UsersView({ bookings, onOpen }: { bookings: BookingRow[]; onOpen: (book
       arr.push(b);
       byEmail.set(key, arr);
     }
-    const list: UserRow[] = [];
+    const list: GuestRow[] = [];
     for (const [key, bs] of byEmail) {
       const sorted = [...bs].sort((a, b) => (a.check_in_date || "").localeCompare(b.check_in_date || ""));
-      const past = sorted.filter((b) => b.check_in_date && b.check_in_date <= todayIso);
       const future = sorted.filter((b) => b.check_in_date && b.check_in_date > todayIso);
       const ref = sorted[sorted.length - 1];
+      const cp = profiles.get(key);
+      const name =
+        `${cp?.first_name ?? ref.first_name ?? ""} ${cp?.last_name ?? ref.last_name ?? ""}`.trim() ||
+        ref.retreat_name || ref.email;
       list.push({
         key,
-        name: `${ref.first_name ?? ""} ${ref.last_name ?? ""}`.trim() || ref.retreat_name || ref.email,
+        name,
         email: ref.email,
-        bookingsCount: bs.length,
-        lastCheckIn: past.length ? past[past.length - 1].check_in_date : null,
+        bookings: sorted,
+        spend: splitFor(sorted.flatMap((b) => instByBooking.get(b.id) || [])),
         nextCheckIn: future.length ? future[0].check_in_date : null,
-        totalSpend: bs.reduce((s, b) => s + Number(b.total_rental_price || 0), 0),
-        latestBookingId: (future[0] ?? ref).id,
       });
     }
     const s = search.toLowerCase().trim();
     return list
       .filter((r) => !s || r.name.toLowerCase().includes(s) || r.email.toLowerCase().includes(s))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [bookings, search]);
+  }, [bookings, search, profiles, instByBooking]);
+
+  const current = rows.find((r) => r.key === selected) ?? null;
+
+  // Recharge le formulaire quand on change de client sélectionné.
+  useEffect(() => {
+    if (!current) return;
+    const cp = profiles.get(current.key);
+    setForm({
+      first_name: cp?.first_name ?? current.bookings[current.bookings.length - 1].first_name,
+      last_name: cp?.last_name ?? current.bookings[current.bookings.length - 1].last_name,
+      phone: cp?.phone ?? null,
+      tax_number: cp?.tax_number ?? null,
+      address: cp?.address ?? null,
+      nationality: cp?.nationality ?? null,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, profiles]);
+
+  const saveProfile = async () => {
+    if (!current) return;
+    setSaving(true);
+    const payload = { email: current.key, ...form };
+    const { error } = await supabase.from("client_profiles").upsert(payload, { onConflict: "email" });
+    setSaving(false);
+    if (error) {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+    } else {
+      setProfiles((m) => new Map(m).set(current.key, payload as ClientProfile));
+      toast({ title: "Guest profile saved" });
+    }
+  };
+
+  const initials = (name: string) =>
+    name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
+
+  const nightsOf = (b: BookingRow) => {
+    if (!b.check_in_date || !b.check_out_date) return null;
+    const n = Math.round((new Date(b.check_out_date).getTime() - new Date(b.check_in_date).getTime()) / 86400000);
+    return n > 0 ? n : null;
+  };
+
+  const field = (label: string, key: keyof typeof form, placeholder: string) => (
+    <div>
+      <label className="block text-xs text-muted-foreground mb-1">{label}</label>
+      <Input
+        value={form[key] ?? ""}
+        placeholder={placeholder}
+        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value || null }))}
+        className="h-9"
+      />
+    </div>
+  );
+
+  const CAT_STYLE = {
+    rental: { label: "Rental", dot: "#57761f" },
+    catering: { label: "Catering", dot: "#2a78d6" },
+    extra: { label: "Extras", dot: "#c2622f" },
+  } as const;
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <Input placeholder="Search name or email" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
-        <span className="text-sm text-muted-foreground">{rows.length} client{rows.length === 1 ? "" : "s"}</span>
+    <div className="grid gap-4 lg:grid-cols-[300px,1fr] items-start">
+      {/* -------- Liste des guests -------- */}
+      <div className="border border-border rounded-xl bg-card overflow-hidden">
+        <div className="p-3 border-b border-border">
+          <Input placeholder="Search name or email" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <p className="mt-1.5 text-xs text-muted-foreground">{rows.length} guest{rows.length === 1 ? "" : "s"}</p>
+        </div>
+        <ul className="divide-y divide-border max-h-[70vh] overflow-y-auto">
+          {rows.map((r) => (
+            <li key={r.key}>
+              <button
+                type="button"
+                onClick={() => setSelected(r.key)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/60 ${r.key === selected ? "bg-primary/10 border-l-2 border-primary" : "border-l-2 border-transparent"}`}
+              >
+                <span className="shrink-0 w-9 h-9 rounded-full bg-primary/15 text-primary text-xs font-semibold flex items-center justify-center">
+                  {initials(r.name)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium truncate">{r.name}</span>
+                  <span className="block text-xs text-muted-foreground truncate">{r.email}</span>
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground text-right">
+                  <span className="block font-medium text-foreground">{fmtMoney(r.spend.total)}</span>
+                  <span>{r.bookings.length} booking{r.bookings.length === 1 ? "" : "s"}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+          {rows.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted-foreground italic">No guests found.</li>}
+        </ul>
       </div>
-      <div className="border border-border rounded-xl bg-card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
-              <th className="px-4 py-2.5 font-medium">Name</th>
-              <th className="px-4 py-2.5 font-medium">Email</th>
-              <th className="px-4 py-2.5 font-medium">Bookings</th>
-              <th className="px-4 py-2.5 font-medium">Last stay</th>
-              <th className="px-4 py-2.5 font-medium">Next stay</th>
-              <th className="px-4 py-2.5 font-medium text-right">Total rental</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.map((r) => (
-              <tr key={r.key} className="hover:bg-muted/50 cursor-pointer" onClick={() => onOpen(r.latestBookingId)}>
-                <td className="px-4 py-2.5 font-medium">{r.name}</td>
-                <td className="px-4 py-2.5 text-muted-foreground">{r.email}</td>
-                <td className="px-4 py-2.5">{r.bookingsCount}</td>
-                <td className="px-4 py-2.5">{r.lastCheckIn ?? "—"}</td>
-                <td className="px-4 py-2.5">{r.nextCheckIn ?? "—"}</td>
-                <td className="px-4 py-2.5 text-right">{fmtMoney(r.totalSpend)}</td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-muted-foreground italic">No clients found.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+
+      {/* -------- Fiche du guest sélectionné -------- */}
+      {!current ? (
+        <div className="border border-dashed border-border rounded-xl bg-card/50 p-10 text-center text-sm text-muted-foreground">
+          Select a guest on the left to see their profile and booking history.
+        </div>
+      ) : (
+        <div className="space-y-4 min-w-0">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr),260px]">
+            {/* Profil */}
+            <section className="border border-border rounded-xl bg-card p-5">
+              <div className="flex items-center gap-4">
+                <span className="w-14 h-14 rounded-full bg-primary/15 text-primary text-lg font-semibold flex items-center justify-center">
+                  {initials(current.name)}
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-semibold leading-tight truncate">{current.name}</h2>
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5 text-sm text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" />{current.email}</span>
+                    {form.phone && <span className="inline-flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" />{form.phone}</span>}
+                    {form.nationality && <span className="inline-flex items-center gap-1.5"><Globe2 className="w-3.5 h-3.5" />{form.nationality}</span>}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-border">
+                <h3 className="text-sm font-medium mb-3">Personal information</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {field("First name", "first_name", "First name")}
+                  {field("Last name", "last_name", "Last name")}
+                  {field("Phone number", "phone", "+351 …")}
+                  {field("Tax number", "tax_number", "VAT / NIF")}
+                  {field("Nationality", "nationality", "e.g. Belgian")}
+                  {field("Address", "address", "Street, city, country")}
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button size="sm" onClick={saveProfile} disabled={saving}>
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save profile"}
+                  </Button>
+                </div>
+              </div>
+            </section>
+
+            {/* Total dépensé, par catégorie */}
+            <section className="border border-border rounded-xl bg-card p-5">
+              <h3 className="text-sm font-medium mb-1 flex items-center gap-1.5"><ReceiptText className="w-4 h-4 text-muted-foreground" />Total spent</h3>
+              <p className="text-2xl font-semibold">{fmtMoney(current.spend.total)}</p>
+              <p className="text-xs text-muted-foreground mb-3">incl. VAT · discounts deducted</p>
+              <ul className="space-y-2">
+                {(Object.keys(CAT_STYLE) as Array<keyof typeof CAT_STYLE>).map((k) => (
+                  <li key={k} className="flex items-center justify-between text-sm">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: CAT_STYLE[k].dot }} />
+                      {CAT_STYLE[k].label}
+                    </span>
+                    <span className="font-medium">{fmtMoney(current.spend[k])}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </div>
+
+          {/* Historique des bookings */}
+          <section className="border border-border rounded-xl bg-card overflow-hidden">
+            <div className="px-4 py-3 border-b border-border font-medium text-sm">Booking history</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
+                    <th className="px-4 py-2.5 font-medium">Event</th>
+                    <th className="px-4 py-2.5 font-medium">Check-in</th>
+                    <th className="px-4 py-2.5 font-medium">Check-out</th>
+                    <th className="px-4 py-2.5 font-medium">Nights</th>
+                    <th className="px-4 py-2.5 font-medium">Guests</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Rental</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Catering</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Extras</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {[...current.bookings].reverse().map((b) => {
+                    const sp = splitFor(instByBooking.get(b.id) || []);
+                    const nights = nightsOf(b);
+                    return (
+                      <tr key={b.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => onOpen(b.id)}>
+                        <td className="px-4 py-2.5">
+                          <span className="font-medium">{b.retreat_name}</span>
+                          <span className="ml-2 text-[10px] uppercase px-1.5 py-0.5 rounded-full border border-border bg-muted text-muted-foreground">
+                            {EVENT_TYPE_LABEL[b.event_type ?? "retreat"] ?? "Retreat"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5">{b.check_in_date ?? "—"}</td>
+                        <td className="px-4 py-2.5">{b.check_out_date ?? "—"}</td>
+                        <td className="px-4 py-2.5">{nights ?? "—"}</td>
+                        <td className="px-4 py-2.5">{b.guest_count || "—"}</td>
+                        <td className="px-4 py-2.5 text-right">{sp.rental ? fmtMoney(sp.rental) : "—"}</td>
+                        <td className="px-4 py-2.5 text-right">{sp.catering ? fmtMoney(sp.catering) : "—"}</td>
+                        <td className="px-4 py-2.5 text-right">{sp.extra ? fmtMoney(sp.extra) : "—"}</td>
+                        <td className="px-4 py-2.5 text-right font-medium">{sp.total ? fmtMoney(sp.total) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

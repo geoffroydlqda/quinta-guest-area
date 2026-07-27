@@ -13,7 +13,7 @@ import {
 const NAV = [
   { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/bookings", label: "Bookings", icon: CalendarRange },
-  { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/guests", label: "Guests", icon: Users },
   { to: "/admin/payments", label: "Payments", icon: Wallet },
   { to: "/admin/transportation", label: "Transportation", icon: Car },
   { to: "/admin/rooms", label: "Room setup", icon: BedDouble },

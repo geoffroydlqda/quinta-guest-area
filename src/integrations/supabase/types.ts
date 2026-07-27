@@ -191,6 +191,48 @@ export type Database = {
         }
         Relationships: []
       }
+      client_profiles: {
+        Row: {
+          address: string | null
+          created_at: string
+          email: string
+          first_name: string | null
+          id: string
+          last_name: string | null
+          nationality: string | null
+          notes: string | null
+          phone: string | null
+          tax_number: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          email: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          nationality?: string | null
+          notes?: string | null
+          phone?: string | null
+          tax_number?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          email?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          nationality?: string | null
+          notes?: string | null
+          phone?: string | null
+          tax_number?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       deleted_entries_log: {
         Row: {
           also_deleted_auth_user: boolean
