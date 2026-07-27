@@ -107,6 +107,7 @@ export type Database = {
           edit_lock_override: boolean
           event_type: string
           catering_expected: boolean
+          client_id: string | null
           check_in_date: string | null
           check_out_date: string | null
           created_at: string
@@ -136,6 +137,7 @@ export type Database = {
           edit_lock_override?: boolean
           event_type?: string
           catering_expected?: boolean
+          client_id?: string | null
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string
@@ -165,6 +167,7 @@ export type Database = {
           edit_lock_override?: boolean
           event_type?: string
           catering_expected?: boolean
+          client_id?: string | null
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string

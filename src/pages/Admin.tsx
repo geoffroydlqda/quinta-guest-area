@@ -65,6 +65,7 @@ type BookingRow = {
   total_rental_price?: number | null;
   event_type?: string | null;
   catering_expected?: boolean | null;
+  client_id?: string | null;
 };
 
 const EVENT_TYPE_LABEL: Record<string, string> = {
@@ -455,7 +456,7 @@ const AdminContent = () => {
         )}
 
         {view === "guests" && (
-          <GuestsView bookings={data.bookings || []} installments={installments} onOpen={navigateToBooking} />
+          <GuestsView bookings={data.bookings || []} installments={installments} onOpen={navigateToBooking} onReload={() => load({ silent: true })} />
         )}
 
         {view === "bookings" && (
@@ -996,10 +997,12 @@ function DashboardView({
 
 // ---------------------------------------------------------------- Guests
 // Fiche client façon "PMS" : liste à gauche, profil + historique à droite.
-// Coordonnées (phone, tax number, address, nationality) stockées dans
-// public.client_profiles (une ligne par email, admin only).
+// Un guest = une fiche client_profiles ; chaque booking pointe vers elle via
+// bookings.client_id (fallback : regroupement par email pour les bookings
+// pas encore rattachés). Merge = re-pointer les bookings vers une autre fiche.
 
 type ClientProfile = {
+  id: string;
   email: string;
   first_name: string | null;
   last_name: string | null;
@@ -1009,28 +1012,35 @@ type ClientProfile = {
   nationality: string | null;
 };
 
-const EMPTY_CLIENT: Omit<ClientProfile, "email"> = {
+type ClientForm = Omit<ClientProfile, "id" | "email">;
+
+const EMPTY_CLIENT: ClientForm = {
   first_name: null, last_name: null, phone: null, tax_number: null, address: null, nationality: null,
 };
 
-function GuestsView({ bookings, installments, onOpen }: {
+function GuestsView({ bookings, installments, onOpen, onReload }: {
   bookings: BookingRow[];
   installments: Installment[];
   onOpen: (bookingId: string) => void;
+  onReload: () => Promise<void>;
 }) {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [profiles, setProfiles] = useState<Map<string, ClientProfile>>(new Map());
-  const [form, setForm] = useState<Omit<ClientProfile, "email">>(EMPTY_CLIENT);
+  const [profilesArr, setProfilesArr] = useState<ClientProfile[]>([]);
+  const [form, setForm] = useState<ClientForm>(EMPTY_CLIENT);
   const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    supabase.from("client_profiles").select("email,first_name,last_name,phone,tax_number,address,nationality")
-      .then(({ data, error }) => {
-        if (!error && data) setProfiles(new Map((data as ClientProfile[]).map((p) => [p.email.toLowerCase(), p])));
-      });
-  }, []);
+  const fetchProfiles = async () => {
+    const { data, error } = await supabase.from("client_profiles")
+      .select("id,email,first_name,last_name,phone,tax_number,address,nationality");
+    if (!error && data) setProfilesArr(data as ClientProfile[]);
+  };
+  useEffect(() => { fetchProfiles(); }, []);
+
+  const profileById = useMemo(() => new Map(profilesArr.map((p) => [p.id, p])), [profilesArr]);
+  const profileByEmail = useMemo(() => new Map(profilesArr.map((p) => [p.email.toLowerCase(), p])), [profilesArr]);
 
   type SpendSplit = { rental: number; catering: number; extra: number; total: number };
   const splitFor = (instList: Installment[]): SpendSplit => {
@@ -1047,15 +1057,6 @@ function GuestsView({ bookings, installments, onOpen }: {
     return s;
   };
 
-  type GuestRow = {
-    key: string;
-    name: string;
-    email: string;
-    bookings: BookingRow[];
-    spend: SpendSplit;
-    nextCheckIn: string | null;
-  };
-
   const instByBooking = useMemo(() => {
     const m = new Map<string, Installment[]>();
     for (const i of installments) {
@@ -1066,67 +1067,149 @@ function GuestsView({ bookings, installments, onOpen }: {
     return m;
   }, [installments]);
 
+  type GuestRow = {
+    key: string;                    // client_id, sinon email (bookings non rattachés)
+    profile: ClientProfile | null;
+    name: string;
+    email: string;
+    bookings: BookingRow[];
+    spend: SpendSplit;
+  };
+
   const rows: GuestRow[] = useMemo(() => {
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const byEmail = new Map<string, BookingRow[]>();
+    const byKey = new Map<string, BookingRow[]>();
     for (const b of bookings) {
-      const key = (b.email || "").toLowerCase();
-      const arr = byEmail.get(key) || [];
+      const key = b.client_id || (b.email || "").toLowerCase();
+      const arr = byKey.get(key) || [];
       arr.push(b);
-      byEmail.set(key, arr);
+      byKey.set(key, arr);
     }
     const list: GuestRow[] = [];
-    for (const [key, bs] of byEmail) {
+    for (const [key, bs] of byKey) {
       const sorted = [...bs].sort((a, b) => (a.check_in_date || "").localeCompare(b.check_in_date || ""));
-      const future = sorted.filter((b) => b.check_in_date && b.check_in_date > todayIso);
       const ref = sorted[sorted.length - 1];
-      const cp = profiles.get(key);
+      const profile = profileById.get(key) ?? profileByEmail.get((ref.email || "").toLowerCase()) ?? null;
       const name =
-        `${cp?.first_name ?? ref.first_name ?? ""} ${cp?.last_name ?? ref.last_name ?? ""}`.trim() ||
+        `${profile?.first_name ?? ref.first_name ?? ""} ${profile?.last_name ?? ref.last_name ?? ""}`.trim() ||
         ref.retreat_name || ref.email;
       list.push({
         key,
+        profile,
         name,
-        email: ref.email,
+        email: profile?.email ?? ref.email,
         bookings: sorted,
         spend: splitFor(sorted.flatMap((b) => instByBooking.get(b.id) || [])),
-        nextCheckIn: future.length ? future[0].check_in_date : null,
       });
     }
     const s = search.toLowerCase().trim();
     return list
       .filter((r) => !s || r.name.toLowerCase().includes(s) || r.email.toLowerCase().includes(s))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [bookings, search, profiles, instByBooking]);
+  }, [bookings, search, profileById, profileByEmail, instByBooking]);
 
   const current = rows.find((r) => r.key === selected) ?? null;
 
   // Recharge le formulaire quand on change de client sélectionné.
   useEffect(() => {
     if (!current) return;
-    const cp = profiles.get(current.key);
+    const ref = current.bookings[current.bookings.length - 1];
     setForm({
-      first_name: cp?.first_name ?? current.bookings[current.bookings.length - 1].first_name,
-      last_name: cp?.last_name ?? current.bookings[current.bookings.length - 1].last_name,
-      phone: cp?.phone ?? null,
-      tax_number: cp?.tax_number ?? null,
-      address: cp?.address ?? null,
-      nationality: cp?.nationality ?? null,
+      first_name: current.profile?.first_name ?? ref.first_name,
+      last_name: current.profile?.last_name ?? ref.last_name,
+      phone: current.profile?.phone ?? null,
+      tax_number: current.profile?.tax_number ?? null,
+      address: current.profile?.address ?? null,
+      nationality: current.profile?.nationality ?? null,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, profiles]);
+  }, [selected, profilesArr]);
+
+  const linkBookings = async (clientId: string, bookingIds: string[]) => {
+    if (!bookingIds.length) return;
+    const { error } = await supabase.from("bookings").update({ client_id: clientId }).in("id", bookingIds);
+    if (error) throw error;
+  };
 
   const saveProfile = async () => {
     if (!current) return;
     setSaving(true);
-    const payload = { email: current.key, ...form };
-    const { error } = await supabase.from("client_profiles").upsert(payload, { onConflict: "email" });
-    setSaving(false);
-    if (error) {
-      toast({ title: "Save failed", description: error.message, variant: "destructive" });
-    } else {
-      setProfiles((m) => new Map(m).set(current.key, payload as ClientProfile));
+    try {
+      if (current.profile) {
+        const { error } = await supabase.from("client_profiles")
+          .update({ ...form }).eq("id", current.profile.id);
+        if (error) throw error;
+      } else {
+        const email = (current.bookings[0].email || "").toLowerCase();
+        const { data, error } = await supabase.from("client_profiles")
+          .upsert({ email, ...form }, { onConflict: "email" }).select("id").single();
+        if (error) throw error;
+        await linkBookings(data.id, current.bookings.filter((b) => !b.client_id).map((b) => b.id));
+        await onReload();
+      }
+      await fetchProfiles();
       toast({ title: "Guest profile saved" });
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const mergeInto = async (targetKey: string) => {
+    const target = rows.find((r) => r.key === targetKey);
+    if (!current || !target || target.key === current.key) return;
+    if (!target.profile) {
+      toast({ title: "Cannot merge", description: "Target guest has no profile yet — open it and save its profile first.", variant: "destructive" });
+      return;
+    }
+    const ok = window.confirm(
+      `Merge "${current.name}" into "${target.name}"?\n\n` +
+      `${current.bookings.length} booking${current.bookings.length === 1 ? "" : "s"} will be moved to ${target.name}. ` +
+      `The duplicate guest entry will disappear. Nothing is deleted from the bookings themselves.`
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await linkBookings(target.profile.id, current.bookings.map((b) => b.id));
+      if (current.profile && current.profile.id !== target.profile.id) {
+        await supabase.from("client_profiles").delete().eq("id", current.profile.id);
+      }
+      await Promise.all([fetchProfiles(), onReload()]);
+      setSelected(target.key);
+      toast({ title: "Guests merged", description: `${current.name} → ${target.name}` });
+    } catch (e: any) {
+      toast({ title: "Merge failed", description: e.message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteGuest = async () => {
+    if (!current) return;
+    const n = current.bookings.length;
+    const ok = window.confirm(
+      `Delete guest "${current.name}"?\n\n` +
+      `This permanently deletes their ${n} booking${n === 1 ? "" : "s"} (${current.bookings.map((b) => b.retreat_name).join(", ")}) ` +
+      `including room setups, food plans, transportation and payment installments. This cannot be undone.\n\n` +
+      `If this guest is a duplicate, use "Merge into…" instead.`
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      for (const b of current.bookings) {
+        const res = await supabase.functions.invoke("admin-delete-guest", { body: { booking_id: b.id } });
+        if (res.error) throw new Error(`${b.retreat_name}: ${res.error.message}`);
+      }
+      if (current.profile) {
+        await supabase.from("client_profiles").delete().eq("id", current.profile.id);
+      }
+      setSelected(null);
+      await Promise.all([fetchProfiles(), onReload()]);
+      toast({ title: "Guest deleted", description: current.name });
+    } catch (e: any) {
+      toast({ title: "Delete failed", description: e.message, variant: "destructive" });
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -1139,7 +1222,7 @@ function GuestsView({ bookings, installments, onOpen }: {
     return n > 0 ? n : null;
   };
 
-  const field = (label: string, key: keyof typeof form, placeholder: string) => (
+  const field = (label: string, key: keyof ClientForm, placeholder: string) => (
     <div>
       <label className="block text-xs text-muted-foreground mb-1">{label}</label>
       <Input
@@ -1201,17 +1284,36 @@ function GuestsView({ bookings, installments, onOpen }: {
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr),260px]">
             {/* Profil */}
             <section className="border border-border rounded-xl bg-card p-5">
-              <div className="flex items-center gap-4">
-                <span className="w-14 h-14 rounded-full bg-primary/15 text-primary text-lg font-semibold flex items-center justify-center">
-                  {initials(current.name)}
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-semibold leading-tight truncate">{current.name}</h2>
-                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5 text-sm text-muted-foreground">
-                    <span className="inline-flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" />{current.email}</span>
-                    {form.phone && <span className="inline-flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" />{form.phone}</span>}
-                    {form.nationality && <span className="inline-flex items-center gap-1.5"><Globe2 className="w-3.5 h-3.5" />{form.nationality}</span>}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-4 min-w-0">
+                  <span className="w-14 h-14 shrink-0 rounded-full bg-primary/15 text-primary text-lg font-semibold flex items-center justify-center">
+                    {initials(current.name)}
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold leading-tight truncate">{current.name}</h2>
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5 text-sm text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" />{current.email}</span>
+                      {form.phone && <span className="inline-flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" />{form.phone}</span>}
+                      {form.nationality && <span className="inline-flex items-center gap-1.5"><Globe2 className="w-3.5 h-3.5" />{form.nationality}</span>}
+                    </div>
                   </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <select
+                    className="border border-border rounded-md px-2 py-1.5 text-xs bg-background text-muted-foreground max-w-[160px]"
+                    value=""
+                    disabled={busy}
+                    onChange={(e) => { if (e.target.value) mergeInto(e.target.value); e.target.value = ""; }}
+                    title="Move all bookings of this guest to another guest"
+                  >
+                    <option value="">Merge into…</option>
+                    {rows.filter((r) => r.key !== current.key).map((r) => (
+                      <option key={r.key} value={r.key}>{r.name}</option>
+                    ))}
+                  </select>
+                  <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={deleteGuest} disabled={busy} title="Delete guest and all their bookings">
+                    {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  </Button>
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t border-border">
