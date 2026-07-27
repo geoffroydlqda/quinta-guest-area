@@ -37,7 +37,8 @@ Interface utilisateur en **anglais**. Communication avec le propriétaire en **f
 
 ## Refonte admin (juillet 2026)
 
-- **Layout** : sidebar fixe (`AdminLayout`), police Inter (classe `.admin-ui`), pages routées `/admin` (Dashboard), `/admin/bookings|users|payments|transportation|food|rooms`. La guest area garde le branding typewriter.
+- **Layout** : sidebar fixe (`AdminLayout`), police Inter (classe `.admin-ui`), pages routées `/admin` (Dashboard), `/admin/bookings|guests|payments|transportation|rooms` (`/admin/users` redirige vers guests). La guest area garde le branding typewriter.
+- **Guests** (`GuestsView`) : un guest = une fiche `client_profiles` (email unique, phone/tax_number/address/nationality, RLS admin) ; chaque booking pointe vers elle via `bookings.client_id` (fallback regroupement par email). Fiche éditable, total dépensé ventilé rental/catering/extras, booking history. "Merge into…" re-pointe les bookings d'un doublon vers une autre fiche puis supprime le doublon ; Delete guest supprime les bookings (via `admin-delete-guest`, un appel par booking) puis la fiche.
 - **Dashboard** : KPI + graphiques SVG maison (`DashboardCharts`, palette olive validée par le skill dataviz), sélecteur d'année.
 - **Payments** (`PaymentsPage`) : échéancier global — remplace l'ancien Google Sheet de suivi. Une ligne par `payment_installment` : TVAC (`amount_due`) / HT (`amount_excl_vat`), statut, facture (bucket `invoices`), **`payment_link`** (lien Wise collé manuellement ; affiché en bouton "Pay now" dans les emails de rappel), marquer payé, rappel manuel.
 - **Rappels manuels** : `payment-reminders` avec `{send_installment: id}` (admin) → type `payment_manual` dans `reminder_log` (renvoyable, hors dédoublonnage). Les emails `internal+…@quintamor.com` (bookings gérés en interne) sont exclus de tout envoi automatique.
