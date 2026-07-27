@@ -8,6 +8,7 @@ export const ADMIN_EMAILS = [
   'loïs@quintamor.com',
   'lois@quintamor.com',
   '977luisferreira@gmail.com',
+  'thomasquerton@gmail.com',
 ].map(normalizeEmail);
 
 export function isAdminEmail(email?: string | null): boolean {
