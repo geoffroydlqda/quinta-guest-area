@@ -1308,7 +1308,7 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
                   >
                     <option value="">Merge into…</option>
                     {rows.filter((r) => r.key !== current.key).map((r) => (
-                      <option key={r.key} value={r.key}>{r.name}</option>
+                      <option key={r.key} value={r.key}>{r.name} — {r.email}</option>
                     ))}
                   </select>
                   <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={deleteGuest} disabled={busy} title="Delete guest and all their bookings">
