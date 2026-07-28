@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,15 +35,45 @@ const initial = {
   internal_notes: "",
 };
 
+type GuestOption = { id: string; email: string; first_name: string | null; last_name: string | null };
+
 export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
   const { toast } = useToast();
   const [form, setForm] = useState(initial);
   const [submitting, setSubmitting] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Guest d'abord : le booking se crée pour une fiche guest (client_profiles),
+  // existante ou nouvelle — évite les guests en doublon.
+  const [guests, setGuests] = useState<GuestOption[]>([]);
+  const [guestId, setGuestId] = useState<string>("new");
+
+  useEffect(() => {
+    if (!open) return;
+    supabase.from("client_profiles").select("id,email,first_name,last_name")
+      .then(({ data }) => {
+        if (data) setGuests((data as GuestOption[]).sort((a, b) =>
+          `${a.first_name ?? ""} ${a.last_name ?? ""}`.trim().localeCompare(`${b.first_name ?? ""} ${b.last_name ?? ""}`.trim())
+        ));
+      });
+  }, [open]);
+
+  const guestLabel = (g: GuestOption) =>
+    `${`${g.first_name ?? ""} ${g.last_name ?? ""}`.trim() || g.email} — ${g.email}`;
+
+  const selectGuest = (id: string) => {
+    setGuestId(id);
+    if (id === "new") {
+      setForm((f) => ({ ...f, email: "", first_name: "", last_name: "" }));
+    } else {
+      const g = guests.find((x) => x.id === id);
+      if (g) setForm((f) => ({ ...f, email: g.email, first_name: g.first_name ?? "", last_name: g.last_name ?? "" }));
+    }
+  };
 
   const reset = () => {
     setForm(initial);
+    setGuestId("new");
     setInviteUrl(null);
     setCopied(false);
   };
@@ -109,6 +139,23 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
       console.log("[create-booking] success", { booking_id: data.booking.id, invite_url: data.invite_url });
       setInviteUrl(data.invite_url ?? null);
       toast({ title: "Booking created" });
+      // Rattache le booking à sa fiche guest (existante ou créée à la volée).
+      try {
+        let clientId = guestId !== "new" ? guestId : null;
+        if (!clientId) {
+          const { data: existing } = await supabase.from("client_profiles").select("id").eq("email", payload.email).maybeSingle();
+          if (existing) clientId = existing.id;
+          else {
+            const { data: created } = await supabase.from("client_profiles")
+              .insert({ email: payload.email, first_name: payload.first_name, last_name: payload.last_name })
+              .select("id").single();
+            clientId = created?.id ?? null;
+          }
+        }
+        if (clientId) await supabase.from("bookings").update({ client_id: clientId }).eq("id", data.booking.id);
+      } catch (e) {
+        console.warn("[create-booking] client link failed", e);
+      }
       // Crée l'événement dans le calendrier Google "Events" (no-op tant que le
       // service account n'est pas configuré côté Supabase).
       supabase.functions.invoke("sync-booking-calendar", { body: { booking_id: data.booking.id } }).catch(() => {});
@@ -158,8 +205,21 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
         ) : (
           <div className="space-y-3">
             <div>
-              <Label htmlFor="retreat_name">Retreat name</Label>
-              <Input id="retreat_name" value={form.retreat_name} onChange={(e) => setForm({ ...form, retreat_name: e.target.value })} placeholder="e.g. Yoga Retreat — June" />
+              <Label htmlFor="guest_select">Guest</Label>
+              <select
+                id="guest_select"
+                value={guestId}
+                onChange={(e) => selectGuest(e.target.value)}
+                className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background h-10"
+              >
+                <option value="new">➕ New guest…</option>
+                {guests.map((g) => (
+                  <option key={g.id} value={g.id}>{guestLabel(g)}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Pick an existing guest to attach this booking to their profile, or create a new one.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -173,7 +233,21 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
             </div>
             <div>
               <Label htmlFor="email">Email *</Label>
-              <Input id="email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <Input
+                id="email"
+                type="email"
+                required
+                value={form.email}
+                disabled={guestId !== "new"}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+              {guestId !== "new" && (
+                <p className="mt-1 text-xs text-muted-foreground">From the guest's profile — edit it in the Guests tab.</p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="retreat_name">Retreat / event name</Label>
+              <Input id="retreat_name" value={form.retreat_name} onChange={(e) => setForm({ ...form, retreat_name: e.target.value })} placeholder="e.g. Yoga Retreat — June" />
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>

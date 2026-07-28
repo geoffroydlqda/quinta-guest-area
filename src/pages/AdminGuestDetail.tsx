@@ -541,6 +541,22 @@ const AdminGuestDetailContent = () => {
         {/* Guest header card */}
         <section className="bg-card rounded-2xl border border-border p-6">
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
+            <div className="sm:col-span-2">
+              <div className="text-muted-foreground">Retreat / event name</div>
+              <NameField
+                bookingId={booking?.id ?? null}
+                value={booking?.retreat_name || null}
+                placeholder="Event name"
+                field="retreat_name"
+                onSaved={(v) => {
+                  setData((d) => d ? {
+                    ...d,
+                    booking: d.booking ? { ...d.booking, retreat_name: v ?? "" } : d.booking,
+                  } : d);
+                  if (booking) supabase.functions.invoke("sync-booking-calendar", { body: { booking_id: booking.id } }).catch(() => {});
+                }}
+              />
+            </div>
             <div>
               <div className="text-muted-foreground">First name</div>
               <NameField
@@ -573,7 +589,17 @@ const AdminGuestDetailContent = () => {
             </div>
             <div>
               <div className="text-muted-foreground">Email</div>
-              <div className="font-medium break-all">{email || "—"}</div>
+              <BookingEmailField
+                booking={booking}
+                display={email}
+                onSaved={(newEmail) => {
+                  setData((d) => d ? {
+                    ...d,
+                    booking: d.booking ? { ...d.booking, email: newEmail } : d.booking,
+                    profile: d.profile ? { ...d.profile, email: newEmail } : d.profile,
+                  } : d);
+                }}
+              />
             </div>
             <div>
               <div className="text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> Guests</div>
@@ -2074,11 +2100,13 @@ function NameField({
   bookingId,
   value,
   placeholder,
+  field,
   onSaved,
 }: {
   bookingId: string | null;
   value: string | null;
   placeholder: string;
+  field?: "first_name" | "last_name" | "retreat_name";
   onSaved: (next: string | null) => void;
 }) {
   const { toast } = useToast();
@@ -2112,8 +2140,9 @@ function NameField({
       return;
     }
     setSaving(true);
-    const patch: Record<string, string | null> =
-      placeholder.toLowerCase().includes("first")
+    const patch: Record<string, string | null> = field
+      ? { [field]: next }
+      : placeholder.toLowerCase().includes("first")
         ? { first_name: next }
         : { last_name: next };
     const { error } = await supabase.from("bookings").update(patch).eq("id", bookingId);
@@ -2161,6 +2190,99 @@ function NameField({
     >
       <span className="font-medium">{value || "—"}</span>
       <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+    </button>
+  );
+}
+
+// Email du booking, éditable depuis la fiche. À la sauvegarde : met à jour
+// bookings.email et rattache le booking à la fiche guest correspondant au
+// nouvel email (créée au besoin) — cohérent avec l'onglet Guests.
+function BookingEmailField({
+  booking,
+  display,
+  onSaved,
+}: {
+  booking: { id: string; email: string; first_name: string | null; last_name: string | null } | null;
+  display: string;
+  onSaved: (newEmail: string) => void;
+}) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(display);
+  const [saving, setSaving] = useState(false);
+
+  if (!booking) return <div className="font-medium break-all">{display || "—"}</div>;
+
+  const save = async () => {
+    const newEmail = draft.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      toast({ title: "Invalid email", variant: "destructive" });
+      return;
+    }
+    if (newEmail === (booking.email || "").toLowerCase()) { setEditing(false); return; }
+    if (!window.confirm(`Change this booking's email to ${newEmail}?\n\nGuest-area invitations and payment reminders will go there.`)) return;
+    setSaving(true);
+    try {
+      // Fiche guest du nouvel email : réutilisée si elle existe, créée sinon.
+      let clientId: string | null = null;
+      const { data: existing } = await supabase.from("client_profiles").select("id").eq("email", newEmail).maybeSingle();
+      if (existing) {
+        clientId = existing.id;
+      } else {
+        const { data: created, error: insErr } = await supabase.from("client_profiles")
+          .insert({ email: newEmail, first_name: booking.first_name, last_name: booking.last_name })
+          .select("id").single();
+        if (insErr) throw insErr;
+        clientId = created.id;
+      }
+      const { error } = await supabase.from("bookings")
+        .update({ email: newEmail, client_id: clientId })
+        .eq("id", booking.id);
+      if (error) throw error;
+      onSaved(newEmail);
+      setEditing(false);
+      toast({ title: "Email updated" });
+    } catch (e: any) {
+      toast({ title: "Could not save", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <Input
+          autoFocus
+          type="email"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); save(); }
+            else if (e.key === "Escape") { e.preventDefault(); setDraft(display); setEditing(false); }
+          }}
+          disabled={saving}
+          className="h-8"
+        />
+        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={save} disabled={saving} aria-label="Save">
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+        </Button>
+        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setDraft(display); setEditing(false); }} disabled={saving} aria-label="Cancel">
+          <X className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => { setDraft(display); setEditing(true); }}
+      className="group inline-flex items-center gap-2 text-left"
+      title="Click to edit"
+    >
+      <span className="font-medium break-all">{display || "—"}</span>
+      <Pencil className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" />
     </button>
   );
 }
