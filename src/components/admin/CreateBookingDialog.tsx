@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Copy, Check } from "lucide-react";
+import { Loader2, Copy, Check, Plus, X, Search } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -47,6 +47,8 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
   // existante ou nouvelle — évite les guests en doublon.
   const [guests, setGuests] = useState<GuestOption[]>([]);
   const [guestId, setGuestId] = useState<string>("new");
+  const [guestQuery, setGuestQuery] = useState("");
+  const [guestListOpen, setGuestListOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -61,19 +63,31 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
   const guestLabel = (g: GuestOption) =>
     `${`${g.first_name ?? ""} ${g.last_name ?? ""}`.trim() || g.email} — ${g.email}`;
 
-  const selectGuest = (id: string) => {
-    setGuestId(id);
-    if (id === "new") {
-      setForm((f) => ({ ...f, email: "", first_name: "", last_name: "" }));
-    } else {
-      const g = guests.find((x) => x.id === id);
-      if (g) setForm((f) => ({ ...f, email: g.email, first_name: g.first_name ?? "", last_name: g.last_name ?? "" }));
-    }
+  const selectGuest = (g: GuestOption) => {
+    setGuestId(g.id);
+    setGuestQuery(guestLabel(g));
+    setGuestListOpen(false);
+    setForm((f) => ({ ...f, email: g.email, first_name: g.first_name ?? "", last_name: g.last_name ?? "" }));
   };
+
+  const newGuestMode = () => {
+    setGuestId("new");
+    setGuestQuery("");
+    setGuestListOpen(false);
+    setForm((f) => ({ ...f, email: "", first_name: "", last_name: "" }));
+  };
+
+  const filteredGuests = guests.filter((g) => {
+    const q = guestQuery.toLowerCase().trim();
+    if (!q) return true;
+    return guestLabel(g).toLowerCase().includes(q);
+  }).slice(0, 8);
 
   const reset = () => {
     setForm(initial);
     setGuestId("new");
+    setGuestQuery("");
+    setGuestListOpen(false);
     setInviteUrl(null);
     setCopied(false);
   };
@@ -205,20 +219,67 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
         ) : (
           <div className="space-y-3">
             <div>
-              <Label htmlFor="guest_select">Guest</Label>
-              <select
-                id="guest_select"
-                value={guestId}
-                onChange={(e) => selectGuest(e.target.value)}
-                className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background h-10"
-              >
-                <option value="new">➕ New guest…</option>
-                {guests.map((g) => (
-                  <option key={g.id} value={g.id}>{guestLabel(g)}</option>
-                ))}
-              </select>
+              <Label htmlFor="guest_search">Guest</Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    id="guest_search"
+                    value={guestQuery}
+                    placeholder="Search a guest by name or email…"
+                    className="pl-8 pr-8"
+                    autoComplete="off"
+                    onFocus={() => setGuestListOpen(true)}
+                    onBlur={() => setTimeout(() => setGuestListOpen(false), 150)}
+                    onChange={(e) => {
+                      setGuestQuery(e.target.value);
+                      setGuestListOpen(true);
+                      if (guestId !== "new") newGuestMode();
+                      setGuestQuery(e.target.value);
+                    }}
+                  />
+                  {guestId !== "new" && (
+                    <button
+                      type="button"
+                      onClick={newGuestMode}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      aria-label="Clear selected guest"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                  {guestListOpen && filteredGuests.length > 0 && (
+                    <ul className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-md border border-border bg-background shadow-md">
+                      {filteredGuests.map((g) => (
+                        <li key={g.id}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => { e.preventDefault(); selectGuest(g); }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                          >
+                            <span className="font-medium">{`${g.first_name ?? ""} ${g.last_name ?? ""}`.trim() || g.email}</span>
+                            <span className="text-muted-foreground"> — {g.email}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={newGuestMode}
+                  title="Create a new guest"
+                  className={guestId === "new" ? "border-primary text-primary" : ""}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Pick an existing guest to attach this booking to their profile, or create a new one.
+                {guestId !== "new"
+                  ? "Booking will be attached to this guest's profile."
+                  : "New guest — fill in their name and email below."}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
