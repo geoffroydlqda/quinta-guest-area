@@ -584,6 +584,36 @@ const AdminGuestDetailContent = () => {
               <div className="font-medium">{fmtDate(checkIn)} → {fmtDate(checkOut)}</div>
             </div>
             <div>
+              <div className="text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Check-in · check-out time</div>
+              <div className="mt-0.5 flex items-center gap-1.5">
+                {(["check_in_time", "check_out_time"] as const).map((field, i) => (
+                  <span key={field} className="flex items-center gap-1.5">
+                    {i === 1 && <span className="text-muted-foreground text-xs">→</span>}
+                    <input
+                      type="time"
+                      disabled={!booking}
+                      defaultValue={(((booking as any)?.[field] as string | null) ?? (field === "check_in_time" ? "15:00" : "11:00")).slice(0, 5)}
+                      className="h-8 rounded-md border border-input bg-background px-2 text-sm font-medium"
+                      onBlur={async (e) => {
+                        if (!booking) return;
+                        const v = e.target.value;
+                        const prev = (((booking as any)?.[field] as string | null) ?? (field === "check_in_time" ? "15:00" : "11:00")).slice(0, 5);
+                        if (!v || v === prev) return;
+                        const { error } = await supabase.from("bookings").update({ [field]: v } as any).eq("id", booking.id);
+                        if (error) toast({ title: "Failed to save", description: error.message, variant: "destructive" });
+                        else {
+                          (booking as any)[field] = v;
+                          toast({ title: field === "check_in_time" ? "Check-in time saved" : "Check-out time saved" });
+                          // Répercute sur l'événement Google Calendar (no-op tant que le service account n'est pas configuré)
+                          supabase.functions.invoke("sync-booking-calendar", { body: { booking_id: booking.id } }).catch(() => {});
+                        }
+                      }}
+                    />
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div>
               <div className="text-muted-foreground">Status</div>
               <div className="font-medium">
                 {isPending

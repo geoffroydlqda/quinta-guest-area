@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Download, RefreshCw, Trash2, FileDown, Mail, ChevronDown, ChevronRight, Plus, Copy, Check, ExternalLink, Pencil, Phone, MapPin, Globe2, ReceiptText } from "lucide-react";
+import { Loader2, Download, RefreshCw, Trash2, FileDown, Mail, ChevronDown, ChevronLeft, ChevronRight, Plus, Copy, Check, ExternalLink, Pencil, Phone, MapPin, Globe2, ReceiptText } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,9 @@ type BookingRow = {
   event_type?: string | null;
   catering_expected?: boolean | null;
   client_id?: string | null;
+  check_in_time?: string | null;
+  check_out_time?: string | null;
+  google_calendar_event_id?: string | null;
 };
 
 const EVENT_TYPE_LABEL: Record<string, string> = {
@@ -584,6 +587,144 @@ const AdminContent = () => {
   );
 };
 
+// ------------------------------------------------------- Booking calendar
+// Vue mensuelle maison : une barre par booking (nom de l'événement), couleurs
+// par type, clic → fiche booking. Reflète la table bookings (source de vérité).
+const EVENT_TYPE_COLOR: Record<string, string> = {
+  retreat: "#57761f", wedding: "#2a78d6", other: "#c2622f", day_retreat: "#8a6a2f",
+};
+
+function BookingCalendar({ bookings, todayIso, onOpen }: {
+  bookings: BookingRow[];
+  todayIso: string;
+  onOpen: (bookingId: string) => void;
+}) {
+  const [month, setMonth] = useState(() => todayIso.slice(0, 7)); // "YYYY-MM"
+  const [yy, mm] = month.split("-").map(Number);
+
+  const shift = (delta: number) => {
+    const d = new Date(yy, mm - 1 + delta, 1);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  // Semaines du mois (lundi → dimanche), avec débordement sur les mois voisins.
+  const weeks = useMemo(() => {
+    const first = new Date(yy, mm - 1, 1);
+    const start = new Date(first);
+    start.setDate(1 - ((first.getDay() + 6) % 7));
+    const out: Date[][] = [];
+    const cur = new Date(start);
+    do {
+      const week: Date[] = [];
+      for (let i = 0; i < 7; i++) { week.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
+      out.push(week);
+    } while (cur.getMonth() === mm - 1 && cur.getFullYear() === yy);
+    return out;
+  }, [yy, mm]);
+
+  const monthLabel = new Date(yy, mm - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+
+  const eventName = (b: BookingRow) =>
+    b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email;
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <div className="font-medium text-sm">Booking calendar</div>
+        <div className="flex items-center gap-1.5">
+          <button type="button" onClick={() => shift(-1)} className="w-7 h-7 rounded-md border border-border hover:bg-muted flex items-center justify-center" aria-label="Previous month"><ChevronLeft className="w-4 h-4" /></button>
+          <span className="text-sm font-medium w-36 text-center">{monthLabel}</span>
+          <button type="button" onClick={() => shift(1)} className="w-7 h-7 rounded-md border border-border hover:bg-muted flex items-center justify-center" aria-label="Next month"><ChevronRight className="w-4 h-4" /></button>
+          <button type="button" onClick={() => setMonth(todayIso.slice(0, 7))} className="ml-1 rounded-md border border-border px-2.5 py-1 text-xs hover:bg-muted">Today</button>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => <div key={d} className="px-1.5">{d}</div>)}
+      </div>
+      <div className="space-y-px">
+        {weeks.map((week, wi) => {
+          const wStart = iso(week[0]);
+          const wEnd = iso(week[6]);
+          // Segments des bookings qui touchent cette semaine (check-out inclus).
+          type Seg = { b: BookingRow; s: number; e: number; startsHere: boolean; lane: number };
+          const segs: Seg[] = [];
+          for (const b of bookings) {
+            if (!b.check_in_date || !b.check_out_date) continue;
+            if (b.check_in_date > wEnd || b.check_out_date < wStart) continue;
+            const s = b.check_in_date <= wStart ? 0 : week.findIndex((d) => iso(d) === b.check_in_date);
+            const e = b.check_out_date >= wEnd ? 6 : week.findIndex((d) => iso(d) === b.check_out_date);
+            if (s === -1 || e === -1) continue;
+            segs.push({ b, s, e, startsHere: b.check_in_date >= wStart, lane: 0 });
+          }
+          segs.sort((a, b) => a.s - b.s || b.e - a.e);
+          const laneEnds: number[] = [];
+          for (const seg of segs) {
+            let lane = laneEnds.findIndex((end) => end < seg.s);
+            if (lane === -1) { lane = laneEnds.length; laneEnds.push(seg.e); }
+            else laneEnds[lane] = seg.e;
+            seg.lane = lane;
+          }
+          const lanes = Math.min(3, Math.max(1, laneEnds.length));
+          return (
+            <div key={wi} className="relative">
+              <div className="grid grid-cols-7 gap-px">
+                {week.map((d, di) => {
+                  const inMonth = d.getMonth() === mm - 1;
+                  const isToday = iso(d) === todayIso;
+                  return (
+                    <div key={di} className={`rounded-sm px-1.5 pt-1 ${inMonth ? "bg-muted/40" : "bg-muted/10"}`} style={{ height: `${26 + lanes * 24}px` }}>
+                      <span className={`inline-flex items-center justify-center text-[11px] w-5 h-5 rounded-full ${isToday ? "bg-primary text-primary-foreground font-semibold" : inMonth ? "text-foreground" : "text-muted-foreground/50"}`}>
+                        {d.getDate()}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="absolute left-0 right-0 top-[26px] grid grid-cols-7 gap-px pointer-events-none">
+                {segs.filter((seg) => seg.lane < 3).map((seg) => (
+                  <button
+                    key={seg.b.id + wi}
+                    type="button"
+                    onClick={() => onOpen(seg.b.id)}
+                    title={`${eventName(seg.b)} · ${seg.b.check_in_date} → ${seg.b.check_out_date}`}
+                    className="pointer-events-auto text-left text-[11px] leading-none text-white px-1.5 h-[20px] flex items-center truncate hover:opacity-85"
+                    style={{
+                      gridColumn: `${seg.s + 1} / ${seg.e + 2}`,
+                      gridRow: 1,
+                      marginTop: `${seg.lane * 24}px`,
+                      background: EVENT_TYPE_COLOR[seg.b.event_type ?? "retreat"] ?? EVENT_TYPE_COLOR.retreat,
+                      borderRadius: seg.startsHere && (seg.b.check_out_date! <= wEnd) ? "6px" : seg.startsHere ? "6px 2px 2px 6px" : (seg.b.check_out_date! <= wEnd) ? "2px 6px 6px 2px" : "2px",
+                    }}
+                  >
+                    <span className="truncate">{(seg.startsHere || seg.s === 0) ? eventName(seg.b) : ""}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-4 mt-3 text-[11px] text-muted-foreground flex-wrap">
+        {Object.entries(EVENT_TYPE_COLOR).map(([k, c]) => (
+          <span key={k} className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: c }} />
+            {EVENT_TYPE_LABEL[k]}
+          </span>
+        ))}
+        <a
+          className="ml-auto underline hover:text-foreground"
+          href="https://calendar.google.com/calendar/u/1?cid=Y18yNGY1NmEwZTgxYjY4OWVkMjk0MDU0NjdiZDJjMWRhZDg2ZTA0MWE5NWVlNWEyNGExMTU2YjE0ZWRlZWNiMzA0QGdyb3VwLmNhbGVuZGFyLmdvb2dsZS5jb20"
+          target="_blank" rel="noreferrer"
+        >
+          Open in Google Calendar
+        </a>
+      </div>
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------- Dashboard
 function DashboardView({
   data, installments, events, categoryOf, todayIso, onOpen,
@@ -607,11 +748,6 @@ function DashboardView({
   useEffect(() => {
     if (years.length && !years.includes(year)) setYear(years.includes(currentYear) ? currentYear : years[years.length - 1]);
   }, [years, year, currentYear]);
-  const in30Iso = useMemo(() => {
-    const d = new Date(`${todayIso}T12:00:00`);
-    d.setDate(d.getDate() + 30);
-    return d.toISOString().slice(0, 10);
-  }, [todayIso]);
 
   const eventName = (bookingId: string) => {
     const b = bookingById.get(bookingId);
@@ -635,8 +771,6 @@ function DashboardView({
     const overdueTotal = overdue.reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const outstanding = installments.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
 
-    const live = events.filter((e) => categoryOf(e) === "live");
-    const next30 = events.filter((e) => e.checkIn && e.checkIn > todayIso && e.checkIn <= in30Iso);
     const upcoming = events
       .filter((e) => e.checkIn && e.checkIn > todayIso)
       .sort((a, b) => (a.checkIn || "").localeCompare(b.checkIn || ""))
@@ -647,9 +781,9 @@ function DashboardView({
     return {
       contracted, contractedHt, collected, overdueTotal, outstanding,
       overdueCount: overdue.length,
-      live, next30, upcoming, overdueRows,
+      upcoming, overdueRows,
     };
-  }, [installments, bookingById, events, categoryOf, todayIso, in30Iso, year]);
+  }, [installments, bookingById, events, todayIso, year]);
 
   const charts = useMemo(() => {
     const rev = Array.from({ length: 12 }, () => ({ rental: 0, catering: 0, extra: 0, collected: 0 }));
@@ -820,17 +954,7 @@ function DashboardView({
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Tile
-          label="On site now"
-          value={String(kpis.live.length)}
-          sub={(() => { const n = kpis.live.reduce((s, e) => s + (e.guestsCount || 0), 0); return `${n} guest${n === 1 ? "" : "s"}`; })()}
-        />
-        <Tile
-          label="Next 30 days"
-          value={String(kpis.next30.length)}
-          sub={`${kpis.next30.reduce((s, e) => s + (e.guestsCount || 0), 0)} guests arriving`}
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Tile
           label={`Revenue ${year} (incl. VAT)`}
           value={fmtMoney(kpis.contracted)}
@@ -849,6 +973,8 @@ function DashboardView({
           tone={kpis.overdueTotal > 0 ? "danger" : undefined}
         />
       </div>
+
+      <BookingCalendar bookings={bookings} todayIso={todayIso} onOpen={onOpen} />
 
       <div className="grid lg:grid-cols-2 gap-4">
         <section className="rounded-xl border border-border bg-card p-4">

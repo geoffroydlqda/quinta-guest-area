@@ -109,6 +109,9 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
       console.log("[create-booking] success", { booking_id: data.booking.id, invite_url: data.invite_url });
       setInviteUrl(data.invite_url ?? null);
       toast({ title: "Booking created" });
+      // Crée l'événement dans le calendrier Google "Events" (no-op tant que le
+      // service account n'est pas configuré côté Supabase).
+      supabase.functions.invoke("sync-booking-calendar", { body: { booking_id: data.booking.id } }).catch(() => {});
       onCreated?.();
     } catch (e: any) {
       console.error("[create-booking] threw", e);

@@ -108,6 +108,11 @@ export type Database = {
           event_type: string
           catering_expected: boolean
           client_id: string | null
+          check_in_time: string
+          check_out_time: string
+          google_calendar_event_id: string | null
+          calendar_sync_status: string | null
+          calendar_synced_at: string | null
           check_in_date: string | null
           check_out_date: string | null
           created_at: string
@@ -138,6 +143,11 @@ export type Database = {
           event_type?: string
           catering_expected?: boolean
           client_id?: string | null
+          check_in_time?: string
+          check_out_time?: string
+          google_calendar_event_id?: string | null
+          calendar_sync_status?: string | null
+          calendar_synced_at?: string | null
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string
@@ -168,6 +178,11 @@ export type Database = {
           event_type?: string
           catering_expected?: boolean
           client_id?: string | null
+          check_in_time?: string
+          check_out_time?: string
+          google_calendar_event_id?: string | null
+          calendar_sync_status?: string | null
+          calendar_synced_at?: string | null
           check_in_date?: string | null
           check_out_date?: string | null
           created_at?: string
