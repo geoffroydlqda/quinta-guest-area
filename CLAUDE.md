@@ -79,3 +79,4 @@ Toute modification de schéma passe par un fichier SQL dans `supabase/migrations
 4. Le bundle JS principal dépasse 1,3 Mo (warning au build) — piste d'amélioration : code-splitting par route avec `React.lazy`.
 5. `index.html` contient des URLs absolues (canonical, OG) — les mettre à jour si le domaine change.
 6. C'est une app en production avec de vrais guests : privilégier les petites modifications testées, et une branche Git pour tout changement risqué.
+7. **Triggers "prevent update" (bookings, transportation_trips)** : ils doivent laisser passer `service_role`/`postgres`, sinon les écritures des Edge Functions sont annulées EN SILENCE (cause des doublons calendrier de juillet 2026 : les event ids ne se sauvaient jamais, chaque backfill recréait tout). Tout nouveau trigger de ce type doit commencer par ce même garde-fou.
