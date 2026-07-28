@@ -79,9 +79,11 @@ serve(async (req) => {
     const filteredTripsRaw = trips.data || [];
     const filteredPassengers = passengers.data || [];
     const filteredFood = food.data || [];
-    const filteredBookings = (bookings.data || []).filter(
-      (b: any) => !isAdmin(b.email) && (!b.user_id || !adminUserIds.has(b.user_id))
-    );
+    // Les bookings ne sont PAS filtrés par email admin : Loïs, Tommy ou Luis
+    // sont admins ET de vrais clients (bug juillet 2026 : leurs bookings
+    // disparaissaient de tout l'admin dès qu'on mettait leur vrai email).
+    // Le filtre admin ne s'applique qu'aux profils de comptes (ci-dessus).
+    const filteredBookings = bookings.data || [];
 
     // Attach passengers to their trips (preserve creation order)
     const paxByTrip = new Map<string, any[]>();
