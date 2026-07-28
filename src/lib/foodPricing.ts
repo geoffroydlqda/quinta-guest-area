@@ -32,12 +32,26 @@ function dayCostPerPerson(sel: FoodDaySelection, p: DietPricing): number {
   return t;
 }
 
+// Détail précis par type de repas au sein d'un régime : "units" = nombre de
+// personnes-repas (personnes-jours pour le full board), price = prix unitaire.
+export interface MealLine {
+  units: number;
+  price: number;
+  total: number;
+}
+
 export interface DietBreakdownItem {
   type: DietType;
   label: string;
   guests: number;
   perPerson: number;
   total: number;
+  meals: {
+    fullBoard: MealLine;
+    breakfast: MealLine;
+    lunch: MealLine;
+    dinner: MealLine;
+  };
 }
 
 export interface FoodCostSummary {
@@ -100,23 +114,45 @@ export function calculateFoodCostMulti(
     }
   });
 
-  // Aggregate cost per diet across days using per-day guest distribution
+  // Aggregate cost per diet across days using per-day guest distribution.
+  // On accumule aussi le nombre de personnes-repas par type de repas pour le
+  // breakdown détaillé du cost summary.
   const dietTotals: Record<DietType, number> = { vegetarian: 0, meat_dinner: 0, meat_lunch_dinner: 0 };
+  const emptyUnits = () => ({ fullBoard: 0, breakfast: 0, lunch: 0, dinner: 0 });
+  const dietUnits: Record<DietType, ReturnType<typeof emptyUnits>> = {
+    vegetarian: emptyUnits(), meat_dinner: emptyUnits(), meat_lunch_dinner: emptyUnits(),
+  };
   selections.forEach((sel) => {
     const dayGuests = typeof sel.guests_count_day === 'number' && sel.guests_count_day >= 0
       ? sel.guests_count_day
       : guestsCount;
     const distribution = distributeDailyGuests(dayGuests, diet);
     getDietTypes().forEach((meta) => {
+      const n = distribution[meta.type];
       const dayPricePerPerson = dayCostPerPerson(sel, meta.pricing);
-      dietTotals[meta.type] += dayPricePerPerson * distribution[meta.type];
+      dietTotals[meta.type] += dayPricePerPerson * n;
+      if (n > 0) {
+        if (sel.fullBoard) dietUnits[meta.type].fullBoard += n;
+        else {
+          if (sel.breakfast) dietUnits[meta.type].breakfast += n;
+          if (sel.lunch) dietUnits[meta.type].lunch += n;
+          if (sel.dinner) dietUnits[meta.type].dinner += n;
+        }
+      }
     });
   });
 
   const dietBreakdown: DietBreakdownItem[] = getDietTypes().map((meta) => {
     const guests = diet?.[meta.countKey] || 0;
     const perPerson = selections.reduce((sum, sel) => sum + dayCostPerPerson(sel, meta.pricing), 0);
-    return { type: meta.type, label: meta.label, guests, perPerson, total: Math.round(dietTotals[meta.type]) };
+    const u = dietUnits[meta.type];
+    const meals = {
+      fullBoard: { units: u.fullBoard, price: meta.pricing.fullBoard, total: u.fullBoard * meta.pricing.fullBoard },
+      breakfast: { units: u.breakfast, price: meta.pricing.breakfast, total: u.breakfast * meta.pricing.breakfast },
+      lunch: { units: u.lunch, price: meta.pricing.lunch, total: u.lunch * meta.pricing.lunch },
+      dinner: { units: u.dinner, price: meta.pricing.dinner, total: u.dinner * meta.pricing.dinner },
+    };
+    return { type: meta.type, label: meta.label, guests, perPerson, total: Math.round(dietTotals[meta.type]), meals };
   });
 
   const grandTotal = Math.round(dietBreakdown.reduce((s, d) => s + d.total, 0));

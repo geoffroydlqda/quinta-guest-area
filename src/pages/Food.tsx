@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, AlertCircle, Check, Info, Minus, Plus, Clock } from 'lucide-react';
+import { Loader2, AlertCircle, Check, Minus, Plus, Clock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -158,9 +158,13 @@ const Food = () => {
                 >
                   <div>
                     <div className="font-medium">{meta.label}</div>
-                    <div className="text-xs text-muted-foreground">
-                      €{meta.pricing.fullBoard} / full board / person / day
+                    <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                      <span>Full board <strong className="text-foreground">€{meta.pricing.fullBoard}</strong></span>
+                      <span>Breakfast <strong className="text-foreground">€{meta.pricing.breakfast}</strong></span>
+                      <span>Lunch <strong className="text-foreground">€{meta.pricing.lunch}</strong></span>
+                      <span>Dinner <strong className="text-foreground">€{meta.pricing.dinner}</strong></span>
                     </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">per person / day</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
@@ -204,22 +208,6 @@ const Food = () => {
               </p>
             </div>
           )}
-        </div>
-
-        {/* Summary Stats */}
-        <div className="grid grid-cols-3 gap-4">
-          <div className="bg-card rounded-xl border border-border p-4 text-center">
-            <p className="text-2xl font-semibold">{costSummary.fullBoardDays}</p>
-            <p className="text-sm text-muted-foreground font-medium">Full board days</p>
-          </div>
-          <div className="bg-card rounded-xl border border-border p-4 text-center">
-            <p className="text-2xl font-semibold">{costSummary.breakfastCount}</p>
-            <p className="text-sm text-muted-foreground font-medium">Breakfast only</p>
-          </div>
-          <div className="bg-card rounded-xl border border-border p-4 text-center">
-            <p className="text-2xl font-semibold">{costSummary.lunchCount + costSummary.dinnerCount}</p>
-            <p className="text-sm text-muted-foreground font-medium">Other meals</p>
-          </div>
         </div>
 
         {/* Food Table */}
@@ -324,14 +312,6 @@ const Food = () => {
 
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
           <span>• Full board = all 3 meals</span>
-          <span>• Selecting Full board disables individual meal toggles</span>
-        </div>
-
-        <div className="rounded-xl bg-primary/10 border border-primary/30 p-4">
-          <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-            <p className="text-sm font-medium">A sweet treat is always served after dinner.</p>
-          </div>
         </div>
 
         <div>

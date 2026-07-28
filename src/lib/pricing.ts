@@ -26,8 +26,8 @@ export interface DietPricing {
 const DEFAULT_TAXI_PRICES: TaxiPrices = { seats4: 70, seats6: 90, seats8: 110 };
 
 const DEFAULT_DIET_PRICING: Record<DietType, DietPricing> = {
-  vegetarian: { fullBoard: 70, breakfast: 20, lunch: 23, dinner: 27 },
-  meat_dinner: { fullBoard: 78, breakfast: 20, lunch: 23, dinner: 35 },
+  vegetarian: { fullBoard: 70, breakfast: 20, lunch: 25, dinner: 27 },
+  meat_dinner: { fullBoard: 78, breakfast: 20, lunch: 25, dinner: 35 },
   meat_lunch_dinner: { fullBoard: 85, breakfast: 20, lunch: 30, dinner: 35 },
 };
 
