@@ -1012,10 +1012,10 @@ type ClientProfile = {
   nationality: string | null;
 };
 
-type ClientForm = Omit<ClientProfile, "id" | "email">;
+type ClientForm = Omit<ClientProfile, "id">;
 
 const EMPTY_CLIENT: ClientForm = {
-  first_name: null, last_name: null, phone: null, tax_number: null, address: null, nationality: null,
+  email: "", first_name: null, last_name: null, phone: null, tax_number: null, address: null, nationality: null,
 };
 
 function GuestsView({ bookings, installments, onOpen, onReload }: {
@@ -1114,6 +1114,7 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
     if (!current) return;
     const ref = current.bookings[current.bookings.length - 1];
     setForm({
+      email: current.email,
       first_name: current.profile?.first_name ?? ref.first_name,
       last_name: current.profile?.last_name ?? ref.last_name,
       phone: current.profile?.phone ?? null,
@@ -1132,24 +1133,49 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
 
   const saveProfile = async () => {
     if (!current) return;
+    const newEmail = (form.email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      toast({ title: "Invalid email", description: "Please enter a valid email address.", variant: "destructive" });
+      return;
+    }
+    const emailChanged = newEmail !== (current.email || "").toLowerCase();
+    if (emailChanged) {
+      const ok = window.confirm(
+        `Change this guest's email to ${newEmail}?\n\n` +
+        `It will be applied to their ${current.bookings.length} booking${current.bookings.length === 1 ? "" : "s"} ` +
+        `and used for guest-area invitations and payment reminders.`
+      );
+      if (!ok) return;
+    }
     setSaving(true);
     try {
-      if (current.profile) {
+      const payload = { ...form, email: newEmail };
+      let profileId = current.profile?.id;
+      if (profileId) {
         const { error } = await supabase.from("client_profiles")
-          .update({ ...form }).eq("id", current.profile.id);
+          .update(payload).eq("id", profileId);
         if (error) throw error;
       } else {
-        const email = (current.bookings[0].email || "").toLowerCase();
         const { data, error } = await supabase.from("client_profiles")
-          .upsert({ email, ...form }, { onConflict: "email" }).select("id").single();
+          .upsert(payload, { onConflict: "email" }).select("id").single();
         if (error) throw error;
-        await linkBookings(data.id, current.bookings.filter((b) => !b.client_id).map((b) => b.id));
+        profileId = data.id;
+        await linkBookings(profileId, current.bookings.filter((b) => !b.client_id).map((b) => b.id));
+      }
+      if (emailChanged) {
+        const { error } = await supabase.from("bookings")
+          .update({ email: newEmail })
+          .in("id", current.bookings.map((b) => b.id));
+        if (error) throw error;
         await onReload();
       }
       await fetchProfiles();
       toast({ title: "Guest profile saved" });
     } catch (e: any) {
-      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+      const msg = /duplicate|unique/i.test(e.message || "")
+        ? "Another guest already uses this email — use Merge into… instead."
+        : e.message;
+      toast({ title: "Save failed", description: msg, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -1321,6 +1347,19 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
                 <div className="grid gap-3 sm:grid-cols-2">
                   {field("First name", "first_name", "First name")}
                   {field("Last name", "last_name", "Last name")}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-muted-foreground mb-1">Email</label>
+                    <Input
+                      type="email"
+                      value={form.email ?? ""}
+                      placeholder="guest@email.com"
+                      onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                      className="h-9"
+                    />
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Used for guest-area invitations and payment reminders — applies to all this guest's bookings.
+                    </p>
+                  </div>
                   {field("Phone number", "phone", "+351 …")}
                   {field("Tax number", "tax_number", "VAT / NIF")}
                   {field("Nationality", "nationality", "e.g. Belgian")}
