@@ -2167,7 +2167,7 @@ function NameField({
       : placeholder.toLowerCase().includes("first")
         ? { first_name: next }
         : { last_name: next };
-    const { error } = await supabase.from("bookings").update(patch).eq("id", bookingId);
+    const { error } = await supabase.from("bookings").update(patch as any).eq("id", bookingId);
     setSaving(false);
     if (error) {
       toast({ title: "Could not save", description: error.message, variant: "destructive" });

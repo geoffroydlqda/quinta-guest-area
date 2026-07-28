@@ -357,6 +357,42 @@ export type Database = {
           },
         ]
       }
+      event_staff: {
+        Row: {
+          booking_id: string
+          created_at: string
+          daily_fee: number
+          id: string
+          name: string
+          notes: string | null
+          paid_days: number
+          role: string | null
+          updated_at: string
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string
+          daily_fee?: number
+          id?: string
+          name: string
+          notes?: string | null
+          paid_days?: number
+          role?: string | null
+          updated_at?: string
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string
+          daily_fee?: number
+          id?: string
+          name?: string
+          notes?: string | null
+          paid_days?: number
+          role?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       guest_profiles: {
         Row: {
           check_in_date: string | null

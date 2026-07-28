@@ -89,9 +89,13 @@ const SECTION_TITLES: Record<string, string> = {
   bookings: "Bookings",
   guests: "Guests",
   payments: "Payments",
+  catering: "Catering",
   transportation: "Transportation",
   rooms: "Room setup",
 };
+
+const fmtShort = (d: string | null) =>
+  d ? new Date(`${d}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—";
 
 const fmtMoney = (v: number) =>
   `${v < 0 ? "−" : ""}€${Math.abs(v).toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -461,6 +465,10 @@ const AdminContent = () => {
 
         {view === "guests" && (
           <GuestsView bookings={data.bookings || []} installments={installments} onOpen={navigateToBooking} onReload={() => load({ silent: true })} />
+        )}
+
+        {view === "catering" && (
+          <CateringView bookings={data.bookings || []} todayIso={todayIso} onOpen={navigateToBooking} />
         )}
 
         {view === "bookings" && (
@@ -922,9 +930,6 @@ function DashboardView({
     </div>
   );
 
-  const fmtShort = (d: string | null) =>
-    d ? new Date(`${d}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—";
-
   return (
     <div className="space-y-6">
       {years.length > 1 && (
@@ -1055,6 +1060,224 @@ function DashboardView({
       </div>
 
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- Catering
+// Staff assigné par événement : nom, rémunération journalière, jours payés.
+// Convention maison : kitchen staff payé (nuits + 1) jours — pré-rempli.
+type StaffRow = {
+  id: string; booking_id: string; name: string; role: string | null;
+  daily_fee: number; paid_days: number;
+};
+
+function CateringView({ bookings, todayIso, onOpen }: {
+  bookings: BookingRow[];
+  todayIso: string;
+  onOpen: (bookingId: string) => void;
+}) {
+  const { toast } = useToast();
+  const [staff, setStaff] = useState<StaffRow[]>([]);
+  const [pastOpen, setPastOpen] = useState(false);
+
+  const loadStaff = async () => {
+    const { data, error } = await supabase.from("event_staff")
+      .select("id,booking_id,name,role,daily_fee,paid_days");
+    if (!error && data) setStaff(data as StaffRow[]);
+  };
+  useEffect(() => { loadStaff(); }, []);
+
+  const byBooking = useMemo(() => {
+    const m = new Map<string, StaffRow[]>();
+    for (const s of staff) {
+      const arr = m.get(s.booking_id) || [];
+      arr.push(s);
+      m.set(s.booking_id, arr);
+    }
+    return m;
+  }, [staff]);
+
+  const knownNames = useMemo(() => [...new Set(staff.map((s) => s.name))].sort(), [staff]);
+
+  const dated = bookings.filter((b) => b.check_in_date && b.check_out_date);
+  const upcoming = dated
+    .filter((b) => b.check_out_date! >= todayIso)
+    .sort((a, b) => a.check_in_date!.localeCompare(b.check_in_date!));
+  const past = dated
+    .filter((b) => b.check_out_date! < todayIso)
+    .sort((a, b) => b.check_in_date!.localeCompare(a.check_in_date!));
+
+  const addStaff = async (bookingId: string, v: { name: string; role: string | null; daily_fee: number; paid_days: number }) => {
+    const { error } = await supabase.from("event_staff").insert({ booking_id: bookingId, ...v });
+    if (error) toast({ title: "Save failed", description: error.message, variant: "destructive" });
+    else await loadStaff();
+    return !error;
+  };
+  const updateStaff = async (id: string, patch: Partial<Pick<StaffRow, "daily_fee" | "paid_days">>) => {
+    setStaff((rows) => rows.map((r) => r.id === id ? { ...r, ...patch } : r));
+    const { error } = await supabase.from("event_staff").update(patch).eq("id", id);
+    if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); await loadStaff(); }
+  };
+  const removeStaff = async (id: string, name: string) => {
+    if (!window.confirm(`Remove ${name} from this event?`)) return;
+    const { error } = await supabase.from("event_staff").delete().eq("id", id);
+    if (error) toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+    else await loadStaff();
+  };
+
+  const totalFor = (rows: StaffRow[]) => rows.reduce((s, r) => s + Number(r.daily_fee) * r.paid_days, 0);
+
+  return (
+    <div className="space-y-4">
+      <datalist id="staff-names">
+        {knownNames.map((n) => <option key={n} value={n} />)}
+      </datalist>
+
+      <div>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">Upcoming & current events</h2>
+        <div className="space-y-3">
+          {upcoming.map((b) => (
+            <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso}
+              onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} totalFor={totalFor} />
+          ))}
+          {upcoming.length === 0 && <p className="text-sm text-muted-foreground italic">No upcoming events.</p>}
+        </div>
+      </div>
+
+      <div>
+        <button type="button" onClick={() => setPastOpen(!pastOpen)}
+          className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2 hover:text-foreground">
+          {pastOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          Past events ({past.length})
+        </button>
+        {pastOpen && (
+          <div className="space-y-3">
+            {past.map((b) => (
+              <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso}
+                onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} totalFor={totalFor} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CateringEventCard({ booking: b, rows, todayIso, onOpen, onAdd, onUpdate, onRemove, totalFor }: {
+  booking: BookingRow;
+  rows: StaffRow[];
+  todayIso: string;
+  onOpen: (id: string) => void;
+  onAdd: (bookingId: string, v: { name: string; role: string | null; daily_fee: number; paid_days: number }) => Promise<boolean>;
+  onUpdate: (id: string, patch: Partial<Pick<StaffRow, "daily_fee" | "paid_days">>) => void;
+  onRemove: (id: string, name: string) => void;
+  totalFor: (rows: StaffRow[]) => number;
+}) {
+  const nights = Math.max(0, Math.round(
+    (new Date(`${b.check_out_date}T12:00:00`).getTime() - new Date(`${b.check_in_date}T12:00:00`).getTime()) / 86400000
+  ));
+  const suggestedDays = nights + 1;
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
+  const [fee, setFee] = useState("");
+  const [days, setDays] = useState(String(suggestedDays));
+  const [saving, setSaving] = useState(false);
+
+  const isLive = b.check_in_date! <= todayIso && b.check_out_date! >= todayIso;
+  const eventName = b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email;
+
+  const submit = async () => {
+    if (!name.trim() || !fee) return;
+    setSaving(true);
+    const ok = await onAdd(b.id, {
+      name: name.trim(),
+      role: role.trim() || null,
+      daily_fee: Number(fee),
+      paid_days: Math.max(1, Number(days) || suggestedDays),
+    });
+    setSaving(false);
+    if (ok) { setName(""); setRole(""); setFee(""); setDays(String(suggestedDays)); setAdding(false); }
+  };
+
+  return (
+    <section className="rounded-xl border border-border bg-card">
+      <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <button type="button" onClick={() => onOpen(b.id)} className="font-medium text-sm hover:underline text-left">
+            {eventName}
+          </button>
+          {isLive && <span className="ml-2 text-[10px] uppercase px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">Live</span>}
+          <span className="ml-2 text-[10px] uppercase px-1.5 py-0.5 rounded-full border border-border bg-muted text-muted-foreground">
+            {EVENT_TYPE_LABEL[b.event_type ?? "retreat"] ?? "Retreat"}
+          </span>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {fmtShort(b.check_in_date)} → {fmtShort(b.check_out_date)} · <strong className="text-foreground">{nights} night{nights !== 1 ? "s" : ""}</strong>
+            <span> · kitchen staff usually paid {suggestedDays} days (nights + 1)</span>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-sm font-semibold">{rows.length ? fmtMoney(totalFor(rows)) : "—"}</div>
+          <div className="text-[11px] text-muted-foreground">staff cost</div>
+        </div>
+      </div>
+
+      {rows.length > 0 && (
+        <div className="divide-y divide-border">
+          {rows.map((r) => (
+            <div key={r.id} className="px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <span className="font-medium min-w-[120px]">{r.name}</span>
+              {r.role && <span className="text-xs text-muted-foreground">{r.role}</span>}
+              <span className="flex items-center gap-1.5 ml-auto">
+                <Input type="number" min="0" step="1" value={String(r.daily_fee)}
+                  onChange={(e) => onUpdate(r.id, { daily_fee: Number(e.target.value) || 0 })}
+                  className="h-7 w-20 text-right px-1.5" aria-label="Daily fee" />
+                <span className="text-xs text-muted-foreground">€/day ×</span>
+                <Input type="number" min="1" step="1" value={String(r.paid_days)}
+                  onChange={(e) => onUpdate(r.id, { paid_days: Math.max(1, Number(e.target.value) || 1) })}
+                  className="h-7 w-14 text-right px-1.5" aria-label="Paid days" />
+                <span className="text-xs text-muted-foreground">days</span>
+              </span>
+              <span className="w-24 text-right font-medium tabular-nums">{fmtMoney(Number(r.daily_fee) * r.paid_days)}</span>
+              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => onRemove(r.id, r.name)} aria-label={`Remove ${r.name}`}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="px-4 py-2.5 border-t border-border">
+        {adding ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="space-y-0.5">
+              <div className="text-[11px] text-muted-foreground">Name *</div>
+              <Input list="staff-names" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jake" className="h-8 w-36" autoFocus />
+            </label>
+            <label className="space-y-0.5">
+              <div className="text-[11px] text-muted-foreground">Role</div>
+              <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Chef…" className="h-8 w-28" />
+            </label>
+            <label className="space-y-0.5">
+              <div className="text-[11px] text-muted-foreground">Daily fee (€) *</div>
+              <Input type="number" min="0" step="1" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="200" className="h-8 w-24" />
+            </label>
+            <label className="space-y-0.5">
+              <div className="text-[11px] text-muted-foreground">Paid days</div>
+              <Input type="number" min="1" step="1" value={days} onChange={(e) => setDays(e.target.value)} className="h-8 w-20" />
+            </label>
+            <Button size="sm" className="h-8" onClick={submit} disabled={saving || !name.trim() || !fee}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-8" onClick={() => setAdding(false)} disabled={saving}>Cancel</Button>
+          </div>
+        ) : (
+          <Button size="sm" variant="outline" className="h-8" onClick={() => { setDays(String(suggestedDays)); setAdding(true); }}>
+            <Plus className="w-3.5 h-3.5 mr-1" /> Add staff member
+          </Button>
+        )}
+      </div>
+    </section>
   );
 }
 
