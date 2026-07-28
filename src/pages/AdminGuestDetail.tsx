@@ -1099,6 +1099,7 @@ type Installment = {
   invoice_file_url: string | null;
   invoice_file_name: string | null;
   notes: string | null;
+  is_cash?: boolean;
 };
 
 const fmtEUR = (v: number | string) => {
@@ -1188,7 +1189,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
     const iRes = await supabase
       .from("payment_installments")
-      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes")
+      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash")
       .eq("booking_id", b.id)
       .order("due_date", { ascending: true, nullsFirst: false });
     if (!iRes.error) setInstallments((iRes.data || []) as Installment[]);
@@ -1270,7 +1271,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const upsertInstallment = async (
     id: string | null,
-    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null },
+    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean },
     file?: File | null
   ) => {
     if (!booking) return false;
@@ -1283,6 +1284,7 @@ function PaymentSection({ userId }: { userId: string }) {
       status: values.status,
       category: values.category,
       notes: values.notes,
+      is_cash: values.is_cash,
     };
     let installmentId = id;
     if (id) {
@@ -1491,21 +1493,25 @@ function PaymentSection({ userId }: { userId: string }) {
         <Row
           label="Amount"
           value={
-            inst.amount_excl_vat != null
-              ? `${fmtEUR(inst.amount_due)} incl. VAT · ${fmtEUR(inst.amount_excl_vat)} excl. VAT`
-              : fmtEUR(inst.amount_due)
+            inst.is_cash
+              ? `${fmtEUR(inst.amount_due)} · cash (no VAT)`
+              : inst.amount_excl_vat != null
+                ? `${fmtEUR(inst.amount_due)} incl. VAT · ${fmtEUR(inst.amount_excl_vat)} excl. VAT`
+                : fmtEUR(inst.amount_due)
           }
         />
         <Row label="Due date" value={fmtDate(inst.due_date)} />
         {inst.notes && (
           <p className="text-xs italic text-muted-foreground whitespace-pre-wrap">{inst.notes}</p>
         )}
-        <InvoiceFileControl
-          inst={inst}
-          onUpload={(f) => uploadInvoice(inst, f)}
-          onDownload={() => downloadInvoice(inst)}
-          onRemove={() => removeInvoice(inst)}
-        />
+        {!inst.is_cash && (
+          <InvoiceFileControl
+            inst={inst}
+            onUpload={(f) => uploadInvoice(inst, f)}
+            onDownload={() => downloadInvoice(inst)}
+            onRemove={() => removeInvoice(inst)}
+          />
+        )}
       </div>
     );
   };
@@ -1672,13 +1678,14 @@ function InstallmentForm({
   checkInDate?: string | null;
   onCancel: () => void;
   onSave: (
-    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null },
+    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean },
     file?: File | null
   ) => Promise<void> | void;
 }) {
   const [label, setLabel] = useState(initial?.label || "");
   const [amountDue, setAmountDue] = useState(initial?.amount_due != null ? String(Math.abs(initial.amount_due)) : "");
   const [amountExclVat, setAmountExclVat] = useState(initial?.amount_excl_vat != null ? String(Math.abs(initial.amount_excl_vat)) : "");
+  const [isCash, setIsCash] = useState(initial?.is_cash ?? false);
   const [dueDate, setDueDate] = useState(initial?.due_date || "");
   const [dueDateTouched, setDueDateTouched] = useState(!!initial?.due_date);
   const [notes, setNotes] = useState(initial?.notes || "");
@@ -1716,13 +1723,17 @@ function InstallmentForm({
       {
         label: label.trim(),
         amount_due: sign * Math.abs(Number(amountDue)),
-        amount_excl_vat: amountExclVat.trim() === "" ? null : sign * Math.abs(Number(amountExclVat)),
+        // Cash : pas de TVA, le montant HT = montant TVAC. Pas de facture.
+        amount_excl_vat: isCash
+          ? sign * Math.abs(Number(amountDue))
+          : (amountExclVat.trim() === "" ? null : sign * Math.abs(Number(amountExclVat))),
         due_date: isDiscount ? null : (dueDate || null),
         status: isDiscount ? "paid" : status,
         category,
         notes: notes.trim() || null,
+        is_cash: isCash,
       },
-      file
+      isCash ? null : file
     );
     setSaving(false);
   };
@@ -1752,12 +1763,21 @@ function InstallmentForm({
           <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Deposit, balance, food, taxi, etc." />
         </label>
         <label className="space-y-1">
-          <div className="text-xs text-muted-foreground">Amount incl. VAT (€) *</div>
+          <div className="text-xs text-muted-foreground">{isCash ? "Amount (€) *" : "Amount incl. VAT (€) *"}</div>
           <Input type="number" min="0" step="0.01" value={amountDue} onChange={(e) => setAmountDue(e.target.value)} />
         </label>
-        <label className="space-y-1">
-          <div className="text-xs text-muted-foreground">Amount excl. VAT (€)</div>
-          <Input type="number" min="0" step="0.01" value={amountExclVat} onChange={(e) => setAmountExclVat(e.target.value)} placeholder="Optional" />
+        {!isCash && (
+          <label className="space-y-1">
+            <div className="text-xs text-muted-foreground">Amount excl. VAT (€)</div>
+            <Input type="number" min="0" step="0.01" value={amountExclVat} onChange={(e) => setAmountExclVat(e.target.value)} placeholder="Optional" />
+          </label>
+        )}
+        <label className="flex items-center gap-2 cursor-pointer select-none self-end pb-1.5">
+          <Checkbox checked={isCash} onCheckedChange={(v) => setIsCash(v === true)} />
+          <span>
+            <span className="font-medium">Cash payment</span>
+            <span className="block text-xs text-muted-foreground">No VAT (excl. = incl.) · no invoice</span>
+          </span>
         </label>
         {category !== "discount" && (
           <label className="space-y-1">
@@ -1789,6 +1809,7 @@ function InstallmentForm({
         )}
       </div>
 
+      {!isCash && (
       <div className="space-y-1">
         <div className="text-xs text-muted-foreground">Invoice file (optional)</div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -1812,6 +1833,7 @@ function InstallmentForm({
           />
         </div>
       </div>
+      )}
 
       <label className="space-y-1 block">
         <div className="text-xs text-muted-foreground">Notes</div>

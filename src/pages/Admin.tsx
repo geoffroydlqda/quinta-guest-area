@@ -81,6 +81,7 @@ type Installment = {
   due_date: string | null; status: string; category?: string | null;
   invoice_file_url?: string | null; invoice_file_name?: string | null;
   payment_link?: string | null;
+  is_cash?: boolean;
 };
 
 const SECTION_TITLES: Record<string, string> = {
@@ -186,7 +187,7 @@ const AdminContent = () => {
     if (!silent) setLoading(true);
     const [res, instRes] = await Promise.all([
       supabase.functions.invoke("admin-list-data"),
-      supabase.from("payment_installments").select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,payment_link"),
+      supabase.from("payment_installments").select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,payment_link,is_cash"),
     ]);
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });

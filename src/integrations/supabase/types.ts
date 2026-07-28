@@ -416,6 +416,7 @@ export type Database = {
           due_date: string | null
           id: string
           invoice_file_name: string | null
+          is_cash: boolean
           invoice_file_url: string | null
           label: string
           notes: string | null
@@ -432,6 +433,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           invoice_file_name?: string | null
+          is_cash?: boolean
           invoice_file_url?: string | null
           label: string
           notes?: string | null
@@ -448,6 +450,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           invoice_file_name?: string | null
+          is_cash?: boolean
           invoice_file_url?: string | null
           label?: string
           notes?: string | null

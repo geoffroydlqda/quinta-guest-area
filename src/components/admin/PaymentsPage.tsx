@@ -36,6 +36,7 @@ export interface PayInstallment {
   invoice_file_url?: string | null;
   invoice_file_name?: string | null;
   payment_link?: string | null;
+  is_cash?: boolean;
 }
 
 type Bucket = "paid" | "overdue" | "upcoming";
@@ -389,6 +390,11 @@ export function PaymentsPage({
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     )}
+                    {r.inst.is_cash && (
+                      <span className="ml-1.5 inline-flex align-middle rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground" title="Cash payment — no VAT, no invoice">
+                        Cash
+                      </span>
+                    )}
                   </td>
                   <td className={`px-3 py-2 whitespace-nowrap ${r.bucket === "overdue" ? "text-destructive font-medium" : ""}`}>
                     {fmtDate(r.inst.due_date)}
@@ -419,7 +425,9 @@ export function PaymentsPage({
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     <div className="flex items-center gap-1">
-                      {r.inst.invoice_file_url ? (
+                      {r.inst.is_cash ? (
+                        <span className="text-xs text-muted-foreground" title="Cash payment — no invoice">—</span>
+                      ) : r.inst.invoice_file_url ? (
                         <>
                           <Button size="sm" variant="ghost" className="h-7 px-1.5" title={`Download ${r.inst.invoice_file_name || "invoice"}`} onClick={() => downloadInvoice(r)}>
                             <Download className="w-3.5 h-3.5" />
