@@ -771,19 +771,11 @@ function DashboardView({
     const overdueTotal = overdue.reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const outstanding = installments.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
 
-    const upcoming = events
-      .filter((e) => e.checkIn && e.checkIn > todayIso)
-      .sort((a, b) => (a.checkIn || "").localeCompare(b.checkIn || ""))
-      .slice(0, 5);
-    const overdueRows = overdue
-      .sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""))
-      .slice(0, 8);
     return {
       contracted, contractedHt, collected, overdueTotal, outstanding,
       overdueCount: overdue.length,
-      upcoming, overdueRows,
     };
-  }, [installments, bookingById, events, todayIso, year]);
+  }, [installments, bookingById, todayIso, year]);
 
   const charts = useMemo(() => {
     const rev = Array.from({ length: 12 }, () => ({ rental: 0, catering: 0, extra: 0, collected: 0 }));
@@ -954,29 +946,30 @@ function DashboardView({
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Tile
-          label={`Revenue ${year} (incl. VAT)`}
-          value={fmtMoney(kpis.contracted)}
-          sub={`${fmtMoney(kpis.contractedHt)} excl. VAT`}
-        />
-        <Tile
-          label={`Collected ${year}`}
-          value={fmtMoney(kpis.collected)}
-          sub={kpis.contracted > 0 ? `${Math.round((kpis.collected / kpis.contracted) * 100)}% of contracted` : undefined}
-          tone="success"
-        />
-        <Tile
-          label="Overdue"
-          value={fmtMoney(kpis.overdueTotal)}
-          sub={`${kpis.overdueCount} payment${kpis.overdueCount === 1 ? "" : "s"} late · ${fmtMoney(kpis.outstanding)} outstanding total`}
-          tone={kpis.overdueTotal > 0 ? "danger" : undefined}
-        />
-      </div>
+      <div className="grid lg:grid-cols-2 gap-4 items-start">
+        <BookingCalendar bookings={bookings} todayIso={todayIso} onOpen={onOpen} />
 
-      <BookingCalendar bookings={bookings} todayIso={todayIso} onOpen={onOpen} />
+        <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Tile
+            label={`Revenue ${year} (incl. VAT)`}
+            value={fmtMoney(kpis.contracted)}
+            sub={`${fmtMoney(kpis.contractedHt)} excl. VAT`}
+          />
+          <Tile
+            label={`Collected ${year}`}
+            value={fmtMoney(kpis.collected)}
+            sub={kpis.contracted > 0 ? `${Math.round((kpis.collected / kpis.contracted) * 100)}% of contracted` : undefined}
+            tone="success"
+          />
+          <Tile
+            label="Overdue"
+            value={fmtMoney(kpis.overdueTotal)}
+            sub={`${kpis.overdueCount} payment${kpis.overdueCount === 1 ? "" : "s"} late · ${fmtMoney(kpis.outstanding)} outstanding total`}
+            tone={kpis.overdueTotal > 0 ? "danger" : undefined}
+          />
+        </div>
 
-      <div className="grid lg:grid-cols-2 gap-4">
         <section className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-baseline justify-between gap-2 flex-wrap">
             <div className="font-medium text-sm">Season occupancy · {year}</div>
@@ -1046,6 +1039,7 @@ function DashboardView({
             No revenue target set for {year}.
           </section>
         )}
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
@@ -1059,64 +1053,6 @@ function DashboardView({
         </section>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <section className="rounded-xl border border-border bg-card">
-          <div className="px-4 py-3 border-b border-border font-medium text-sm">Overdue payments</div>
-          {kpis.overdueRows.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground italic">Nothing overdue. 🎉</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {kpis.overdueRows.map((i) => (
-                <li key={i.id}>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(i.booking_id)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm hover:bg-muted/60 text-left"
-                  >
-                    <span className="min-w-0">
-                      <span className="font-medium">{eventName(i.booking_id)}</span>
-                      <span className="text-muted-foreground"> · {i.label || "Payment"}</span>
-                    </span>
-                    <span className="shrink-0 text-right">
-                      <span className="font-medium">{fmtMoney(Number(i.amount_due))}</span>
-                      <span className="text-destructive text-xs ml-2">due {fmtShort(i.due_date)}</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="rounded-xl border border-border bg-card">
-          <div className="px-4 py-3 border-b border-border font-medium text-sm">Upcoming check-ins</div>
-          {kpis.upcoming.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground italic">No upcoming events.</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {kpis.upcoming.map((e) => (
-                <li key={e.bookingId}>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(e.bookingId)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm hover:bg-muted/60 text-left"
-                  >
-                    <span className="min-w-0 flex items-center gap-1.5">
-                      <span className="font-medium truncate">{eventName(e.bookingId)}</span>
-                      <span className="shrink-0 text-[10px] uppercase px-1.5 py-0.5 rounded-full border border-border bg-muted text-muted-foreground">
-                        {EVENT_TYPE_LABEL[bookingById.get(e.bookingId)?.event_type ?? "retreat"] ?? "Retreat"}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-muted-foreground">
-                      {fmtShort(e.checkIn)} → {fmtShort(e.checkOut)} · {e.guestsCount} guests
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
     </div>
   );
 }
