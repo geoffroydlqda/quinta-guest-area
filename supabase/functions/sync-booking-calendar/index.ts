@@ -45,12 +45,25 @@ const BodySchema = z.object({
 });
 
 // ---- OAuth2 service account (JWT RS256 -> access token, mis en cache) ------
+// Identifiants : env (GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY) ou, à défaut,
+// app_settings key='internal' (google_sa_email / google_sa_private_key —
+// lisible uniquement par le service role, comme cron_key).
+async function getSaCreds(): Promise<{ email: string; key: string }> {
+  let email = Deno.env.get("GOOGLE_SA_EMAIL") ?? "";
+  let key = Deno.env.get("GOOGLE_SA_PRIVATE_KEY") ?? "";
+  if (!email || !key) {
+    const { data } = await _adminAuthClient.from("app_settings").select("value").eq("key", "internal").maybeSingle();
+    const v = (data?.value ?? {}) as Record<string, string>;
+    email = email || v.google_sa_email || "";
+    key = key || v.google_sa_private_key || "";
+  }
+  if (!email || !key) throw new Error("SA_NOT_CONFIGURED");
+  return { email, key: key.replace(/\\n/g, "\n") };
+}
+
 let _gTok: { token: string; exp: number } | null = null;
 async function googleAccessToken(): Promise<string> {
-  const email = Deno.env.get("GOOGLE_SA_EMAIL");
-  let key = Deno.env.get("GOOGLE_SA_PRIVATE_KEY");
-  if (!email || !key) throw new Error("SA_NOT_CONFIGURED");
-  key = key.replace(/\\n/g, "\n");
+  const { email, key } = await getSaCreds();
   const now = Math.floor(Date.now() / 1000);
   if (_gTok && _gTok.exp - 60 > now) return _gTok.token;
   const b64url = (bytes: Uint8Array) =>
@@ -134,15 +147,26 @@ async function upsertBooking(admin: ReturnType<typeof createClient>, b: BookingR
   let eventId = b.google_calendar_event_id;
   let ok = false;
   if (eventId) {
-    // Événement existant (souvent créé à la main) : dates + description seulement,
-    // on préserve le titre.
-    const r = await fetch(`${CAL_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`, {
-      method: "PATCH", headers,
-      body: JSON.stringify({ ...dates, description: bookingDescription(b) }),
-    });
-    ok = r.ok;
-    if (r.status === 404 || r.status === 410) eventId = null; // événement supprimé côté Google -> recréer
-    else if (!r.ok) throw new Error(`PATCH ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    // Événement existant. S'il a été créé à la main par Geoffroy (description
+    // libre, liens Notion…), on ne touche QUE les dates — jamais son titre ni
+    // sa description. On ne réécrit la description que si elle est vide ou
+    // qu'elle vient de cette fonction (marqueur "guest.quintamor.com/admin").
+    const getR = await fetch(`${CAL_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`, { headers });
+    if (getR.status === 404 || getR.status === 410) {
+      eventId = null; // événement supprimé côté Google -> recréer
+    } else if (!getR.ok) {
+      throw new Error(`GET ${getR.status}: ${(await getR.text()).slice(0, 200)}`);
+    } else {
+      const ev = await getR.json();
+      const ownDescription = !ev.description || String(ev.description).includes("guest.quintamor.com/admin/guest/");
+      const patch: Record<string, unknown> = { ...dates };
+      if (ownDescription) patch.description = bookingDescription(b);
+      const r = await fetch(`${CAL_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`, {
+        method: "PATCH", headers, body: JSON.stringify(patch),
+      });
+      if (!r.ok) throw new Error(`PATCH ${r.status}: ${(await r.text()).slice(0, 200)}`);
+      ok = true;
+    }
   }
   if (!eventId) {
     const r = await fetch(`${CAL_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events`, {

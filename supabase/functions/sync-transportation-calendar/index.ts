@@ -47,13 +47,26 @@ const BodySchema = z.object({
 
 // ---- OAuth2 service account (JWT RS256 -> access token, mis en cache) ------
 let _gTok: { token: string; exp: number } | null = null;
-async function googleAccessToken(): Promise<string> {
-  const email = Deno.env.get("GOOGLE_SA_EMAIL");
-  let key = Deno.env.get("GOOGLE_SA_PRIVATE_KEY");
+// Identifiants : env (GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY) ou, à défaut,
+// app_settings key='internal' (google_sa_email / google_sa_private_key —
+// lisible uniquement par le service role, comme cron_key).
+async function getSaCreds(): Promise<{ email: string; key: string }> {
+  let email = Deno.env.get("GOOGLE_SA_EMAIL") ?? "";
+  let key = Deno.env.get("GOOGLE_SA_PRIVATE_KEY") ?? "";
+  if (!email || !key) {
+    const { data } = await _adminAuthClient.from("app_settings").select("value").eq("key", "internal").maybeSingle();
+    const v = (data?.value ?? {}) as Record<string, string>;
+    email = email || v.google_sa_email || "";
+    key = key || v.google_sa_private_key || "";
+  }
   if (!email || !key) {
     throw new Error("Google service account not configured (secrets GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY)");
   }
-  key = key.replace(/\\n/g, "\n");
+  return { email, key: key.replace(/\\n/g, "\n") };
+}
+
+async function googleAccessToken(): Promise<string> {
+  const { email, key } = await getSaCreds();
   const now = Math.floor(Date.now() / 1000);
   if (_gTok && _gTok.exp - 60 > now) return _gTok.token;
   const b64url = (bytes: Uint8Array) =>
