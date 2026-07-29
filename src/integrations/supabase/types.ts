@@ -212,6 +212,9 @@ export type Database = {
       client_profiles: {
         Row: {
           address: string | null
+          city: string | null
+          company_name: string | null
+          country: string | null
           created_at: string
           email: string
           first_name: string | null
@@ -222,9 +225,13 @@ export type Database = {
           phone: string | null
           tax_number: string | null
           updated_at: string
+          zip_code: string | null
         }
         Insert: {
           address?: string | null
+          city?: string | null
+          company_name?: string | null
+          country?: string | null
           created_at?: string
           email: string
           first_name?: string | null
@@ -235,9 +242,13 @@ export type Database = {
           phone?: string | null
           tax_number?: string | null
           updated_at?: string
+          zip_code?: string | null
         }
         Update: {
           address?: string | null
+          city?: string | null
+          company_name?: string | null
+          country?: string | null
           created_at?: string
           email?: string
           first_name?: string | null
@@ -248,6 +259,7 @@ export type Database = {
           phone?: string | null
           tax_number?: string | null
           updated_at?: string
+          zip_code?: string | null
         }
         Relationships: []
       }
@@ -453,6 +465,8 @@ export type Database = {
           id: string
           invoice_file_name: string | null
           is_cash: boolean
+          moloni_document_id: number | null
+          invoice_number: string | null
           invoice_file_url: string | null
           label: string
           notes: string | null
@@ -470,6 +484,8 @@ export type Database = {
           id?: string
           invoice_file_name?: string | null
           is_cash?: boolean
+          moloni_document_id?: number | null
+          invoice_number?: string | null
           invoice_file_url?: string | null
           label: string
           notes?: string | null
@@ -487,6 +503,8 @@ export type Database = {
           id?: string
           invoice_file_name?: string | null
           is_cash?: boolean
+          moloni_document_id?: number | null
+          invoice_number?: string | null
           invoice_file_url?: string | null
           label?: string
           notes?: string | null

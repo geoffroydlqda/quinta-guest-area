@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Loader2, Mail, Link2, Upload, Download, Trash2, FileDown, ExternalLink,
+  Loader2, Mail, Link2, Upload, Download, Trash2, FileDown, ExternalLink, FilePlus2,
 } from "lucide-react";
 
 /**
@@ -37,6 +37,8 @@ export interface PayInstallment {
   invoice_file_name?: string | null;
   payment_link?: string | null;
   is_cash?: boolean;
+  moloni_document_id?: number | null;
+  invoice_number?: string | null;
 }
 
 type Bucket = "paid" | "overdue" | "upcoming";
@@ -276,6 +278,32 @@ export function PaymentsPage({
     onReload();
   };
 
+  // Step 1 facturation Moloni : crée la fatura-recibo (FR2026) et attache le PDF.
+  const generateInvoice = async (r: Row) => {
+    const guest = `${r.booking.first_name ?? ""} ${r.booking.last_name ?? ""}`.trim() || r.booking.retreat_name || r.booking.email;
+    const ok = window.confirm(
+      `Generate a Moloni invoice (fatura-recibo) for ${guest} — ${fmt2(Number(r.inst.amount_due))}?\n\n` +
+      `This issues a REAL sequential document in the FR2026 series and reports it to the AT. It cannot be undone (only corrected with a credit note).`
+    );
+    if (!ok) return;
+    setBusyId(r.inst.id);
+    const res = await supabase.functions.invoke("moloni-invoice", {
+      body: { action: "generate", installment_id: r.inst.id },
+    });
+    setBusyId(null);
+    const err = (res.data as any)?.error || res.error?.message;
+    if (err) {
+      toast({ title: "Invoice failed", description: String(err), variant: "destructive" });
+      return;
+    }
+    const d = res.data as { number?: string; pdf_attached?: boolean };
+    toast({
+      title: `Invoice ${d.number ?? "created"}`,
+      description: d.pdf_attached ? "PDF attached to the payment." : "Created in Moloni — PDF not attached yet, retry download from Moloni.",
+    });
+    onReload();
+  };
+
   const exportCsv = () => {
     const esc = (v: unknown) => {
       const s = String(v ?? "");
@@ -429,17 +457,29 @@ export function PaymentsPage({
                         <span className="text-xs text-muted-foreground" title="Cash payment — no invoice">—</span>
                       ) : r.inst.invoice_file_url ? (
                         <>
+                          {r.inst.invoice_number && (
+                            <span className="text-xs text-muted-foreground mr-0.5" title="Moloni document">{r.inst.invoice_number}</span>
+                          )}
                           <Button size="sm" variant="ghost" className="h-7 px-1.5" title={`Download ${r.inst.invoice_file_name || "invoice"}`} onClick={() => downloadInvoice(r)}>
                             <Download className="w-3.5 h-3.5" />
                           </Button>
-                          <Button size="sm" variant="ghost" className="h-7 px-1.5 text-destructive" title="Remove invoice" onClick={() => removeInvoice(r)}>
-                            <Trash2 className="w-3.5 h-3.5" />
+                          {!r.inst.moloni_document_id && (
+                            <Button size="sm" variant="ghost" className="h-7 px-1.5 text-destructive" title="Remove invoice" onClick={() => removeInvoice(r)}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </>
+                      ) : r.inst.moloni_document_id ? (
+                        <span className="text-xs text-muted-foreground" title="Created in Moloni — PDF pending">{r.inst.invoice_number ?? "In Moloni"}</span>
+                      ) : (
+                        <>
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" title="Generate a Moloni invoice (fatura-recibo FR2026)" disabled={busy} onClick={() => generateInvoice(r)}>
+                            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><FilePlus2 className="w-3.5 h-3.5 mr-1" />Invoice</>}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 px-1.5 text-muted-foreground" title="Upload an existing invoice (PDF/JPG/PNG)" disabled={busy} onClick={() => pickInvoice(r)}>
+                            <Upload className="w-3.5 h-3.5" />
                           </Button>
                         </>
-                      ) : (
-                        <Button size="sm" variant="ghost" className="h-7 px-1.5 text-muted-foreground" title="Upload invoice (PDF/JPG/PNG)" disabled={busy} onClick={() => pickInvoice(r)}>
-                          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                        </Button>
                       )}
                     </div>
                   </td>

@@ -82,6 +82,8 @@ type Installment = {
   invoice_file_url?: string | null; invoice_file_name?: string | null;
   payment_link?: string | null;
   is_cash?: boolean;
+  moloni_document_id?: number | null;
+  invoice_number?: string | null;
 };
 
 const SECTION_TITLES: Record<string, string> = {
@@ -191,7 +193,7 @@ const AdminContent = () => {
     if (!silent) setLoading(true);
     const [res, instRes] = await Promise.all([
       supabase.functions.invoke("admin-list-data"),
-      supabase.from("payment_installments").select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,payment_link,is_cash"),
+      supabase.from("payment_installments").select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,payment_link,is_cash,moloni_document_id,invoice_number"),
     ]);
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });
@@ -1292,16 +1294,21 @@ type ClientProfile = {
   email: string;
   first_name: string | null;
   last_name: string | null;
+  company_name: string | null;
   phone: string | null;
   tax_number: string | null;
   address: string | null;
+  zip_code: string | null;
+  city: string | null;
+  country: string | null;
   nationality: string | null;
 };
 
 type ClientForm = Omit<ClientProfile, "id">;
 
 const EMPTY_CLIENT: ClientForm = {
-  email: "", first_name: null, last_name: null, phone: null, tax_number: null, address: null, nationality: null,
+  email: "", first_name: null, last_name: null, company_name: null, phone: null,
+  tax_number: null, address: null, zip_code: null, city: null, country: null, nationality: null,
 };
 
 function GuestsView({ bookings, installments, onOpen, onReload }: {
@@ -1320,7 +1327,7 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
 
   const fetchProfiles = async () => {
     const { data, error } = await supabase.from("client_profiles")
-      .select("id,email,first_name,last_name,phone,tax_number,address,nationality");
+      .select("id,email,first_name,last_name,company_name,phone,tax_number,address,zip_code,city,country,nationality");
     if (!error && data) setProfilesArr(data as ClientProfile[]);
   };
   useEffect(() => { fetchProfiles(); }, []);
@@ -1403,9 +1410,13 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
       email: current.email,
       first_name: current.profile?.first_name ?? ref.first_name,
       last_name: current.profile?.last_name ?? ref.last_name,
+      company_name: current.profile?.company_name ?? null,
       phone: current.profile?.phone ?? null,
       tax_number: current.profile?.tax_number ?? null,
       address: current.profile?.address ?? null,
+      zip_code: current.profile?.zip_code ?? null,
+      city: current.profile?.city ?? null,
+      country: current.profile?.country ?? null,
       nationality: current.profile?.nationality ?? null,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1646,10 +1657,16 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
                       Used for guest-area invitations and payment reminders — applies to all this guest's bookings.
                     </p>
                   </div>
-                  {field("Phone number", "phone", "+351 …")}
+                  {field("Company name", "company_name", "Optional — invoiced entity")}
                   {field("Tax number", "tax_number", "VAT / NIF")}
+                  {field("Phone number", "phone", "+351 …")}
                   {field("Nationality", "nationality", "e.g. Belgian")}
-                  {field("Address", "address", "Street, city, country")}
+                  <div className="sm:col-span-2 grid gap-3 sm:grid-cols-[2fr,1fr]">
+                    {field("Street address", "address", "Street and number")}
+                    {field("Zip code", "zip_code", "1050-174")}
+                  </div>
+                  {field("City", "city", "Lisboa")}
+                  {field("Country", "country", "Portugal")}
                 </div>
                 <div className="mt-3 flex justify-end">
                   <Button size="sm" onClick={saveProfile} disabled={saving}>
