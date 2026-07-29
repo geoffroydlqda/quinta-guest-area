@@ -124,6 +124,10 @@ async function generateInvoice(installmentId: string) {
   if (inst.category === "discount") throw new Error("Discounts are handled with credit notes, not invoices");
   if (inst.moloni_document_id) throw new Error(`Invoice already generated (${inst.invoice_number ?? inst.moloni_document_id})`);
   if (!(Number(inst.amount_due) > 0)) throw new Error("Amount must be positive");
+  // Garde-fou : jamais de vrai document fiscal pour un paiement Stripe de TEST.
+  if (inst.stripe_session_id?.startsWith("cs_test_")) {
+    throw new Error("This payment was made in Stripe TEST mode — no real invoice will be created for it");
+  }
 
   // Échéances payées dans la même session Stripe et pas encore facturées
   // -> une seule fatura-recibo à plusieurs lignes.
