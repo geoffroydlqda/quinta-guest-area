@@ -723,7 +723,8 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
     );
   }
 
-  const totalDue = Number(booking?.total_rental_price ?? 0);
+  // Ce que la cliente paie : prix de base − remise.
+  const totalDue = Math.max(0, Number(booking?.total_rental_price ?? 0) - Number(booking?.rental_discount ?? 0));
   const totalPaid = rental.filter((i) => i.status === 'paid').reduce((s, i) => s + Number(i.amount_due || 0), 0);
   const remaining = Math.max(totalDue - totalPaid, 0);
   const pct = totalDue > 0 ? Math.min(100, Math.round((totalPaid / totalDue) * 100)) : 0;

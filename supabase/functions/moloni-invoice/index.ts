@@ -232,14 +232,16 @@ async function generateInvoice(installmentId: string) {
     ? ` · Check-in ${fmtDatePt(booking.check_in_date)} → Check-out ${fmtDatePt(booking.check_out_date)}`
     : "";
 
-  // % de remise sur le rental : rental_discount TVAC rapporté au prix catalogue
-  // (total contracté + remise). Appliqué à chaque ligne rental -> prorata automatique.
+  // % de remise sur le rental. Convention : total_rental_price = prix de base
+  // (catalogue) ; le client paie total − discount. d% = discount / total,
+  // appliqué à chaque ligne rental -> prorata automatique.
   const rentalDiscount = Math.abs(Number(booking.rental_discount ?? 0));
   let discountPct = 0;
   if (rentalDiscount > 0) {
-    const contracted = Number(booking.total_rental_price ?? 0) ||
-      group.filter((g) => (g.category ?? "rental") === "rental").reduce((s, g) => s + Number(g.amount_due), 0);
-    const catalog = contracted + rentalDiscount;
+    // Fallback si le total n'est pas rempli : les échéances somment au net,
+    // donc catalogue = somme des échéances rental + remise.
+    const catalog = Number(booking.total_rental_price ?? 0) ||
+      (group.filter((g) => (g.category ?? "rental") === "rental").reduce((s, g) => s + Number(g.amount_due), 0) + rentalDiscount);
     if (catalog > 0) discountPct = Math.round((rentalDiscount / catalog) * 10000) / 100;
   }
 
