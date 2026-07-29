@@ -133,6 +133,7 @@ export type Database = {
           remaining_balance: number | null
           retreat_name: string
           total_rental_price: number | null
+          rental_discount: number | null
           updated_at: string
           user_id: string | null
           whatsapp_group_url: string | null
@@ -168,6 +169,7 @@ export type Database = {
           remaining_balance?: number | null
           retreat_name?: string
           total_rental_price?: number | null
+          rental_discount?: number | null
           updated_at?: string
           user_id?: string | null
           whatsapp_group_url?: string | null
@@ -203,6 +205,7 @@ export type Database = {
           remaining_balance?: number | null
           retreat_name?: string
           total_rental_price?: number | null
+          rental_discount?: number | null
           updated_at?: string
           user_id?: string | null
           whatsapp_group_url?: string | null
@@ -466,6 +469,8 @@ export type Database = {
           invoice_file_name: string | null
           is_cash: boolean
           moloni_document_id: number | null
+          vat_rate: number | null
+          stripe_session_id: string | null
           invoice_number: string | null
           invoice_file_url: string | null
           label: string
@@ -485,6 +490,8 @@ export type Database = {
           invoice_file_name?: string | null
           is_cash?: boolean
           moloni_document_id?: number | null
+          vat_rate?: number | null
+          stripe_session_id?: string | null
           invoice_number?: string | null
           invoice_file_url?: string | null
           label: string
@@ -504,6 +511,8 @@ export type Database = {
           invoice_file_name?: string | null
           is_cash?: boolean
           moloni_document_id?: number | null
+          vat_rate?: number | null
+          stripe_session_id?: string | null
           invoice_number?: string | null
           invoice_file_url?: string | null
           label?: string

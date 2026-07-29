@@ -1,6 +1,10 @@
 // Stripe Checkout — bouton "Pay" de la guest area.
-// { installment_id } -> crée une Checkout Session Stripe pour l'échéance
-// (montant TVAC, EUR) et renvoie l'URL de paiement hébergée par Stripe.
+// { installment_ids: [uuid, ...] } (ou installment_id unique, rétro-compatible)
+// -> crée UNE Checkout Session Stripe couvrant les échéances (une ligne par
+// échéance, montants TVAC, EUR) et renvoie l'URL de paiement.
+// Toutes les échéances doivent appartenir au même booking. Le webhook marque
+// ensuite toutes les échéances payées et stocke le stripe_session_id commun
+// (-> une seule fatura-recibo à plusieurs lignes).
 // Accessible au guest propriétaire du booking (user_id ou email) et aux admins.
 // Clé API : app_settings key='internal'.stripe_secret_key (service role only).
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
@@ -23,7 +27,10 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const BodySchema = z.object({ installment_id: z.string().uuid() });
+const BodySchema = z.object({
+  installment_id: z.string().uuid().optional(),
+  installment_ids: z.array(z.string().uuid()).min(1).max(10).optional(),
+});
 
 const PROD_ORIGIN = "https://guest.quintamor.com";
 const ALLOWED_ORIGINS = new Set([
@@ -32,6 +39,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:5173",
   "http://localhost:8080",
 ]);
+const CHECKOUT_IMAGE = `${PROD_ORIGIN}/checkout-quinta.jpg`;
 
 async function stripeKey(): Promise<string> {
   const { data } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
@@ -62,23 +70,30 @@ serve(async (req) => {
 
     const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
-    const { installment_id } = parsed.data;
+    const ids = parsed.data.installment_ids ?? (parsed.data.installment_id ? [parsed.data.installment_id] : []);
+    if (ids.length === 0) return json({ error: "installment_ids required" }, 400);
 
-    // Échéance + booking
-    const { data: inst, error: instErr } = await admin.from("payment_installments")
+    // Échéances (dédupliquées) + validations
+    const uniqueIds = [...new Set(ids)];
+    const { data: insts, error: instErr } = await admin.from("payment_installments")
       .select("id,booking_id,label,amount_due,category,status,is_cash")
-      .eq("id", installment_id).maybeSingle();
+      .in("id", uniqueIds);
     if (instErr) throw instErr;
-    if (!inst) return json({ error: "Installment not found" }, 404);
-    if (inst.status === "paid") return json({ error: "This payment is already settled" }, 400);
-    if (inst.is_cash) return json({ error: "Cash payment — not payable online" }, 400);
-    if (inst.category === "discount" || !(Number(inst.amount_due) > 0)) {
-      return json({ error: "This line is not payable online" }, 400);
+    if (!insts || insts.length !== uniqueIds.length) return json({ error: "Installment not found" }, 404);
+
+    const bookingIds = new Set(insts.map((i) => i.booking_id));
+    if (bookingIds.size !== 1) return json({ error: "All payments must belong to the same booking" }, 400);
+    for (const inst of insts) {
+      if (inst.status === "paid") return json({ error: `"${inst.label}" is already settled` }, 400);
+      if (inst.is_cash) return json({ error: `"${inst.label}" is a cash payment — not payable online` }, 400);
+      if (inst.category === "discount" || !(Number(inst.amount_due) > 0)) {
+        return json({ error: `"${inst.label}" is not payable online` }, 400);
+      }
     }
 
     const { data: booking, error: bErr } = await admin.from("bookings")
       .select("id,user_id,email,retreat_name,first_name,check_in_date,check_out_date")
-      .eq("id", inst.booking_id).maybeSingle();
+      .eq("id", insts[0].booking_id).maybeSingle();
     if (bErr) throw bErr;
     if (!booking) return json({ error: "Booking not found" }, 404);
 
@@ -92,30 +107,37 @@ serve(async (req) => {
     const origin = ALLOWED_ORIGINS.has(reqOrigin) ? reqOrigin : PROD_ORIGIN;
 
     const key = await stripeKey();
-    const cents = Math.round(Number(inst.amount_due) * 100);
-    const name = `${inst.label || "Payment"} — ${booking.retreat_name || "Quinta do Amor"}`;
     const stay = booking.check_in_date && booking.check_out_date
-      ? `Stay ${booking.check_in_date} → ${booking.check_out_date}`
-      : "Quinta do Amor";
+      ? `Stay ${booking.check_in_date} → ${booking.check_out_date} · ${booking.retreat_name || "Quinta do Amor"}`
+      : (booking.retreat_name || "Quinta do Amor");
 
     const params = new URLSearchParams();
     params.set("mode", "payment");
     // Moyens de paiement maîtrisés (frais minimaux) : carte (+ Apple/Google Pay
     // automatiques), prélèvement SEPA (~6 € plafonnés), Link (tarif carte).
-    // Pas de Klarna/BNPL ni de méthodes locales non pertinentes.
     params.set("payment_method_types[0]", "card");
     params.set("payment_method_types[1]", "sepa_debit");
     params.set("payment_method_types[2]", "link");
-    params.set("line_items[0][quantity]", "1");
-    params.set("line_items[0][price_data][currency]", "eur");
-    params.set("line_items[0][price_data][unit_amount]", String(cents));
-    params.set("line_items[0][price_data][product_data][name]", name.slice(0, 250));
-    params.set("line_items[0][price_data][product_data][description]", stay.slice(0, 250));
-    params.set("client_reference_id", inst.id);
-    params.set("metadata[installment_id]", inst.id);
+
+    // Une ligne Stripe par échéance (le total = somme des échéances)
+    insts.forEach((inst, idx) => {
+      const cents = Math.round(Number(inst.amount_due) * 100);
+      const name = `${inst.label || "Payment"} — ${booking.retreat_name || "Quinta do Amor"}`;
+      params.set(`line_items[${idx}][quantity]`, "1");
+      params.set(`line_items[${idx}][price_data][currency]`, "eur");
+      params.set(`line_items[${idx}][price_data][unit_amount]`, String(cents));
+      params.set(`line_items[${idx}][price_data][product_data][name]`, name.slice(0, 250));
+      params.set(`line_items[${idx}][price_data][product_data][description]`, stay.slice(0, 250));
+      params.set(`line_items[${idx}][price_data][product_data][images][0]`, CHECKOUT_IMAGE);
+    });
+
+    const idsCsv = insts.map((i) => i.id).join(",");
+    params.set("client_reference_id", insts[0].id);
+    params.set("metadata[installment_ids]", idsCsv);
     params.set("metadata[booking_id]", booking.id);
-    params.set("payment_intent_data[metadata][installment_id]", inst.id);
-    params.set("payment_intent_data[description]", name.slice(0, 250));
+    params.set("payment_intent_data[metadata][installment_ids]", idsCsv);
+    params.set("payment_intent_data[description]",
+      `${booking.retreat_name || "Quinta do Amor"} — ${insts.map((i) => i.label).join(" + ")}`.slice(0, 250));
     if (booking.email) params.set("customer_email", booking.email);
     params.set("success_url", `${origin}/dashboard?payment=success&session_id={CHECKOUT_SESSION_ID}`);
     params.set("cancel_url", `${origin}/dashboard?payment=cancelled`);

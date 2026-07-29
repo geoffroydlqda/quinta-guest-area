@@ -15,7 +15,7 @@ export type PaymentInstallment = {
   amount_due: number;
   due_date: string | null;
   status: "pending" | "paid";
-  category: "rental" | "extra";
+  category: "rental" | "catering" | "extra" | "discount";
   invoice_file_url: string | null;
   invoice_file_name: string | null;
   notes: string | null;

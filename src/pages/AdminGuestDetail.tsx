@@ -1061,10 +1061,15 @@ function Row({ label, value }: { label: string; value: any }) {
 type Booking = {
   id: string;
   total_rental_price: number | null;
+  rental_discount: number | null;
   payment_status: "pending" | "deposit_paid" | "paid_in_full" | "overdue";
   payment_status_override: "pending" | "deposit_paid" | "paid_in_full" | "overdue" | null;
   check_in_date: string | null;
 };
+
+// TVA par catégorie : rental 23 %, catering 13 %, extra au choix (6/13/23).
+const VAT_DEFAULT: Record<string, number> = { rental: 23, catering: 13, extra: 23, discount: 23 };
+const exclVatOf = (incl: number, rate: number) => Math.round((incl / (1 + rate / 100)) * 100) / 100;
 
 // Date helpers (return ISO YYYY-MM-DD, local-time)
 function toIsoLocal(d: Date): string {
@@ -1100,6 +1105,7 @@ type Installment = {
   invoice_file_name: string | null;
   notes: string | null;
   is_cash?: boolean;
+  vat_rate?: number | null;
 };
 
 const fmtEUR = (v: number | string) => {
@@ -1161,6 +1167,8 @@ function PaymentSection({ userId }: { userId: string }) {
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [editingRental, setEditingRental] = useState(false);
   const [rentalInput, setRentalInput] = useState("");
+  const [editingDiscount, setEditingDiscount] = useState(false);
+  const [discountInput, setDiscountInput] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteInstId, setDeleteInstId] = useState<string | null>(null);
@@ -1169,7 +1177,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const loadAll = async () => {
     setLoading(true);
-    let q = supabase.from("bookings").select("id,total_rental_price,payment_status,payment_status_override,check_in_date");
+    let q = supabase.from("bookings").select("id,total_rental_price,rental_discount,payment_status,payment_status_override,check_in_date");
     if (bookingIdParam) {
       q = q.eq("id", bookingIdParam);
     } else {
@@ -1186,10 +1194,11 @@ function PaymentSection({ userId }: { userId: string }) {
     const b = bRes.data as Booking;
     setBooking(b);
     setRentalInput(b.total_rental_price != null ? String(b.total_rental_price) : "");
+    setDiscountInput(b.rental_discount != null ? String(b.rental_discount) : "");
 
     const iRes = await supabase
       .from("payment_installments")
-      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash")
+      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash,vat_rate")
       .eq("booking_id", b.id)
       .order("due_date", { ascending: true, nullsFirst: false });
     if (!iRes.error) setInstallments((iRes.data || []) as Installment[]);
@@ -1232,6 +1241,23 @@ function PaymentSection({ userId }: { userId: string }) {
     toast({ title: "Saved" });
   };
 
+  const saveDiscount = async () => {
+    if (!booking) return;
+    const v = discountInput.trim() === "" ? null : Number(discountInput);
+    if (v !== null && (Number.isNaN(v) || v < 0)) {
+      toast({ title: "Invalid amount", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("bookings").update({ rental_discount: v }).eq("id", booking.id);
+    if (error) {
+      toast({ title: "Failed to save", description: error.message, variant: "destructive" });
+      return;
+    }
+    setBooking({ ...booking, rental_discount: v });
+    setEditingDiscount(false);
+    toast({ title: "Saved", description: v ? "The discount will be split pro-rata across rental invoice lines." : undefined });
+  };
+
   const setOverride = async (value: BookingStatus | null) => {
     if (!booking) return;
     setSavingOverride(true);
@@ -1271,7 +1297,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const upsertInstallment = async (
     id: string | null,
-    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean },
+    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number },
     file?: File | null
   ) => {
     if (!booking) return false;
@@ -1285,6 +1311,7 @@ function PaymentSection({ userId }: { userId: string }) {
       category: values.category,
       notes: values.notes,
       is_cash: values.is_cash,
+      vat_rate: values.vat_rate,
     };
     let installmentId = id;
     if (id) {
@@ -1352,6 +1379,8 @@ function PaymentSection({ userId }: { userId: string }) {
         booking_id: booking.id,
         label: r.label,
         amount_due: r.amount_due,
+        amount_excl_vat: exclVatOf(r.amount_due, 23),
+        vat_rate: 23,
         due_date: r.due_date,
         category: "rental",
         status: "pending",
@@ -1522,8 +1551,8 @@ function PaymentSection({ userId }: { userId: string }) {
         <Wallet className="w-4 h-4 text-primary" /> Payments
       </h2>
 
-      {/* Total rental price + status */}
-      <div className="grid sm:grid-cols-2 gap-4">
+      {/* Total rental price + discount + status */}
+      <div className="grid sm:grid-cols-3 gap-4">
         <div className="space-y-2">
           <div className="text-xs uppercase text-muted-foreground">Total rental price (€)</div>
           {editingRental ? (
@@ -1550,6 +1579,37 @@ function PaymentSection({ userId }: { userId: string }) {
               </Button>
             </div>
           )}
+        </div>
+
+        <div className="space-y-1">
+          <div className="text-xs uppercase text-muted-foreground">Discount (€, incl. VAT)</div>
+          {editingDiscount ? (
+            <div className="flex items-center gap-2">
+              <Input
+                type="number" min="0" step="0.01"
+                value={discountInput}
+                onChange={(e) => setDiscountInput(e.target.value)}
+                className="max-w-[140px]" autoFocus
+              />
+              <Button size="sm" onClick={saveDiscount}><Check className="w-4 h-4" /></Button>
+              <Button size="sm" variant="ghost" onClick={() => {
+                setEditingDiscount(false);
+                setDiscountInput(booking.rental_discount != null ? String(booking.rental_discount) : "");
+              }}><X className="w-4 h-4" /></Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className={`text-xl font-bold ${booking.rental_discount ? "text-amber-700" : "text-muted-foreground"}`}>
+                {booking.rental_discount ? `−€${booking.rental_discount}` : "—"}
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => setEditingDiscount(true)}>
+                <Pencil className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+          <div className="text-[11px] text-muted-foreground">
+            Shown on invoices, split pro-rata across rental payments.
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -1678,13 +1738,15 @@ function InstallmentForm({
   checkInDate?: string | null;
   onCancel: () => void;
   onSave: (
-    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean },
+    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number },
     file?: File | null
   ) => Promise<void> | void;
 }) {
   const [label, setLabel] = useState(initial?.label || "");
   const [amountDue, setAmountDue] = useState(initial?.amount_due != null ? String(Math.abs(initial.amount_due)) : "");
-  const [amountExclVat, setAmountExclVat] = useState(initial?.amount_excl_vat != null ? String(Math.abs(initial.amount_excl_vat)) : "");
+  const [extraVat, setExtraVat] = useState<number>(
+    initial?.category === "extra" && initial?.vat_rate != null ? initial.vat_rate : 23
+  );
   const [isCash, setIsCash] = useState(initial?.is_cash ?? false);
   const [dueDate, setDueDate] = useState(initial?.due_date || "");
   const [dueDateTouched, setDueDateTouched] = useState(!!initial?.due_date);
@@ -1712,6 +1774,12 @@ function InstallmentForm({
     setFile(f);
   };
 
+  // TVA automatique : rental 23 %, catering 13 %, extra au choix (6/13/23).
+  // Cash : pas de TVA (HT = TVAC).
+  const vatRate = isCash ? 0 : (category === "extra" ? extraVat : (VAT_DEFAULT[category] ?? 23));
+  const amountNum = Math.abs(Number(amountDue) || 0);
+  const computedExcl = isCash ? amountNum : exclVatOf(amountNum, vatRate);
+
   const submit = async () => {
     if (!label.trim() || !amountDue) return;
     setSaving(true);
@@ -1722,16 +1790,14 @@ function InstallmentForm({
     await onSave(
       {
         label: label.trim(),
-        amount_due: sign * Math.abs(Number(amountDue)),
-        // Cash : pas de TVA, le montant HT = montant TVAC. Pas de facture.
-        amount_excl_vat: isCash
-          ? sign * Math.abs(Number(amountDue))
-          : (amountExclVat.trim() === "" ? null : sign * Math.abs(Number(amountExclVat))),
+        amount_due: sign * amountNum,
+        amount_excl_vat: sign * computedExcl,
         due_date: isDiscount ? null : (dueDate || null),
         status: isDiscount ? "paid" : status,
         category,
         notes: notes.trim() || null,
         is_cash: isCash,
+        vat_rate: vatRate,
       },
       isCash ? null : file
     );
@@ -1767,10 +1833,30 @@ function InstallmentForm({
           <Input type="number" min="0" step="0.01" value={amountDue} onChange={(e) => setAmountDue(e.target.value)} />
         </label>
         {!isCash && (
-          <label className="space-y-1">
-            <div className="text-xs text-muted-foreground">Amount excl. VAT (€)</div>
-            <Input type="number" min="0" step="0.01" value={amountExclVat} onChange={(e) => setAmountExclVat(e.target.value)} placeholder="Optional" />
-          </label>
+          <div className="space-y-1">
+            <div className="text-xs text-muted-foreground">VAT</div>
+            {category === "extra" ? (
+              <div className="flex items-center gap-3 h-9">
+                {[6, 13, 23].map((r) => (
+                  <label key={r} className="flex items-center gap-1.5 cursor-pointer select-none text-sm">
+                    <input
+                      type="radio"
+                      name="extra-vat"
+                      checked={extraVat === r}
+                      onChange={() => setExtraVat(r)}
+                      className="accent-primary"
+                    />
+                    {r}%
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="h-9 flex items-center text-sm">{vatRate}% <span className="text-muted-foreground ml-1">({category})</span></div>
+            )}
+            {amountNum > 0 && (
+              <div className="text-[11px] text-muted-foreground">= €{computedExcl.toLocaleString("en-GB", { minimumFractionDigits: 2 })} excl. VAT</div>
+            )}
+          </div>
         )}
         <label className="flex items-center gap-2 cursor-pointer select-none self-end pb-1.5">
           <Checkbox checked={isCash} onCheckedChange={(v) => setIsCash(v === true)} />

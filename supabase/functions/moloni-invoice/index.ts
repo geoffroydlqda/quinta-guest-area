@@ -86,14 +86,38 @@ function json(body: unknown, status = 200) {
 const fmtDatePt = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
+// Taux (%) -> taxId Moloni (IVA 23/13/6)
+const TAX_IDS: Record<number, number> = { 23: 1923, 13: 1924, 6: 1925 };
+const DEFAULT_RATE: Record<string, number> = { rental: 23, catering: 13, extra: 23 };
+
+type InstRow = {
+  id: string; booking_id: string; label: string; amount_due: number;
+  amount_excl_vat: number | null; category: string | null; status: string;
+  is_cash: boolean | null; moloni_document_id: number | null; invoice_number: string | null;
+  invoice_file_url: string | null; vat_rate: number | null; stripe_session_id: string | null;
+};
+
+const INST_COLS = "id,booking_id,label,amount_due,amount_excl_vat,category,status,is_cash,moloni_document_id,invoice_number,invoice_file_url,vat_rate,stripe_session_id";
+
+function rateFor(inst: InstRow): number {
+  const r = inst.vat_rate ?? DEFAULT_RATE[inst.category ?? "rental"] ?? 23;
+  return TAX_IDS[r] ? r : 23;
+}
+
+function netHt(inst: InstRow): number {
+  if (inst.amount_excl_vat != null) return Math.abs(Number(inst.amount_excl_vat));
+  const rate = rateFor(inst);
+  return Math.abs(Number(inst.amount_due)) / (1 + rate / 100);
+}
+
 async function generateInvoice(installmentId: string) {
   const cfg = await moloniCfg();
   const admin = _adminAuthClient;
 
   // 1. Charge l'échéance + booking + fiche client
   const { data: inst, error: instErr } = await admin.from("payment_installments")
-    .select("id,booking_id,label,amount_due,amount_excl_vat,category,status,is_cash,moloni_document_id,invoice_number,invoice_file_url")
-    .eq("id", installmentId).maybeSingle();
+    .select(INST_COLS)
+    .eq("id", installmentId).maybeSingle() as { data: InstRow | null; error: unknown };
   if (instErr) throw instErr;
   if (!inst) throw new Error("Installment not found");
   if (inst.is_cash) throw new Error("Cash payment — no invoice");
@@ -101,8 +125,25 @@ async function generateInvoice(installmentId: string) {
   if (inst.moloni_document_id) throw new Error(`Invoice already generated (${inst.invoice_number ?? inst.moloni_document_id})`);
   if (!(Number(inst.amount_due) > 0)) throw new Error("Amount must be positive");
 
+  // Échéances payées dans la même session Stripe et pas encore facturées
+  // -> une seule fatura-recibo à plusieurs lignes.
+  let group: InstRow[] = [inst];
+  if (inst.stripe_session_id) {
+    const { data: siblings } = await admin.from("payment_installments")
+      .select(INST_COLS)
+      .eq("stripe_session_id", inst.stripe_session_id)
+      .eq("booking_id", inst.booking_id) as { data: InstRow[] | null };
+    group = (siblings ?? [inst]).filter((s) =>
+      !s.moloni_document_id && !s.is_cash && s.category !== "discount" && Number(s.amount_due) > 0
+    );
+    if (!group.find((s) => s.id === inst.id)) group = [inst];
+  }
+  // Ordre stable : rental d'abord, puis catering, puis extras
+  const catOrder: Record<string, number> = { rental: 0, catering: 1, extra: 2 };
+  group.sort((a, b) => (catOrder[a.category ?? "rental"] ?? 3) - (catOrder[b.category ?? "rental"] ?? 3));
+
   const { data: booking, error: bErr } = await admin.from("bookings")
-    .select("id,retreat_name,first_name,last_name,email,check_in_date,check_out_date,client_id")
+    .select("id,retreat_name,first_name,last_name,email,check_in_date,check_out_date,client_id,total_rental_price,rental_discount")
     .eq("id", inst.booking_id).maybeSingle();
   if (bErr) throw bErr;
   if (!booking) throw new Error("Booking not found");
@@ -180,24 +221,46 @@ async function generateInvoice(installmentId: string) {
     if (!customerId) throw new Error(`customerCreate returned no id: ${JSON.stringify(created).slice(0, 300)}`);
   }
 
-  // 3. Produit selon la catégorie (la TVA vient du produit Moloni)
-  const productId = cfg.products[inst.category ?? "rental"] ?? cfg.products["rental"];
-  if (!productId) throw new Error(`No Moloni product configured for category ${inst.category}`);
-
-  // Prix unitaire HT : champ excl. VAT si présent, sinon dérivé du produit ?
-  // On exige le HT explicite pour une facture exacte.
-  if (inst.amount_excl_vat == null) {
-    throw new Error("Amount excl. VAT is missing on this payment — set it before generating the invoice");
-  }
-  const priceHt = Math.abs(Number(inst.amount_excl_vat));
-
+  // 3. Lignes du document : une par échéance du groupe.
+  // TVA par ligne (vat_rate de l'échéance, taxId forcé sur la ligne) ;
+  // remise rental répartie au prorata via le % de remise du booking.
   const stayLine = booking.check_in_date && booking.check_out_date
     ? ` · Check-in ${fmtDatePt(booking.check_in_date)} → Check-out ${fmtDatePt(booking.check_out_date)}`
     : "";
-  const description = `${booking.retreat_name || clientName} — ${inst.label || inst.category}${stayLine}`;
 
-  // 4. Crée la fatura-recibo (série FR2026), finalisée, payée par virement.
-  const totalTtc = Math.abs(Number(inst.amount_due));
+  // % de remise sur le rental : rental_discount TVAC rapporté au prix catalogue
+  // (total contracté + remise). Appliqué à chaque ligne rental -> prorata automatique.
+  const rentalDiscount = Math.abs(Number(booking.rental_discount ?? 0));
+  let discountPct = 0;
+  if (rentalDiscount > 0) {
+    const contracted = Number(booking.total_rental_price ?? 0) ||
+      group.filter((g) => (g.category ?? "rental") === "rental").reduce((s, g) => s + Number(g.amount_due), 0);
+    const catalog = contracted + rentalDiscount;
+    if (catalog > 0) discountPct = Math.round((rentalDiscount / catalog) * 10000) / 100;
+  }
+
+  const products = group.map((g, idx) => {
+    const productId = cfg.products[g.category ?? "rental"] ?? cfg.products["rental"];
+    if (!productId) throw new Error(`No Moloni product configured for category ${g.category}`);
+    const rate = rateFor(g);
+    const net = netHt(g);
+    const isRental = (g.category ?? "rental") === "rental";
+    const d = isRental ? discountPct : 0;
+    // Moloni calcule net = price × (1 − d/100) : on remonte au prix catalogue HT.
+    const price = d > 0 ? net / (1 - d / 100) : net;
+    return {
+      productId,
+      qty: 1,
+      ordering: idx + 1,
+      price: Math.round(price * 1e6) / 1e6,
+      ...(d > 0 ? { discount: d } : {}),
+      summary: `${booking.retreat_name || clientName} — ${g.label || g.category}${idx === 0 ? stayLine : ""}`,
+      taxes: [{ taxId: TAX_IDS[rate], ordering: 1, cumulative: false }],
+    };
+  });
+
+  // 4. Crée la fatura-recibo, finalisée, payée (total = somme des échéances).
+  const totalTtc = Math.round(group.reduce((s, g) => s + Math.abs(Number(g.amount_due)), 0) * 100) / 100;
   const created = await gql(`mutation($c: Int!, $d: InvoiceReceiptInsert!) {
     invoiceReceiptCreate(companyId: $c, data: $d) {
       data { documentId number date totalValue grossValue taxesValue status }
@@ -211,13 +274,7 @@ async function generateInvoice(installmentId: string) {
       date: new Date().toISOString(),
       expirationDate: new Date().toISOString().slice(0, 10),
       status: 1,
-      products: [{
-        productId,
-        qty: 1,
-        ordering: 1,
-        price: priceHt,
-        summary: description,
-      }],
+      products,
       payments: [{ paymentMethodId: cfg.payment_method_id, value: totalTtc }],
     },
   });
@@ -226,11 +283,13 @@ async function generateInvoice(installmentId: string) {
   const doc = created?.data?.invoiceReceiptCreate?.data;
   if (!doc?.documentId) throw new Error(`invoiceReceiptCreate returned no document: ${JSON.stringify(created).slice(0, 400)}`);
 
-  // Sauvegarde immédiate de la référence (même si le PDF échoue ensuite)
+  // Sauvegarde immédiate de la référence sur TOUTES les échéances du groupe
+  // (même si le PDF échoue ensuite)
+  const groupIds = group.map((g) => g.id);
   await admin.from("payment_installments").update({
     moloni_document_id: doc.documentId,
     invoice_number: doc.number ?? null,
-  }).eq("id", inst.id);
+  }).in("id", groupIds);
 
   // 5. PDF : génération -> token -> téléchargement -> bucket invoices
   let pdfStored = false;
@@ -256,7 +315,7 @@ async function generateInvoice(installmentId: string) {
           await admin.from("payment_installments").update({
             invoice_file_url: path,
             invoice_file_name: `${doc.number ?? doc.documentId}.pdf`,
-          }).eq("id", inst.id);
+          }).in("id", groupIds);
           pdfStored = true;
         }
       }
@@ -270,6 +329,8 @@ async function generateInvoice(installmentId: string) {
     number: doc.number,
     total: doc.totalValue,
     taxes: doc.taxesValue,
+    lines: group.length,
+    discount_pct: discountPct || undefined,
     pdf_attached: pdfStored,
   };
 }

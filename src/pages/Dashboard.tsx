@@ -592,11 +592,12 @@ function usePayInstallment() {
   const { toast } = useToast();
   const [payingId, setPayingId] = useState<string | null>(null);
 
-  const pay = async (inst: PaymentInstallment) => {
-    setPayingId(inst.id);
+  const payMany = async (insts: PaymentInstallment[]) => {
+    if (insts.length === 0) return;
+    setPayingId(insts[0].id);
     try {
       const { data, error } = await supabase.functions.invoke('stripe-checkout', {
-        body: { installment_id: inst.id },
+        body: { installment_ids: insts.map((i) => i.id) },
       });
       if (error || !data?.url) {
         throw new Error(data?.error || error?.message || 'Could not start the payment');
@@ -612,7 +613,9 @@ function usePayInstallment() {
     }
   };
 
-  return { pay, payingId };
+  const pay = (inst: PaymentInstallment) => payMany([inst]);
+
+  return { pay, payMany, payingId };
 }
 
 async function downloadInstallmentInvoice(inst: PaymentInstallment) {
@@ -654,9 +657,11 @@ function InstallmentRow({ inst, onPay, paying }: { inst: PaymentInstallment; onP
   );
 }
 
-function NextPaymentCard({ inst, onPay, paying }: { inst: PaymentInstallment; onPay: (inst: PaymentInstallment) => void; paying: boolean }) {
+function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstallment[]; onPay: (insts: PaymentInstallment[]) => void; paying: boolean }) {
   const todayIso = new Date().toISOString().slice(0, 10);
-  const overdue = !!inst.due_date && inst.due_date < todayIso;
+  const first = insts[0];
+  const overdue = !!first.due_date && first.due_date < todayIso;
+  const total = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
   return (
     <section className="bg-card rounded-2xl border-2 border-primary/30 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -664,14 +669,17 @@ function NextPaymentCard({ inst, onPay, paying }: { inst: PaymentInstallment; on
           <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
             {overdue ? 'Payment due' : 'Next payment'}
           </div>
-          <div className="text-lg font-medium truncate">{inst.label}</div>
+          <div className="text-lg font-medium truncate">
+            {insts.map((i) => i.label).join(' + ')}
+          </div>
           <div className="text-sm text-muted-foreground">
-            {fmtEur(inst.amount_due)}{inst.due_date ? ` · due ${fmtDate(inst.due_date)}` : ''}
+            {fmtEur(total)}{first.due_date ? ` · due ${fmtDate(first.due_date)}` : ''}
+            {insts.length > 1 ? ` · ${insts.length} items, one payment` : ''}
           </div>
         </div>
-        <Button size="lg" onClick={() => onPay(inst)} disabled={paying} className="shrink-0">
+        <Button size="lg" onClick={() => onPay(insts)} disabled={paying} className="shrink-0">
           {paying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
-          Pay {fmtEur(inst.amount_due)}
+          Pay {fmtEur(total)}
         </Button>
       </div>
       <div className="mt-3 text-xs text-muted-foreground">
@@ -683,17 +691,22 @@ function NextPaymentCard({ inst, onPay, paying }: { inst: PaymentInstallment; on
 
 function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }) {
   const { booking, payments, isLoading } = usePaymentData(bookingId);
-  const { pay, payingId } = usePayInstallment();
+  const { pay, payMany, payingId } = usePayInstallment();
 
   if (isLoading) return null;
 
   const rental = payments.filter((i) => (i.category ?? 'rental') === 'rental');
+  const catering = payments.filter((i) => i.category === 'catering');
   const extras = payments.filter((i) => i.category === 'extra');
 
-  // Prochaine échéance payable en ligne (rental puis extras, triées par date côté hook)
-  const nextPayable = [...rental, ...extras]
+  // Prochaines échéances payables en ligne : toutes celles qui partagent la
+  // due date la plus proche (ex. rental + catering) -> un seul paiement Stripe.
+  const payable = payments
     .filter(isPayableOnline)
-    .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))[0] ?? null;
+    .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'));
+  const nextGroup = payable.length > 0
+    ? payable.filter((i) => (i.due_date ?? '9999') === (payable[0].due_date ?? '9999'))
+    : [];
 
   const hasAccommodation = rental.length > 0 || (booking?.total_rental_price ?? 0) > 0;
   const hasExtras = extras.length > 0;
@@ -721,8 +734,8 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
 
   return (
     <div className="space-y-4">
-      {nextPayable && (
-        <NextPaymentCard inst={nextPayable} onPay={pay} paying={payingId === nextPayable.id} />
+      {nextGroup.length > 0 && (
+        <NextPaymentCard insts={nextGroup} onPay={payMany} paying={payingId === nextGroup[0].id} />
       )}
       {hasAccommodation && (
         <section className="bg-card rounded-2xl border border-border p-6">
@@ -752,6 +765,16 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
               {fmtEur(totalPaid)} paid of {fmtEur(totalDue)} · {fmtEur(remaining)} remaining
             </div>
           )}
+        </section>
+      )}
+
+      {catering.length > 0 && (
+        <section className="bg-card rounded-2xl border border-border p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Utensils className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-medium">Catering</h2>
+          </div>
+          <div>{catering.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</div>
         </section>
       )}
 

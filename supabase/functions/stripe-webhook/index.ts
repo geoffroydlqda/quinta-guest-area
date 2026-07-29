@@ -60,20 +60,23 @@ async function verifySignature(payload: string, header: string | null): Promise<
   return hexEqual(hex, v1);
 }
 
-async function markPaid(installmentId: string, sessionId: string) {
-  const { data: inst } = await admin.from("payment_installments")
-    .select("id,status")
-    .eq("id", installmentId).maybeSingle();
-  if (!inst) {
-    console.error(`[stripe-webhook] installment ${installmentId} not found (session ${sessionId})`);
-    return;
+async function markPaid(installmentIds: string[], sessionId: string) {
+  for (const installmentId of installmentIds) {
+    const { data: inst } = await admin.from("payment_installments")
+      .select("id,status")
+      .eq("id", installmentId).maybeSingle();
+    if (!inst) {
+      console.error(`[stripe-webhook] installment ${installmentId} not found (session ${sessionId})`);
+      continue;
+    }
+    if (inst.status === "paid") continue; // idempotent — Stripe renvoie parfois deux fois
+    const { error } = await admin.from("payment_installments").update({
+      status: "paid",
+      stripe_session_id: sessionId,
+    }).eq("id", installmentId);
+    if (error) throw error;
+    console.log(`[stripe-webhook] installment ${installmentId} marked paid (session ${sessionId})`);
   }
-  if (inst.status === "paid") return; // idempotent — Stripe renvoie parfois deux fois
-  const { error } = await admin.from("payment_installments").update({
-    status: "paid",
-  }).eq("id", installmentId);
-  if (error) throw error;
-  console.log(`[stripe-webhook] installment ${installmentId} marked paid (session ${sessionId})`);
 }
 
 serve(async (req) => {
@@ -85,20 +88,23 @@ serve(async (req) => {
     const event = JSON.parse(payload);
     const type: string = event?.type ?? "";
     const session = event?.data?.object ?? {};
-    const installmentId: string | undefined =
-      session?.metadata?.installment_id ?? session?.client_reference_id ?? undefined;
+    const idsRaw: string = session?.metadata?.installment_ids
+      ?? session?.metadata?.installment_id
+      ?? session?.client_reference_id
+      ?? "";
+    const installmentIds = idsRaw.split(",").map((s: string) => s.trim()).filter(Boolean);
 
     if (type === "checkout.session.completed") {
-      if (session?.payment_status === "paid" && installmentId) {
-        await markPaid(installmentId, session.id);
+      if (session?.payment_status === "paid" && installmentIds.length) {
+        await markPaid(installmentIds, session.id);
       } else {
         // SEPA & co : le débit est en cours, async_payment_succeeded suivra.
         console.log(`[stripe-webhook] session ${session?.id} completed, payment ${session?.payment_status} — waiting`);
       }
     } else if (type === "checkout.session.async_payment_succeeded") {
-      if (installmentId) await markPaid(installmentId, session.id);
+      if (installmentIds.length) await markPaid(installmentIds, session.id);
     } else if (type === "checkout.session.async_payment_failed") {
-      console.error(`[stripe-webhook] async payment FAILED for installment ${installmentId} (session ${session?.id})`);
+      console.error(`[stripe-webhook] async payment FAILED for installments ${idsRaw} (session ${session?.id})`);
     }
 
     return json({ received: true });
