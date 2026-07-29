@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 export type PaymentBooking = {
   id: string;
   total_rental_price: number | null;
+  rental_discount: number | null;
   payment_status: string | null;
   payment_status_override: string | null;
 };
@@ -40,7 +41,7 @@ export function usePaymentData(bookingId: string | null | undefined) {
       const [bRes, iRes] = await Promise.all([
         supabase
           .from("bookings")
-          .select("id,total_rental_price,payment_status,payment_status_override")
+          .select("id,total_rental_price,rental_discount,payment_status,payment_status_override")
           .eq("id", bookingId)
           .maybeSingle(),
         supabase
