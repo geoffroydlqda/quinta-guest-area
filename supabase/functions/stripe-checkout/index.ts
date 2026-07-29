@@ -100,6 +100,12 @@ serve(async (req) => {
 
     const params = new URLSearchParams();
     params.set("mode", "payment");
+    // Moyens de paiement maîtrisés (frais minimaux) : carte (+ Apple/Google Pay
+    // automatiques), prélèvement SEPA (~6 € plafonnés), Link (tarif carte).
+    // Pas de Klarna/BNPL ni de méthodes locales non pertinentes.
+    params.set("payment_method_types[0]", "card");
+    params.set("payment_method_types[1]", "sepa_debit");
+    params.set("payment_method_types[2]", "link");
     params.set("line_items[0][quantity]", "1");
     params.set("line_items[0][price_data][currency]", "eur");
     params.set("line_items[0][price_data][unit_amount]", String(cents));
