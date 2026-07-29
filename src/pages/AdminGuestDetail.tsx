@@ -1219,8 +1219,9 @@ function PaymentSection({ userId }: { userId: string }) {
   const totals = useMemo(() => {
     const totalDue = rentalInst.reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const totalPaid = rentalInst.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
-    // Ce que le client doit réellement : prix total − remise.
-    const rental = Math.max(0, Number(booking?.total_rental_price || 0) - Number(booking?.rental_discount || 0));
+    // Convention (29 juil. 2026) : total_rental_price = ce que le client paie.
+    // La discount ne sert qu'à l'affichage facture (prix catalogue = total + discount).
+    const rental = Number(booking?.total_rental_price || 0);
     const remaining = Math.max(0, rental - totalPaid);
     const pct = rental > 0 ? Math.min(100, (totalPaid / rental) * 100) : 0;
     const mismatch = rental > 0 && rentalInst.length > 0 && Math.abs(totalDue - rental) > 0.001;
@@ -1372,8 +1373,7 @@ function PaymentSection({ userId }: { userId: string }) {
   const generate3070 = async () => {
     if (!booking?.total_rental_price || rentalInst.length > 0) return;
     setGenerating(true);
-    // Le plan 30/70 porte sur ce que le client doit : prix total − remise.
-    const total = Math.max(0, Number(booking.total_rental_price) - Number(booking.rental_discount || 0));
+    const total = Number(booking.total_rental_price);
     const deposit = Math.round(total * 0.3 * 100) / 100;
     const balance = Math.round((total - deposit) * 100) / 100;
     const depositDue = todayIso();
@@ -1625,7 +1625,7 @@ function PaymentSection({ userId }: { userId: string }) {
             </div>
           )}
           <div className="text-[11px] text-muted-foreground">
-            Shown on invoices, split pro-rata across rental payments.
+            Invoice display only — list price = total + discount, split pro-rata across rental payments. The total stays what the client pays.
           </div>
         </div>
 
