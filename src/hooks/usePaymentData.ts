@@ -19,6 +19,7 @@ export type PaymentInstallment = {
   invoice_file_url: string | null;
   invoice_file_name: string | null;
   notes: string | null;
+  is_cash: boolean | null;
 };
 
 export function usePaymentData(bookingId: string | null | undefined) {
@@ -44,7 +45,7 @@ export function usePaymentData(bookingId: string | null | undefined) {
           .maybeSingle(),
         supabase
           .from("payment_installments")
-          .select("id,booking_id,label,amount_due,due_date,status,category,invoice_file_url,invoice_file_name,notes")
+          .select("id,booking_id,label,amount_due,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash")
           .eq("booking_id", bookingId)
           .order("due_date", { ascending: true, nullsFirst: false }),
       ]);

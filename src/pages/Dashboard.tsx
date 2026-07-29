@@ -53,6 +53,29 @@ const DashboardContent = () => {
   const [foodData, setFoodData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Retour de Stripe Checkout (?payment=success|cancelled)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get('payment');
+    if (!outcome) return;
+    if (outcome === 'success') {
+      toast({
+        title: 'Payment received — thank you!',
+        description: 'Your payment is being confirmed. The status below will update shortly (bank debits can take a few days to settle).',
+      });
+    } else if (outcome === 'cancelled') {
+      toast({
+        title: 'Payment cancelled',
+        description: 'No worries — you can pay whenever you are ready.',
+      });
+    }
+    params.delete('payment');
+    params.delete('session_id');
+    const rest = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Stay dates and guest count come from the active booking (source of truth).
   // profile is only used for name and status_overall.
   const bookingCheckIn = activeBooking?.check_in_date ?? null;
@@ -561,6 +584,37 @@ function installmentBadge(s: PaymentInstallment) {
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${cfg.cls}`}>{cfg.label}</span>;
 }
 
+function isPayableOnline(inst: PaymentInstallment) {
+  return inst.status !== 'paid' && !inst.is_cash && String(inst.category ?? 'rental') !== 'discount' && Number(inst.amount_due) > 0;
+}
+
+function usePayInstallment() {
+  const { toast } = useToast();
+  const [payingId, setPayingId] = useState<string | null>(null);
+
+  const pay = async (inst: PaymentInstallment) => {
+    setPayingId(inst.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-checkout', {
+        body: { installment_id: inst.id },
+      });
+      if (error || !data?.url) {
+        throw new Error(data?.error || error?.message || 'Could not start the payment');
+      }
+      window.location.href = data.url;
+    } catch (e) {
+      setPayingId(null);
+      toast({
+        title: 'Payment unavailable',
+        description: e instanceof Error ? e.message : 'Please try again or contact us.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  return { pay, payingId };
+}
+
 async function downloadInstallmentInvoice(inst: PaymentInstallment) {
   const path = inst.invoice_file_url;
   if (!path) return;
@@ -572,7 +626,7 @@ async function downloadInstallmentInvoice(inst: PaymentInstallment) {
   window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
 }
 
-function InstallmentRow({ inst }: { inst: PaymentInstallment }) {
+function InstallmentRow({ inst, onPay, paying }: { inst: PaymentInstallment; onPay?: (inst: PaymentInstallment) => void; paying?: boolean }) {
   return (
     <div className="py-2.5 flex items-center justify-between gap-3 border-t border-border first:border-t-0">
       <div className="min-w-0">
@@ -584,6 +638,12 @@ function InstallmentRow({ inst }: { inst: PaymentInstallment }) {
       <div className="flex items-center gap-2 shrink-0">
         <span className="text-sm font-medium">{fmtEur(inst.amount_due)}</span>
         {installmentBadge(inst)}
+        {onPay && isPayableOnline(inst) && (
+          <Button size="sm" onClick={() => onPay(inst)} disabled={paying}>
+            {paying ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <CreditCard className="w-3.5 h-3.5 mr-1" />}
+            Pay
+          </Button>
+        )}
         {inst.invoice_file_url && (
           <Button size="sm" variant="outline" onClick={() => downloadInstallmentInvoice(inst)}>
             <Download className="w-3.5 h-3.5 mr-1" /> Invoice
@@ -594,13 +654,46 @@ function InstallmentRow({ inst }: { inst: PaymentInstallment }) {
   );
 }
 
+function NextPaymentCard({ inst, onPay, paying }: { inst: PaymentInstallment; onPay: (inst: PaymentInstallment) => void; paying: boolean }) {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const overdue = !!inst.due_date && inst.due_date < todayIso;
+  return (
+    <section className="bg-card rounded-2xl border-2 border-primary/30 p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+            {overdue ? 'Payment due' : 'Next payment'}
+          </div>
+          <div className="text-lg font-medium truncate">{inst.label}</div>
+          <div className="text-sm text-muted-foreground">
+            {fmtEur(inst.amount_due)}{inst.due_date ? ` · due ${fmtDate(inst.due_date)}` : ''}
+          </div>
+        </div>
+        <Button size="lg" onClick={() => onPay(inst)} disabled={paying} className="shrink-0">
+          {paying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
+          Pay {fmtEur(inst.amount_due)}
+        </Button>
+      </div>
+      <div className="mt-3 text-xs text-muted-foreground">
+        Secure payment by card, bank debit or wallet — you'll be redirected to our payment partner Stripe.
+      </div>
+    </section>
+  );
+}
+
 function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }) {
   const { booking, payments, isLoading } = usePaymentData(bookingId);
+  const { pay, payingId } = usePayInstallment();
 
   if (isLoading) return null;
 
   const rental = payments.filter((i) => (i.category ?? 'rental') === 'rental');
   const extras = payments.filter((i) => i.category === 'extra');
+
+  // Prochaine échéance payable en ligne (rental puis extras, triées par date côté hook)
+  const nextPayable = [...rental, ...extras]
+    .filter(isPayableOnline)
+    .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))[0] ?? null;
 
   const hasAccommodation = rental.length > 0 || (booking?.total_rental_price ?? 0) > 0;
   const hasExtras = extras.length > 0;
@@ -628,6 +721,9 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
 
   return (
     <div className="space-y-4">
+      {nextPayable && (
+        <NextPaymentCard inst={nextPayable} onPay={pay} paying={payingId === nextPayable.id} />
+      )}
       {hasAccommodation && (
         <section className="bg-card rounded-2xl border border-border p-6">
           <div className="flex items-center gap-2 mb-4">
@@ -648,7 +744,7 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
           )}
 
           {rental.length > 0 && (
-            <div>{rental.map((i) => <InstallmentRow key={i.id} inst={i} />)}</div>
+            <div>{rental.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</div>
           )}
 
           {totalDue > 0 && (
@@ -666,7 +762,7 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
             <h2 className="text-lg font-medium">Extras</h2>
           </div>
 
-          <div>{extras.map((i) => <InstallmentRow key={i.id} inst={i} />)}</div>
+          <div>{extras.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</div>
 
           <div className="mt-3 pt-3 border-t border-border text-sm text-muted-foreground">
             Extras total: {fmtEur(extrasTotal)} · {fmtEur(extrasPaid)} paid · {fmtEur(extrasOutstanding)} outstanding

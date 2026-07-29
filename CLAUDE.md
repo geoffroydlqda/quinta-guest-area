@@ -59,7 +59,9 @@ Toute modification de schéma passe par un fichier SQL dans `supabase/migrations
 
 ## Edge Functions (supabase/functions/)
 
-`admin-claim-booking`, `admin-delete-guest`, `admin-generate-invite-token`, `admin-guest-detail`, `admin-list-data`, `claim-booking`, `create-booking`, `ensure-guest-profile`, `notify-transport-pricing`, `qa-tests`, `send-guest-summary`, `payment-reminders`, `send-invite-email`, `send-room-setup-emails`, `sync-google-sheets`, `sync-transportation-calendar`.
+`admin-claim-booking`, `admin-delete-guest`, `admin-generate-invite-token`, `admin-guest-detail`, `admin-list-data`, `claim-booking`, `create-booking`, `ensure-guest-profile`, `notify-transport-pricing`, `qa-tests`, `send-guest-summary`, `payment-reminders`, `send-invite-email`, `send-room-setup-emails`, `sync-google-sheets`, `sync-transportation-calendar`, `sync-booking-calendar`, `moloni-invoice`, `stripe-checkout`, `stripe-webhook`.
+
+**Paiements Stripe (juillet 2026)** : clé API dans `app_settings.internal.stripe_secret_key` (actuellement **sk_test** — sandbox ; swap vers sk_live après validation). `stripe-checkout` (guest ou admin) crée une Checkout Session pour une échéance (bouton Pay du Dashboard guest, carte "Next payment"). `stripe-webhook` (`verify_jwt=false`, signature `stripe-signature` vérifiée avec `app_settings.internal.stripe_webhook_secret`) marque l'échéance payée sur `checkout.session.completed`/`async_payment_succeeded` (SEPA = asynchrone, quelques jours). Principe fiscal validé avec Geoffroy : **demande de paiement = guest area + emails ; l'argent reçu déclenche la fatura-recibo Moloni** (auto-génération à brancher en mode live — étape 4, avec email de confirmation Resend + PDF joint). Jamais de génération Moloni sur un paiement test.
 
 `sync-transportation-calendar` parle directement aux API Google (service account : secrets `GOOGLE_SA_EMAIL`/`GOOGLE_SA_PRIVATE_KEY`, calendrier partagé avec l'email du SA ; Maps Routes API via `GOOGLE_MAPS_API_KEY`, optionnelle). `sync-google-sheets` appelle encore la passerelle Lovable morte (à réécrire ou retirer).
 

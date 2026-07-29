@@ -10,3 +10,7 @@ verify_jwt = false
 verify_jwt = false
 [functions.payment-reminders]
 verify_jwt = false
+
+# Stripe ne peut pas envoyer de JWT — la sécurité vient de la signature stripe-signature.
+[functions.stripe-webhook]
+verify_jwt = false
