@@ -73,10 +73,22 @@ function paras(text: string): string {
   ).join("\n");
 }
 
+// Signature ajoutée à tous les emails de paiement (modèle validé par Geoffroy).
+const SIGNATURE = `
+<p style="margin:22px 0 0 0;color:#222222;">
+  <a href="https://www.quintamor.com" style="color:#1155cc;">www.quintamor.com</a><br>
+  +351 931 377 682
+</p>
+<p style="margin:14px 0 0 0;">
+  📅 <a href="https://www.quintamor.com/retreats#calendar" style="color:#1155cc;">Check our availabilities</a><br>
+  📸 <a href="https://quintadoamor.pixieset.com/quintadoamor/" style="color:#1155cc;">More pictures of our venue</a>
+</p>`;
+
 function emailShell(inner: string): string {
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#ffffff;">
-<div style="max-width:560px;margin:0 auto;padding:28px 24px;font-family:Helvetica,Arial,sans-serif;font-size:12pt;line-height:1.6;color:#222222;">
+<div style="max-width:560px;margin:0;padding:28px 24px;font-family:Helvetica,Arial,sans-serif;font-size:12pt;line-height:1.6;color:#222222;">
 ${inner}
+${SIGNATURE}
 </div></body></html>`;
 }
 
@@ -119,11 +131,12 @@ serve(async (req) => {
       const token = await signInstallment(inst.id);
       const payUrl = `${FUNCTIONS_BASE}/stripe-checkout?installment=${inst.id}&t=${token}`;
       const amount = fmtEur(Number(inst.amount_due));
-      // Esthétique volontairement "mail personnel" : pas de bouton stylé,
-      // juste un lien texte comme dans un email écrit à la main.
+      // Mise en page sobre façon mail personnel, mais avec un vrai bouton
+      // (aligné à gauche, pas de bloc centré marketing).
       html = emailShell(`
 ${paras(parsed.data.body_top ?? "")}
-<p style="margin:0 0 14px 0;"><a href="${payUrl}" style="color:#1155cc;">Pay ${esc(amount)}</a> <span style="color:#888888;font-size:10pt;">(secure payment by card or bank debit — Stripe)</span></p>
+<p style="margin:18px 0 6px 0;"><a href="${payUrl}" style="display:inline-block;background:#57761f;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-family:Helvetica,Arial,sans-serif;font-size:12pt;">Pay ${esc(amount)}</a></p>
+<p style="margin:0 0 18px 0;font-size:10pt;color:#888888;">Secure payment by card or bank debit, powered by Stripe.</p>
 ${paras(parsed.data.body_bottom ?? "")}
 `);
     } else {

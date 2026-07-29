@@ -182,11 +182,13 @@ export function PaymentEmailDialog({
           {kind === "request" ? (
             <>
               <Textarea value={bodyTop} onChange={(e) => setBodyTop(e.target.value)} rows={7} className="font-normal" />
-              <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-2 text-sm">
-                <span className="text-blue-700 underline">Pay {fmtEur(Number(inst.amount_due))}</span>{" "}
-                <span className="text-xs text-muted-foreground">(secure payment by card or bank debit — Stripe)</span>
-                <div className="mt-1 text-[11px] text-muted-foreground">
-                  Inserted automatically — a plain text link, like a personally written email. It opens a fresh Stripe checkout on every click.
+              <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-2.5 text-sm">
+                <span className="inline-block rounded-md bg-primary px-5 py-2 text-primary-foreground font-semibold">
+                  Pay {fmtEur(Number(inst.amount_due))}
+                </span>
+                <div className="mt-1 text-xs text-muted-foreground">Secure payment by card or bank debit, powered by Stripe.</div>
+                <div className="mt-1.5 text-[11px] text-muted-foreground">
+                  Inserted automatically — opens a fresh Stripe checkout on every click.
                 </div>
               </div>
               <Textarea value={bodyBottom} onChange={(e) => setBodyBottom(e.target.value)} rows={8} />
@@ -202,6 +204,10 @@ export function PaymentEmailDialog({
               </div>
             </>
           )}
+        </div>
+
+        <div className="text-[11px] text-muted-foreground">
+          Signature added automatically: www.quintamor.com · +351 931 377 682 · 📅 availabilities · 📸 venue photos
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
