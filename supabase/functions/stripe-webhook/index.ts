@@ -62,7 +62,7 @@ async function verifySignature(payload: string, header: string | null): Promise<
 
 async function markPaid(installmentId: string, sessionId: string) {
   const { data: inst } = await admin.from("payment_installments")
-    .select("id,status,amount_due")
+    .select("id,status")
     .eq("id", installmentId).maybeSingle();
   if (!inst) {
     console.error(`[stripe-webhook] installment ${installmentId} not found (session ${sessionId})`);
@@ -71,8 +71,6 @@ async function markPaid(installmentId: string, sessionId: string) {
   if (inst.status === "paid") return; // idempotent — Stripe renvoie parfois deux fois
   const { error } = await admin.from("payment_installments").update({
     status: "paid",
-    paid_at: new Date().toISOString().slice(0, 10),
-    amount_paid: inst.amount_due,
   }).eq("id", installmentId);
   if (error) throw error;
   console.log(`[stripe-webhook] installment ${installmentId} marked paid (session ${sessionId})`);
