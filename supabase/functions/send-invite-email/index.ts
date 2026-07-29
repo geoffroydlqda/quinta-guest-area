@@ -10,7 +10,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const FROM_EMAIL = "Quinta do Amor <noreply@quintamor.com>";
+const FROM_EMAIL = "Quinta do Amor <hello@quintamor.com>";
 const ADMIN_EMAIL = "hello@quintamor.com";
 const GUEST_AREA_ORIGIN = "https://guest.quintamor.com";
 

@@ -20,6 +20,7 @@ import Admin from "./pages/Admin";
 import AdminGuestDetail from "./pages/AdminGuestDetail";
 import BookingSelector from "./pages/BookingSelector";
 import InvitePage from "./pages/InvitePage";
+import PaymentSuccess from "./pages/PaymentSuccess";
 import NotFound from "./pages/NotFound";
 import { loadPricing } from "@/lib/pricing";
 
@@ -43,6 +44,7 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/invite/:token" element={<InvitePage />} />
+              <Route path="/payment-success" element={<PaymentSuccess />} />
               {/* Protected routes - require authentication */}
               <Route path="/bookings" element={<BookingSelector />} />
               <Route path="/dashboard" element={<Dashboard />} />

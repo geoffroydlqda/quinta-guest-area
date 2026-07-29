@@ -12,7 +12,7 @@ const corsHeaders = {
 };
 
 const ADMIN_EMAIL = "hello@quintamor.com";
-const FROM_EMAIL = "Quinta do Amor <noreply@quintamor.com>";
+const FROM_EMAIL = "Quinta do Amor <hello@quintamor.com>";
 
 const RoomSetupSchema = z.object({
   action: z.literal('submit'),

@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Mail, Link2, Upload, Download, Trash2, FileDown, ExternalLink, FilePlus2,
 } from "lucide-react";
+import { PaymentEmailDialog } from "@/components/admin/PaymentEmailDialog";
 
 /**
  * Page Payments — échéancier global (remplace le Google Sheet de suivi).
@@ -21,6 +22,7 @@ export interface PayBooking {
   last_name: string | null;
   email: string;
   check_in_date: string | null;
+  check_out_date?: string | null;
   total_rental_price?: number | null;
 }
 
@@ -80,6 +82,21 @@ export function PaymentsPage({
   const [busyId, setBusyId] = useState<string | null>(null);
   const uploadTarget = useRef<PayInstallment | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Compose email de paiement (textes validés — demande ou confirmation)
+  const [emailTarget, setEmailTarget] = useState<{ inst: PayInstallment; booking: PayBooking; kind: "request" | "confirmation" } | null>(null);
+
+  // Position de l'échéance parmi les échéances payables du booking (pour
+  // "second and final payment") + reste-t-il d'autres échéances impayées.
+  const emailMeta = (inst: PayInstallment) => {
+    const siblings = installments
+      .filter((i) => i.booking_id === inst.booking_id && i.category !== "discount" && Number(i.amount_due) > 0)
+      .sort((a, b) => (a.due_date ?? "0000").localeCompare(b.due_date ?? "0000"));
+    const idx = siblings.findIndex((i) => i.id === inst.id);
+    const ordinal = idx >= 0 ? idx + 1 : 1;
+    const isLast = idx >= 0 && idx === siblings.length - 1;
+    const allSettled = siblings.every((i) => i.id === inst.id || i.status === "paid");
+    return { ordinal, isLast, allSettled };
+  };
 
   const todayIso = useMemo(() => {
     const n = new Date();
@@ -439,15 +456,26 @@ export function PaymentsPage({
                   <td className="px-3 py-2 whitespace-nowrap">
                     <div className="flex items-center gap-1.5">
                       {rem && <span className="text-xs text-muted-foreground">{fmtDate(rem.slice(0, 10))}</span>}
-                      {r.bucket !== "paid" && (
+                      {r.bucket !== "paid" ? (
                         <Button
                           size="sm" variant="outline" className="h-7 px-2"
-                          disabled={busy || r.isInternal}
-                          title={r.isInternal ? "Internal booking — no real client email" : `Send a reminder email to ${r.booking.email}`}
-                          onClick={() => sendReminder(r)}
+                          disabled={busy || r.isInternal || !!r.inst.is_cash}
+                          title={r.isInternal ? "Internal booking — no real client email" : `Send a payment request to ${r.booking.email}`}
+                          onClick={() => setEmailTarget({ inst: r.inst, booking: r.booking, kind: "request" })}
                         >
-                          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+                          <Mail className="w-3.5 h-3.5" />
                         </Button>
+                      ) : (
+                        !r.inst.is_cash && (
+                          <Button
+                            size="sm" variant="outline" className="h-7 px-2"
+                            disabled={busy || r.isInternal}
+                            title={r.isInternal ? "Internal booking — no real client email" : `Send the payment confirmation (invoice attached) to ${r.booking.email}`}
+                            onClick={() => setEmailTarget({ inst: r.inst, booking: r.booking, kind: "confirmation" })}
+                          >
+                            <Mail className="w-3.5 h-3.5" />
+                          </Button>
+                        )
                       )}
                     </div>
                   </td>
@@ -510,6 +538,23 @@ export function PaymentsPage({
         className="hidden"
         onChange={onFileSelected}
       />
+
+      {emailTarget && (() => {
+        const meta = emailMeta(emailTarget.inst);
+        return (
+          <PaymentEmailDialog
+            open={!!emailTarget}
+            onOpenChange={(v) => { if (!v) setEmailTarget(null); }}
+            kind={emailTarget.kind}
+            booking={emailTarget.booking}
+            inst={emailTarget.inst}
+            ordinal={meta.ordinal}
+            isLast={meta.isLast}
+            allSettled={meta.allSettled}
+            onSent={() => { loadReminders(); }}
+          />
+        );
+      })()}
     </div>
   );
 }

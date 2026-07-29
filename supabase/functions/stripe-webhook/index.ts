@@ -24,11 +24,14 @@ function json(body: unknown, status = 200) {
   });
 }
 
-async function webhookSecret(): Promise<string> {
+// Deux secrets possibles pendant la transition sandbox -> live :
+// la signature est acceptée si elle correspond à l'un des deux.
+async function webhookSecrets(): Promise<string[]> {
   const { data } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
-  const s = (data?.value as Record<string, string> | null)?.stripe_webhook_secret;
-  if (!s) throw new Error("WEBHOOK_SECRET_MISSING");
-  return s;
+  const v = data?.value as Record<string, string> | null;
+  const list = [v?.stripe_webhook_secret, v?.stripe_webhook_secret_live].filter(Boolean) as string[];
+  if (!list.length) throw new Error("WEBHOOK_SECRET_MISSING");
+  return list;
 }
 
 function hexEqual(a: string, b: string): boolean {
@@ -50,14 +53,15 @@ async function verifySignature(payload: string, header: string | null): Promise<
   const age = Math.abs(Date.now() / 1000 - Number(t));
   if (!Number.isFinite(age) || age > 600) return false;
 
-  const secret = await webhookSecret();
-  const keyData = new TextEncoder().encode(secret);
-  const key = await crypto.subtle.importKey(
-    "raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${payload}`));
-  const hex = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  return hexEqual(hex, v1);
+  for (const secret of await webhookSecrets()) {
+    const key = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${payload}`));
+    const hex = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    if (hexEqual(hex, v1)) return true;
+  }
+  return false;
 }
 
 async function markPaid(installmentIds: string[], sessionId: string) {

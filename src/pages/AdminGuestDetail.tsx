@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
+import { PaymentEmailDialog } from "@/components/admin/PaymentEmailDialog";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { calculateFoodCostMulti } from "@/lib/foodPricing";
 import { calculateTransportationCost, getFixedTripPriceNumeric, getEffectiveTripPrice } from "@/lib/transportationPricing";
@@ -1065,6 +1066,10 @@ type Booking = {
   payment_status: "pending" | "deposit_paid" | "paid_in_full" | "overdue";
   payment_status_override: "pending" | "deposit_paid" | "paid_in_full" | "overdue" | null;
   check_in_date: string | null;
+  check_out_date: string | null;
+  email: string | null;
+  first_name: string | null;
+  retreat_name: string | null;
 };
 
 // TVA par catégorie : rental 23 %, catering 13 %, extra au choix (6/13/23).
@@ -1172,12 +1177,13 @@ function PaymentSection({ userId }: { userId: string }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteInstId, setDeleteInstId] = useState<string | null>(null);
+  const [emailTarget, setEmailTarget] = useState<{ inst: Installment; kind: "request" | "confirmation" } | null>(null);
   const [savingOverride, setSavingOverride] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   const loadAll = async () => {
     setLoading(true);
-    let q = supabase.from("bookings").select("id,total_rental_price,rental_discount,payment_status,payment_status_override,check_in_date");
+    let q = supabase.from("bookings").select("id,total_rental_price,rental_discount,payment_status,payment_status_override,check_in_date,check_out_date,email,first_name,retreat_name");
     if (bookingIdParam) {
       q = q.eq("id", bookingIdParam);
     } else {
@@ -1513,6 +1519,15 @@ function PaymentSection({ userId }: { userId: string }) {
                 Overdue
               </span>
             )}
+            {!inst.is_cash && inst.category !== "discount" && booking.email && (
+              <Button
+                size="icon" variant="ghost" className="h-7 w-7"
+                title={inst.status === "paid" ? "Send payment confirmation (invoice attached)" : "Send payment request email"}
+                onClick={() => setEmailTarget({ inst, kind: inst.status === "paid" ? "confirmation" : "request" })}
+              >
+                <Mail className="w-3.5 h-3.5" />
+              </Button>
+            )}
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(inst.id)}>
               <Pencil className="w-3.5 h-3.5" />
             </Button>
@@ -1726,6 +1741,32 @@ function PaymentSection({ userId }: { userId: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Compose email de paiement (demande / confirmation) */}
+      {emailTarget && booking.email && (() => {
+        const siblings = installments
+          .filter((i) => i.category !== "discount" && Number(i.amount_due) > 0)
+          .sort((a, b) => (a.due_date ?? "0000").localeCompare(b.due_date ?? "0000"));
+        const idx = siblings.findIndex((i) => i.id === emailTarget.inst.id);
+        return (
+          <PaymentEmailDialog
+            open={!!emailTarget}
+            onOpenChange={(v) => { if (!v) setEmailTarget(null); }}
+            kind={emailTarget.kind}
+            booking={{
+              email: booking.email,
+              first_name: booking.first_name,
+              retreat_name: booking.retreat_name,
+              check_in_date: booking.check_in_date,
+              check_out_date: booking.check_out_date,
+            }}
+            inst={emailTarget.inst}
+            ordinal={idx >= 0 ? idx + 1 : 1}
+            isLast={idx >= 0 && idx === siblings.length - 1}
+            allSettled={siblings.every((i) => i.id === emailTarget.inst.id || i.status === "paid")}
+          />
+        );
+      })()}
     </section>
   );
 }

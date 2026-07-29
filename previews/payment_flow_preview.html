@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flow de paiement manuel — preview (Maryssia)</title>
+<style>
+  :root {
+    --olive: #57761f;
+    --olive-dark: #3f5716;
+    --cream: #f5f1e8;
+    --card: #ffffff;
+    --ink: #2b2b26;
+    --muted: #8a8578;
+    --border: #e3ddd0;
+    --amber: #b45309;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Inter, -apple-system, "Segoe UI", sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    padding: 40px 20px 80px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 26px; margin-bottom: 6px; }
+  .sub { color: var(--muted); margin-bottom: 36px; font-size: 15px; }
+  .step {
+    display: flex; gap: 18px; margin-bottom: 8px;
+  }
+  .rail { display: flex; flex-direction: column; align-items: center; }
+  .dot {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--olive); color: #fff; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+    flex-shrink: 0;
+  }
+  .dot.ghost { background: #a8a394; }
+  .line { width: 2px; flex: 1; background: var(--border); margin: 6px 0; }
+  .step-body { flex: 1; padding-bottom: 34px; min-width: 0; }
+  .step-title { font-weight: 700; font-size: 17px; margin-bottom: 2px; }
+  .step-who { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 22px; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  .note { font-size: 13.5px; color: var(--muted); margin-top: 10px; }
+  .note b { color: var(--ink); }
+  .chip {
+    display: inline-block; background: #eef3e2; border: 1px solid #cddcaa;
+    color: var(--olive-dark); border-radius: 999px; padding: 1px 9px; font-size: 12px;
+    font-weight: 600; white-space: nowrap;
+  }
+  /* email mockup */
+  .email {
+    border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff;
+  }
+  .email-head {
+    background: #faf8f2; border-bottom: 1px solid var(--border);
+    padding: 12px 18px; font-size: 13px; color: var(--muted);
+  }
+  .email-head b { color: var(--ink); font-weight: 600; }
+  .email-body {
+    padding: 26px 30px;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 12pt;               /* Helvetica 12 — police des emails */
+    line-height: 1.6;
+    color: #222;
+  }
+  .email-body p { margin-bottom: 14px; }
+  .paybtn {
+    display: inline-block; background: var(--olive); color: #fff !important;
+    text-decoration: none; font-weight: 700; padding: 13px 30px; border-radius: 10px;
+    font-size: 12pt; margin: 6px 0 8px;
+  }
+  .fallback { font-size: 10pt; color: #888; }
+  .attach {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--border); background: #faf8f2; border-radius: 9px;
+    padding: 8px 14px; font-size: 10.5pt; color: var(--ink); font-family: Helvetica, Arial, sans-serif;
+  }
+  .attach svg { flex-shrink: 0; }
+  /* checkout mockup */
+  .checkout { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .co-left { flex: 1; background: #fff; padding: 22px; border-right: 1px solid var(--border); }
+  .co-right { flex: 1.1; background: #fff; padding: 22px; }
+  .co-brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; margin-bottom: 14px; }
+  .co-badge { background: #1a2b4a; color: #fff; font-size: 10.5px; border-radius: 5px; padding: 2px 7px; }
+  .co-amount { font-size: 26px; font-weight: 800; margin: 4px 0 2px; }
+  .co-desc { font-size: 12.5px; color: var(--muted); }
+  .co-img { width: 100%; border-radius: 9px; margin-top: 14px; aspect-ratio: 16/9; object-fit: cover;
+            background: linear-gradient(140deg,#d8862a 0%,#8a6a2f 45%,#57761f 100%); display:flex; align-items:flex-end; padding:10px; color:#fff; font-size:11.5px; }
+  .co-row { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 13.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 9px; }
+  .co-pay { background: var(--olive); color: #fff; text-align: center; border-radius: 8px; padding: 12px; font-weight: 700; margin-top: 10px; font-size: 14px; }
+  .radio { width: 14px; height: 14px; border: 1.6px solid #b9b3a4; border-radius: 50%; display: inline-block; }
+  /* admin row mockup */
+  .admin-row {
+    display: flex; align-items: center; gap: 12px; border: 1px solid var(--border);
+    border-radius: 10px; padding: 13px 16px; background: #fff; font-size: 14px;
+  }
+  .badge { border-radius: 999px; padding: 2px 11px; font-size: 12px; font-weight: 600; border: 1px solid; }
+  .badge.pending { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+  .badge.paid { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .icon-btn {
+    width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center; background: #faf8f2;
+  }
+  .icon-btn.hot { border-color: var(--olive); background: #eef3e2; }
+  .flex-spacer { flex: 1; }
+  .improve {
+    background: #fffbe9; border: 1px solid #f0e2ae; border-radius: 10px;
+    padding: 14px 18px; font-size: 13.5px; margin-top: 12px;
+  }
+  .improve b { display: block; margin-bottom: 6px; }
+  .improve ul { margin-left: 18px; }
+  .improve li { margin-bottom: 4px; }
+  .warn {
+    background: #fdecec; border: 1px solid #f2b8b5; color: #8a2b25;
+    border-radius: 10px; padding: 13px 17px; font-size: 13.5px; margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Flow de paiement manuel — preview</h1>
+  <div class="sub">Cas réel : Maryssia · Ilo Retreat (client) · 3 → 8 août 2026 · Payment #2 — <b>€3,860</b>. Rien n'est encore implémenté : c'est la maquette à valider.</div>
+
+  <!-- STEP 1 -->
+  <div class="step">
+    <div class="rail"><div class="dot">1</div><div class="line"></div></div>
+    <div class="step-body">
+      <div class="step-title">Tu cliques l'icône ✉️ sur l'échéance</div>
+      <div class="step-who">Toi · onglet Payments ou fiche booking</div>
+      <div class="admin-row">
+        <div><b>Payment #2</b> <span class="chip">RENTAL</span></div>
+        <div style="color:var(--muted)">€3,860.00 · due 4 Jun 2026</div>
+        <div class="flex-spacer"></div>
+        <span class="badge pending">Pending</span>
+        <span class="icon-btn hot" title="Send payment request">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#57761f" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
+        </span>
+        <span class="icon-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8a8578" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+      </div>
+      <div class="note">L'icône ouvre un <b>aperçu éditable dans l'app</b> (pas ton client mail) : tu peux ajuster le texte, puis "Send". L'envoi part via Resend depuis geo@quintamor.com — c'est ce qui permet le vrai bouton, la mise en page Helvetica, et plus tard la pièce jointe. Un mailto ne sait faire ni bouton ni pièce jointe.</div>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="step">
+    <div class="rail"><div class="dot">2</div><div class="line"></div></div>
+    <div class="step-body">
+      <div class="step-title">Maryssia reçoit la demande de paiement</div>
+      <div class="step-who">Elle · sa boîte mail — Helvetica 12</div>
+      <div class="email">
+        <div class="email-head">
+          De : <b>Geo — Quinta do Amor</b> &lt;geo@quintamor.com&gt;<br>
+          À : maria@iloretreat.com<br>
+          Objet : <b>Your stay at Quinta do Amor — final payment</b>
+        </div>
+        <div class="email-body">
+          <p>Hi Maryssia,</p>
+          <p>I hope you're doing well! Your stay at Quinta do Amor is getting close — August 3 to 8, we can't wait.</p>
+          <p>Here's the link for the second and final payment for your stay:</p>
+          <p style="text-align:center"><a class="paybtn" href="#">Pay €3,860</a></p>
+          <p class="fallback" style="text-align:center">Secure payment by card or bank debit, powered by Stripe.</p>
+          <p>Your invoice will arrive in your inbox automatically as soon as the payment comes through — nothing else to do on your side.</p>
+          <p>If anything feels unclear, just reply to this email, I'm happy to help.</p>
+          <p>Looking forward to welcoming you soon.</p>
+          <p>Warmly,<br>Geo</p>
+        </div>
+      </div>
+      <div class="improve">
+        <b>Ce que j'ai amélioré vs ton brouillon :</b>
+        <ul>
+          <li><b>Le montant sur le bouton</b> ("Pay €3,860") — transparence totale, elle sait avant de cliquer.</li>
+          <li>Dates écrites naturellement ("August 3 to 8") plutôt qu'un format technique.</li>
+          <li>"second and last" → "second and final" (plus idiomatique), et rattaché à l'excitation du séjour qui approche.</li>
+          <li>La ligne facture : "arrives automatically — nothing else to do on your side" — ça désamorce la question avant qu'elle se pose.</li>
+          <li>"just reply to this email" — plus concret que "let me know".</li>
+          <li>Ligne rassurance sous le bouton (Stripe, carte ou prélèvement) — utile pour un montant à 4 chiffres.</li>
+          <li>Objet clair et non commercial : "Your stay at Quinta do Amor — final payment".</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="step">
+    <div class="rail"><div class="dot">3</div><div class="line"></div></div>
+    <div class="step-body">
+      <div class="step-title">Elle clique Pay → page Stripe → paiement</div>
+      <div class="step-who">Elle · checkout Stripe (déjà construit et testé)</div>
+      <div class="checkout">
+        <div class="co-left">
+          <div class="co-brand">🏔 Quinta do amor</div>
+          <div class="co-desc">Payment #2 — Ilo Retreat (client)</div>
+          <div class="co-amount">€3,860.00</div>
+          <div class="co-desc">Stay 2026-08-03 → 2026-08-08</div>
+          <div class="co-img">📷 ta photo de la quinta au coucher de soleil</div>
+        </div>
+        <div class="co-right">
+          <div class="co-row"><span class="radio"></span> 💳 Card</div>
+          <div class="co-row"><span class="radio"></span> 🏦 SEPA Direct Debit</div>
+          <div class="co-row"><span class="radio"></span> 🔗 Link</div>
+          <div class="co-pay">Pay</div>
+        </div>
+      </div>
+      <div class="note">Le webhook Stripe marque l'échéance <b>Paid</b> automatiquement (carte : instantané · SEPA : à la confirmation du prélèvement, quelques jours). Tu le vois dans Payments sans rien faire.</div>
+    </div>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="step">
+    <div class="rail"><div class="dot">4</div><div class="line"></div></div>
+    <div class="step-body">
+      <div class="step-title">Paiement reçu → tu génères la facture</div>
+      <div class="step-who">Toi · un clic sur "Invoice" (manuel pour l'instant, automatisé à l'étape suivante de la roadmap)</div>
+      <div class="admin-row">
+        <div><b>Payment #2</b> <span class="chip">RENTAL</span></div>
+        <div class="flex-spacer"></div>
+        <span class="badge paid">Paid</span>
+        <span class="chip">FR FT2026/1 · fatura-recibo</span>
+      </div>
+      <div class="note">Fatura-recibo réelle dans ta série FT2026 : ligne rental à 23 %, description avec dates de séjour, PDF attaché à l'échéance. (Si un discount était défini sur le booking, il apparaîtrait en % sur la ligne.)</div>
+    </div>
+  </div>
+
+  <!-- STEP 5 -->
+  <div class="step">
+    <div class="rail"><div class="dot">5</div></div>
+    <div class="step-body">
+      <div class="step-title">Tu cliques l'icône ✉️ de confirmation → facture jointe</div>
+      <div class="step-who">Elle · sa boîte mail — Helvetica 12, PDF joint</div>
+      <div class="email">
+        <div class="email-head">
+          De : <b>Geo — Quinta do Amor</b> &lt;geo@quintamor.com&gt;<br>
+          À : maria@iloretreat.com<br>
+          Objet : <b>Payment received — you're all set</b> · 📎 FR_FT2026-1.pdf
+        </div>
+        <div class="email-body">
+          <p>Hi Maryssia,</p>
+          <p>Good news — your payment of €3,860 has arrived safely. Your stay is now fully settled, nothing left to think about.</p>
+          <p><span class="attach"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#b03a2e" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg> FR FT2026-1.pdf — your invoice</span></p>
+          <p>If you have any questions at all, I'm always happy to help — just reply here.</p>
+          <p>See you very soon at the quinta.</p>
+          <p>Warmly,<br>Geo</p>
+        </div>
+      </div>
+      <div class="improve">
+        <b>Ce que j'ai amélioré vs ton brouillon :</b>
+        <ul>
+          <li>Corrigé le double "Hi |first name| / Hi," du brouillon — une seule salutation, prénommée.</li>
+          <li>"Good news —" en ouverture : le mail respire la bonne nouvelle dès la première ligne.</li>
+          <li>"has arrived safely" + "fully settled, nothing left to think about" — clôture mentale du sujet paiement (c'était le dernier installment).</li>
+          <li>"You'll find the invoice here attached" → pièce jointe montrée visuellement, phrase intégrée.</li>
+          <li>"See you very soon at the quinta" — on termine sur le séjour, pas sur l'argent.</li>
+          <li>Objet : "Payment received — you're all set".</li>
+        </ul>
+      </div>
+      <div class="warn">
+        ⚠️ <b>Avant le vrai test avec Maryssia, il manque 2 choses côté Stripe</b> (on est encore en sandbox) :
+        1) ta clé <b>sk_live</b> (Développeurs → Clés API, hors sandbox — "Reveal live key"),
+        2) le <b>webhook côté compte live</b> : même URL, mêmes 3 événements, et tu me colles le nouveau whsec_.
+        Sans ça, le bouton Pay créerait un paiement fictif. Tout le reste (webhook, Moloni, Resend) est prêt.
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

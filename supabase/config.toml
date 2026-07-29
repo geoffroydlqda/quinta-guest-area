@@ -14,3 +14,8 @@ verify_jwt = false
 # Stripe ne peut pas envoyer de JWT — la sécurité vient de la signature stripe-signature.
 [functions.stripe-webhook]
 verify_jwt = false
+
+# GET = lien de paiement signé (HMAC cron_key) cliqué depuis un email, sans JWT.
+# Le POST garde son contrôle d'auth manuel (getUser) dans le code.
+[functions.stripe-checkout]
+verify_jwt = false
