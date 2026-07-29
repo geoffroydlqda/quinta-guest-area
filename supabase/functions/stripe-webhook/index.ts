@@ -64,7 +64,8 @@ async function verifySignature(payload: string, header: string | null): Promise<
   return false;
 }
 
-async function markPaid(installmentIds: string[], sessionId: string) {
+async function markPaid(installmentIds: string[], sessionId: string): Promise<string[]> {
+  const newlyPaid: string[] = [];
   for (const installmentId of installmentIds) {
     const { data: inst } = await admin.from("payment_installments")
       .select("id,status")
@@ -79,8 +80,67 @@ async function markPaid(installmentIds: string[], sessionId: string) {
       stripe_session_id: sessionId,
     }).eq("id", installmentId);
     if (error) throw error;
+    newlyPaid.push(installmentId);
     console.log(`[stripe-webhook] installment ${installmentId} marked paid (session ${sessionId})`);
   }
+  return newlyPaid;
+}
+
+// Étape 4 — automatisation post-paiement (LIVE uniquement, best-effort) :
+// fatura-recibo Moloni générée puis email de confirmation avec le PDF joint.
+// Auth interne des appels : x-cron-key (app_settings.internal.cron_key).
+// En cas d'échec, tout reste faisable à la main (boutons Invoice et ✉️).
+async function automate(newlyPaid: string[], sessionId: string) {
+  if (!newlyPaid.length) return;
+  if (sessionId.startsWith("cs_test")) {
+    console.log("[automation] test session — no invoice/email");
+    return;
+  }
+  try {
+    const { data } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
+    const cronKey = (data?.value as Record<string, string> | null)?.cron_key;
+    if (!cronKey) { console.error("[automation] cron_key missing"); return; }
+    const base = `${Deno.env.get("SUPABASE_URL")}/functions/v1`;
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+      "x-cron-key": cronKey,
+    };
+
+    // 1. Facture (couvre tout le groupe de la session, une seule fatura-recibo)
+    const inv = await fetch(`${base}/moloni-invoice`, {
+      method: "POST", headers,
+      body: JSON.stringify({ action: "generate", installment_id: newlyPaid[0] }),
+    });
+    const invBody = await inv.json().catch(() => ({}));
+    if (!inv.ok || invBody?.error) {
+      console.error(`[auto-invoice] failed (manual Invoice button still available): ${JSON.stringify(invBody).slice(0, 300)}`);
+      return; // pas d'email de confirmation sans facture jointe
+    }
+    console.log(`[auto-invoice] ${invBody.number ?? invBody.document_id} created (${invBody.lines} line(s))`);
+
+    // 2. Email de confirmation avec le PDF (template serveur validé)
+    const em = await fetch(`${base}/payment-emails`, {
+      method: "POST", headers,
+      body: JSON.stringify({ kind: "confirmation", installment_id: newlyPaid[0] }),
+    });
+    const emBody = await em.json().catch(() => ({}));
+    if (!em.ok || emBody?.error) {
+      console.error(`[auto-email] failed (manual ✉️ still available): ${JSON.stringify(emBody).slice(0, 300)}`);
+    } else {
+      console.log(`[auto-email] confirmation sent to ${emBody.to} (${emBody.attachment})`);
+    }
+  } catch (e) {
+    console.error("[automation] error:", e);
+  }
+}
+
+function scheduleAutomation(newlyPaid: string[], sessionId: string) {
+  const task = automate(newlyPaid, sessionId);
+  // Répond vite à Stripe ; le travail continue après la réponse.
+  const rt = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(task);
+  return task;
 }
 
 serve(async (req) => {
@@ -100,13 +160,17 @@ serve(async (req) => {
 
     if (type === "checkout.session.completed") {
       if (session?.payment_status === "paid" && installmentIds.length) {
-        await markPaid(installmentIds, session.id);
+        const newlyPaid = await markPaid(installmentIds, session.id);
+        scheduleAutomation(newlyPaid, session.id);
       } else {
         // SEPA & co : le débit est en cours, async_payment_succeeded suivra.
         console.log(`[stripe-webhook] session ${session?.id} completed, payment ${session?.payment_status} — waiting`);
       }
     } else if (type === "checkout.session.async_payment_succeeded") {
-      if (installmentIds.length) await markPaid(installmentIds, session.id);
+      if (installmentIds.length) {
+        const newlyPaid = await markPaid(installmentIds, session.id);
+        scheduleAutomation(newlyPaid, session.id);
+      }
     } else if (type === "checkout.session.async_payment_failed") {
       console.error(`[stripe-webhook] async payment FAILED for installments ${idsRaw} (session ${session?.id})`);
     }

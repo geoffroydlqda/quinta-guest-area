@@ -344,21 +344,33 @@ async function generateInvoice(installmentId: string) {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
-    const userClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user || !(await isAdminEmailDb(user.email))) return json({ error: "Forbidden" }, 403);
+    // Appel interne (stripe-webhook -> génération auto après paiement) :
+    // authentifié par x-cron-key = app_settings.internal.cron_key.
+    let internalCall = false;
+    const cronHeader = req.headers.get("x-cron-key");
+    if (cronHeader) {
+      const { data } = await _adminAuthClient.from("app_settings").select("value").eq("key", "internal").maybeSingle();
+      internalCall = !!cronHeader && cronHeader === (data?.value as Record<string, string> | null)?.cron_key;
+    }
+
+    if (!internalCall) {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+      const userClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user || !(await isAdminEmailDb(user.email))) return json({ error: "Forbidden" }, 403);
+    }
 
     const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
     const { action, query, variables, installment_id } = parsed.data;
 
     if (action === "gql") {
+      if (internalCall) return json({ error: "gql is admin-only" }, 403);
       if (!query) return json({ error: "query required" }, 400);
       return json(await gql(query, variables as Record<string, unknown> | undefined));
     }

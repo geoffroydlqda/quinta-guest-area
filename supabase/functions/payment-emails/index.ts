@@ -34,7 +34,9 @@ function json(body: unknown, status = 200) {
 const BodySchema = z.object({
   kind: z.enum(["request", "confirmation"]),
   installment_id: z.string().uuid(),
-  subject: z.string().min(1).max(200),
+  // subject/body optionnels : pour une confirmation sans texte (appel interne
+  // du webhook), le template validé par Geoffroy est appliqué côté serveur.
+  subject: z.string().min(1).max(200).optional(),
   body_top: z.string().max(5000).optional(),
   body_bottom: z.string().max(5000).optional(),
   body: z.string().max(5000).optional(),
@@ -97,19 +99,30 @@ const fmtEur = (n: number) => `€${Number(n).toLocaleString("en-GB", { maximumF
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
-    const userClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user || !(await isAdminEmailDb(user.email))) return json({ error: "Forbidden" }, 403);
+    // Appel interne (stripe-webhook -> email de confirmation auto) :
+    // authentifié par x-cron-key = app_settings.internal.cron_key.
+    let internalCall = false;
+    const cronHeader = req.headers.get("x-cron-key");
+    if (cronHeader) {
+      internalCall = cronHeader === (await internalKey().catch(() => null));
+    }
+
+    if (!internalCall) {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+      const userClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user || !(await isAdminEmailDb(user.email))) return json({ error: "Forbidden" }, 403);
+    }
 
     const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
-    const { kind, installment_id, subject } = parsed.data;
+    const { kind, installment_id } = parsed.data;
+    if (kind === "request" && !parsed.data.subject) return json({ error: "subject required" }, 400);
 
     const { data: inst } = await admin.from("payment_installments")
       .select("id,booking_id,label,amount_due,status,is_cash,category,invoice_file_url,invoice_file_name,invoice_number")
@@ -121,6 +134,35 @@ serve(async (req) => {
       .eq("id", inst.booking_id).maybeSingle();
     if (!booking?.email) return json({ error: "Booking has no email" }, 400);
     const to = booking.email;
+
+    // Sujet / corps par défaut (template validé) pour la confirmation —
+    // utilisé par l'automatisation du webhook, éditable dans l'admin sinon.
+    let subject = parsed.data.subject ?? "";
+    let bodyText = parsed.data.body ?? "";
+    if (kind === "confirmation" && (!subject || !bodyText)) {
+      const { data: sibs } = await admin.from("payment_installments")
+        .select("id,amount_due,status,category,stripe_session_id,is_cash")
+        .eq("booking_id", inst.booking_id);
+      const group = inst.stripe_session_id
+        ? (sibs ?? []).filter((s) => s.stripe_session_id === inst.stripe_session_id)
+        : [inst];
+      const amount = group.reduce((s, g) => s + Math.abs(Number(g.amount_due)), 0);
+      const allSettled = (sibs ?? []).filter((s) => s.category !== "discount")
+        .every((s) => s.status === "paid");
+      const first = (booking.first_name ?? "").trim() || "there";
+      subject = subject || "Payment received — you're all set";
+      bodyText = bodyText ||
+`Hi ${first},
+
+Good news, your payment of ${fmtEur(amount)} has arrived safely.${allSettled ? " Your stay is now fully settled." : ""}
+
+If you have any questions at all, I'm always happy to help. Just reply here.
+
+See you very soon at the Quinta.
+
+Warmly,
+Geo`;
+    }
 
     let html = "";
     const attachments: { filename: string; content: string }[] = [];
@@ -156,7 +198,7 @@ ${paras(parsed.data.body_bottom ?? "")}
         filename: inst.invoice_file_name ?? `${(inst.invoice_number ?? "invoice").replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`,
         content: btoa(bin),
       });
-      html = emailShell(paras(parsed.data.body ?? ""));
+      html = emailShell(paras(bodyText));
     }
 
     const sent = await resend.emails.send({
