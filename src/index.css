@@ -113,22 +113,22 @@
     @apply border-border;
   }
 
-  /* Corps de texte : Inter (lisibilité) — le branding typewriter reste sur les titres.
-     Demande produit juillet 2026 : la typewriter partout était fatigante à lire. */
+  /* Inter partout, titres compris — demande produit du 29 juillet 2026 :
+     abandon complet de la Dico Typewriter (guest area incluse). */
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Dico Typewriter', 'Courier New', monospace;
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     @apply font-semibold tracking-tight;
   }
 }
 
 @layer components {
   .text-display {
-    font-family: 'Dico Typewriter', 'Courier New', monospace;
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
 
   /* Admin : police sobre et lisible (Inter), le branding typewriter reste côté guest */

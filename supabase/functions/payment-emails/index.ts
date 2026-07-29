@@ -119,12 +119,11 @@ serve(async (req) => {
       const token = await signInstallment(inst.id);
       const payUrl = `${FUNCTIONS_BASE}/stripe-checkout?installment=${inst.id}&t=${token}`;
       const amount = fmtEur(Number(inst.amount_due));
+      // Esthétique volontairement "mail personnel" : pas de bouton stylé,
+      // juste un lien texte comme dans un email écrit à la main.
       html = emailShell(`
 ${paras(parsed.data.body_top ?? "")}
-<div style="text-align:center;margin:22px 0 8px 0;">
-  <a href="${payUrl}" style="display:inline-block;background:#57761f;color:#ffffff;text-decoration:none;font-weight:bold;padding:13px 32px;border-radius:10px;font-family:Helvetica,Arial,sans-serif;font-size:12pt;">Pay ${esc(amount)}</a>
-</div>
-<p style="text-align:center;font-size:10pt;color:#888888;margin:0 0 18px 0;">Secure payment by card or bank debit, powered by Stripe.</p>
+<p style="margin:0 0 14px 0;"><a href="${payUrl}" style="color:#1155cc;">Pay ${esc(amount)}</a> <span style="color:#888888;font-size:10pt;">(secure payment by card or bank debit — Stripe)</span></p>
 ${paras(parsed.data.body_bottom ?? "")}
 `);
     } else {

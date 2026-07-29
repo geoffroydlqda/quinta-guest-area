@@ -182,12 +182,11 @@ export function PaymentEmailDialog({
           {kind === "request" ? (
             <>
               <Textarea value={bodyTop} onChange={(e) => setBodyTop(e.target.value)} rows={7} className="font-normal" />
-              <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3 text-center">
-                <span className="inline-block rounded-lg bg-primary px-6 py-2.5 text-primary-foreground font-semibold">
-                  Pay {fmtEur(Number(inst.amount_due))}
-                </span>
-                <div className="mt-1.5 text-[11px] text-muted-foreground">
-                  Secure payment by card or bank debit, powered by Stripe. · Inserted automatically — the link opens a fresh Stripe checkout.
+              <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-2 text-sm">
+                <span className="text-blue-700 underline">Pay {fmtEur(Number(inst.amount_due))}</span>{" "}
+                <span className="text-xs text-muted-foreground">(secure payment by card or bank debit — Stripe)</span>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  Inserted automatically — a plain text link, like a personally written email. It opens a fresh Stripe checkout on every click.
                 </div>
               </div>
               <Textarea value={bodyBottom} onChange={(e) => setBodyBottom(e.target.value)} rows={8} />
