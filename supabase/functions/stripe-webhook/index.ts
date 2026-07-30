@@ -119,6 +119,21 @@ async function automate(newlyPaid: string[], sessionId: string) {
     }
     console.log(`[auto-invoice] ${invBody.number ?? invBody.document_id} created (${invBody.lines} line(s))`);
 
+    // 1b. Si le PDF n'était pas prêt, on retente (Moloni met parfois >25 s)
+    if (!invBody.pdf_attached) {
+      console.log("[auto-invoice] PDF not ready — retrying");
+      await new Promise((r) => setTimeout(r, 5000));
+      const retry = await fetch(`${base}/moloni-invoice`, {
+        method: "POST", headers,
+        body: JSON.stringify({ action: "pdf", installment_id: newlyPaid[0] }),
+      });
+      const retryBody = await retry.json().catch(() => ({}));
+      if (!retry.ok || retryBody?.error) {
+        console.error(`[auto-invoice] PDF retry failed — no confirmation email (attach manually then use ✉️): ${JSON.stringify(retryBody).slice(0, 300)}`);
+        return;
+      }
+    }
+
     // 2. Email de confirmation avec le PDF (template serveur validé)
     const em = await fetch(`${base}/payment-emails`, {
       method: "POST", headers,

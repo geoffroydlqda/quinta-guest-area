@@ -37,7 +37,7 @@ const MOLONI_API = "https://api.molonion.pt/v1";
 const MEDIA_BASE = "https://mediaapi.moloni.org";
 
 const BodySchema = z.object({
-  action: z.enum(["gql", "generate"]),
+  action: z.enum(["gql", "generate", "pdf"]),
   query: z.string().max(20000).optional(),
   variables: z.record(z.unknown()).optional(),
   installment_id: z.string().uuid().optional(),
@@ -298,37 +298,8 @@ async function generateInvoice(installmentId: string) {
   }).in("id", groupIds);
 
   // 5. PDF : génération -> token -> téléchargement -> bucket invoices
-  let pdfStored = false;
-  try {
-    await gql(`mutation($c: Int!, $d: Int!) { invoiceReceiptGetPDF(companyId: $c, documentId: $d) }`,
-      { c: cfg.company_id, d: doc.documentId });
-    // petit délai de génération
-    await new Promise((r) => setTimeout(r, 1500));
-    let tok: any = null;
-    for (let i = 0; i < 3 && !tok?.path; i++) {
-      const t = await gql(`query($d: Int!) { invoiceReceiptGetPDFToken(documentId: $d) { data { token path filename } errors { msg } } }`,
-        { d: doc.documentId });
-      tok = t?.data?.invoiceReceiptGetPDFToken?.data;
-      if (!tok?.path) await new Promise((r) => setTimeout(r, 1500));
-    }
-    if (tok?.path && tok?.token) {
-      const pdfRes = await fetch(`${MEDIA_BASE}${tok.path}?jwt=${tok.token}`);
-      if (pdfRes.ok) {
-        const bytes = new Uint8Array(await pdfRes.arrayBuffer());
-        const path = `${booking.id}/${inst.id}/${(doc.number ?? `moloni-${doc.documentId}`).replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`;
-        const up = await admin.storage.from("invoices").upload(path, bytes, { contentType: "application/pdf", upsert: true });
-        if (!up.error) {
-          await admin.from("payment_installments").update({
-            invoice_file_url: path,
-            invoice_file_name: `${doc.number ?? doc.documentId}.pdf`,
-          }).in("id", groupIds);
-          pdfStored = true;
-        }
-      }
-    }
-  } catch (e) {
-    console.error("PDF fetch failed:", e);
-  }
+  const pdf = await attachPdf(cfg, doc.documentId, booking.id, inst.id, groupIds, `${doc.number ?? doc.documentId}.pdf`);
+  if (!pdf.stored) console.error("PDF attach failed:", pdf.error);
 
   return {
     document_id: doc.documentId,
@@ -337,8 +308,69 @@ async function generateInvoice(installmentId: string) {
     taxes: doc.taxesValue,
     lines: group.length,
     discount_pct: discountPct || undefined,
-    pdf_attached: pdfStored,
+    pdf_attached: pdf.stored,
+    pdf_error: pdf.error,
   };
+}
+
+// Récupère le PDF d'un document Moloni (patience : la génération d'un document
+// final prend ~10 s) et l'attache aux échéances du groupe.
+async function attachPdf(
+  cfg: MoloniCfg,
+  documentId: number,
+  bookingId: string,
+  anchorInstId: string,
+  groupIds: string[],
+  fallbackName: string,
+): Promise<{ stored: boolean; error?: string }> {
+  const admin = _adminAuthClient;
+  try {
+    await gql(`mutation($c: Int!, $d: Int!) { invoiceReceiptGetPDF(companyId: $c, documentId: $d) }`,
+      { c: cfg.company_id, d: documentId });
+  } catch (e) {
+    console.error("invoiceReceiptGetPDF:", e); // la génération peut déjà être en file
+  }
+  let tok: { token?: string; path?: string; filename?: string } | null = null;
+  for (let i = 0; i < 10 && !tok?.path; i++) {
+    await new Promise((r) => setTimeout(r, 2500));
+    try {
+      const t = await gql(`query($d: Int!) { invoiceReceiptGetPDFToken(documentId: $d) { data { token path filename } errors { msg } } }`,
+        { d: documentId });
+      tok = t?.data?.invoiceReceiptGetPDFToken?.data ?? null;
+    } catch (e) {
+      console.error("invoiceReceiptGetPDFToken:", e);
+    }
+  }
+  if (!tok?.path || !tok?.token) return { stored: false, error: "PDF not ready after ~25s — retry with action 'pdf'" };
+  const pdfRes = await fetch(`${MEDIA_BASE}${tok.path}?jwt=${tok.token}`);
+  if (!pdfRes.ok) return { stored: false, error: `mediaapi HTTP ${pdfRes.status}` };
+  const bytes = new Uint8Array(await pdfRes.arrayBuffer());
+  const niceName = (tok.filename || fallbackName).replace(/[^A-Za-z0-9._-]/g, "_");
+  const path = `${bookingId}/${anchorInstId}/${niceName}`;
+  const up = await admin.storage.from("invoices").upload(path, bytes, { contentType: "application/pdf", upsert: true });
+  if (up.error) return { stored: false, error: up.error.message };
+  await admin.from("payment_installments").update({
+    invoice_file_url: path,
+    invoice_file_name: niceName,
+  }).in("id", groupIds);
+  return { stored: true };
+}
+
+// Rattrapage : (re)attache le PDF d'une facture déjà générée.
+async function attachPdfFor(installmentId: string) {
+  const cfg = await moloniCfg();
+  const admin = _adminAuthClient;
+  const { data: inst } = await admin.from("payment_installments")
+    .select(INST_COLS).eq("id", installmentId).maybeSingle() as { data: InstRow | null };
+  if (!inst) throw new Error("Installment not found");
+  if (!inst.moloni_document_id) throw new Error("No Moloni invoice on this payment yet");
+  const { data: group } = await admin.from("payment_installments")
+    .select("id").eq("booking_id", inst.booking_id).eq("moloni_document_id", inst.moloni_document_id) as { data: { id: string }[] | null };
+  const groupIds = (group ?? [{ id: inst.id }]).map((g) => g.id);
+  const pdf = await attachPdf(cfg, inst.moloni_document_id, inst.booking_id, inst.id, groupIds,
+    `${inst.invoice_number ?? inst.moloni_document_id}.pdf`);
+  if (!pdf.stored) throw new Error(pdf.error ?? "PDF attach failed");
+  return { document_id: inst.moloni_document_id, pdf_attached: true };
 }
 
 serve(async (req) => {
@@ -376,6 +408,7 @@ serve(async (req) => {
     }
 
     if (!installment_id) return json({ error: "installment_id required" }, 400);
+    if (action === "pdf") return json(await attachPdfFor(installment_id));
     return json(await generateInvoice(installment_id));
   } catch (e) {
     const msg = String((e as Error)?.message ?? e);
