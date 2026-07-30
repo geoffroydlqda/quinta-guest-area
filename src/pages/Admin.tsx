@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -239,6 +239,8 @@ const AdminContent = () => {
   type EventRow = {
     bookingId: string;
     userId: string | null;
+    retreatName: string;
+    clientId: string | null;
     firstName: string | null;
     lastName: string | null;
     email: string;
@@ -266,6 +268,8 @@ const AdminContent = () => {
       list.push({
         bookingId: b.id,
         userId: b.user_id,
+        retreatName: b.retreat_name || "",
+        clientId: b.client_id ?? null,
         firstName: b.first_name,
         lastName: b.last_name,
         email: b.email,
@@ -363,6 +367,10 @@ const AdminContent = () => {
     return m;
   }, [installments]);
 
+  const navigateToGuest = (ev: { clientId: string | null; email: string }) => {
+    navigate(`/admin/guests?guest=${encodeURIComponent(ev.clientId || (ev.email || "").toLowerCase())}`);
+  };
+
   const navigateToBooking = (bookingId: string) => {
     navigate(`/admin/guest/${bookingId}?bookingId=${bookingId}`);
   };
@@ -403,12 +411,16 @@ const AdminContent = () => {
 
   const renameBookingDirect = async (
     bookingId: string,
-    patch: { first_name?: string | null; last_name?: string | null }
+    patch: { first_name?: string | null; last_name?: string | null; retreat_name?: string }
   ) => {
     const { error } = await supabase.from("bookings").update(patch).eq("id", bookingId);
     if (error) {
       toast({ title: "Could not save name", description: error.message, variant: "destructive" });
       return;
+    }
+    // Le nom d'event alimente le titre Google Calendar
+    if (patch.retreat_name !== undefined) {
+      supabase.functions.invoke("sync-booking-calendar", { body: { booking_id: bookingId } }).catch(() => {});
     }
     setData((d) =>
       d
@@ -509,6 +521,7 @@ const AdminContent = () => {
                     categoryOf={categoryOfEvent}
                     paymentForEvent={paymentForEvent}
                     onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                    onOpenGuest={navigateToGuest}
                     onDeleteBooking={deleteBookingDirect}
                     onRenameBooking={renameBookingDirect}
                     onSetEventType={setEventTypeDirect}
@@ -538,9 +551,10 @@ const AdminContent = () => {
                       categoryOf={categoryOfEvent}
                       paymentForEvent={paymentForEvent}
                       onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                      onOpenGuest={navigateToGuest}
                       onDeleteBooking={deleteBookingDirect}
-                    onRenameBooking={renameBookingDirect}
-                    onSetEventType={setEventTypeDirect}
+                      onRenameBooking={renameBookingDirect}
+                      onSetEventType={setEventTypeDirect}
                     />
                   )
                 )}
@@ -556,6 +570,7 @@ const AdminContent = () => {
                   categoryOf={categoryOfEvent}
                   paymentForEvent={paymentForEvent}
                   onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                  onOpenGuest={navigateToGuest}
                   onDeleteBooking={deleteBookingDirect}
                     onRenameBooking={renameBookingDirect}
                     onSetEventType={setEventTypeDirect}
@@ -1321,6 +1336,19 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [profilesArr, setProfilesArr] = useState<ClientProfile[]>([]);
+
+  // Deep-link depuis l'onglet Bookings : /admin/guests?guest=<client_id|email>
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const g = searchParams.get("guest");
+    if (g) {
+      setSelected(g);
+      const next = new URLSearchParams(searchParams);
+      next.delete("guest");
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [form, setForm] = useState<ClientForm>(EMPTY_CLIENT);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -2354,6 +2382,8 @@ export default Admin;
 type EventRowProps = {
   bookingId: string;
   userId: string | null;
+  retreatName: string;
+  clientId: string | null;
   firstName: string | null;
   lastName: string | null;
   email: string;
@@ -2374,6 +2404,7 @@ function EventTable({
   categoryOf,
   paymentForEvent,
   onRowClick,
+  onOpenGuest,
   onDeleteBooking,
   onRenameBooking,
   onSetEventType,
@@ -2384,8 +2415,9 @@ function EventTable({
   categoryOf: (e: EventRowProps) => "upcoming" | "past" | "live" | "none";
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
   onRowClick: (bookingId: string) => void;
+  onOpenGuest: (ev: EventRowProps) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
-  onRenameBooking: (bookingId: string, patch: { first_name?: string | null; last_name?: string | null }) => Promise<void> | void;
+  onRenameBooking: (bookingId: string, patch: { first_name?: string | null; last_name?: string | null; retreat_name?: string }) => Promise<void> | void;
   onSetEventType: (bookingId: string, v: string) => Promise<void> | void;
   showLive?: boolean;
 }) {
@@ -2443,7 +2475,7 @@ function EventTable({
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-muted">
           <tr className="text-left">
-            {["First","Last","Email","Type","Check-in","Check-out","Guests","Status","Payment","Actions"].map((h, i) => (
+            {["Event","Guest","Type","Check-in","Check-out","Payment","Actions"].map((h, i) => (
               <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -2462,9 +2494,9 @@ function EventTable({
                 <td className="px-3 py-2">
                   <div className="inline-flex items-center gap-2">
                     <InlineNameCell
-                      value={ev.firstName}
-                      placeholder="First"
-                      onSave={(v) => onRenameBooking(ev.bookingId, { first_name: v })}
+                      value={ev.retreatName || null}
+                      placeholder="Event name"
+                      onSave={(v) => onRenameBooking(ev.bookingId, { retreat_name: v ?? "" })}
                     />
                     {isLive && (
                       <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 border border-green-300">
@@ -2473,14 +2505,16 @@ function EventTable({
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-2">
-                  <InlineNameCell
-                    value={ev.lastName}
-                    placeholder="Last"
-                    onSave={(v) => onRenameBooking(ev.bookingId, { last_name: v })}
-                  />
+                <td className="px-3 py-2 whitespace-nowrap">
+                  <button
+                    type="button"
+                    className="text-primary hover:underline text-left"
+                    title="Open the guest file"
+                    onClick={(e) => { e.stopPropagation(); onOpenGuest(ev); }}
+                  >
+                    {label}
+                  </button>
                 </td>
-                <td className="px-3 py-2">{ev.email}</td>
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                   <select
                     className="h-7 rounded-md border border-input bg-background px-1.5 text-xs"
@@ -2495,8 +2529,6 @@ function EventTable({
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">{ev.checkIn}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{ev.checkOut}</td>
-                <td className="px-3 py-2">{ev.guestsCount}</td>
-                <td className="px-3 py-2"><StatusBadge checkIn={ev.checkIn} statusOverall={ev.statusOverall} /></td>
                 <td className="px-3 py-2">
                   <PaymentBadge
                     status={payStatus}

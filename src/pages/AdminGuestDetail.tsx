@@ -450,7 +450,17 @@ const AdminGuestDetailContent = () => {
             <Button size="sm" variant="outline" onClick={() => navigate("/admin")}>
               <ArrowLeft className="w-4 h-4 mr-1" />Back
             </Button>
-            <h1 className="text-lg sm:text-xl font-medium truncate">{fullName}</h1>
+            <button
+              type="button"
+              className="text-lg sm:text-xl font-medium truncate text-left hover:underline decoration-primary/60 underline-offset-4"
+              title="Open the guest file"
+              onClick={() => {
+                const key = ((booking as any)?.client_id as string | null) || (email || "").toLowerCase();
+                if (key) navigate(`/admin/guests?guest=${encodeURIComponent(key)}`);
+              }}
+            >
+              {fullName}
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <Button
