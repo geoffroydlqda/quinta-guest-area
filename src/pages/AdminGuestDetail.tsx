@@ -246,7 +246,7 @@ const AdminGuestDetailContent = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#35532A]" />
       </div>
     );
   }
@@ -754,7 +754,7 @@ const AdminGuestDetailContent = () => {
         {/* Room Setup */}
         <section className="bg-card rounded-2xl border border-border p-6">
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
-            <BedDouble className="w-4 h-4 text-primary" /> Room Setup
+            <BedDouble className="w-4 h-4 text-[#35532A]" /> Room Setup
           </h2>
           {booking && (
             <div className="mb-4 pb-4 border-b border-border">
@@ -855,7 +855,7 @@ const AdminGuestDetailContent = () => {
         <section className="bg-card rounded-2xl border border-border p-6">
           <div className="flex items-center justify-between mb-3 gap-2">
             <h2 className="text-base font-semibold flex items-center gap-2">
-              <Utensils className="w-4 h-4 text-primary" /> Food
+              <Utensils className="w-4 h-4 text-[#35532A]" /> Food
             </h2>
             {food && (
               <div className="flex items-center gap-1">
@@ -940,7 +940,7 @@ const AdminGuestDetailContent = () => {
 
               <div className="pt-3 border-t border-border flex justify-between items-center">
                 <span className="font-semibold">Food subtotal</span>
-                <span className="font-bold text-primary">€{foodCost.grandTotal}</span>
+                <span className="font-bold text-[#35532A]">€{foodCost.grandTotal}</span>
               </div>
             </div>
           ) : (
@@ -951,7 +951,7 @@ const AdminGuestDetailContent = () => {
         {/* Transportation */}
         <section className="bg-card rounded-2xl border border-border p-6">
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
-            <Car className="w-4 h-4 text-primary" /> Transportation
+            <Car className="w-4 h-4 text-[#35532A]" /> Transportation
           </h2>
           {sortedTrips.length === 0 ? (
             <p className="text-sm text-muted-foreground italic">No trips</p>
@@ -1031,7 +1031,7 @@ const AdminGuestDetailContent = () => {
               })}
               <div className="pt-3 border-t border-border flex justify-between items-center">
                 <span className="font-semibold">Transportation subtotal</span>
-                <span className="font-bold text-primary">€{transportCost.subtotal}</span>
+                <span className="font-bold text-[#35532A]">€{transportCost.subtotal}</span>
               </div>
               {transportCost.customOfferCount > 0 && (
                 <p className="text-xs italic text-muted-foreground">
@@ -1046,9 +1046,9 @@ const AdminGuestDetailContent = () => {
         {grandTotal > 0 && (
           <section className="bg-primary/5 rounded-2xl border border-primary/30 p-6 flex justify-between items-center">
             <span className="font-semibold flex items-center gap-2">
-              <Euro className="w-4 h-4 text-primary" /> Estimated total (Food + Transportation)
+              <Euro className="w-4 h-4 text-[#35532A]" /> Estimated total (Food + Transportation)
             </span>
-            <span className="text-xl font-bold text-primary">€{grandTotal}</span>
+            <span className="text-xl font-bold text-[#35532A]">€{grandTotal}</span>
           </section>
         )}
 
@@ -1497,7 +1497,7 @@ function PaymentSection({ userId }: { userId: string }) {
     return (
       <section className="bg-card rounded-2xl border border-border p-6">
         <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
-          <Wallet className="w-4 h-4 text-primary" /> Payments
+          <Wallet className="w-4 h-4 text-[#35532A]" /> Payments
         </h2>
         <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
       </section>
@@ -1508,7 +1508,7 @@ function PaymentSection({ userId }: { userId: string }) {
     return (
       <section className="bg-card rounded-2xl border border-border p-6">
         <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
-          <Wallet className="w-4 h-4 text-primary" /> Payments
+          <Wallet className="w-4 h-4 text-[#35532A]" /> Payments
         </h2>
         <p className="text-sm text-muted-foreground italic">No booking linked yet.</p>
       </section>
@@ -1596,7 +1596,7 @@ function PaymentSection({ userId }: { userId: string }) {
   return (
     <section className="bg-card rounded-2xl border border-border p-6 space-y-6">
       <h2 className="text-base font-semibold flex items-center gap-2">
-        <Wallet className="w-4 h-4 text-primary" /> Payments
+        <Wallet className="w-4 h-4 text-[#35532A]" /> Payments
       </h2>
 
       {/* Total rental price + discount + status */}
@@ -1619,7 +1619,7 @@ function PaymentSection({ userId }: { userId: string }) {
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <span className="text-xl font-bold text-primary">
+              <span className="text-xl font-bold text-[#35532A]">
                 {booking.total_rental_price != null ? `€${booking.total_rental_price}` : "—"}
               </span>
               <Button size="sm" variant="ghost" onClick={() => setEditingRental(true)}>
@@ -2158,7 +2158,7 @@ function WhatsAppLinkEditor({
               href={current}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-medium break-all underline text-primary"
+              className="font-medium break-all underline text-[#35532A]"
             >
               {current}
             </a>
@@ -2234,7 +2234,7 @@ function NotesBlock({
     <section className="bg-card rounded-2xl border border-border p-6">
       <div className="flex items-start justify-between mb-3 gap-2">
         <h2 className="text-base font-semibold flex items-center gap-2">
-          <StickyNote className="w-4 h-4 text-primary" /> Notes
+          <StickyNote className="w-4 h-4 text-[#35532A]" /> Notes
         </h2>
         {!editing && hasNote && (
           <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={startEdit} aria-label="Edit note">

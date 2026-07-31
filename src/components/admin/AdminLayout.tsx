@@ -53,7 +53,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   const tabClass = (isActive: boolean) =>
     `flex flex-1 flex-col items-center gap-0.5 pt-1.5 pb-1 text-[10px] font-medium ${
-      isActive ? "text-primary" : "text-muted-foreground"
+      isActive ? "text-[#35532A]" : "text-muted-foreground"
     }`;
 
   const tabPill = (isActive: boolean) =>

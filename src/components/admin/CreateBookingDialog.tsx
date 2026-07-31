@@ -271,7 +271,7 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
                   size="icon"
                   onClick={newGuestMode}
                   title="Create a new guest"
-                  className={guestId === "new" ? "border-primary text-primary" : ""}
+                  className={guestId === "new" ? "border-primary text-[#35532A]" : ""}
                 >
                   <Plus className="w-4 h-4" />
                 </Button>

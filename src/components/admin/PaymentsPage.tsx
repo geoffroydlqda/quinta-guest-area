@@ -350,7 +350,7 @@ export function PaymentsPage({
   const Tile = ({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "danger" | "success" }) => (
     <div className="rounded-xl border border-border bg-card p-3.5">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`text-xl font-semibold mt-0.5 ${tone === "danger" ? "text-destructive" : tone === "success" ? "text-primary" : ""}`}>{value}</div>
+      <div className={`text-xl font-semibold mt-0.5 ${tone === "danger" ? "text-destructive" : tone === "success" ? "text-[#35532A]" : ""}`}>{value}</div>
       {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
     </div>
   );
