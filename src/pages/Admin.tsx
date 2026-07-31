@@ -804,7 +804,8 @@ function DashboardView({
     let total = 0;
     for (const b of bookings) {
       if (!(b.check_in_date || "").startsWith(year)) continue;
-      if (/^internal\+/i.test(b.email || "")) continue;
+      // Les bookings "internal+" sont de VRAIS clients (gérés sans guest area) :
+      // ils comptent dans les stats — l'exclusion internal+ ne vaut que pour les emails.
       const prof = (b.client_id && byId.get(b.client_id)) || byEmail.get((b.email || "").toLowerCase());
       let nat = (prof?.nationality || "").trim();
       if (nat) nat = DEMONYMS[nat.toLowerCase()] ?? nat;
