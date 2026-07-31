@@ -1850,8 +1850,12 @@ function InstallmentForm({
 }) {
   const [label, setLabel] = useState(initial?.label || "");
   const [amountDue, setAmountDue] = useState(initial?.amount_due != null ? String(Math.abs(initial.amount_due)) : "");
-  const [extraVat, setExtraVat] = useState<number>(
-    initial?.category === "extra" && initial?.vat_rate != null ? initial.vat_rate : 23
+  // TVA choisie au radio (extra ET catering — demande Geoffroy 31 juil. 2026) :
+  // extra par défaut 23 %, catering par défaut 13 %, choix 6/13/23 possible.
+  const [chosenVat, setChosenVat] = useState<number>(
+    (initial?.category === "extra" || initial?.category === "catering") && initial?.vat_rate != null
+      ? initial.vat_rate
+      : initial?.category === "catering" ? 13 : 23
   );
   const [isCash, setIsCash] = useState(initial?.is_cash ?? false);
   const [dueDate, setDueDate] = useState(initial?.due_date || "");
@@ -1882,7 +1886,7 @@ function InstallmentForm({
 
   // TVA automatique : rental 23 %, catering 13 %, extra au choix (6/13/23).
   // Cash : pas de TVA (HT = TVAC).
-  const vatRate = isCash ? 0 : (category === "extra" ? extraVat : (VAT_DEFAULT[category] ?? 23));
+  const vatRate = isCash ? 0 : (category === "extra" || category === "catering" ? chosenVat : (VAT_DEFAULT[category] ?? 23));
   const amountNum = Math.abs(Number(amountDue) || 0);
   const computedExcl = isCash ? amountNum : exclVatOf(amountNum, vatRate);
 
@@ -1920,7 +1924,7 @@ function InstallmentForm({
             <button
               key={c}
               type="button"
-              onClick={() => setCategory(c)}
+              onClick={() => { setCategory(c); setChosenVat(c === "catering" ? 13 : 23); }}
               className={`px-3 py-1.5 text-xs capitalize ${category === c ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
             >
               {c}
@@ -1941,20 +1945,21 @@ function InstallmentForm({
         {!isCash && (
           <div className="space-y-1">
             <div className="text-xs text-muted-foreground">VAT</div>
-            {category === "extra" ? (
+            {category === "extra" || category === "catering" ? (
               <div className="flex items-center gap-3 h-9">
                 {[6, 13, 23].map((r) => (
                   <label key={r} className="flex items-center gap-1.5 cursor-pointer select-none text-sm">
                     <input
                       type="radio"
-                      name="extra-vat"
-                      checked={extraVat === r}
-                      onChange={() => setExtraVat(r)}
+                      name="inst-vat"
+                      checked={chosenVat === r}
+                      onChange={() => setChosenVat(r)}
                       className="accent-primary"
                     />
                     {r}%
                   </label>
                 ))}
+                {category === "catering" && <span className="text-[11px] text-muted-foreground">(13% by default)</span>}
               </div>
             ) : (
               <div className="h-9 flex items-center text-sm">{vatRate}% <span className="text-muted-foreground ml-1">({category})</span></div>
