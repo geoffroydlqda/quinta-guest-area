@@ -49,12 +49,15 @@ function stayRange(checkIn?: string | null, checkOut?: string | null): string | 
     : `${mA} ${a.getDate()} to ${mB} ${b.getDate()}`;
 }
 
-export function buildRequestTemplate(booking: EmailBooking, inst: EmailInstallment, ordinal: number, isLast: boolean) {
+export function buildRequestTemplate(booking: EmailBooking, inst: EmailInstallment, ordinal: number, isLast: boolean, groupCount = 1) {
   const first = (booking.first_name ?? "").trim() || "there";
   const stay = stayRange(booking.check_in_date, booking.check_out_date);
   const stayLine = stay
     ? `Your stay at Quinta do Amor from ${stay} is getting close`
     : `Your stay at Quinta do Amor is getting close`;
+  const linkLine = groupCount > 1
+    ? `Here's the link to settle the ${groupCount === 2 ? "two" : groupCount} payments for your stay in one go:`
+    : `Here's the link for the ${ordinalWord(ordinal)}${isLast ? " and final" : ""} payment for your stay:`;
   return {
     subject: `Your stay at Quinta do Amor — ${isLast ? "final payment" : "payment"}`,
     bodyTop:
@@ -64,7 +67,7 @@ I hope you're doing well!
 
 ${stayLine}
 
-Here's the link for the ${ordinalWord(ordinal)}${isLast ? " and final" : ""} payment for your stay:`,
+${linkLine}`,
     bodyBottom:
 `Your invoice will arrive in your inbox as soon as the payment comes through.
 
@@ -104,6 +107,7 @@ export function PaymentEmailDialog({
   ordinal,
   isLast,
   allSettled,
+  groupInsts,
   onSent,
 }: {
   open: boolean;
@@ -114,8 +118,12 @@ export function PaymentEmailDialog({
   ordinal: number;
   isLast: boolean;
   allSettled: boolean;
+  /** Demande groupée : plusieurs échéances -> un seul lien Stripe (une facture multi-lignes). */
+  groupInsts?: EmailInstallment[];
   onSent?: () => void;
 }) {
+  const insts = kind === "request" && groupInsts && groupInsts.length > 1 ? groupInsts : [inst];
+  const totalDue = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
   const { toast } = useToast();
   const [subject, setSubject] = useState("");
   const [bodyTop, setBodyTop] = useState("");
@@ -127,7 +135,7 @@ export function PaymentEmailDialog({
   useEffect(() => {
     if (!open) return;
     if (kind === "request") {
-      const t = buildRequestTemplate(booking, inst, ordinal, isLast);
+      const t = buildRequestTemplate(booking, inst, ordinal, isLast, insts.length);
       setSubject(t.subject); setBodyTop(t.bodyTop); setBodyBottom(t.bodyBottom);
     } else {
       const t = buildConfirmationTemplate(booking, inst, allSettled);
@@ -142,7 +150,9 @@ export function PaymentEmailDialog({
     setSending(true);
     try {
       const payload = kind === "request"
-        ? { kind, installment_id: inst.id, subject, body_top: bodyTop, body_bottom: bodyBottom }
+        ? (insts.length > 1
+          ? { kind, installment_ids: insts.map((i) => i.id), subject, body_top: bodyTop, body_bottom: bodyBottom }
+          : { kind, installment_id: inst.id, subject, body_top: bodyTop, body_bottom: bodyBottom })
         : { kind, installment_id: inst.id, subject, body };
       const { data, error } = await supabase.functions.invoke("payment-emails", { body: payload });
       if (error || data?.error) throw new Error(data?.error || error?.message);
@@ -184,8 +194,14 @@ export function PaymentEmailDialog({
               <Textarea value={bodyTop} onChange={(e) => setBodyTop(e.target.value)} rows={7} className="font-normal" />
               <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-2.5 text-sm">
                 <span className="inline-block rounded-md bg-primary px-5 py-2 text-primary-foreground font-semibold">
-                  Pay {fmtEur(Number(inst.amount_due))}
+                  Pay {fmtEur(totalDue)}
                 </span>
+                {insts.length > 1 && (
+                  <div className="mt-1.5 text-xs text-muted-foreground">
+                    One link, {insts.length} payments together: {insts.map((i) => `${i.label || "Installment"} (${fmtEur(Number(i.amount_due))})`).join(" + ")}.
+                    A single invoice with one line per payment will be issued.
+                  </div>
+                )}
                 <div className="mt-1 text-xs text-muted-foreground">Secure bank payment (debit or transfer), powered by Stripe.</div>
                 <div className="mt-1.5 text-[11px] text-muted-foreground">
                   Inserted automatically — opens a fresh Stripe checkout on every click.

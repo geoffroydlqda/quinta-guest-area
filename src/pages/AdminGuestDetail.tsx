@@ -1207,7 +1207,10 @@ function PaymentSection({ userId }: { userId: string }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteInstId, setDeleteInstId] = useState<string | null>(null);
-  const [emailTarget, setEmailTarget] = useState<{ inst: Installment; kind: "request" | "confirmation" } | null>(null);
+  const [emailTarget, setEmailTarget] = useState<{ inst: Installment; kind: "request" | "confirmation"; group?: Installment[] } | null>(null);
+  // Groupage de paiements : échéances cochées -> une seule demande (un lien
+  // Stripe, une fatura-recibo multi-lignes à l'encaissement).
+  const [groupSel, setGroupSel] = useState<Set<string>>(new Set());
   const [savingOverride, setSavingOverride] = useState(false);
   const [generating, setGenerating] = useState(false);
 
@@ -1532,6 +1535,17 @@ function PaymentSection({ userId }: { userId: string }) {
       <div key={inst.id} className="rounded-lg border border-border p-3 text-sm space-y-2">
         <div className="flex justify-between items-start gap-2 flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
+            {inst.status !== "paid" && !inst.is_cash && inst.category !== "discount" && Number(inst.amount_due) > 0 && (
+              <Checkbox
+                checked={groupSel.has(inst.id)}
+                onCheckedChange={(v) => setGroupSel((s) => {
+                  const n = new Set(s);
+                  if (v === true) n.add(inst.id); else n.delete(inst.id);
+                  return n;
+                })}
+                title="Select to group with other payments (one link, one invoice)"
+              />
+            )}
             <div className="font-semibold truncate">{inst.label}</div>
             <span className="text-[10px] uppercase px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground">
               {inst.category}
@@ -1707,8 +1721,24 @@ function PaymentSection({ userId }: { userId: string }) {
       )}
 
       {/* Rental installments */}
-      {/* Top action bar: single Add payment + 30/70 quick action */}
+      {/* Top action bar: group request + single Add payment + 30/70 quick action */}
       <div className="flex items-center justify-end flex-wrap gap-2">
+        {groupSel.size >= 2 && booking.email && (() => {
+          const sel = installments.filter((i) => groupSel.has(i.id) && i.status !== "paid");
+          const total = sel.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+          return (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="mr-auto"
+              title="One email, one payment link for all selected payments — a single multi-line invoice will be issued on payment"
+              onClick={() => sel.length >= 2 && setEmailTarget({ inst: sel[0], kind: "request", group: sel })}
+            >
+              <Mail className="w-4 h-4 mr-1" />
+              Group payments ({sel.length} · €{total.toLocaleString("en-GB", { maximumFractionDigits: 2 })})
+            </Button>
+          );
+        })()}
         {rentalInst.length === 0 && booking.total_rental_price != null && booking.total_rental_price > 0 && (
           <Button size="sm" variant="outline" onClick={generate3070} disabled={generating}>
             {generating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
@@ -1792,9 +1822,11 @@ function PaymentSection({ userId }: { userId: string }) {
               check_out_date: booking.check_out_date,
             }}
             inst={emailTarget.inst}
+            groupInsts={emailTarget.group}
             ordinal={idx >= 0 ? idx + 1 : 1}
             isLast={idx >= 0 && idx === siblings.length - 1}
             allSettled={siblings.every((i) => i.id === emailTarget.inst.id || i.status === "paid")}
+            onSent={() => setGroupSel(new Set())}
           />
         );
       })()}

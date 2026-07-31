@@ -95,10 +95,10 @@ type InstRow = {
   amount_excl_vat: number | null; category: string | null; status: string;
   is_cash: boolean | null; moloni_document_id: number | null; invoice_number: string | null;
   invoice_file_url: string | null; vat_rate: number | null; stripe_session_id: string | null;
-  paid_usd: number | null; usd_rate: number | null;
+  paid_usd: number | null; usd_rate: number | null; notes: string | null;
 };
 
-const INST_COLS = "id,booking_id,label,amount_due,amount_excl_vat,category,status,is_cash,moloni_document_id,invoice_number,invoice_file_url,vat_rate,stripe_session_id,paid_usd,usd_rate";
+const INST_COLS = "id,booking_id,label,amount_due,amount_excl_vat,category,status,is_cash,moloni_document_id,invoice_number,invoice_file_url,vat_rate,stripe_session_id,paid_usd,usd_rate,notes";
 
 function rateFor(inst: InstRow): number {
   const r = inst.vat_rate ?? DEFAULT_RATE[inst.category ?? "rental"] ?? 23;
@@ -268,7 +268,9 @@ async function generateInvoice(installmentId: string) {
       ordering: idx + 1,
       price: Math.round(price * 1e6) / 1e6,
       ...(d > 0 ? { discount: d } : {}),
-      summary: `${booking.retreat_name || clientName} — ${g.label || g.category}${idx === 0 ? stayLine : ""}`,
+      // Description de ligne : la note de l'échéance prime (demande Geoffroy,
+      // 31 juil. 2026), sinon le label, sinon la catégorie.
+      summary: `${booking.retreat_name || clientName} — ${(g.notes ?? "").trim() || g.label || g.category}${idx === 0 ? stayLine : ""}`,
       taxes: [{ taxId: TAX_IDS[rate], ordering: 1, cumulative: false }],
     };
   });

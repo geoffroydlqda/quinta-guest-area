@@ -33,7 +33,10 @@ function json(body: unknown, status = 200) {
 
 const BodySchema = z.object({
   kind: z.enum(["request", "confirmation"]),
-  installment_id: z.string().uuid(),
+  installment_id: z.string().uuid().optional(),
+  // Demande groupée : plusieurs échéances du même booking, un seul lien de
+  // paiement (une session Stripe -> une fatura-recibo multi-lignes).
+  installment_ids: z.array(z.string().uuid()).min(1).max(20).optional(),
   // subject/body optionnels : pour une confirmation sans texte (appel interne
   // du webhook), le template validé par Geoffroy est appliqué côté serveur.
   subject: z.string().min(1).max(200).optional(),
@@ -121,13 +124,26 @@ serve(async (req) => {
 
     const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
-    const { kind, installment_id } = parsed.data;
+    const { kind } = parsed.data;
     if (kind === "request" && !parsed.data.subject) return json({ error: "subject required" }, 400);
+    const ids = parsed.data.installment_ids?.length
+      ? [...new Set(parsed.data.installment_ids)]
+      : (parsed.data.installment_id ? [parsed.data.installment_id] : []);
+    if (!ids.length) return json({ error: "installment_id or installment_ids required" }, 400);
+    if (kind === "confirmation" && ids.length > 1) {
+      return json({ error: "confirmation takes a single installment_id" }, 400);
+    }
 
-    const { data: inst } = await admin.from("payment_installments")
-      .select("id,booking_id,label,amount_due,status,is_cash,category,invoice_file_url,invoice_file_name,invoice_number")
-      .eq("id", installment_id).maybeSingle();
-    if (!inst) return json({ error: "Installment not found" }, 404);
+    const { data: instsData } = await admin.from("payment_installments")
+      .select("id,booking_id,label,amount_due,status,is_cash,category,invoice_file_url,invoice_file_name,invoice_number,stripe_session_id")
+      .in("id", ids);
+    const insts = (instsData ?? []);
+    if (insts.length !== ids.length) return json({ error: "Installment not found" }, 404);
+    if (new Set(insts.map((i) => i.booking_id)).size !== 1) {
+      return json({ error: "All installments must belong to the same booking" }, 400);
+    }
+    // Ancre du groupe = la première échéance demandée
+    const inst = insts.find((i) => i.id === ids[0])!;
 
     const { data: booking } = await admin.from("bookings")
       .select("id,email,first_name,retreat_name,check_in_date,check_out_date")
@@ -168,11 +184,20 @@ Geo`;
     const attachments: { filename: string; content: string }[] = [];
 
     if (kind === "request") {
-      if (inst.status === "paid") return json({ error: "This payment is already settled" }, 400);
-      if (inst.is_cash) return json({ error: "Cash payment — no online payment link" }, 400);
-      const token = await signInstallment(inst.id);
-      const payUrl = `${FUNCTIONS_BASE}/stripe-checkout?installment=${inst.id}&t=${token}`;
-      const amount = fmtEur(Number(inst.amount_due));
+      for (const i of insts) {
+        if (i.status === "paid") return json({ error: `"${i.label ?? "A payment"}" is already settled` }, 400);
+        if (i.is_cash) return json({ error: `"${i.label ?? "A payment"}" is a cash payment — no online link` }, 400);
+        if (i.category === "discount") return json({ error: "Discount lines cannot be requested" }, 400);
+      }
+      let payUrl: string;
+      if (ids.length > 1) {
+        const token = await signInstallment([...ids].sort().join(","));
+        payUrl = `${FUNCTIONS_BASE}/stripe-checkout?installments=${ids.join(",")}&t=${token}`;
+      } else {
+        const token = await signInstallment(inst.id);
+        payUrl = `${FUNCTIONS_BASE}/stripe-checkout?installment=${inst.id}&t=${token}`;
+      }
+      const amount = fmtEur(insts.reduce((s, i) => s + Number(i.amount_due || 0), 0));
       // Mise en page sobre façon mail personnel, mais avec un vrai bouton
       // (aligné à gauche, pas de bloc centré marketing).
       html = emailShell(`
@@ -210,19 +235,19 @@ ${paras(parsed.data.body_bottom ?? "")}
       ...(attachments.length ? { attachments } : {}),
     });
     if (sent.error) {
-      await admin.from("reminder_log").insert({
+      await admin.from("reminder_log").insert(insts.map((i) => ({
         type: kind === "request" ? "payment_request" : "payment_receipt",
-        installment_id: inst.id, booking_id: booking.id, recipient: to, subject,
-        status: "error", error: String(sent.error.message ?? sent.error),
-      });
+        installment_id: i.id, booking_id: booking.id, recipient: to, subject,
+        status: "error", error: String(sent.error!.message ?? sent.error),
+      })));
       return json({ error: String(sent.error.message ?? sent.error) }, 502);
     }
 
-    await admin.from("reminder_log").insert({
+    await admin.from("reminder_log").insert(insts.map((i) => ({
       type: kind === "request" ? "payment_request" : "payment_receipt",
-      installment_id: inst.id, booking_id: booking.id, recipient: to, subject,
+      installment_id: i.id, booking_id: booking.id, recipient: to, subject,
       status: "sent", error: null,
-    });
+    })));
 
     return json({ sent: true, to, kind, attachment: attachments[0]?.filename ?? null });
   } catch (e) {

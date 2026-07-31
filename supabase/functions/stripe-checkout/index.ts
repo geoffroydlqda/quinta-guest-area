@@ -231,29 +231,46 @@ async function createSession(
 
 async function handlePayLink(req: Request): Promise<Response> {
   const url = new URL(req.url);
-  const installmentId = url.searchParams.get("installment") ?? "";
   const token = url.searchParams.get("t") ?? "";
-  if (!/^[0-9a-f-]{36}$/.test(installmentId) || !token) {
-    return redirect(`${PROD_ORIGIN}/payment-success?payment=invalid`);
-  }
-  const expected = await expectedToken(installmentId);
-  if (token !== expected) return redirect(`${PROD_ORIGIN}/payment-success?payment=invalid`);
+  const invalid = () => redirect(`${PROD_ORIGIN}/payment-success?payment=invalid`);
 
-  const { data: inst } = await admin.from("payment_installments")
+  // Deux formes de lien signé :
+  //   ?installment=<uuid>                (historique, une échéance)
+  //   ?installments=<uuid>,<uuid>,…      (groupé — signature sur les ids triés)
+  const multiRaw = url.searchParams.get("installments") ?? "";
+  const single = url.searchParams.get("installment") ?? "";
+  const ids = multiRaw
+    ? [...new Set(multiRaw.split(",").map((s) => s.trim()).filter(Boolean))]
+    : (single ? [single] : []);
+  if (!ids.length || ids.length > 20 || !ids.every((id) => /^[0-9a-f-]{36}$/.test(id)) || !token) {
+    return invalid();
+  }
+  const expected = await expectedToken(multiRaw ? [...ids].sort().join(",") : ids[0]);
+  if (token !== expected) return invalid();
+
+  const { data: instsData } = await admin.from("payment_installments")
     .select("id,booking_id,label,amount_due,category,status,is_cash")
-    .eq("id", installmentId).maybeSingle();
-  if (!inst) return redirect(`${PROD_ORIGIN}/payment-success?payment=invalid`);
-  if (inst.status === "paid") return redirect(`${PROD_ORIGIN}/payment-success?payment=already`);
-  if (inst.is_cash || inst.category === "discount" || !(Number(inst.amount_due) > 0)) {
-    return redirect(`${PROD_ORIGIN}/payment-success?payment=invalid`);
+    .in("id", ids);
+  const insts = instsData ?? [];
+  if (insts.length !== ids.length) return invalid();
+  if (new Set(insts.map((i) => i.booking_id)).size !== 1) return invalid();
+
+  // Un lien groupé reste utilisable si une partie a déjà été réglée :
+  // on encaisse ce qui reste dû.
+  const payable = insts.filter((i) =>
+    i.status !== "paid" && !i.is_cash && i.category !== "discount" && Number(i.amount_due) > 0
+  );
+  if (!payable.length) {
+    const allPaid = insts.every((i) => i.status === "paid" || i.category === "discount");
+    return allPaid ? redirect(`${PROD_ORIGIN}/payment-success?payment=already`) : invalid();
   }
   const { data: booking } = await admin.from("bookings")
     .select("id,email,retreat_name,check_in_date,check_out_date,client_id")
-    .eq("id", inst.booking_id).maybeSingle();
-  if (!booking) return redirect(`${PROD_ORIGIN}/payment-success?payment=invalid`);
+    .eq("id", payable[0].booking_id).maybeSingle();
+  if (!booking) return invalid();
 
   const { session } = await createSession(
-    [inst], booking,
+    payable, booking,
     `${PROD_ORIGIN}/payment-success?payment=success`,
     `${PROD_ORIGIN}/payment-success?payment=cancelled`,
   );
