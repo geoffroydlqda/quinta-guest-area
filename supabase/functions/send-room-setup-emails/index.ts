@@ -64,7 +64,7 @@ function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): s
               
               <!-- Header -->
               <tr>
-                <td style="background-color: #5e6d3f; padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
+                <td style="background-color: #6d7855; padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
                   <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 400; letter-spacing: 1px;">Quinta do Amor</h1>
                   <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">
                     ${isAdmin ? 'Housekeeping Setup — ' + safeFullName : 'Your Room Setup Confirmation'}
@@ -90,8 +90,8 @@ function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): s
 
                   <!-- Room Setup -->
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
-                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #5e6d3f;">
-                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #5e6d3f; font-weight: 600;">Room Configuration</h2>
+                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #6d7855;">
+                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #6d7855; font-weight: 600;">Room Configuration</h2>
                     </td></tr>
                     <tr><td style="padding: 12px 0;">
                       <table width="100%">
@@ -127,7 +127,7 @@ function generateSubmitEmailHtml(payload: RoomSetupPayload, isAdmin: boolean): s
                 <td style="background-color: #f6efea; padding: 24px 32px; text-align: center; border-radius: 0 0 12px 12px; border-left: 1px solid #e8ddd6; border-right: 1px solid #e8ddd6; border-bottom: 1px solid #e8ddd6;">
                   <p style="margin: 0 0 4px 0; font-size: 12px; color: #333;">Submitted: ${new Date().toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })}</p>
                   <p style="margin: 0 0 8px 0; font-size: 12px; color: #666;">Quinta do Amor © ${new Date().getFullYear()}</p>
-                  <p style="margin: 0; font-size: 12px; color: #5e6d3f;">hello@quintamor.com</p>
+                  <p style="margin: 0; font-size: 12px; color: #6d7855;">hello@quintamor.com</p>
                 </td>
               </tr>
 

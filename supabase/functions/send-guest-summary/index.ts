@@ -200,7 +200,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
               
               <!-- Header -->
               <tr>
-                <td style="background-color: #5e6d3f; padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
+                <td style="background-color: #6d7855; padding: 32px; text-align: center; border-radius: 12px 12px 0 0;">
                   <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 400; letter-spacing: 1px;">Quinta do Amor</h1>
                   <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">
                     ${isAdmin ? 'Guest Area Summary — ' + safeFullName : 'Guest Area Summary'}
@@ -216,9 +216,9 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
                     <tr><td style="padding: 0 0 8px 0; font-size: 14px; color: #333; text-align: center;">You can edit your information anytime in your Guest Area.</td></tr>
                     <tr><td align="center">
-                      <a href="${GUEST_AREA_URL}" style="display: inline-block; background-color: #5e6d3f; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Go to Guest Area</a>
+                      <a href="${GUEST_AREA_URL}" style="display: inline-block; background-color: #6d7855; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Go to Guest Area</a>
                     </td></tr>
-                    <tr><td style="padding: 8px 0 0 0; font-size: 12px; color: #999; text-align: center;"><a href="${GUEST_AREA_URL}" style="color: #5e6d3f; text-decoration: underline;">${GUEST_AREA_URL}</a></td></tr>
+                    <tr><td style="padding: 8px 0 0 0; font-size: 12px; color: #999; text-align: center;"><a href="${GUEST_AREA_URL}" style="color: #6d7855; text-decoration: underline;">${GUEST_AREA_URL}</a></td></tr>
                   </table>
 
                   ${isAdmin ? `
@@ -235,8 +235,8 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
 
                   <!-- Stay Information -->
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
-                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #5e6d3f;">
-                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #5e6d3f; font-weight: 600;">Stay Information</h2>
+                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #6d7855;">
+                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #6d7855; font-weight: 600;">Stay Information</h2>
                     </td></tr>
                     <tr><td style="padding: 12px 0;">
                       <table width="100%">
@@ -249,8 +249,8 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
 
                   <!-- Room Setup -->
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
-                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #5e6d3f;">
-                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #5e6d3f; font-weight: 600;">Room Setup</h2>
+                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #6d7855;">
+                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #6d7855; font-weight: 600;">Room Setup</h2>
                     </td></tr>
                     <tr><td style="padding: 12px 0;">
                       ${roomSetup ? `
@@ -267,8 +267,8 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
 
                   <!-- Transportation -->
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
-                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #5e6d3f;">
-                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #5e6d3f; font-weight: 600;">Transportation</h2>
+                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #6d7855;">
+                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #6d7855; font-weight: 600;">Transportation</h2>
                     </td></tr>
                     <tr><td style="padding: 12px 0;">
                       ${transportation && transportation.tripCount > 0 ? `
@@ -279,7 +279,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                       </table>
                       <!-- Transportation Subtotal -->
                       <table width="100%" style="margin-top: 12px; border-top: 1px solid #e8ddd6;">
-                         ${transportation.totalPrice > 0 ? `<tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Transportation subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">${transportation.totalPrice}€</td></tr>` : ''}
+                         ${transportation.totalPrice > 0 ? `<tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Transportation subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #6d7855; font-size: 16px;">${transportation.totalPrice}€</td></tr>` : ''}
                          ${hasCustomOffers ? `<tr><td colspan="2" style="padding: 4px 0; color: #666; font-size: 13px; font-style: italic;">Custom transportation offers will be quoted separately.</td></tr>` : ''}
                       </table>
                       ` : '<p style="color: #999; font-style: italic;">Not set</p>'}
@@ -288,8 +288,8 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
 
                   <!-- Food -->
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
-                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #5e6d3f;">
-                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #5e6d3f; font-weight: 600;">Food</h2>
+                    <tr><td style="padding-bottom: 12px; border-bottom: 2px solid #6d7855;">
+                      <h2 style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #6d7855; font-weight: 600;">Food</h2>
                     </td></tr>
                     <tr><td style="padding: 12px 0;">
                       ${food ? `
@@ -329,7 +329,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                       <!-- Food Subtotal -->
                       ${food.totalCost !== undefined && food.totalCost > 0 ? `
                       <table width="100%" style="margin-top: 12px; border-top: 1px solid #e8ddd6;">
-                        <tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Food subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 16px;">${food.totalCost}€</td></tr>
+                        <tr><td style="padding: 12px 0; color: #000; font-weight: 700;">Food subtotal</td><td style="padding: 12px 0; text-align: right; font-weight: 700; color: #6d7855; font-size: 16px;">${food.totalCost}€</td></tr>
                       </table>
                       ` : ''}
                       ${!food.dietPreference && food.fullBoardDays === 0 && food.breakfastOnlyDays === 0 && food.customDays === 0 && (!food.selections || food.selections.length === 0) ? '<p style="color: #999; font-style: italic;">No selections made</p>' : ''}
@@ -342,7 +342,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 8px; margin-bottom: 24px; background-color: #f0f7e6; border-radius: 8px;">
                     <tr>
                       <td style="padding: 16px; font-weight: 700; font-size: 16px; color: #000;">Estimated total (Food + Transportation)</td>
-                      <td style="padding: 16px; text-align: right; font-weight: 700; color: #5e6d3f; font-size: 20px;">${grandTotal}€</td>
+                      <td style="padding: 16px; text-align: right; font-weight: 700; color: #6d7855; font-size: 20px;">${grandTotal}€</td>
                     </tr>
                     ${hasCustomOffers ? `<tr><td colspan="2" style="padding: 0 16px 12px; color: #666; font-size: 13px; font-style: italic;">* Excludes custom offer trips, which will be quoted separately.</td></tr>` : ''}
                   </table>
@@ -376,7 +376,7 @@ function generateSummaryHtml(payload: GuestSummaryPayload, isAdmin: boolean): st
                 <td style="background-color: #f6efea; padding: 24px 32px; text-align: center; border-radius: 0 0 12px 12px; border-left: 1px solid #e8ddd6; border-right: 1px solid #e8ddd6; border-bottom: 1px solid #e8ddd6;">
                   <p style="margin: 0 0 4px 0; font-size: 12px; color: #333;">Submitted: ${new Date().toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })}</p>
                   <p style="margin: 0 0 8px 0; font-size: 12px; color: #666;">Quinta do Amor © ${new Date().getFullYear()}</p>
-                  <p style="margin: 0; font-size: 12px; color: #5e6d3f;">hello@quintamor.com</p>
+                  <p style="margin: 0; font-size: 12px; color: #6d7855;">hello@quintamor.com</p>
                 </td>
               </tr>
 

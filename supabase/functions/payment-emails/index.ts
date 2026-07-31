@@ -177,7 +177,7 @@ Geo`;
       // (aligné à gauche, pas de bloc centré marketing).
       html = emailShell(`
 ${paras(parsed.data.body_top ?? "")}
-<p style="margin:18px 0 6px 0;"><a href="${payUrl}" style="display:inline-block;background:#57761f;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;">Pay ${esc(amount)}</a></p>
+<p style="margin:18px 0 6px 0;"><a href="${payUrl}" style="display:inline-block;background:#6d7855;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;">Pay ${esc(amount)}</a></p>
 <p style="margin:0 0 18px 0;font-size:11px;color:#888888;">Secure bank payment (debit or transfer), powered by Stripe.</p>
 ${paras(parsed.data.body_bottom ?? "")}
 `);

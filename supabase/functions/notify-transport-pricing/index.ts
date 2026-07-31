@@ -124,7 +124,7 @@ serve(async (req) => {
       <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f6efea;padding:32px 16px;">
         <tr><td align="center">
           <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-            <tr><td style="background-color:#5e6d3f;padding:24px 32px;border-radius:12px 12px 0 0;text-align:center;">
+            <tr><td style="background-color:#6d7855;padding:24px 32px;border-radius:12px 12px 0 0;text-align:center;">
               <h1 style="margin:0;color:#fff;font-size:24px;font-weight:400;">Transportation pricing update</h1>
             </td></tr>
             <tr><td style="background-color:#fff;padding:28px 32px;">
@@ -133,10 +133,10 @@ serve(async (req) => {
               <table width="100%">${rowsHtml || '<tr><td style="color:#666;font-size:13px;">No trips yet.</td></tr>'}</table>
               <p style="margin:18px 0 0;font-size:15px;"><strong>Transportation subtotal:</strong> ${total}€${pending > 0 ? ` <span style="color:#a16207;">(${pending} custom offer${pending !== 1 ? "s" : ""} pending)</span>` : ""}</p>
               <p style="margin:18px 0 0;text-align:center;">
-                <a href="${GUEST_AREA_URL}" style="display:inline-block;background-color:#5e6d3f;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-size:14px;">Open Guest Area</a>
+                <a href="${GUEST_AREA_URL}" style="display:inline-block;background-color:#6d7855;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-size:14px;">Open Guest Area</a>
               </p>
             </td></tr>
-            <tr><td style="background-color:#5e6d3f;padding:18px;border-radius:0 0 12px 12px;text-align:center;color:rgba(255,255,255,0.85);font-size:12px;">Quinta do Amor</td></tr>
+            <tr><td style="background-color:#6d7855;padding:18px;border-radius:0 0 12px 12px;text-align:center;color:rgba(255,255,255,0.85);font-size:12px;">Quinta do Amor</td></tr>
           </table>
         </td></tr>
       </table>

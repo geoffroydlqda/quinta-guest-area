@@ -75,7 +75,7 @@ function reminderHtml(c: ReminderCandidate): string {
     : `This is a friendly reminder that the payment below is due on <strong>${escapeHtml(c.due_date)}</strong>.`;
   return `
   <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 560px; margin: 0 auto; color: #222;">
-    <h2 style="color:#4a5a3a;">Quinta do Amor</h2>
+    <h2 style="color:#6d7855;">Quinta do Amor</h2>
     <p>Hi ${escapeHtml(c.first_name || "there")},</p>
     <p>${intro}</p>
     <table width="100%" style="background:#f6efea;border-radius:8px;margin:16px 0;">
@@ -86,12 +86,12 @@ function reminderHtml(c: ReminderCandidate): string {
     ${c.payment_link && /^https?:\/\//i.test(c.payment_link) ? `
     <p style="margin:20px 0;">
       <a href="${escapeHtml(c.payment_link)}"
-         style="background:#4a5a3a;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:6px;display:inline-block;">
+         style="background:#6d7855;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:6px;display:inline-block;">
         Pay now
       </a>
     </p>` : ""}
     <p>You can review your payment details anytime in your
-      <a href="${GUEST_AREA_URL}" style="color:#4a5a3a;">Guest Area</a>.</p>
+      <a href="${GUEST_AREA_URL}" style="color:#6d7855;">Guest Area</a>.</p>
     <p>If you have already made this payment, please disregard this message — it can
       take us a little time to reconcile transfers.</p>
     <p>Warm regards,<br/>Quinta do Amor</p>

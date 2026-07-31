@@ -107,12 +107,12 @@ serve(async (req) => {
         setup, plan your meals and arrange your transportation.</p>
       <p style="margin: 20px 0;">
         <a href="${inviteUrl}"
-           style="${FONT} background: #4a5a3a; color: #ffffff; padding: 10px 22px; border-radius: 6px; text-decoration: none; display: inline-block;">
+           style="${FONT} background: #6d7855; color: #ffffff; padding: 10px 22px; border-radius: 6px; text-decoration: none; display: inline-block;">
           Open my Guest Area
         </a>
       </p>
       <p style="margin: 0 0 14px; font-size: 10pt; color: #555;">If the button doesn't work, copy this link into your browser:<br/>
-        <a href="${inviteUrl}" style="color: #4a5a3a; word-break: break-all;">${inviteUrl}</a></p>
+        <a href="${inviteUrl}" style="color: #6d7855; word-break: break-all;">${inviteUrl}</a></p>
       <p style="margin: 0 0 14px;">Please let me know if you have any questions!</p>
       <p style="margin: 0;">Geo<br/>Quinta do Amor</p>
     </div>`;
