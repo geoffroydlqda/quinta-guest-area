@@ -109,15 +109,17 @@ async function createSession(
   const params = new URLSearchParams();
   params.set("mode", "payment");
 
-  // Ordre voulu : rails les moins chers d'abord, carte en dernier recours.
+  // Rails bancaires uniquement (choix Geoffroy, 30 juil. 2026 — pas de carte,
+  // pas de Link qui est un portefeuille de cartes) :
   // SEPA (~6 € plafonnés) · Virement bancaire (~5 € plafonnés, IBAN virtuel,
-  // réconciliation auto) · Bancontact (clientèle belge, < carte) · Carte · Link.
+  // réconciliation auto) · Bancontact (clientèle belge).
+  // ⚠️ Conséquence assumée : clients hors zone euro (US/CA…) sans option en ligne.
   // Le virement (customer_balance) exige un Customer Stripe — si sa création
   // échoue, on retire juste ce rail de la session.
   const customerId = booking.email ? await getOrCreateCustomer(key, booking.email) : null;
   const types = customerId
-    ? ["sepa_debit", "customer_balance", "bancontact", "card", "link"]
-    : ["sepa_debit", "bancontact", "card", "link"];
+    ? ["sepa_debit", "customer_balance", "bancontact"]
+    : ["sepa_debit", "bancontact"];
   types.forEach((t, i) => params.set(`payment_method_types[${i}]`, t));
   if (customerId) {
     params.set("customer", customerId);
