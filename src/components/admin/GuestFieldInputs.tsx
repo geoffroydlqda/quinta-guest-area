@@ -112,17 +112,25 @@ export function AddressAutocomplete({
 
 // -------------------------------------------------------------- nationalité
 
-const NATIONALITIES = [
-  "American", "Argentine", "Australian", "Austrian", "Belgian", "Brazilian", "British",
-  "Bulgarian", "Canadian", "Chilean", "Chinese", "Colombian", "Croatian", "Cypriot",
-  "Czech", "Danish", "Dutch", "Egyptian", "Estonian", "Filipino", "Finnish", "French",
-  "German", "Greek", "Hungarian", "Icelandic", "Indian", "Indonesian", "Irish",
-  "Israeli", "Italian", "Japanese", "Latvian", "Lebanese", "Lithuanian",
-  "Luxembourgish", "Maltese", "Mexican", "Moroccan", "New Zealander", "Norwegian",
-  "Peruvian", "Polish", "Portuguese", "Romanian", "Russian", "Singaporean", "Slovak",
-  "Slovenian", "South African", "South Korean", "Spanish", "Swedish", "Swiss", "Thai",
-  "Tunisian", "Turkish", "Ukrainian", "Uruguayan", "Vietnamese",
+// Choix par PAYS (avec drapeau) — demande Geoffroy 31 juil. 2026.
+const COUNTRIES: [string, string][] = [
+  ["AR","Argentina"],["AU","Australia"],["AT","Austria"],["BE","Belgium"],["BR","Brazil"],
+  ["BG","Bulgaria"],["CA","Canada"],["CL","Chile"],["CN","China"],["CO","Colombia"],
+  ["HR","Croatia"],["CY","Cyprus"],["CZ","Czechia"],["DK","Denmark"],["EG","Egypt"],
+  ["EE","Estonia"],["FI","Finland"],["FR","France"],["DE","Germany"],["GR","Greece"],
+  ["HU","Hungary"],["IS","Iceland"],["IN","India"],["ID","Indonesia"],["IE","Ireland"],
+  ["IL","Israel"],["IT","Italy"],["JP","Japan"],["LV","Latvia"],["LB","Lebanon"],
+  ["LT","Lithuania"],["LU","Luxembourg"],["MT","Malta"],["MX","Mexico"],["MA","Morocco"],
+  ["NL","Netherlands"],["NZ","New Zealand"],["NO","Norway"],["PE","Peru"],["PH","Philippines"],
+  ["PL","Poland"],["PT","Portugal"],["RO","Romania"],["RU","Russia"],["SG","Singapore"],
+  ["SK","Slovakia"],["SI","Slovenia"],["ZA","South Africa"],["KR","South Korea"],["ES","Spain"],
+  ["SE","Sweden"],["CH","Switzerland"],["TH","Thailand"],["TN","Tunisia"],["TR","Turkey"],
+  ["UA","Ukraine"],["AE","United Arab Emirates"],["GB","United Kingdom"],["US","United States"],
+  ["UY","Uruguay"],["VN","Vietnam"],
 ];
+
+const flagOf = (iso: string) =>
+  String.fromCodePoint(...iso.toUpperCase().split("").map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 
 export function NationalityCombobox({
   value,
@@ -133,30 +141,37 @@ export function NationalityCombobox({
 }) {
   const [open, setOpen] = useState(false);
   const q = value.trim().toLowerCase();
+  const exact = COUNTRIES.find(([, n]) => n.toLowerCase() === q);
   const matches = q
-    ? NATIONALITIES.filter((n) => n.toLowerCase().includes(q) && n.toLowerCase() !== q)
-    : NATIONALITIES;
+    ? COUNTRIES.filter(([, n]) => n.toLowerCase().includes(q) && n.toLowerCase() !== q)
+    : COUNTRIES;
 
   return (
     <div className="relative">
+      {exact && (
+        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-base pointer-events-none">
+          {flagOf(exact[0])}
+        </span>
+      )}
       <Input
         value={value}
-        placeholder="Search — e.g. Belgian"
+        placeholder="Search a country…"
         onChange={(e) => { onChange(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        className={PLACEHOLDER_CLS}
+        className={`${PLACEHOLDER_CLS} ${exact ? "pl-9" : ""}`}
       />
       {open && matches.length > 0 && (
         <div className="absolute z-30 mt-1 w-full max-h-52 overflow-auto rounded-md border border-border bg-popover shadow-md">
-          {matches.map((n) => (
+          {matches.map(([code, name]) => (
             <button
-              key={n}
+              key={code}
               type="button"
-              className="block w-full text-left px-3 py-1.5 text-sm hover:bg-muted"
-              onMouseDown={(e) => { e.preventDefault(); onChange(n); setOpen(false); }}
+              className="flex w-full items-center gap-2 text-left px-3 py-1.5 text-sm hover:bg-muted"
+              onMouseDown={(e) => { e.preventDefault(); onChange(name); setOpen(false); }}
             >
-              {n}
+              <span className="text-base">{flagOf(code)}</span>
+              {name}
             </button>
           ))}
         </div>
