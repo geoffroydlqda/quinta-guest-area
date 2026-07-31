@@ -68,6 +68,7 @@ type BookingRow = {
   event_type?: string | null;
   catering_expected?: boolean | null;
   client_id?: string | null;
+  is_test?: boolean | null;
   check_in_time?: string | null;
   check_out_time?: string | null;
   google_calendar_event_id?: string | null;
@@ -243,6 +244,7 @@ const AdminContent = () => {
     userId: string | null;
     retreatName: string;
     clientId: string | null;
+    isTest: boolean;
     firstName: string | null;
     lastName: string | null;
     email: string;
@@ -272,6 +274,7 @@ const AdminContent = () => {
         userId: b.user_id,
         retreatName: b.retreat_name || "",
         clientId: b.client_id ?? null,
+        isTest: !!b.is_test,
         firstName: b.first_name,
         lastName: b.last_name,
         email: b.email,
@@ -764,7 +767,8 @@ function DashboardView({
   todayIso: string;
   onOpen: (bookingId: string) => void;
 }) {
-  const bookings = data.bookings || [];
+  // Mode test : les bookings marqués is_test n'entrent dans AUCUNE stat du dashboard.
+  const bookings = useMemo(() => (data.bookings || []).filter((b) => !b.is_test), [data]);
   const bookingById = useMemo(() => new Map(bookings.map((b) => [b.id, b])), [bookings]);
   const years = useMemo(() => {
     const ys = new Set<string>();
@@ -2538,6 +2542,7 @@ type EventRowProps = {
   userId: string | null;
   retreatName: string;
   clientId: string | null;
+  isTest: boolean;
   firstName: string | null;
   lastName: string | null;
   email: string;
@@ -2652,6 +2657,11 @@ function EventTable({
                       placeholder="Event name"
                       onSave={(v) => onRenameBooking(ev.bookingId, { retreat_name: v ?? "" })}
                     />
+                    {ev.isTest && (
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+                        Test
+                      </span>
+                    )}
                     {isLive && (
                       <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 border border-green-300">
                         Live

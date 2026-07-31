@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
-  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink, Printer, Copy, Lock, LockOpen,
+  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink, Printer, Copy, Lock, LockOpen, FlaskConical,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -510,6 +510,26 @@ const AdminGuestDetailContent = () => {
             <Button size="sm" variant="outline" onClick={resendEmail} disabled={resending || !data?.profile}>
               {resending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Mail className="w-4 h-4 mr-1" />}
               Resend summary email
+            </Button>
+            <Button
+              size="sm"
+              variant={(booking as any)?.is_test ? "secondary" : "ghost"}
+              className={(booking as any)?.is_test ? "border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100" : ""}
+              title="Test bookings are excluded from dashboard stats and payment totals."
+              onClick={async () => {
+                if (!booking) return;
+                const next = !(booking as any).is_test;
+                const { error } = await supabase.from("bookings").update({ is_test: next }).eq("id", booking.id);
+                if (error) {
+                  toast({ title: "Could not update", description: error.message, variant: "destructive" });
+                } else {
+                  (booking as any).is_test = next;
+                  toast({ title: next ? "Marked as test booking" : "No longer a test booking", description: next ? "Excluded from stats and totals." : "Counted in stats again." });
+                  load();
+                }
+              }}
+            >
+              <FlaskConical className="w-4 h-4 mr-1" /> {(booking as any)?.is_test ? "Test booking" : "Mark as test"}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => window.print()}>Print / PDF</Button>
             <Button

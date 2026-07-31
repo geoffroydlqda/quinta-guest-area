@@ -134,6 +134,7 @@ export type Database = {
           retreat_name: string
           total_rental_price: number | null
           rental_discount: number | null
+          is_test: boolean
           updated_at: string
           user_id: string | null
           whatsapp_group_url: string | null
@@ -170,6 +171,7 @@ export type Database = {
           retreat_name?: string
           total_rental_price?: number | null
           rental_discount?: number | null
+          is_test?: boolean
           updated_at?: string
           user_id?: string | null
           whatsapp_group_url?: string | null
@@ -206,6 +208,7 @@ export type Database = {
           retreat_name?: string
           total_rental_price?: number | null
           rental_discount?: number | null
+          is_test?: boolean
           updated_at?: string
           user_id?: string | null
           whatsapp_group_url?: string | null

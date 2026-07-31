@@ -24,6 +24,7 @@ export interface PayBooking {
   check_in_date: string | null;
   check_out_date?: string | null;
   total_rental_price?: number | null;
+  is_test?: boolean | null;
 }
 
 export interface PayInstallment {
@@ -177,6 +178,7 @@ export function PaymentsPage({
   const totals = useMemo(() => {
     let total = 0, totalHt = 0, paid = 0, paidCash = 0, paidBank = 0, overdue = 0;
     for (const r of rows) {
+      if (r.booking.is_test) continue; // bookings de test : hors totaux
       const a = Number(r.inst.amount_due || 0);
       total += a;
       totalHt += Number(r.inst.amount_excl_vat ?? 0);
@@ -418,6 +420,9 @@ export function PaymentsPage({
                   <td className="px-3 py-2 font-medium max-w-[200px]">
                     <button type="button" className="hover:underline text-left truncate block w-full" onClick={() => onOpen(r.booking.id)}>
                       {r.name}
+                      {r.booking.is_test && (
+                        <span className="ml-1.5 text-[10px] uppercase px-1 py-0.5 rounded border border-amber-300 bg-amber-50 text-amber-800">Test</span>
+                      )}
                     </button>
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
