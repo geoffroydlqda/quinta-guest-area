@@ -1141,6 +1141,7 @@ type Installment = {
   notes: string | null;
   is_cash?: boolean;
   vat_rate?: number | null;
+  group_id?: string | null;
 };
 
 const fmtEUR = (v: number | string) => {
@@ -1208,9 +1209,40 @@ function PaymentSection({ userId }: { userId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteInstId, setDeleteInstId] = useState<string | null>(null);
   const [emailTarget, setEmailTarget] = useState<{ inst: Installment; kind: "request" | "confirmation"; group?: Installment[] } | null>(null);
-  // Groupage de paiements : échéances cochées -> une seule demande (un lien
-  // Stripe, une fatura-recibo multi-lignes à l'encaissement).
+  // Groupage de paiements : échéances cochées -> bouton flottant "Group
+  // payments" -> le groupe est PERSISTÉ (group_id) et affiché dans l'admin ;
+  // l'email (un lien Stripe, une fatura-recibo multi-lignes) part quand
+  // Geoffroy le décide, depuis le bloc du groupe.
   const [groupSel, setGroupSel] = useState<Set<string>>(new Set());
+
+  const createGroup = async () => {
+    const ids = installments.filter((i) => groupSel.has(i.id) && i.status !== "paid" && !i.group_id).map((i) => i.id);
+    if (ids.length < 2) return;
+    const gid = crypto.randomUUID();
+    const { error } = await supabase.from("payment_installments").update({ group_id: gid }).in("id", ids);
+    if (error) { toast({ title: "Grouping failed", description: error.message, variant: "destructive" }); return; }
+    setInstallments((arr) => arr.map((i) => (ids.includes(i.id) ? { ...i, group_id: gid } : i)));
+    setGroupSel(new Set());
+    toast({ title: "Payments grouped", description: "Send the request whenever you're ready — one link, one invoice." });
+  };
+
+  const ungroup = async (gid: string) => {
+    const ids = installments.filter((i) => i.group_id === gid).map((i) => i.id);
+    const { error } = await supabase.from("payment_installments").update({ group_id: null }).in("id", ids);
+    if (error) { toast({ title: "Ungroup failed", description: error.message, variant: "destructive" }); return; }
+    setInstallments((arr) => arr.map((i) => (i.group_id === gid ? { ...i, group_id: null } : i)));
+  };
+
+  const paymentGroups = useMemo(() => {
+    const m = new Map<string, Installment[]>();
+    for (const i of installments) {
+      if (!i.group_id) continue;
+      const a = m.get(i.group_id) || [];
+      a.push(i);
+      m.set(i.group_id, a);
+    }
+    return [...m.entries()];
+  }, [installments]);
   const [savingOverride, setSavingOverride] = useState(false);
   const [generating, setGenerating] = useState(false);
 
@@ -1237,7 +1269,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
     const iRes = await supabase
       .from("payment_installments")
-      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash,vat_rate")
+      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash,vat_rate,group_id")
       .eq("booking_id", b.id)
       .order("due_date", { ascending: true, nullsFirst: false });
     if (!iRes.error) setInstallments((iRes.data || []) as Installment[]);
@@ -1535,7 +1567,7 @@ function PaymentSection({ userId }: { userId: string }) {
       <div key={inst.id} className="rounded-lg border border-border p-3 text-sm space-y-2">
         <div className="flex justify-between items-start gap-2 flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
-            {inst.status !== "paid" && !inst.is_cash && inst.category !== "discount" && Number(inst.amount_due) > 0 && (
+            {inst.status !== "paid" && !inst.is_cash && inst.category !== "discount" && !inst.group_id && Number(inst.amount_due) > 0 && (
               <Checkbox
                 checked={groupSel.has(inst.id)}
                 onCheckedChange={(v) => setGroupSel((s) => {
@@ -1547,6 +1579,11 @@ function PaymentSection({ userId }: { userId: string }) {
               />
             )}
             <div className="font-semibold truncate">{inst.label}</div>
+            {inst.group_id && (
+              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded border border-[#CAE8BD] bg-primary/15 text-[#35532A] font-semibold whitespace-nowrap">
+                Grouped
+              </span>
+            )}
             <span className="text-[10px] uppercase px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground">
               {inst.category}
             </span>
@@ -1720,25 +1757,52 @@ function PaymentSection({ userId }: { userId: string }) {
         </div>
       )}
 
+      {/* Groupes de paiements persistés — l'email part d'ici, quand il veut */}
+      {paymentGroups.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs uppercase text-muted-foreground">Grouped payments</div>
+          {paymentGroups.map(([gid, members]) => {
+            const pending = members.filter((m) => m.status !== "paid");
+            const total = members.reduce((s, m) => s + Number(m.amount_due || 0), 0);
+            const pendingTotal = pending.reduce((s, m) => s + Number(m.amount_due || 0), 0);
+            return (
+              <div key={gid} className="rounded-lg border border-[#CAE8BD] bg-primary/10 p-3 text-sm flex items-center justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <div className="font-semibold">
+                    {members.length} payments together · €{total.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {members.map((m) => `${m.label || m.category} (€${Number(m.amount_due).toLocaleString("en-GB", { maximumFractionDigits: 2 })})`).join(" + ")}
+                  </div>
+                  {pending.length === 0 ? (
+                    <div className="text-xs text-[#35532A] font-medium mt-0.5">All paid ✓</div>
+                  ) : (
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      One email, one payment link — a single multi-line invoice on payment.
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {pending.length > 0 && booking.email && (
+                    <Button
+                      size="sm"
+                      onClick={() => setEmailTarget({ inst: pending[0], kind: "request", group: pending })}
+                    >
+                      <Mail className="w-4 h-4 mr-1" />
+                      Send request (€{pendingTotal.toLocaleString("en-GB", { maximumFractionDigits: 2 })})
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => ungroup(gid)}>Ungroup</Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Rental installments */}
-      {/* Top action bar: group request + single Add payment + 30/70 quick action */}
+      {/* Top action bar: single Add payment + 30/70 quick action */}
       <div className="flex items-center justify-end flex-wrap gap-2">
-        {groupSel.size >= 2 && booking.email && (() => {
-          const sel = installments.filter((i) => groupSel.has(i.id) && i.status !== "paid");
-          const total = sel.reduce((s, i) => s + Number(i.amount_due || 0), 0);
-          return (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="mr-auto"
-              title="One email, one payment link for all selected payments — a single multi-line invoice will be issued on payment"
-              onClick={() => sel.length >= 2 && setEmailTarget({ inst: sel[0], kind: "request", group: sel })}
-            >
-              <Mail className="w-4 h-4 mr-1" />
-              Group payments ({sel.length} · €{total.toLocaleString("en-GB", { maximumFractionDigits: 2 })})
-            </Button>
-          );
-        })()}
         {rentalInst.length === 0 && booking.total_rental_price != null && booking.total_rental_price > 0 && (
           <Button size="sm" variant="outline" onClick={generate3070} disabled={generating}>
             {generating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
@@ -1788,6 +1852,26 @@ function PaymentSection({ userId }: { userId: string }) {
         )}
       </div>
 
+
+      {/* Barre flottante de groupage — visible dès 2 échéances cochées */}
+      {groupSel.size >= 2 && (() => {
+        const selTotal = installments
+          .filter((i) => groupSel.has(i.id))
+          .reduce((s, i) => s + Number(i.amount_due || 0), 0);
+        return (
+          <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full bg-card border border-border shadow-xl pl-4 pr-2 py-2">
+            <span className="text-sm font-medium whitespace-nowrap">
+              {groupSel.size} selected · €{selTotal.toLocaleString("en-GB", { maximumFractionDigits: 2 })}
+            </span>
+            <Button size="sm" className="rounded-full" onClick={createGroup}>
+              Group payments
+            </Button>
+            <Button size="sm" variant="ghost" className="rounded-full" onClick={() => setGroupSel(new Set())}>
+              Cancel
+            </Button>
+          </div>
+        );
+      })()}
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteInstId} onOpenChange={(o) => !o && setDeleteInstId(null)}>

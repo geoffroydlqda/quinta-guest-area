@@ -474,6 +474,7 @@ export type Database = {
           moloni_document_id: number | null
           vat_rate: number | null
           paid_usd: number | null
+          group_id: string | null
           usd_rate: number | null
           stripe_session_id: string | null
           invoice_number: string | null
@@ -497,6 +498,7 @@ export type Database = {
           moloni_document_id?: number | null
           vat_rate?: number | null
           paid_usd?: number | null
+          group_id?: string | null
           usd_rate?: number | null
           stripe_session_id?: string | null
           invoice_number?: string | null
@@ -520,6 +522,7 @@ export type Database = {
           moloni_document_id?: number | null
           vat_rate?: number | null
           paid_usd?: number | null
+          group_id?: string | null
           usd_rate?: number | null
           stripe_session_id?: string | null
           invoice_number?: string | null
