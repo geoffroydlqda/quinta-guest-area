@@ -23,7 +23,7 @@ import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
-import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass } from "lucide-react";
+import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass, FlaskConical } from "lucide-react";
 import { calculateTransportationCost } from "@/lib/transportationPricing";
 import { getDietPricing } from "@/lib/pricing";
 import type { TransportationTrip } from "@/types/guest";
@@ -105,6 +105,35 @@ const fmtShort = (d: string | null) =>
 const fmtMoney = (v: number) =>
   `${v < 0 ? "−" : ""}€${Math.abs(v).toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
+// --- Refonte Bookings (juil. 2026) : drapeaux + avatars pastel -------------
+// Anciennes nationalités saisies en gentilé -> pays (pour le drapeau)
+const NAT_DEMONYMS: Record<string, string> = {
+  belgian: "Belgium", french: "France", portuguese: "Portugal", dutch: "Netherlands",
+  german: "Germany", british: "United Kingdom", english: "United Kingdom",
+  american: "United States", swiss: "Switzerland", spanish: "Spain", italian: "Italy",
+  irish: "Ireland", polish: "Poland", canadian: "Canada", australian: "Australia",
+};
+function flagForNationality(nat: string | null | undefined): string | null {
+  if (!nat) return null;
+  const name = NAT_DEMONYMS[nat.trim().toLowerCase()] ?? nat.trim();
+  const hit = COUNTRIES.find(([, n]) => n.toLowerCase() === name.toLowerCase());
+  return hit ? flagOf(hit[0]) : null;
+}
+// Pastilles avatar (fond pastel, texte foncé) — déterministe par nom
+const AVATAR_TINTS: [string, string][] = [
+  ["#EAF6DF", "#35532A"], ["#EDF5FF", "#1D4F96"], ["#FFF2EA", "#8A4A1B"],
+  ["#F3EDFF", "#5B3E99"], ["#FFF8E4", "#6F5B15"], ["#FFEAE7", "#A03028"],
+];
+function avatarTint(label: string): [string, string] {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0;
+  return AVATAR_TINTS[h % AVATAR_TINTS.length];
+}
+function initialsOf(label: string): string {
+  const parts = label.replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase();
+}
+
 interface Data {
   profiles: Profile[]; rooms: Room[]; trips: Trip[]; food: FoodPlan[];
   bookings?: BookingRow[];
@@ -182,6 +211,7 @@ const AdminContent = () => {
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted">("all");
   const [categoryFilter, setCategoryFilter] = useState<"all" | "live" | "upcoming" | "past">("all");
   const [pastCollapsed, setPastCollapsed] = useState(true);
+  const [showTests, setShowTests] = useState(false);
   
   const [createBookingOpen, setCreateBookingOpen] = useState(false);
   const { section } = useParams<{ section?: string }>();
@@ -303,6 +333,7 @@ const AdminContent = () => {
   const filteredEvents = useMemo(() => {
     const s = search.toLowerCase().trim();
     return events.filter((e) => {
+      if (!showTests && e.isTest) return false;
       if (statusFilter !== "all" && e.statusOverall !== statusFilter) return false;
       if (!s) return true;
       return (
@@ -312,7 +343,7 @@ const AdminContent = () => {
         `${e.firstName ?? ""} ${e.lastName ?? ""}`.toLowerCase().includes(s)
       );
     });
-  }, [events, search, statusFilter]);
+  }, [events, search, statusFilter, showTests]);
 
   const { upcomingEvents, pastEvents, unscheduledEvents } = useMemo(() => {
     const upcoming: EventRow[] = [];
@@ -384,6 +415,30 @@ const AdminContent = () => {
     const inst = installmentsByBooking.get(e.bookingId) || [];
     return resolvePaymentStatus({ payment_status_override: e.paymentStatusOverride }, inst);
   };
+
+  // Progression de paiement (hors lignes discount) — colonne Payment du tableau
+  const paymentProgressFor = (e: EventRow) => {
+    const inst = (installmentsByBooking.get(e.bookingId) || []).filter((i) => i.category !== "discount");
+    const total = inst.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    const paid = inst.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    return { paid, total };
+  };
+
+  // Nationalités des guests (drapeau dans la colonne Guest)
+  const [clientNats, setClientNats] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    supabase.from("client_profiles").select("id,email,nationality").then(({ data: d }) => {
+      const m = new Map<string, string>();
+      for (const p of d ?? []) {
+        if (!p.nationality) continue;
+        m.set(p.id, p.nationality);
+        if (p.email) m.set(p.email.toLowerCase(), p.nationality);
+      }
+      setClientNats(m);
+    });
+  }, []);
+  const natForEvent = (e: EventRowProps) =>
+    (e.clientId && clientNats.get(e.clientId)) || clientNats.get((e.email || "").toLowerCase()) || null;
 
   const deleteBookingDirect = async (bookingId: string, _label: string) => {
     const ok = confirm(
@@ -526,6 +581,15 @@ const AdminContent = () => {
                 <option value="upcoming">Upcoming</option>
                 <option value="past">Past</option>
               </select>
+              <Button
+                size="sm"
+                variant={showTests ? "default" : "outline"}
+                onClick={() => setShowTests((v) => !v)}
+                title="Show or hide test bookings"
+              >
+                <FlaskConical className="w-4 h-4 mr-1" />
+                {showTests ? "Hide tests" : "Show tests"}
+              </Button>
               <Button size="sm" variant="outline" onClick={() => downloadCSV("guests.csv", [
                 ["First name","Last name","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Submitted at","Claimed"],
                 ...filteredEvents.map((e) => {
@@ -546,6 +610,9 @@ const AdminContent = () => {
                     toolStatus={toolStatus}
                     categoryOf={categoryOfEvent}
                     paymentForEvent={paymentForEvent}
+                    paymentProgress={paymentProgressFor}
+                    natFor={natForEvent}
+                    todayIso={todayIso}
                     onRowClick={(bookingId) => navigateToBooking(bookingId)}
                     onOpenGuest={navigateToGuest}
                     onDeleteBooking={deleteBookingDirect}
@@ -576,6 +643,9 @@ const AdminContent = () => {
                       toolStatus={toolStatus}
                       categoryOf={categoryOfEvent}
                       paymentForEvent={paymentForEvent}
+                      paymentProgress={paymentProgressFor}
+                      natFor={natForEvent}
+                      todayIso={todayIso}
                       onRowClick={(bookingId) => navigateToBooking(bookingId)}
                       onOpenGuest={navigateToGuest}
                       onDeleteBooking={deleteBookingDirect}
@@ -595,6 +665,9 @@ const AdminContent = () => {
                   toolStatus={toolStatus}
                   categoryOf={categoryOfEvent}
                   paymentForEvent={paymentForEvent}
+                  paymentProgress={paymentProgressFor}
+                  natFor={natForEvent}
+                  todayIso={todayIso}
                   onRowClick={(bookingId) => navigateToBooking(bookingId)}
                   onOpenGuest={navigateToGuest}
                   onDeleteBooking={deleteBookingDirect}
@@ -2636,6 +2709,9 @@ function EventTable({
   toolStatus,
   categoryOf,
   paymentForEvent,
+  paymentProgress,
+  natFor,
+  todayIso,
   onRowClick,
   onOpenGuest,
   onDeleteBooking,
@@ -2647,6 +2723,9 @@ function EventTable({
   toolStatus: (uid: string | null, bookingId?: string | null) => { room: string; food: string; trip: string };
   categoryOf: (e: EventRowProps) => "upcoming" | "past" | "live" | "none";
   paymentForEvent: (e: EventRowProps) => ResolvedPaymentStatus;
+  paymentProgress: (e: EventRowProps) => { paid: number; total: number };
+  natFor: (e: EventRowProps) => string | null;
+  todayIso: string;
   onRowClick: (bookingId: string) => void;
   onOpenGuest: (ev: EventRowProps) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
@@ -2703,13 +2782,17 @@ function EventTable({
     window.open(`/dashboard?impersonate=${bookingId}`, "_blank");
   };
 
+  // "Jul 28" — format court pour la plage de dates
+  const fmtDay = (iso: string) =>
+    new Date(`${iso}T12:00:00`).toLocaleDateString("en-GB", { month: "short", day: "numeric" });
+
   return (
-    <div className="overflow-auto border border-border rounded-lg bg-card max-h-[70vh]">
+    <div className="overflow-auto rounded-2xl bg-card shadow-sm border border-border/60 max-h-[70vh]">
       <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-muted">
+        <thead className="sticky top-0 bg-muted/80 backdrop-blur">
           <tr className="text-left">
-            {["Event","Guest","Type","Check-in","Check-out","Payment","Actions"].map((h, i) => (
-              <th key={i} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>
+            {["Event","Guest","Type","Dates","Payment","Actions"].map((h, i) => (
+              <th key={i} className="px-3 py-2.5 text-[11px] uppercase tracking-wider font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
             ))}
           </tr>
         </thead>
@@ -2718,6 +2801,20 @@ function EventTable({
             const label = (`${ev.firstName ?? ""} ${ev.lastName ?? ""}`.trim() || ev.email);
             const isLive = showLive && categoryOf(ev) === "live";
             const payStatus = paymentForEvent(ev);
+            const { paid, total } = paymentProgress(ev);
+            const pct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+            const barColor = payStatus === "overdue" ? "#F36F63" : pct >= 100 ? "#8FC46A" : "#EFC75B";
+            const flag = flagForNationality(natFor(ev));
+            const [avBg, avInk] = avatarTint(label);
+            const nights = ev.checkIn && ev.checkOut
+              ? Math.round((new Date(`${ev.checkOut}T12:00:00`).getTime() - new Date(`${ev.checkIn}T12:00:00`).getTime()) / 86400000)
+              : 0;
+            const daysUntil = ev.checkIn
+              ? Math.round((new Date(`${ev.checkIn}T12:00:00`).getTime() - new Date(`${todayIso}T12:00:00`).getTime()) / 86400000)
+              : null;
+            const proximity = daysUntil != null && daysUntil > 0 && daysUntil <= 14
+              ? (daysUntil === 1 ? "tomorrow" : `in ${daysUntil} days`)
+              : null;
             return (
               <tr
                 key={ev.bookingId}
@@ -2746,11 +2843,20 @@ function EventTable({
                 <td className="px-3 py-2 whitespace-nowrap">
                   <button
                     type="button"
-                    className="text-[#35532A] font-medium hover:underline text-left"
+                    className="flex items-center gap-2.5 text-left group"
                     title="Open the guest file"
                     onClick={(e) => { e.stopPropagation(); onOpenGuest(ev); }}
                   >
-                    {label}
+                    <span
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
+                      style={{ background: avBg, color: avInk }}
+                    >
+                      {initialsOf(label)}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[#35532A] font-medium group-hover:underline truncate max-w-[180px]">{label}</span>
+                      {flag && <span className="block text-[11px] text-muted-foreground leading-tight">{flag} {NAT_DEMONYMS[(natFor(ev) || "").toLowerCase()] ?? natFor(ev)}</span>}
+                    </span>
                   </button>
                 </td>
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
@@ -2765,13 +2871,44 @@ function EventTable({
                     <option value="day_retreat">Day retreat</option>
                   </select>
                 </td>
-                <td className="px-3 py-2 whitespace-nowrap">{ev.checkIn}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{ev.checkOut}</td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {ev.checkIn ? (
+                    <>
+                      <span className="font-medium tabular-nums">{fmtDay(ev.checkIn)} → {ev.checkOut ? fmtDay(ev.checkOut) : "?"}</span>
+                      <span className="block text-[11px] text-muted-foreground leading-tight">
+                        {nights > 0 && `${nights} night${nights === 1 ? "" : "s"}`}
+                        {proximity && <span className="text-[#35532A] font-medium"> · {proximity}</span>}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
                 <td className="px-3 py-2">
-                  <PaymentBadge
-                    status={payStatus}
-                    onClick={(e) => { e.stopPropagation(); onRowClick(ev.bookingId); }}
-                  />
+                  {total > 0 ? (
+                    <button
+                      type="button"
+                      className="block text-left w-32"
+                      title="Open payments"
+                      onClick={(e) => { e.stopPropagation(); onRowClick(ev.bookingId); }}
+                    >
+                      <span className="flex items-baseline justify-between text-[11px] leading-tight mb-1">
+                        <span className="text-muted-foreground tabular-nums">{fmtMoney(paid)} / {fmtMoney(total)}</span>
+                        <span className="font-bold tabular-nums" style={{ color: payStatus === "overdue" ? "#C0392B" : "#35532A" }}>{pct}%</span>
+                      </span>
+                      <span className="block h-1.5 rounded-full bg-muted overflow-hidden">
+                        <span className="block h-full rounded-full" style={{ width: `${Math.max(pct, 2)}%`, background: barColor }} />
+                      </span>
+                      {payStatus === "overdue" && (
+                        <span className="block text-[10px] font-semibold text-destructive mt-0.5">Overdue</span>
+                      )}
+                    </button>
+                  ) : (
+                    <PaymentBadge
+                      status={payStatus}
+                      onClick={(e) => { e.stopPropagation(); onRowClick(ev.bookingId); }}
+                    />
+                  )}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
                   <div className="flex items-center gap-1.5 justify-end">
