@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,7 +23,7 @@ import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
-import { CalendarCheck, AlertTriangle } from "lucide-react";
+import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass } from "lucide-react";
 import { calculateTransportationCost } from "@/lib/transportationPricing";
 import { getDietPricing } from "@/lib/pricing";
 import type { TransportationTrip } from "@/types/guest";
@@ -452,11 +452,32 @@ const AdminContent = () => {
     );
   }
 
+  // Sous-titre contextuel du Dashboard (refonte "Olá" — juillet 2026)
+  const dashboardSubtitle = (() => {
+    const todayStr = new Date().toLocaleDateString("en-GB", { weekday: "long", month: "long", day: "numeric" });
+    const upcoming = (data.bookings || [])
+      .filter((b) => !b.is_test && b.check_in_date && b.check_in_date > todayIso)
+      .sort((a, b) => ((a.check_in_date ?? "") < (b.check_in_date ?? "") ? -1 : 1))[0];
+    if (!upcoming?.check_in_date) return todayStr;
+    const days = Math.round(
+      (new Date(`${upcoming.check_in_date}T12:00:00`).getTime() - new Date(`${todayIso}T12:00:00`).getTime()) / 86400000
+    );
+    const when = days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
+    return `${todayStr} · next check-in ${when}`;
+  })();
+
   return (
     <AdminLayout>
       <main className="px-4 md:px-6 py-6 max-w-[1400px]">
         <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
-          <h1 className="text-xl font-semibold">{SECTION_TITLES[view]}</h1>
+          {view === "dashboard" ? (
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Olá, Geo 🌿</h1>
+              <div className="text-sm text-muted-foreground mt-0.5">{dashboardSubtitle}</div>
+            </div>
+          ) : (
+            <h1 className="text-xl font-semibold">{SECTION_TITLES[view]}</h1>
+          )}
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => setCreateBookingOpen(true)}>
               <Plus className="w-4 h-4 mr-1" />New booking
@@ -985,10 +1006,21 @@ function DashboardView({
     };
   }, [installments, bookings, bookingById, targets, year, todayIso]);
 
-  const Tile = ({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "danger" | "success" }) => (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`text-2xl font-semibold mt-1 ${tone === "danger" ? "text-destructive" : tone === "success" ? "text-primary" : ""}`}>
+  // Cartes KPI "héro" — icône sur pastille pastel (palette Geoffroy, juil. 2026)
+  const Tile = ({ label, value, sub, tone, icon, chip }: {
+    label: string; value: string; sub?: string; tone?: "danger" | "success";
+    icon?: ReactNode; chip?: string;
+  }) => (
+    <div className="rounded-2xl bg-card p-4 shadow-sm border border-border/60">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-medium text-muted-foreground">{label}</div>
+        {icon && (
+          <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${chip ?? "bg-secondary text-secondary-foreground"}`}>
+            {icon}
+          </span>
+        )}
+      </div>
+      <div className={`text-2xl font-bold tracking-tight mt-1.5 ${tone === "danger" ? "text-destructive" : ""}`}>
         {value}
       </div>
       {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
@@ -1026,18 +1058,24 @@ function DashboardView({
             label={`Revenue ${year} (incl. VAT)`}
             value={fmtMoney(kpis.contracted)}
             sub={`${fmtMoney(kpis.contractedHt)} excl. VAT`}
+            icon={<Euro className="w-4 h-4" />}
+            chip="bg-[#EAF6DF] text-[#679E3F]"
           />
           <Tile
             label={`Collected ${year}`}
             value={fmtMoney(kpis.collected)}
             sub={kpis.contracted > 0 ? `${Math.round((kpis.collected / kpis.contracted) * 100)}% of contracted` : undefined}
             tone="success"
+            icon={<TrendingUp className="w-4 h-4" />}
+            chip="bg-[#EDF5FF] text-[#4a86e0]"
           />
           <Tile
             label="Overdue"
             value={fmtMoney(kpis.overdueTotal)}
             sub={`${kpis.overdueCount} payment${kpis.overdueCount === 1 ? "" : "s"} late · ${fmtMoney(kpis.outstanding)} outstanding total`}
             tone={kpis.overdueTotal > 0 ? "danger" : undefined}
+            icon={kpis.overdueTotal > 0 ? <AlertTriangle className="w-4 h-4" /> : <Hourglass className="w-4 h-4" />}
+            chip={kpis.overdueTotal > 0 ? "bg-[#FFEAE7] text-[#F36F63]" : "bg-[#FFF8E4] text-[#b8912b]"}
           />
         </div>
 
@@ -1052,7 +1090,7 @@ function DashboardView({
               {Math.round(seasonStats.pctBlocked)}% incl. turnaround
             </div>
           </div>
-          <div className="mt-2.5 h-2.5 rounded-full bg-[#dfe5d2] overflow-hidden flex">
+          <div className="mt-2.5 h-2.5 rounded-full bg-[#EAF6DF] overflow-hidden flex">
             <div className="h-full bg-primary" style={{ width: `${Math.min(100, seasonStats.pct)}%` }} />
             <div className="h-full bg-primary/40" style={{ width: `${Math.max(0, Math.min(100, seasonStats.pctBlocked) - Math.min(100, seasonStats.pct))}%` }} />
           </div>
@@ -1094,7 +1132,7 @@ function DashboardView({
                         )}
                       </span>
                     </div>
-                    <div className="mt-1 h-2 rounded-full bg-[#dfe5d2] overflow-hidden flex">
+                    <div className="mt-1 h-2 rounded-full bg-[#EAF6DF] overflow-hidden flex">
                       <div className="h-full bg-primary" style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
                       {r.expected > 0 && (
                         <div className="h-full bg-primary/40" style={{ width: `${Math.max(0, Math.min(100, (pct ?? 0) + pctExp) - Math.min(100, pct ?? 0))}%` }} />
@@ -1130,7 +1168,7 @@ function DashboardView({
                       </span>
                       <span className="text-muted-foreground">{count} · {Math.round(pct)}%</span>
                     </div>
-                    <div className="mt-1 h-2 rounded-full bg-[#dfe5d2] overflow-hidden">
+                    <div className="mt-1 h-2 rounded-full bg-[#EAF6DF] overflow-hidden">
                       <div className={`h-full ${name === "Unknown" ? "bg-primary/30" : "bg-primary"}`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>

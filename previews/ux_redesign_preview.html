@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quinta do Amor — Proposition de refonte UX</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ============ TOKENS DE LA REFONTE ============ */
+  :root {
+    --page: #f8f9f4;            /* quasi blanc, pointe d'olive très fondue — remplace le crème #f6efea */
+    --card: #ffffff;
+    --sidebar: #ffffff;         /* sidebar claire, à la Finexa */
+    --sidebar-ink: #40452f;
+    --ink: #1b1d15;
+    --ink-2: #5d6153;
+    --ink-3: #8b8f80;
+    --hairline: rgba(27,29,21,.08);
+    --olive: #5c8420;           /* action / primaire vibrant */
+    --olive-deep: #44631c;
+    --olive-soft: #e9f2d7;
+    /* teintes pastel (fonds d'icônes, chips) — la vibrance douce des exemples */
+    --t-olive: #e9f2d7;  --t-terra: #fbe8da;  --t-cream: #f7f0dd;
+    --t-blue: #e6effb;   --t-violet: #f0eafa;
+    /* dataviz — validée validate_palette.js sur #ffffff (5 checks PASS) */
+    --c-rental: #5f8b21;
+    --c-catering: #2a78d6;
+    --c-extra: #d9622b;
+    --c-4: #8a5fb8;
+    /* statuts (toujours icône + libellé, jamais couleur seule) */
+    --ok: #178a3f;    --ok-bg: #e5f5ea;
+    --warn: #b45309;  --warn-bg: #fdf1e0;
+    --bad: #c22f2f;   --bad-bg: #fceaea;
+    --info: #1c5cab;  --info-bg: #e8f0fb;
+    --r: 16px;
+    --shadow: 0 1px 2px rgba(27,29,21,.05), 0 8px 24px -12px rgba(27,29,21,.12);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',system-ui,sans-serif; background:#eef0e8; color:var(--ink); }
+
+  /* ============ CHROME DU DOCUMENT DE PROPOSITION ============ */
+  .doc-head { background:#fff; color:var(--ink); padding:26px 32px 0; border-bottom:1px solid var(--hairline); }
+  .doc-head h1 { font-size:19px; font-weight:700; letter-spacing:-.02em; }
+  .doc-head p { font-size:13px; color:var(--ink-2); margin-top:4px; }
+  .doc-tabs { display:flex; gap:4px; margin-top:18px; flex-wrap:wrap; }
+  .doc-tab { background:transparent; border:none; color:var(--ink-2); font:inherit; font-size:13px; font-weight:600;
+    padding:9px 14px; border-radius:10px 10px 0 0; cursor:pointer; }
+  .doc-tab.on { background:#eef0e8; color:#1b1d15; }
+  .stage { display:none; padding:26px 22px 60px; }
+  .stage.on { display:block; }
+  .frame { max-width:1180px; margin:0 auto; }
+  .note { max-width:1180px; margin:0 auto 16px; background:#fffbe8; border:1px solid #ecdf9a; border-radius:12px;
+    padding:10px 14px; font-size:12.5px; color:#6b5d1e; }
+  .note b { color:#4a3f0d; }
+
+  /* ============ TOKENS / DESIGN SYSTEM ============ */
+  .tok-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
+  .tok-card { background:var(--card); border-radius:var(--r); box-shadow:var(--shadow); padding:20px; }
+  .tok-card h3 { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-2); margin-bottom:14px; }
+  .swatches { display:flex; gap:10px; flex-wrap:wrap; }
+  .sw { width:118px; }
+  .sw .chip { height:56px; border-radius:10px; border:1px solid var(--hairline); }
+  .sw .lbl { font-size:11.5px; font-weight:600; margin-top:6px; }
+  .sw .hex { font-size:10.5px; color:var(--ink-3); font-family:ui-monospace,monospace; }
+  .ba { display:grid; grid-template-columns:1fr 1fr; gap:0; border-radius:12px; overflow:hidden; border:1px solid var(--hairline); }
+  .ba > div { padding:14px; font-size:12px; }
+  .ba .before { background:#f6efea; }
+  .ba .after { background:#f3f4ef; }
+  .ba .mini-card { border-radius:8px; padding:8px 10px; margin-top:8px; font-size:11.5px; }
+  .ba .before .mini-card { background:#f0e7e1; border:1px solid #e0d5cb; }
+  .ba .after .mini-card { background:#fff; border:1px solid var(--hairline); box-shadow:0 1px 3px rgba(27,29,21,.06); }
+  .tag { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; padding:3px 9px; border-radius:99px; }
+
+  /* ============ APP MOCK — LAYOUT ============ */
+  .app { display:flex; background:var(--page); border-radius:18px; overflow:hidden; box-shadow:0 20px 50px -20px rgba(27,29,21,.25); min-height:680px; border:1px solid var(--hairline); }
+  .sb { width:212px; background:var(--sidebar); color:var(--sidebar-ink); display:flex; flex-direction:column; flex-shrink:0; border-right:1px solid var(--hairline); }
+  .sb-brand { padding:20px 18px 16px; border-bottom:1px solid var(--hairline); }
+  .sb-brand .n { font-weight:700; font-size:14.5px; letter-spacing:-.01em; color:var(--ink); }
+  .sb-brand .s { font-size:11px; color:var(--ink-3); margin-top:2px; }
+  .sb-nav { padding:10px; display:flex; flex-direction:column; gap:2px; flex:1; }
+  .sb-i { display:flex; align-items:center; gap:10px; padding:9px 11px; border-radius:10px; font-size:13px; color:var(--ink-2); font-weight:500; }
+  .sb-i svg { width:16px; height:16px; opacity:.85; }
+  .sb-i.on { background:var(--olive); color:#fff; font-weight:600; box-shadow:0 4px 12px -4px rgba(92,132,32,.5); }
+  .sb-i .bdg { margin-left:auto; background:var(--olive-soft); color:var(--olive-deep); font-size:10.5px; font-weight:700; padding:1px 7px; border-radius:99px; }
+  .sb-i.on .bdg { background:rgba(255,255,255,.22); color:#fff; }
+  .sb-foot { padding:12px 10px; border-top:1px solid var(--hairline); font-size:12.5px; color:var(--ink-3); display:flex; flex-direction:column; gap:8px; }
+  .sb-foot span { display:flex; align-items:center; gap:9px; padding:4px 11px; }
+  .main { flex:1; min-width:0; padding:22px 26px; }
+  .topbar { display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+  .topbar h2 { font-size:20px; font-weight:700; letter-spacing:-.02em; }
+  .topbar .sub { font-size:12.5px; color:var(--ink-2); margin-top:2px; }
+  .seg { display:flex; background:#fff; border:1px solid var(--hairline); border-radius:99px; padding:3px; margin-left:auto; }
+  .seg button { border:none; background:transparent; font:inherit; font-size:12.5px; font-weight:600; color:var(--ink-2); padding:6px 14px; border-radius:99px; cursor:pointer; }
+  .seg .on { background:var(--ink); color:#fff; }
+  .avatar { width:34px; height:34px; border-radius:99px; background:var(--olive-soft); color:var(--olive-deep); display:flex; align-items:center; justify-content:center; font-size:12.5px; font-weight:700; border:1px solid rgba(95,122,36,.25); }
+
+  /* ============ KPI CARDS ============ */
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px; }
+  .kpi { background:var(--card); border-radius:var(--r); box-shadow:var(--shadow); padding:16px 18px 14px; position:relative; }
+  .kpi .k-top { display:flex; align-items:center; justify-content:space-between; }
+  .kpi .k-lbl { font-size:12px; font-weight:600; color:var(--ink-2); }
+  .kpi .k-ico { width:30px; height:30px; border-radius:9px; display:flex; align-items:center; justify-content:center; }
+  .kpi .k-val { font-size:26px; font-weight:800; letter-spacing:-.03em; margin-top:8px; }
+  .kpi .k-sub { display:flex; align-items:center; gap:8px; margin-top:6px; font-size:11.5px; color:var(--ink-3); }
+  .spark { margin-top:10px; display:flex; align-items:flex-end; gap:3px; height:26px; }
+  .spark i { flex:1; border-radius:3px 3px 0 0; background:var(--olive-soft); }
+  .spark i.hi { background:var(--olive); }
+
+  /* ============ CARDS GÉNÉRIQUES ============ */
+  .card { background:var(--card); border-radius:var(--r); box-shadow:var(--shadow); padding:18px; }
+  .card h4 { font-size:13.5px; font-weight:700; display:flex; align-items:center; justify-content:space-between; }
+  .card h4 .more { font-size:11.5px; color:var(--olive-deep); font-weight:600; }
+  .grid-2 { display:grid; grid-template-columns:1.55fr 1fr; gap:14px; align-items:start; }
+  .col { display:flex; flex-direction:column; gap:14px; }
+
+  /* ============ CHART — barres empilées ============ */
+  .bars { display:flex; align-items:flex-end; gap:10px; height:170px; margin-top:16px; padding-top:8px; border-bottom:1px solid #e3e4dc; }
+  .bgroup { flex:1; display:flex; flex-direction:column-reverse; align-items:stretch; gap:2px; position:relative; }
+  .bgroup i { border-radius:2px; }
+  .bgroup i:last-child { border-radius:4px 4px 2px 2px; }
+  .bgroup:hover .tt { opacity:1; transform:translate(-50%,-4px); }
+  .tt { position:absolute; bottom:100%; left:50%; transform:translate(-50%,2px); opacity:0; transition:.15s;
+    background:#1b1d15; color:#fff; font-size:10.5px; padding:6px 9px; border-radius:8px; white-space:nowrap; pointer-events:none; z-index:5; }
+  .tt b { font-weight:700; }
+  .xlbl { display:flex; gap:10px; margin-top:6px; }
+  .xlbl span { flex:1; text-align:center; font-size:10.5px; color:var(--ink-3); }
+  .legend { display:flex; gap:16px; margin-top:12px; }
+  .legend span { display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-2); }
+  .dot { width:9px; height:9px; border-radius:3px; }
+
+  /* ============ RING (revenue vs target) ============ */
+  .ringwrap { display:flex; align-items:center; gap:18px; margin-top:14px; }
+  .ring { position:relative; width:110px; height:110px; flex-shrink:0; }
+  .ring .in { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .ring .pc { font-size:20px; font-weight:800; letter-spacing:-.02em; }
+  .ring .pl { font-size:10px; color:var(--ink-3); }
+  .ringlist { display:flex; flex-direction:column; gap:8px; font-size:12px; flex:1; }
+  .ringlist .row { display:flex; justify-content:space-between; color:var(--ink-2); }
+  .ringlist b { color:var(--ink); font-weight:700; }
+
+  /* ============ CALENDRIER ============ */
+  .cal { margin-top:14px; }
+  .cal-head { display:flex; align-items:center; justify-content:space-between; font-size:12.5px; font-weight:700; margin-bottom:10px; }
+  .cal-head .nav { display:flex; gap:6px; }
+  .cal-head .nav b { width:24px; height:24px; border:1px solid var(--hairline); border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:600; color:var(--ink-2); font-size:12px; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; font-size:10.5px; }
+  .cal-grid .d { text-align:center; color:var(--ink-3); font-weight:600; padding:3px 0; }
+  .cal-grid .c { aspect-ratio:1.25; border-radius:7px; display:flex; align-items:flex-start; justify-content:flex-end; padding:3px 5px; color:var(--ink-2); background:#f7f8f3; }
+  .cal-grid .c.ev1 { background:var(--olive); color:#fff; font-weight:600; }
+  .cal-grid .c.ev1.soft { background:#8aa943; }
+  .cal-grid .c.ev2 { background:var(--c-extra); color:#fff; font-weight:600; }
+  .cal-grid .c.off { opacity:.35; }
+  .cal-events { display:flex; flex-direction:column; gap:7px; margin-top:12px; }
+  .cal-ev { display:flex; align-items:center; gap:10px; font-size:12px; padding:8px 10px; border-radius:10px; background:#f7f8f3; }
+  .cal-ev .bar { width:3.5px; height:26px; border-radius:99px; }
+  .cal-ev b { font-weight:600; }
+  .cal-ev .dt { margin-left:auto; color:var(--ink-3); font-size:11px; }
+
+  /* ============ LISTES (upcoming / nationalités) ============ */
+  .plist { display:flex; flex-direction:column; margin-top:8px; }
+  .plist .p { display:flex; align-items:center; gap:11px; padding:10px 2px; border-bottom:1px solid #f0f1ea; font-size:12.5px; }
+  .plist .p:last-child { border-bottom:none; }
+  .plist .who b { display:block; font-weight:600; }
+  .plist .who span { font-size:11px; color:var(--ink-3); }
+  .plist .amt { margin-left:auto; text-align:right; }
+  .plist .amt b { font-weight:700; font-variant-numeric:tabular-nums; }
+  .plist .amt span { display:block; font-size:10.5px; color:var(--ink-3); }
+  .nat { display:flex; flex-direction:column; gap:9px; margin-top:12px; }
+  .nat .r { display:flex; align-items:center; gap:9px; font-size:12px; }
+  .nat .f { font-size:15px; width:20px; }
+  .nat .n { width:86px; color:var(--ink-2); }
+  .nat .b { flex:1; height:7px; background:#eef0e7; border-radius:99px; overflow:hidden; }
+  .nat .b i { display:block; height:100%; border-radius:99px; background:var(--olive); }
+  .nat .v { width:18px; text-align:right; font-weight:700; font-size:11.5px; }
+
+  /* ============ TABLES (bookings / payments) ============ */
+  .toolrow { display:flex; gap:10px; margin-bottom:14px; align-items:center; }
+  .search { flex:1; max-width:300px; background:#fff; border:1px solid var(--hairline); border-radius:11px; padding:9px 13px; font-size:12.5px; color:var(--ink-3); display:flex; gap:8px; align-items:center; }
+  .fchip { background:#fff; border:1px solid var(--hairline); border-radius:11px; padding:9px 13px; font-size:12.5px; font-weight:600; color:var(--ink-2); display:flex; gap:7px; align-items:center; }
+  .btn-p { margin-left:auto; background:var(--olive); color:#fff; border:none; font:inherit; font-size:12.5px; font-weight:600; padding:10px 16px; border-radius:11px; box-shadow:0 6px 16px -6px rgba(95,122,36,.55); }
+  table.tb { width:100%; border-collapse:collapse; background:#fff; border-radius:var(--r); overflow:hidden; box-shadow:var(--shadow); font-size:12.5px; }
+  .tb th { text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-3); font-weight:700; padding:12px 14px; border-bottom:1px solid #eef0e8; background:#fbfcf8; }
+  .tb td { padding:12px 14px; border-bottom:1px solid #f2f3ec; vertical-align:middle; }
+  .tb tr:last-child td { border-bottom:none; }
+  .tb tr.hov { background:#f8faf2; }
+  .gcell { display:flex; align-items:center; gap:10px; }
+  .gava { width:30px; height:30px; border-radius:99px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; }
+  .gcell b { font-weight:600; }
+  .sub { display:block; font-size:11px; color:var(--ink-3); font-weight:400; }
+  .pgbar { width:110px; }
+  .pgbar .t { display:flex; justify-content:space-between; font-size:10.5px; margin-bottom:4px; color:var(--ink-2); }
+  .pgbar .t b { font-weight:700; color:var(--ink); }
+  .pgbar .bk { height:6px; background:#eef0e7; border-radius:99px; overflow:hidden; }
+  .pgbar .bk i { display:block; height:100%; border-radius:99px; }
+  .acts { display:flex; gap:6px; }
+  .acts span { width:27px; height:27px; border:1px solid var(--hairline); border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--ink-2); background:#fff; }
+  .daterange { font-variant-numeric:tabular-nums; }
+  .daterange .nights { font-size:10.5px; color:var(--ink-3); }
+
+  /* ============ MOBILE ============ */
+  .phones { display:flex; gap:34px; justify-content:center; flex-wrap:wrap; }
+  .phone { width:315px; background:var(--page); border-radius:38px; border:9px solid #191b13; overflow:hidden; box-shadow:0 30px 60px -25px rgba(27,29,21,.5); position:relative; height:640px; display:flex; flex-direction:column; }
+  .ph-status { display:flex; justify-content:space-between; padding:12px 22px 4px; font-size:11px; font-weight:700; }
+  .ph-body { flex:1; overflow:hidden; padding:10px 16px 0; }
+  .ph-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .ph-head h5 { font-size:17px; font-weight:800; letter-spacing:-.02em; }
+  .ph-kpis { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+  .ph-kpi { background:#fff; border-radius:14px; padding:12px 13px; box-shadow:var(--shadow); }
+  .ph-kpi .l { font-size:10.5px; font-weight:600; color:var(--ink-2); }
+  .ph-kpi .v { font-size:19px; font-weight:800; letter-spacing:-.02em; margin-top:3px; }
+  .ph-kpi .d { font-size:10px; margin-top:3px; }
+  .tabbar { background:#fff; border-top:1px solid var(--hairline); display:flex; padding:8px 6px 16px; }
+  .tabbar a { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:9.5px; font-weight:600; color:var(--ink-3); text-decoration:none; }
+  .tabbar a svg { width:20px; height:20px; }
+  .tabbar a.on { color:var(--olive-deep); }
+  .tabbar a.on .pill { background:var(--olive-soft); }
+  .tabbar .pill { padding:4px 14px; border-radius:99px; display:flex; }
+  .ph-card { background:#fff; border-radius:14px; padding:13px; box-shadow:var(--shadow); margin-bottom:10px; }
+  .ph-card h6 { font-size:12px; font-weight:700; margin-bottom:8px; display:flex; justify-content:space-between; }
+
+  .cap { max-width:1180px; margin:18px auto 0; font-size:12.5px; color:#5d6153; line-height:1.6; background:#fff; border-radius:12px; padding:14px 18px; border:1px solid var(--hairline); }
+  .cap b { color:#1b1d15; }
+  .cap ul { margin:6px 0 0 18px; }
+  .cap li { margin-bottom:3px; }
+  @media (max-width: 900px) {
+    .kpis { grid-template-columns:1fr 1fr; }
+    .grid-2 { grid-template-columns:1fr; }
+    .sb { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="doc-head">
+  <h1>Quinta do Amor — Proposition de refonte UX</h1>
+  <p>Maquettes non fonctionnelles, à valider ensemble avant toute implémentation. Palette dataviz validée (protanopie / deutéranopie / tritanopie + contraste).</p>
+  <div class="doc-tabs">
+    <button class="doc-tab on" onclick="show(0,this)">1 · Design system</button>
+    <button class="doc-tab" onclick="show(1,this)">2 · Dashboard</button>
+    <button class="doc-tab" onclick="show(2,this)">3 · Bookings</button>
+    <button class="doc-tab" onclick="show(3,this)">4 · Payments</button>
+    <button class="doc-tab" onclick="show(4,this)">5 · Mobile</button>
+  </div>
+</div>
+
+<!-- ================= 1. DESIGN SYSTEM ================= -->
+<section class="stage on">
+  <div class="note"><b>Le principe :</b> on garde les couleurs de base (olive, tons chauds) mais en version <b>light &amp; vibrant</b> : fond quasi blanc à peine teinté d'olive, cartes blanches, sidebar claire, et des teintes pastel douces pour les fonds d'icônes et chips — l'olive vif est réservé aux actions et aux données. C'est la logique de tes deux exemples.</div>
+  <div class="frame tok-grid">
+    <div class="tok-card" style="grid-column:1/-1;">
+      <h3>Avant / Après — surfaces</h3>
+      <div class="ba">
+        <div class="before">
+          <b style="font-size:12px;">Aujourd'hui</b> — fond crème <code>#f6efea</code>, cartes crème plus foncé : tout se fond, peu de relief.
+          <div class="mini-card">Carte actuelle — faible contraste avec le fond</div>
+          <div class="mini-card">Les séparations reposent sur des bordures</div>
+        </div>
+        <div class="after">
+          <b style="font-size:12px;">Proposition</b> — fond quasi blanc, pointe d'olive fondue <code>#f8f9f4</code>, cartes <b>blanches</b> avec ombre douce : chaque bloc "flotte", hiérarchie immédiate.
+          <div class="mini-card">Carte blanche — se détache naturellement</div>
+          <div class="mini-card">Ombres douces au lieu de bordures</div>
+        </div>
+      </div>
+    </div>
+    <div class="tok-card">
+      <h3>Couleurs de marque — light &amp; vibrant</h3>
+      <div class="swatches">
+        <div class="sw"><div class="chip" style="background:#5c8420;"></div><div class="lbl">Olive action (primaire)</div><div class="hex">#5c8420</div></div>
+        <div class="sw"><div class="chip" style="background:#e9f2d7;"></div><div class="lbl">Olive pastel</div><div class="hex">#e9f2d7</div></div>
+        <div class="sw"><div class="chip" style="background:#fbe8da;"></div><div class="lbl">Terracotta pastel</div><div class="hex">#fbe8da</div></div>
+        <div class="sw"><div class="chip" style="background:#f7f0dd;"></div><div class="lbl">Crème pastel (rappel)</div><div class="hex">#f7f0dd</div></div>
+        <div class="sw"><div class="chip" style="background:#f8f9f4;"></div><div class="lbl">Fond de page</div><div class="hex">#f8f9f4</div></div>
+        <div class="sw"><div class="chip" style="background:#ffffff;"></div><div class="lbl">Cartes &amp; sidebar</div><div class="hex">#ffffff</div></div>
+      </div>
+    </div>
+    <div class="tok-card">
+      <h3>Dataviz (validée ✓)</h3>
+      <div class="swatches">
+        <div class="sw"><div class="chip" style="background:#5f8b21;"></div><div class="lbl">Rental</div><div class="hex">#5f8b21</div></div>
+        <div class="sw"><div class="chip" style="background:#2a78d6;"></div><div class="lbl">Catering</div><div class="hex">#2a78d6</div></div>
+        <div class="sw"><div class="chip" style="background:#d9622b;"></div><div class="lbl">Extras</div><div class="hex">#d9622b</div></div>
+        <div class="sw"><div class="chip" style="background:#8a5fb8;"></div><div class="lbl">Slot 4 (réserve)</div><div class="hex">#8a5fb8</div></div>
+      </div>
+    </div>
+    <div class="tok-card">
+      <h3>Statuts (icône + libellé, jamais couleur seule)</h3>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <span class="tag" style="background:var(--ok-bg); color:var(--ok);">✓ Paid</span>
+        <span class="tag" style="background:var(--warn-bg); color:var(--warn);">◔ Pending</span>
+        <span class="tag" style="background:var(--bad-bg); color:var(--bad);">! Overdue</span>
+        <span class="tag" style="background:var(--info-bg); color:var(--info);">⚑ Deposit due</span>
+        <span class="tag" style="background:#fdf1e0; color:#92600a; border:1px dashed #e0b96a;">⚗ Test</span>
+      </div>
+      <div style="font-size:11.5px; color:var(--ink-2); margin-top:12px; line-height:1.5;">
+        Chips à fond doux + texte foncé (plus lisibles que les pleins). La même grammaire partout : Bookings, Payments, fiches.
+      </div>
+    </div>
+    <div class="tok-card" style="grid-column:1/-1;">
+      <h3>Règles générales proposées</h3>
+      <div style="font-size:12.5px; line-height:1.7; color:var(--ink-2); columns:2; gap:28px;">
+        <b style="color:var(--ink);">Typo :</b> Inter conservée. Chiffres clés en 26–28px extra-bold, chiffres alignés (tabular-nums) dans les tableaux.<br>
+        <b style="color:var(--ink);">Rayons :</b> 16px cartes, 10–11px boutons et champs — l'arrondi généreux des exemples que tu as partagés.<br>
+        <b style="color:var(--ink);">Ombres :</b> douces et larges, remplacent la plupart des bordures.<br>
+        <b style="color:var(--ink);">Sidebar :</b> claire (blanche), item actif en pilule olive vif — la vibrance vient des accents, pas des aplats sombres.<br>
+        <b style="color:var(--ink);">Densité :</b> plus d'air autour des blocs (14px de gouttière), mais tableaux compacts.<br>
+        <b style="color:var(--ink);">Accessibilité :</b> palette graphique validée daltonisme + contraste ; statuts toujours doublés d'une icône.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 2. DASHBOARD ================= -->
+<section class="stage">
+  <div class="note"><b>Objectifs :</b> supprimer le vide sous le calendrier (colonnes équilibrées qui se remplissent), passer les KPI en cartes "héro" avec tendance, tout rendre plus vivant. Survole les barres du graphique : les tooltips font partie de la proposition.</div>
+  <div class="frame app">
+    <aside class="sb">
+      <div class="sb-brand"><div class="n">Quinta do Amor</div><div class="s">Management</div></div>
+      <nav class="sb-nav">
+        <span class="sb-i on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Dashboard</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings<span class="bdg">14</span></span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>Guests</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Payments<span class="bdg" style="background:var(--t-terra); color:#b4451a;">3</span></span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c-4 0-7 3-7 7 0 5 7 11 7 11s7-6 7-11c0-4-3-7-7-7z" transform="rotate(180 12 12)"/></svg>Catering</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14l2-6H3l2 6zM7 11V7a5 5 0 0 1 10 0v4"/></svg>Transportation</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20M2 12v6M22 12v6M4 12V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5"/></svg>Room setup</span>
+      </nav>
+      <div class="sb-foot"><span>↗ Guest area</span><span>⏻ Sign out</span></div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <div><h2>Olá, Geo 🌿</h2><div class="sub">Friday, July 31 · 2 retreats this month · next check-in in 3 days</div></div>
+        <div class="seg"><button>2024</button><button>2025</button><button class="on">2026</button></div>
+        <div class="avatar">GD</div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="k-top"><span class="k-lbl">Revenue 2026</span><span class="k-ico" style="background:var(--olive-soft); color:var(--olive-deep);">€</span></div>
+          <div class="k-val">€84 350</div>
+          <div class="k-sub"><span class="tag" style="background:var(--ok-bg); color:var(--ok);">↑ +18% vs 2025</span></div>
+          <div class="spark"><i style="height:35%"></i><i style="height:48%"></i><i style="height:42%"></i><i style="height:60%"></i><i style="height:55%"></i><i style="height:74%"></i><i class="hi" style="height:92%"></i></div>
+        </div>
+        <div class="kpi">
+          <div class="k-top"><span class="k-lbl">Bookings</span><span class="k-ico" style="background:var(--info-bg); color:var(--info);">▦</span></div>
+          <div class="k-val">14</div>
+          <div class="k-sub"><span class="tag" style="background:var(--info-bg); color:var(--info);">4 upcoming</span><span>· 2 in progress</span></div>
+          <div class="spark"><i style="height:40%"></i><i style="height:30%"></i><i style="height:55%"></i><i style="height:45%"></i><i style="height:65%"></i><i style="height:58%"></i><i class="hi" style="height:80%"></i></div>
+        </div>
+        <div class="kpi">
+          <div class="k-top"><span class="k-lbl">Occupancy (nights)</span><span class="k-ico" style="background:#f3ecfb; color:#6d43a1;">◧</span></div>
+          <div class="k-val">62%</div>
+          <div class="k-sub"><span class="tag" style="background:var(--ok-bg); color:var(--ok);">↑ +9 pts</span><span>· season May–Nov</span></div>
+          <div class="spark"><i style="height:25%"></i><i style="height:45%"></i><i style="height:70%"></i><i class="hi" style="height:88%"></i><i style="height:75%"></i><i style="height:52%"></i><i style="height:38%"></i></div>
+        </div>
+        <div class="kpi">
+          <div class="k-top"><span class="k-lbl">Outstanding</span><span class="k-ico" style="background:var(--warn-bg); color:var(--warn);">◔</span></div>
+          <div class="k-val">€12 480</div>
+          <div class="k-sub"><span class="tag" style="background:var(--bad-bg); color:var(--bad);">! 1 overdue</span><span>· 5 installments</span></div>
+          <div class="spark"><i style="height:80%"></i><i style="height:66%"></i><i style="height:58%"></i><i style="height:50%"></i><i style="height:40%"></i><i style="height:30%"></i><i class="hi" style="height:22%"></i></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="col">
+          <div class="card">
+            <h4>Revenue by month <span class="more">2026 · TTC</span></h4>
+            <div class="bars">
+              <div class="bgroup"><span class="tt"><b>March</b> · €2 100<br>Rental €2 100</span><i style="background:var(--c-rental); height:14px;"></i></div>
+              <div class="bgroup"><span class="tt"><b>April</b> · €6 850<br>Rental €5 400 · Catering €1 450</span><i style="background:var(--c-rental); height:38px;"></i><i style="background:var(--c-catering); height:10px;"></i></div>
+              <div class="bgroup"><span class="tt"><b>May</b> · €14 200<br>Rental €9 800 · Catering €3 400 · Extras €1 000</span><i style="background:var(--c-rental); height:68px;"></i><i style="background:var(--c-catering); height:24px;"></i><i style="background:var(--c-extra); height:8px;"></i></div>
+              <div class="bgroup"><span class="tt"><b>June</b> · €11 400<br>Rental €8 200 · Catering €2 400 · Extras €800</span><i style="background:var(--c-rental); height:57px;"></i><i style="background:var(--c-catering); height:17px;"></i><i style="background:var(--c-extra); height:6px;"></i></div>
+              <div class="bgroup"><span class="tt"><b>July</b> · €18 900<br>Rental €13 100 · Catering €4 300 · Extras €1 500</span><i style="background:var(--c-rental); height:91px;"></i><i style="background:var(--c-catering); height:30px;"></i><i style="background:var(--c-extra); height:11px;"></i></div>
+              <div class="bgroup"><span class="tt"><b>August</b> · €16 300<br>Rental €11 600 · Catering €3 500 · Extras €1 200</span><i style="background:var(--c-rental); height:80px;"></i><i style="background:var(--c-catering); height:24px;"></i><i style="background:var(--c-extra); height:9px;"></i></div>
+              <div class="bgroup"><span class="tt"><b>September</b> · €9 700<br>Rental €7 100 · Catering €2 000 · Extras €600</span><i style="background:var(--c-rental); height:49px;"></i><i style="background:var(--c-catering); height:14px;"></i><i style="background:var(--c-extra); height:5px;"></i></div>
+              <div class="bgroup"><span class="tt"><b>October</b> · €4 900<br>Rental €3 900 · Catering €1 000</span><i style="background:var(--c-rental); height:27px;"></i><i style="background:var(--c-catering); height:7px;"></i></div>
+            </div>
+            <div class="xlbl"><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span></div>
+            <div class="legend">
+              <span><i class="dot" style="background:var(--c-rental);"></i>Rental</span>
+              <span><i class="dot" style="background:var(--c-catering);"></i>Catering</span>
+              <span><i class="dot" style="background:var(--c-extra);"></i>Extras</span>
+            </div>
+          </div>
+          <div class="card">
+            <h4>Calendar <span class="more">August 2026 · + full year</span></h4>
+            <div class="cal">
+              <div class="cal-grid">
+                <span class="d">M</span><span class="d">T</span><span class="d">W</span><span class="d">T</span><span class="d">F</span><span class="d">S</span><span class="d">S</span>
+                <span class="c off">27</span><span class="c off">28</span><span class="c off">29</span><span class="c off">30</span><span class="c off">31</span><span class="c">1</span><span class="c">2</span>
+                <span class="c ev1">3</span><span class="c ev1">4</span><span class="c ev1">5</span><span class="c ev1">6</span><span class="c ev1">7</span><span class="c ev1">8</span><span class="c">9</span>
+                <span class="c">10</span><span class="c">11</span><span class="c">12</span><span class="c">13</span><span class="c">14</span><span class="c">15</span><span class="c">16</span>
+                <span class="c ev2">17</span><span class="c ev2">18</span><span class="c ev2">19</span><span class="c ev2">20</span><span class="c ev2">21</span><span class="c ev2">22</span><span class="c ev2">23</span>
+                <span class="c">24</span><span class="c">25</span><span class="c">26</span><span class="c">27</span><span class="c">28</span><span class="c">29</span><span class="c">30</span>
+              </div>
+              <div class="cal-events">
+                <div class="cal-ev"><span class="bar" style="background:var(--olive);"></span><div><b>Yoga &amp; Breathwork — Slink</b><span class="sub" style="display:block; font-size:11px; color:var(--ink-3);">Marta P. · 18 guests</span></div><span class="dt">Aug 3 → 8</span></div>
+                <div class="cal-ev"><span class="bar" style="background:var(--c-extra);"></span><div><b>Women's Circle Retreat</b><span class="sub" style="display:block; font-size:11px; color:var(--ink-3);">Claire D. · 14 guests</span></div><span class="dt">Aug 17 → 23</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="card">
+            <h4>Revenue vs target</h4>
+            <div class="ringwrap">
+              <div class="ring">
+                <svg viewBox="0 0 110 110" width="110" height="110">
+                  <circle cx="55" cy="55" r="46" fill="none" stroke="#eef0e7" stroke-width="11"/>
+                  <circle cx="55" cy="55" r="46" fill="none" stroke="#5f7a24" stroke-width="11" stroke-linecap="round"
+                    stroke-dasharray="203 289" transform="rotate(-90 55 55)"/>
+                </svg>
+                <div class="in"><span class="pc">70%</span><span class="pl">of €120k</span></div>
+              </div>
+              <div class="ringlist">
+                <div class="row"><span>Collected</span><b>€71 870</b></div>
+                <div class="row"><span>Confirmed</span><b>€12 480</b></div>
+                <div class="row"><span>To find</span><b>€35 650</b></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h4>Next payments <span class="more">Payments →</span></h4>
+            <div class="plist">
+              <div class="p"><span class="gava" style="background:#eef3e2; color:#4a611c;">MP</span><div class="who"><b>Marta P. — Slink</b><span>2nd installment · due Aug 1</span></div><div class="amt"><b>€3 997</b><span class="tag" style="background:var(--warn-bg); color:var(--warn); margin-top:2px;">◔ Pending</span></div></div>
+              <div class="p"><span class="gava" style="background:#e8f0fb; color:#1c5cab;">CD</span><div class="who"><b>Claire D. — Women's Circle</b><span>Deposit · due Aug 5</span></div><div class="amt"><b>€1 000</b><span class="tag" style="background:var(--warn-bg); color:var(--warn); margin-top:2px;">◔ Pending</span></div></div>
+              <div class="p"><span class="gava" style="background:#fceaea; color:#c22f2f;">AK</span><div class="who"><b>Alexander K. — Breath &amp; Body</b><span>Balance · was due Jul 20</span></div><div class="amt"><b>€2 140</b><span class="tag" style="background:var(--bad-bg); color:var(--bad); margin-top:2px;">! Overdue</span></div></div>
+            </div>
+          </div>
+          <div class="card">
+            <h4>Guest nationalities <span class="more">2026</span></h4>
+            <div class="nat">
+              <div class="r"><span class="f">🇧🇪</span><span class="n">Belgium</span><div class="b"><i style="width:100%"></i></div><span class="v">5</span></div>
+              <div class="r"><span class="f">🇩🇪</span><span class="n">Germany</span><div class="b"><i style="width:60%"></i></div><span class="v">3</span></div>
+              <div class="r"><span class="f">🇫🇷</span><span class="n">France</span><div class="b"><i style="width:40%"></i></div><span class="v">2</span></div>
+              <div class="r"><span class="f">🇬🇧</span><span class="n">UK</span><div class="b"><i style="width:40%"></i></div><span class="v">2</span></div>
+              <div class="r"><span class="f">🇺🇸</span><span class="n">United States</span><div class="b"><i style="width:20%"></i></div><span class="v">1</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cap"><b>Ce qui change sur le Dashboard :</b>
+    <ul>
+      <li><b>Greeting contextuel</b> en haut ("next check-in in 3 days") — le dashboard répond à "que se passe-t-il maintenant ?" avant de montrer des stats.</li>
+      <li><b>4 KPI héros</b> avec tendance vs année précédente et mini-sparkline — le style Finexa que tu aimes.</li>
+      <li><b>Deux colonnes équilibrées</b> : les cartes de droite (target, next payments, nationalités) remplissent la hauteur — plus de vide sous le calendrier.</li>
+      <li><b>Calendrier compact</b> : le mois en cours + la liste des retreats à venir juste dessous ; les couleurs des events reprennent la palette.</li>
+      <li><b>"Next payments"</b> monte sur le dashboard : c'est l'info que tu vérifies le plus souvent, elle mérite d'être visible sans changer d'onglet.</li>
+      <li>Graphiques : barres fines à bouts arrondis, gaps de 2px entre segments, tooltips au survol — la grammaire du skill dataviz.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= 3. BOOKINGS ================= -->
+<section class="stage">
+  <div class="note"><b>Objectifs :</b> transformer le tableau en vraie liste de travail — recherche + filtres, avatars, plage de dates lisible, progression de paiement inline, actions au survol.</div>
+  <div class="frame app" style="min-height:520px;">
+    <aside class="sb">
+      <div class="sb-brand"><div class="n">Quinta do Amor</div><div class="s">Management</div></div>
+      <nav class="sb-nav">
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Dashboard</span>
+        <span class="sb-i on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings<span class="bdg">14</span></span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>Guests</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Payments</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14l2-6H3l2 6z"/></svg>Catering</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14"/></svg>Transportation</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20"/></svg>Room setup</span>
+      </nav>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <div><h2>Bookings</h2><div class="sub">14 bookings in 2026 · 4 upcoming</div></div>
+      </div>
+      <div class="toolrow">
+        <div class="search">⌕ Search event or guest…</div>
+        <div class="fchip">Type: All ▾</div>
+        <div class="fchip">2026 ▾</div>
+        <div class="fchip" style="color:var(--warn);">⚗ Show tests</div>
+        <button class="btn-p">+ New booking</button>
+      </div>
+      <table class="tb">
+        <tr><th>Event</th><th>Guest</th><th>Type</th><th>Dates</th><th>Payment</th><th></th></tr>
+        <tr>
+          <td><b>Yoga &amp; Breathwork — Slink</b><span class="sub">18 guests</span></td>
+          <td><div class="gcell"><span class="gava" style="background:#eef3e2; color:#4a611c;">MP</span><div><b>Marta P.</b><span class="sub">🇵🇱 Poland</span></div></div></td>
+          <td><span class="tag" style="background:var(--olive-soft); color:var(--olive-deep);">Retreat</span></td>
+          <td class="daterange"><b>Aug 3 → 8</b><span class="sub nights">5 nights · in 3 days</span></td>
+          <td><div class="pgbar"><div class="t"><span>€3 998 / 7 995</span><b>50%</b></div><div class="bk"><i style="width:50%; background:var(--olive);"></i></div></div></td>
+          <td><div class="acts"><span>👁</span><span>✉</span></div></td>
+        </tr>
+        <tr class="hov">
+          <td><b>Women's Circle Retreat</b><span class="sub">14 guests</span></td>
+          <td><div class="gcell"><span class="gava" style="background:#e8f0fb; color:#1c5cab;">CD</span><div><b>Claire D.</b><span class="sub">🇫🇷 France</span></div></div></td>
+          <td><span class="tag" style="background:var(--olive-soft); color:var(--olive-deep);">Retreat</span></td>
+          <td class="daterange"><b>Aug 17 → 23</b><span class="sub nights">6 nights</span></td>
+          <td><div class="pgbar"><div class="t"><span>€0 / 6 400</span><b>0%</b></div><div class="bk"><i style="width:2%; background:var(--warn);"></i></div></div></td>
+          <td><div class="acts"><span>👁</span><span>✉</span></div></td>
+        </tr>
+        <tr>
+          <td><b>Breath &amp; Body</b><span class="sub">12 guests</span></td>
+          <td><div class="gcell"><span class="gava" style="background:#fceaea; color:#c22f2f;">AK</span><div><b>Alexander K.</b><span class="sub">🇩🇪 Germany</span></div></div></td>
+          <td><span class="tag" style="background:var(--olive-soft); color:var(--olive-deep);">Retreat</span></td>
+          <td class="daterange"><b>Sep 12 → 16</b><span class="sub nights">4 nights</span></td>
+          <td><div class="pgbar"><div class="t"><span>€4 260 / 6 400</span><b>67%</b></div><div class="bk"><i style="width:67%; background:var(--bad);"></i></div></div></td>
+          <td><div class="acts"><span>👁</span><span>✉</span></div></td>
+        </tr>
+        <tr>
+          <td><b>Family stay — Dubois</b><span class="sub">6 guests</span> <span class="tag" style="background:#fdf1e0; color:#92600a; border:1px dashed #e0b96a; margin-left:4px;">⚗ Test</span></td>
+          <td><div class="gcell"><span class="gava" style="background:#f3ecfb; color:#6d43a1;">GD</span><div><b>Geoffroy D.</b><span class="sub">🇧🇪 Belgium</span></div></div></td>
+          <td><span class="tag" style="background:var(--info-bg); color:var(--info);">Private</span></td>
+          <td class="daterange"><b>Oct 2 → 5</b><span class="sub nights">3 nights</span></td>
+          <td><div class="pgbar"><div class="t"><span>€2 / 3</span><b>67%</b></div><div class="bk"><i style="width:67%; background:var(--olive);"></i></div></div></td>
+          <td><div class="acts"><span>👁</span><span>✉</span></div></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="cap"><b>Ce qui change sur Bookings :</b>
+    <ul>
+      <li><b>Barre d'outils</b> : recherche instantanée (event ou guest), filtre type, filtre année, toggle "Show tests" (les bookings test sont masqués par défaut au lieu d'être mélangés).</li>
+      <li><b>Colonne Guest</b> avec avatar à initiales + drapeau — on reconnaît les gens d'un coup d'œil, clic → fiche guest (déjà en place, on le rend visible).</li>
+      <li><b>Dates en plage</b> "Aug 3 → 8 · 5 nights" + proximité ("in 3 days") au lieu de deux colonnes de dates brutes.</li>
+      <li><b>Colonne Payment = barre de progression</b> (payé / total, % en gras) : l'état financier du booking sans ouvrir la fiche. Rouge quand une échéance est en retard, ambre quand l'acompte n'est pas encore payé.</li>
+      <li><b>Actions au survol</b> (ligne surlignée vert pâle) : ouvrir, email — le tableau reste calme.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= 4. PAYMENTS ================= -->
+<section class="stage">
+  <div class="note"><b>Objectifs :</b> tuiles de synthèse plus riches (bank/cash déjà fait — on leur donne le style KPI), lignes groupées par booking, statuts avec la nouvelle grammaire de chips.</div>
+  <div class="frame app" style="min-height:540px;">
+    <aside class="sb">
+      <div class="sb-brand"><div class="n">Quinta do Amor</div><div class="s">Management</div></div>
+      <nav class="sb-nav">
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Dashboard</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Bookings</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/></svg>Guests</span>
+        <span class="sb-i on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Payments<span class="bdg" style="background:var(--t-terra); color:#b4451a;">3</span></span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14l2-6H3l2 6z"/></svg>Catering</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14"/></svg>Transportation</span>
+        <span class="sb-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20"/></svg>Room setup</span>
+      </nav>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <div><h2>Payments</h2><div class="sub">2026 · all bookings</div></div>
+        <div class="seg"><button>All</button><button class="on">Pending</button><button>Paid</button></div>
+      </div>
+      <div class="kpis" style="grid-template-columns:repeat(3,1fr);">
+        <div class="kpi">
+          <div class="k-top"><span class="k-lbl">Collected</span><span class="k-ico" style="background:var(--ok-bg); color:var(--ok);">✓</span></div>
+          <div class="k-val">€71 870</div>
+          <div class="k-sub"><span>85% · <b style="color:var(--ink);">€64 120</b> bank &amp; card · <b style="color:var(--ink);">€7 750</b> cash</span></div>
+        </div>
+        <div class="kpi">
+          <div class="k-top"><span class="k-lbl">Outstanding</span><span class="k-ico" style="background:var(--warn-bg); color:var(--warn);">◔</span></div>
+          <div class="k-val">€12 480</div>
+          <div class="k-sub"><span>5 installments · next due Aug 1</span></div>
+        </div>
+        <div class="kpi">
+          <div class="k-top"><span class="k-lbl">Overdue</span><span class="k-ico" style="background:var(--bad-bg); color:var(--bad);">!</span></div>
+          <div class="k-val">€2 140</div>
+          <div class="k-sub"><span class="tag" style="background:var(--bad-bg); color:var(--bad);">Alexander K. · 11 days late</span></div>
+        </div>
+      </div>
+      <table class="tb">
+        <tr><th>Booking / installment</th><th>Due</th><th>Amount</th><th>Status</th><th>Invoice</th><th></th></tr>
+        <tr><td colspan="6" style="background:#fbfcf8; font-weight:700; font-size:11.5px; padding:8px 14px; color:var(--ink-2);">Yoga &amp; Breathwork — Slink · Marta P. <span style="font-weight:500;">· €3 998 / 7 995 collected</span></td></tr>
+        <tr>
+          <td><b>Deposit</b><span class="sub">Rental · VAT 23%</span></td>
+          <td class="daterange">Jun 15</td>
+          <td><b>€3 997,50</b></td>
+          <td><span class="tag" style="background:var(--ok-bg); color:var(--ok);">✓ Paid · SEPA</span></td>
+          <td><span class="tag" style="background:var(--info-bg); color:var(--info);">FT2026/4 ⤓</span></td>
+          <td><div class="acts"><span>✉</span></div></td>
+        </tr>
+        <tr>
+          <td><b>2nd installment</b><span class="sub">Rental · VAT 23%</span></td>
+          <td class="daterange"><b style="color:var(--warn);">Aug 1 · tomorrow</b></td>
+          <td><b>€3 997,50</b></td>
+          <td><span class="tag" style="background:var(--warn-bg); color:var(--warn);">◔ Pending</span></td>
+          <td><span style="color:var(--ink-3); font-size:11px;">on payment</span></td>
+          <td><div class="acts"><span>✉</span><span>🔗</span></div></td>
+        </tr>
+        <tr><td colspan="6" style="background:#fbfcf8; font-weight:700; font-size:11.5px; padding:8px 14px; color:var(--ink-2);">Breath &amp; Body · Alexander K. <span style="font-weight:500;">· €4 260 / 6 400 collected</span></td></tr>
+        <tr>
+          <td><b>Balance</b><span class="sub">Rental + catering · multi-line</span></td>
+          <td class="daterange"><b style="color:var(--bad);">Jul 20 · 11 days late</b></td>
+          <td><b>€2 140,00</b></td>
+          <td><span class="tag" style="background:var(--bad-bg); color:var(--bad);">! Overdue</span></td>
+          <td><span style="color:var(--ink-3); font-size:11px;">on payment</span></td>
+          <td><div class="acts"><span>✉</span><span>🔗</span></div></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="cap"><b>Ce qui change sur Payments :</b>
+    <ul>
+      <li><b>3 tuiles KPI</b> : Collected (avec la ventilation bank &amp; card / cash), Outstanding, Overdue — le retard devient impossible à rater.</li>
+      <li><b>Lignes groupées par booking</b> avec sous-total "collected" dans l'en-tête de groupe — fini de reconstituer mentalement quel installment appartient à qui.</li>
+      <li><b>Échéances relatives</b> : "tomorrow", "11 days late" en couleur — plus parlant qu'une date seule.</li>
+      <li><b>Segmented control All / Pending / Paid</b> en haut à droite pour filtrer en un clic.</li>
+      <li>Chips de statut uniformes (✓ Paid · SEPA, ◔ Pending, ! Overdue) + bouton facture au style chip bleu.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= 5. MOBILE ================= -->
+<section class="stage">
+  <div class="note"><b>Objectifs :</b> la barre de pilules horizontale du haut disparaît — navigation par <b>tab bar en bas</b> avec icônes (pouce-friendly), 4 onglets principaux + "More" pour le reste.</div>
+  <div class="phones">
+    <div class="phone">
+      <div class="ph-status"><span>9:41</span><span>●●● ⌁ ▮</span></div>
+      <div class="ph-body">
+        <div class="ph-head"><h5>Olá, Geo 🌿</h5><span class="avatar" style="width:30px;height:30px;font-size:11px;">GD</span></div>
+        <div class="ph-kpis">
+          <div class="ph-kpi"><div class="l">Revenue 2026</div><div class="v">€84 350</div><div class="d"><span class="tag" style="background:var(--ok-bg); color:var(--ok);">↑ +18%</span></div></div>
+          <div class="ph-kpi"><div class="l">Outstanding</div><div class="v">€12 480</div><div class="d"><span class="tag" style="background:var(--bad-bg); color:var(--bad);">! 1 overdue</span></div></div>
+        </div>
+        <div class="ph-card">
+          <h6>Next check-in <span style="color:var(--olive-deep);">in 3 days</span></h6>
+          <div style="display:flex; align-items:center; gap:10px; font-size:12px;">
+            <span class="gava" style="background:#eef3e2; color:#4a611c;">MP</span>
+            <div><b style="font-weight:600;">Yoga &amp; Breathwork — Slink</b><span class="sub">Aug 3 → 8 · 18 guests</span></div>
+          </div>
+        </div>
+        <div class="ph-card">
+          <h6>Next payments</h6>
+          <div class="plist" style="margin-top:0;">
+            <div class="p" style="padding:8px 0;"><div class="who"><b>Marta P.</b><span>due Aug 1</span></div><div class="amt"><b>€3 997</b></div></div>
+            <div class="p" style="padding:8px 0;"><div class="who"><b>Alexander K.</b><span style="color:var(--bad);">11 days late</span></div><div class="amt"><b>€2 140</b></div></div>
+          </div>
+        </div>
+        <div class="ph-card">
+          <h6>August</h6>
+          <div class="cal-grid">
+            <span class="d">M</span><span class="d">T</span><span class="d">W</span><span class="d">T</span><span class="d">F</span><span class="d">S</span><span class="d">S</span>
+            <span class="c off">27</span><span class="c off">28</span><span class="c off">29</span><span class="c off">30</span><span class="c off">31</span><span class="c">1</span><span class="c">2</span>
+            <span class="c ev1">3</span><span class="c ev1">4</span><span class="c ev1">5</span><span class="c ev1">6</span><span class="c ev1">7</span><span class="c ev1">8</span><span class="c">9</span>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <a class="on"><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span>Dashboard</a>
+        <a><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>Bookings</a>
+        <a><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13l2-5a2 2 0 0 1 2-1.5h10A2 2 0 0 1 19 8l2 5v5h-2m-14 0H3v-5z"/><circle cx="7.5" cy="17" r="1.6"/><circle cx="16.5" cy="17" r="1.6"/></svg></span>Transport</a>
+        <a><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 18v-6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6M2 18h20M4 10V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3"/></svg></span>Rooms</a>
+        <a><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span>More</a>
+      </div>
+    </div>
+
+    <div class="phone">
+      <div class="ph-status"><span>9:41</span><span>●●● ⌁ ▮</span></div>
+      <div class="ph-body">
+        <div class="ph-head"><h5>Bookings</h5><button class="btn-p" style="padding:8px 13px; font-size:12px;">+ New</button></div>
+        <div class="search" style="max-width:none; margin-bottom:10px;">⌕ Search…</div>
+        <div class="ph-card">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="gava" style="background:#eef3e2; color:#4a611c;">MP</span>
+            <div style="flex:1;"><b style="font-size:12.5px; font-weight:600;">Yoga &amp; Breathwork — Slink</b><span class="sub">Marta P. · Aug 3 → 8</span></div>
+            <span class="tag" style="background:var(--warn-bg); color:var(--warn);">50%</span>
+          </div>
+          <div class="bk" style="height:5px; background:#eef0e7; border-radius:99px; margin-top:10px; overflow:hidden;"><i style="display:block; height:100%; width:50%; background:var(--olive); border-radius:99px;"></i></div>
+        </div>
+        <div class="ph-card">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="gava" style="background:#e8f0fb; color:#1c5cab;">CD</span>
+            <div style="flex:1;"><b style="font-size:12.5px; font-weight:600;">Women's Circle Retreat</b><span class="sub">Claire D. · Aug 17 → 23</span></div>
+            <span class="tag" style="background:var(--warn-bg); color:var(--warn);">0%</span>
+          </div>
+          <div class="bk" style="height:5px; background:#eef0e7; border-radius:99px; margin-top:10px; overflow:hidden;"><i style="display:block; height:100%; width:2%; background:var(--warn); border-radius:99px;"></i></div>
+        </div>
+        <div class="ph-card">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="gava" style="background:#fceaea; color:#c22f2f;">AK</span>
+            <div style="flex:1;"><b style="font-size:12.5px; font-weight:600;">Breath &amp; Body</b><span class="sub">Alexander K. · Sep 12 → 16</span></div>
+            <span class="tag" style="background:var(--bad-bg); color:var(--bad);">! late</span>
+          </div>
+          <div class="bk" style="height:5px; background:#eef0e7; border-radius:99px; margin-top:10px; overflow:hidden;"><i style="display:block; height:100%; width:67%; background:var(--bad); border-radius:99px;"></i></div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <a><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span>Dashboard</a>
+        <a class="on"><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>Bookings</a>
+        <a><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13l2-5a2 2 0 0 1 2-1.5h10A2 2 0 0 1 19 8l2 5v5h-2m-14 0H3v-5z"/><circle cx="7.5" cy="17" r="1.6"/><circle cx="16.5" cy="17" r="1.6"/></svg></span>Transport</a>
+        <a><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 18v-6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6M2 18h20M4 10V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3"/></svg></span>Rooms</a>
+        <a><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span>More</a>
+      </div>
+    </div>
+  </div>
+  <div class="cap"><b>Ce qui change sur mobile :</b>
+    <ul>
+      <li><b>Tab bar en bas</b> avec icônes : Dashboard, Bookings, Transport, Rooms + "More" (Payments, Guests, Catering, Guest area, Sign out en feuille coulissante — tout reste accessible en 2 taps).</li>
+      <li><b>Dashboard mobile condensé</b> : 2 KPI, prochain check-in, prochains paiements, mini-calendrier — l'essentiel en un écran.</li>
+      <li><b>Bookings en cartes</b> (pas de tableau à scroller horizontalement) : avatar, dates, barre de progression du paiement.</li>
+      <li>Cibles tactiles ≥ 44px, safe-area respectée (encoche iPhone).</li>
+    </ul>
+  </div>
+</section>
+
+<script>
+  function show(i, btn) {
+    document.querySelectorAll('.stage').forEach((s, j) => s.classList.toggle('on', j === i));
+    document.querySelectorAll('.doc-tab').forEach(t => t.classList.remove('on'));
+    btn.classList.add('on');
+    window.scrollTo({top: 0});
+  }
+</script>
+</body>
+</html>

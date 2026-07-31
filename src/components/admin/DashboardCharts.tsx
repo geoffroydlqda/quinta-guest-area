@@ -2,18 +2,20 @@ import { useMemo, useState } from "react";
 
 /**
  * Graphiques du dashboard admin — SVG maison, sans dépendance.
- * Palettes validées (scripts/validate_palette.js du skill dataviz, mode light,
- * surface #f0e7e1) :
- * - catégorielle 3 slots (revenu par catégorie) : rental #57761f, catering
- *   #2a78d6, extra #c2622f — 6 checks PASS (ordre d'empilement = adjacence).
- * - occupation : #5e6d3f (mono-série).
+ * Palette "light & vibrant" fournie par Geoffroy (31 juil. 2026), validée
+ * scripts/validate_palette.js (mode light, surface #ffffff) :
+ * - catégorielle 3 slots : rental #79B84B, catering #6EA6FF, extras #EF9455
+ *   (variante chart de l'apricot #F2A06B, assombrie d'un cran pour rester
+ *   dans la bande de luminance) — CVD + normal-vision PASS ; le contraste
+ *   <3:1 est couvert par la règle relief (légendes + tooltips + labels).
+ * - occupation : #79B84B (mono-série).
  */
-const C_RENTAL = "#57761f";
-const C_CATERING = "#2a78d6";
-const C_EXTRA = "#c2622f";
-const C_COLLECTED = "#5e6d3f";
-const C_GRID = "#ddd4cc";
-const C_TEXT_MUTED = "#5a5a55";
+const C_RENTAL = "#79B84B";
+const C_CATERING = "#6EA6FF";
+const C_EXTRA = "#EF9455";
+const C_COLLECTED = "#79B84B";
+const C_GRID = "#E7E8E1";
+const C_TEXT_MUTED = "#6E746B";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
