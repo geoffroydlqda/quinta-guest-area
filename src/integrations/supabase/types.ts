@@ -470,6 +470,8 @@ export type Database = {
           is_cash: boolean
           moloni_document_id: number | null
           vat_rate: number | null
+          paid_usd: number | null
+          usd_rate: number | null
           stripe_session_id: string | null
           invoice_number: string | null
           invoice_file_url: string | null
@@ -491,6 +493,8 @@ export type Database = {
           is_cash?: boolean
           moloni_document_id?: number | null
           vat_rate?: number | null
+          paid_usd?: number | null
+          usd_rate?: number | null
           stripe_session_id?: string | null
           invoice_number?: string | null
           invoice_file_url?: string | null
@@ -512,6 +516,8 @@ export type Database = {
           is_cash?: boolean
           moloni_document_id?: number | null
           vat_rate?: number | null
+          paid_usd?: number | null
+          usd_rate?: number | null
           stripe_session_id?: string | null
           invoice_number?: string | null
           invoice_file_url?: string | null

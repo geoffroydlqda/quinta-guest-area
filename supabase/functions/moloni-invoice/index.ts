@@ -95,9 +95,10 @@ type InstRow = {
   amount_excl_vat: number | null; category: string | null; status: string;
   is_cash: boolean | null; moloni_document_id: number | null; invoice_number: string | null;
   invoice_file_url: string | null; vat_rate: number | null; stripe_session_id: string | null;
+  paid_usd: number | null; usd_rate: number | null;
 };
 
-const INST_COLS = "id,booking_id,label,amount_due,amount_excl_vat,category,status,is_cash,moloni_document_id,invoice_number,invoice_file_url,vat_rate,stripe_session_id";
+const INST_COLS = "id,booking_id,label,amount_due,amount_excl_vat,category,status,is_cash,moloni_document_id,invoice_number,invoice_file_url,vat_rate,stripe_session_id,paid_usd,usd_rate";
 
 function rateFor(inst: InstRow): number {
   const r = inst.vat_rate ?? DEFAULT_RATE[inst.category ?? "rental"] ?? 23;
@@ -228,9 +229,16 @@ async function generateInvoice(installmentId: string) {
   // 3. Lignes du document : une par échéance du groupe.
   // TVA par ligne (vat_rate de l'échéance, taxId forcé sur la ligne) ;
   // remise rental répartie au prorata via le % de remise du booking.
-  const stayLine = booking.check_in_date && booking.check_out_date
+  let stayLine = booking.check_in_date && booking.check_out_date
     ? ` · Check-in ${fmtDatePt(booking.check_in_date)} → Check-out ${fmtDatePt(booking.check_out_date)}`
     : "";
+  // Paiement présenté en USD : la facture reste en EUR, mais la mention du
+  // montant payé en dollars et du taux figé apparaît sur la première ligne.
+  const usdPaid = group.reduce((s, g) => s + Number(g.paid_usd ?? 0), 0);
+  const usdRate = group.find((g) => g.usd_rate)?.usd_rate;
+  if (usdPaid > 0 && usdRate) {
+    stayLine += ` · Paid in USD: $${usdPaid.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (1 EUR = ${Number(usdRate).toFixed(4)} USD)`;
+  }
 
   // % de remise sur le rental. Convention : total_rental_price = prix de base
   // (catalogue) ; le client paie total − discount. d% = discount / total,

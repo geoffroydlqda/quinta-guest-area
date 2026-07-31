@@ -114,6 +114,19 @@ async function isOutsideSepa(booking: { client_id?: string | null; email: string
   return !SEPA_COUNTRIES.some((c) => country.includes(c));
 }
 
+// Taux EUR->USD du jour (BCE via frankfurter.app), sans marge :
+// même montant pour la cliente, l'écart de change est à la charge de la quinta.
+async function eurUsdRate(): Promise<number | null> {
+  try {
+    const r = await fetch("https://api.frankfurter.app/latest?from=EUR&to=USD");
+    const b = await r.json();
+    const rate = Number(b?.rates?.USD);
+    return Number.isFinite(rate) && rate > 0.5 && rate < 2 ? rate : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
 async function createSession(
   insts: { id: string; label: string | null; amount_due: number }[],
   booking: { id: string; email: string | null; retreat_name: string | null; check_in_date: string | null; check_out_date: string | null },
@@ -137,26 +150,44 @@ async function createSession(
   // échoue, on retire juste ce rail de la session.
   const customerId = booking.email ? await getOrCreateCustomer(key, booking.email) : null;
   const outsideSepa = await isOutsideSepa(booking as { client_id?: string | null; email: string | null });
-  const types = outsideSepa
-    ? (customerId ? ["card", "customer_balance"] : ["card"])
-    : (customerId ? ["sepa_debit", "customer_balance", "bancontact"] : ["sepa_debit", "bancontact"]);
+  // Hors zone SEPA : présentation en USD (ACH ~5 $ plafonnés + carte), montant
+  // converti au taux BCE du jour SANS marge — la cliente paie l'équivalent exact.
+  // Si le taux est indisponible, repli : EUR + carte.
+  const rate = outsideSepa ? await eurUsdRate() : null;
+  const usdMode = outsideSepa && rate !== null;
+  const types = usdMode
+    ? ["us_bank_account", "card"]
+    : outsideSepa
+      ? (customerId ? ["card", "customer_balance"] : ["card"])
+      : (customerId ? ["sepa_debit", "customer_balance", "bancontact"] : ["sepa_debit", "bancontact"]);
   types.forEach((t, i) => params.set(`payment_method_types[${i}]`, t));
   if (customerId) {
     params.set("customer", customerId);
-    params.set("payment_method_options[customer_balance][funding_type]", "bank_transfer");
-    params.set("payment_method_options[customer_balance][bank_transfer][type]", "eu_bank_transfer");
-    params.set("payment_method_options[customer_balance][bank_transfer][eu_bank_transfer][country]", "FR");
+    if (!usdMode) {
+      params.set("payment_method_options[customer_balance][funding_type]", "bank_transfer");
+      params.set("payment_method_options[customer_balance][bank_transfer][type]", "eu_bank_transfer");
+      params.set("payment_method_options[customer_balance][bank_transfer][eu_bank_transfer][country]", "FR");
+    }
   }
+  const fmtEur = (n: number) => `€${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   insts.forEach((inst, idx) => {
-    const cents = Math.round(Number(inst.amount_due) * 100);
+    const eur = Number(inst.amount_due);
+    const cents = usdMode
+      ? Math.round(eur * (rate as number) * 100)
+      : Math.round(eur * 100);
     const name = `${inst.label || "Payment"} — ${booking.retreat_name || "Quinta do Amor"}`;
+    // Transparence USD : l'équivalent EUR + le taux figurent sous le montant.
+    const desc = usdMode
+      ? `${fmtEur(eur)} · 1 EUR = ${(rate as number).toFixed(4)} USD · ${stay}`
+      : stay;
     params.set(`line_items[${idx}][quantity]`, "1");
-    params.set(`line_items[${idx}][price_data][currency]`, "eur");
+    params.set(`line_items[${idx}][price_data][currency]`, usdMode ? "usd" : "eur");
     params.set(`line_items[${idx}][price_data][unit_amount]`, String(cents));
     params.set(`line_items[${idx}][price_data][product_data][name]`, name.slice(0, 250));
-    params.set(`line_items[${idx}][price_data][product_data][description]`, stay.slice(0, 250));
+    params.set(`line_items[${idx}][price_data][product_data][description]`, desc.slice(0, 250));
     params.set(`line_items[${idx}][price_data][product_data][images][0]`, CHECKOUT_IMAGE);
   });
+  if (usdMode) params.set("metadata[fx_rate]", String(rate));
   const idsCsv = insts.map((i) => i.id).join(",");
   params.set("client_reference_id", insts[0].id);
   params.set("metadata[installment_ids]", idsCsv);

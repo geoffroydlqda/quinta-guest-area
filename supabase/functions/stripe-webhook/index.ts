@@ -64,11 +64,11 @@ async function verifySignature(payload: string, header: string | null): Promise<
   return false;
 }
 
-async function markPaid(installmentIds: string[], sessionId: string): Promise<string[]> {
+async function markPaid(installmentIds: string[], sessionId: string, fxRate: number | null): Promise<string[]> {
   const newlyPaid: string[] = [];
   for (const installmentId of installmentIds) {
     const { data: inst } = await admin.from("payment_installments")
-      .select("id,status")
+      .select("id,status,amount_due")
       .eq("id", installmentId).maybeSingle();
     if (!inst) {
       console.error(`[stripe-webhook] installment ${installmentId} not found (session ${sessionId})`);
@@ -78,10 +78,15 @@ async function markPaid(installmentIds: string[], sessionId: string): Promise<st
     const { error } = await admin.from("payment_installments").update({
       status: "paid",
       stripe_session_id: sessionId,
+      // Paiement présenté en USD : taux figé + montant dollars payé (trace compta)
+      ...(fxRate ? {
+        usd_rate: fxRate,
+        paid_usd: Math.round(Number(inst.amount_due) * fxRate * 100) / 100,
+      } : {}),
     }).eq("id", installmentId);
     if (error) throw error;
     newlyPaid.push(installmentId);
-    console.log(`[stripe-webhook] installment ${installmentId} marked paid (session ${sessionId})`);
+    console.log(`[stripe-webhook] installment ${installmentId} marked paid (session ${sessionId})${fxRate ? ` · USD @ ${fxRate}` : ""}`);
   }
   return newlyPaid;
 }
@@ -172,10 +177,12 @@ serve(async (req) => {
       ?? session?.client_reference_id
       ?? "";
     const installmentIds = idsRaw.split(",").map((s: string) => s.trim()).filter(Boolean);
+    const fxRaw = Number(session?.metadata?.fx_rate);
+    const fxRate = Number.isFinite(fxRaw) && fxRaw > 0 ? fxRaw : null;
 
     if (type === "checkout.session.completed") {
       if (session?.payment_status === "paid" && installmentIds.length) {
-        const newlyPaid = await markPaid(installmentIds, session.id);
+        const newlyPaid = await markPaid(installmentIds, session.id, fxRate);
         scheduleAutomation(newlyPaid, session.id);
       } else {
         // SEPA & co : le débit est en cours, async_payment_succeeded suivra.
@@ -183,7 +190,7 @@ serve(async (req) => {
       }
     } else if (type === "checkout.session.async_payment_succeeded") {
       if (installmentIds.length) {
-        const newlyPaid = await markPaid(installmentIds, session.id);
+        const newlyPaid = await markPaid(installmentIds, session.id, fxRate);
         scheduleAutomation(newlyPaid, session.id);
       }
     } else if (type === "checkout.session.async_payment_failed") {
