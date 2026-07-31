@@ -1135,7 +1135,7 @@ type Installment = {
   amount_excl_vat: number | null;
   due_date: string | null;
   status: "pending" | "paid";
-  category: "rental" | "catering" | "extra" | "discount";
+  category: "rental" | "catering" | "extra" | "discount" | "bar";
   invoice_file_url: string | null;
   invoice_file_name: string | null;
   notes: string | null;
@@ -1279,7 +1279,9 @@ function PaymentSection({ userId }: { userId: string }) {
   useEffect(() => { loadAll(); }, [userId, bookingIdParam]);
 
   const rentalInst = useMemo(() => installments.filter((i) => i.category === "rental" || i.category === "discount"), [installments]);
-  const extraInst = useMemo(() => installments.filter((i) => i.category !== "rental" && i.category !== "discount"), [installments]);
+  const extraInst = useMemo(() => installments.filter((i) => i.category !== "rental" && i.category !== "discount" && i.category !== "bar"), [installments]);
+  // Honesty bar (Revolut) — lignes auto-gérées par revolut-bar-sync, admin only
+  const barInst = useMemo(() => installments.filter((i) => i.category === "bar"), [installments]);
 
   const totals = useMemo(() => {
     const totalDue = rentalInst.reduce((s, i) => s + Number(i.amount_due || 0), 0);
@@ -1852,6 +1854,19 @@ function PaymentSection({ userId }: { userId: string }) {
         )}
       </div>
 
+      {/* Honesty bar group — auto (Revolut sync), admin only */}
+      {barInst.length > 0 && (
+        <div className="space-y-3 pt-2 border-t border-border">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="text-xs uppercase text-muted-foreground">Honesty bar <span className="normal-case">(auto · Revolut · not visible to the guest)</span></div>
+            <div className="text-xs text-muted-foreground">
+              Subtotal: €{barInst.reduce((s, i) => s + Number(i.amount_due || 0), 0).toLocaleString("en-GB", { maximumFractionDigits: 2 })}
+            </div>
+          </div>
+          {barInst.map(renderInstallment)}
+        </div>
+      )}
+
 
       {/* Barre flottante de groupage — visible dès 2 échéances cochées */}
       {groupSel.size >= 2 && (() => {
@@ -1946,7 +1961,10 @@ function InstallmentForm({
   const [dueDateTouched, setDueDateTouched] = useState(!!initial?.due_date);
   const [notes, setNotes] = useState(initial?.notes || "");
   const [status, setStatus] = useState<"pending" | "paid">(initial?.status ?? "pending");
-  const [category, setCategory] = useState<"rental" | "catering" | "extra" | "discount">(initial?.category ?? "rental");
+  // "bar" est auto-géré par revolut-bar-sync — l'édition retombe sur "extra"
+  const [category, setCategory] = useState<"rental" | "catering" | "extra" | "discount">(
+    initial?.category === "bar" ? "extra" : (initial?.category ?? "rental")
+  );
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);

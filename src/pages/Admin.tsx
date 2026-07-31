@@ -21,6 +21,7 @@ import { AddressAutocomplete, NationalityCombobox, PLACEHOLDER_CLS, COUNTRIES, f
 import { renderRoomMapCanvas, downloadRoomMapPdf, type RoomMapEntry } from "@/lib/roomMapPdf";
 import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
+import { HonestyBarCard } from "@/components/admin/HonestyBarCard";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
 import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass, FlaskConical } from "lucide-react";
@@ -418,7 +419,7 @@ const AdminContent = () => {
 
   // Progression de paiement (hors lignes discount) — colonne Payment du tableau
   const paymentProgressFor = (e: EventRow) => {
-    const inst = (installmentsByBooking.get(e.bookingId) || []).filter((i) => i.category !== "discount");
+    const inst = (installmentsByBooking.get(e.bookingId) || []).filter((i) => i.category !== "discount" && i.category !== "bar");
     const total = inst.reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const paid = inst.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
     return { paid, total };
@@ -680,7 +681,8 @@ const AdminContent = () => {
         )}
 
         {view === "payments" && (
-          <div>
+          <div className="space-y-4">
+            <HonestyBarCard />
             <PaymentRemindersCard />
             <PaymentsPage
               bookings={data.bookings || []}
@@ -959,13 +961,13 @@ function DashboardView({
   [installments, bookingById]);
 
   const charts = useMemo(() => {
-    const rev = Array.from({ length: 12 }, () => ({ rental: 0, catering: 0, extra: 0, collected: 0 }));
+    const rev = Array.from({ length: 12 }, () => ({ rental: 0, catering: 0, extra: 0, bar: 0, collected: 0 }));
     for (const i of installments) {
       const ci = bookingById.get(i.booking_id)?.check_in_date || "";
       if (!ci.startsWith(year)) continue;
       const m = Number(ci.slice(5, 7)) - 1;
       if (m < 0 || m > 11) continue;
-      const cat = i.category === "catering" ? "catering" : i.category === "extra" ? "extra" : "rental";
+      const cat = i.category === "catering" ? "catering" : i.category === "extra" ? "extra" : i.category === "bar" ? "bar" : "rental";
       const amount = Number(i.amount_due || 0);
       rev[m][cat] += amount;
       if (i.status === "paid") rev[m].collected += amount;
@@ -1041,11 +1043,11 @@ function DashboardView({
     if (!cfg?.net_revenue) return null;
     // CA contracté HT de l'année, ventilé rental / catering / extras, vs P&L.
     // HT manquant : estimation à TVA 23 % (13 % pour le catering — taux food PT).
-    const actual = { rental: 0, catering: 0, extra: 0 };
+    const actual = { rental: 0, catering: 0, extra: 0, bar: 0 };
     for (const i of installments) {
       const ci = bookingById.get(i.booking_id)?.check_in_date || "";
       if (!ci.startsWith(year)) continue;
-      const cat = i.category === "catering" ? "catering" : i.category === "extra" ? "extra" : "rental";
+      const cat = i.category === "catering" ? "catering" : i.category === "extra" ? "extra" : i.category === "bar" ? "bar" : "rental";
       const vat = cat === "catering" ? 1.13 : 1.23;
       actual[cat] += i.amount_excl_vat != null ? Number(i.amount_excl_vat) : Number(i.amount_due || 0) / vat;
     }
@@ -1078,11 +1080,12 @@ function DashboardView({
     }
     const expectedCatering = expectedCateringTvac / 1.13; // HT (TVA food 13 %)
 
-    const total = actual.rental + actual.catering + actual.extra;
+    const total = actual.rental + actual.catering + actual.extra + actual.bar;
     const rows = [
       { label: "Rental", actual: actual.rental, target: cfg.rental ?? null, expected: 0 },
       { label: "Catering", actual: actual.catering, target: cfg.catering ?? null, expected: expectedCatering },
       { label: "Extras", actual: actual.extra, target: cfg.extras ?? null, expected: 0 },
+      ...(actual.bar > 0 ? [{ label: "Bar", actual: actual.bar, target: null as number | null, expected: 0 }] : []),
     ];
     return {
       target: cfg.net_revenue,

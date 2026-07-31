@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 const C_RENTAL = "#8FC46A";
 const C_CATERING = "#6EA6FF";
 const C_EXTRA = "#EF9455";
+const C_BAR = "#B08CF8"; // honesty bar (lavender de la palette Geoffroy) — 4 slots validés
 const C_COLLECTED = "#8FC46A";
 const C_GRID = "#E7E8E1";
 const C_TEXT_MUTED = "#6E746B";
@@ -74,23 +75,25 @@ export function MonthlyRevenueChart({
   months,
 }: {
   /** 12 entrées, index 0 = janvier ; montants TVAC par catégorie. */
-  months: { rental: number; catering: number; extra: number; collected: number }[];
+  months: { rental: number; catering: number; extra: number; bar?: number; collected: number }[];
 }) {
   const [tip, setTip] = useState<TooltipState | null>(null);
   const [hover, setHover] = useState<number | null>(null);
 
   const W = 720, H = 240, mL = 46, mR = 8, mT = 16, mB = 24;
   const plotW = W - mL - mR, plotH = H - mT - mB;
-  const totalOf = (m: { rental: number; catering: number; extra: number }) => m.rental + m.catering + m.extra;
+  const totalOf = (m: { rental: number; catering: number; extra: number; bar?: number }) => m.rental + m.catering + m.extra + (m.bar ?? 0);
   const max = niceMax(Math.max(...months.map(totalOf), 1));
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * max);
   const slot = plotW / 12;
   const barW = Math.min(24, slot * 0.55);
 
+  const hasBar = months.some((m) => (m.bar ?? 0) > 0);
   const SERIES = [
     { key: "rental" as const, label: "Rental", color: C_RENTAL },
     { key: "catering" as const, label: "Catering", color: C_CATERING },
     { key: "extra" as const, label: "Extras", color: C_EXTRA },
+    ...(hasBar ? [{ key: "bar" as const, label: "Bar", color: C_BAR }] : []),
   ];
 
   return (
@@ -110,7 +113,7 @@ export function MonthlyRevenueChart({
           // Empilement bas -> haut : rental, catering, extra ; gaps de 2px ;
           // seul le segment sommital est arrondi (base carrée partout).
           const segs = SERIES
-            .map((s) => ({ ...s, value: m[s.key], h: (m[s.key] / max) * plotH }))
+            .map((s) => ({ ...s, value: m[s.key] ?? 0, h: ((m[s.key] ?? 0) / max) * plotH }))
             .filter((s) => s.h > 0);
           let cursor = mT + plotH;
           const drawn = segs.map((s, idx) => {
@@ -127,7 +130,7 @@ export function MonthlyRevenueChart({
               topPct: ((yTopmost - 6) / H) * 100,
               title: MONTHS[i],
               rows: [
-                ...SERIES.map((s) => ({ label: s.label.toLowerCase(), value: fmtEUR0(m[s.key]), color: s.color })),
+                ...SERIES.map((s) => ({ label: s.label.toLowerCase(), value: fmtEUR0(m[s.key] ?? 0), color: s.color })),
                 { label: "total", value: fmtEUR0(total) },
                 { label: "collected", value: fmtEUR0(m.collected) },
               ],

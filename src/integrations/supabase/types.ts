@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      bar_sales: {
+        Row: {
+          id: string
+          revolut_order_id: string
+          paid_at: string
+          amount: number
+          currency: string
+          qty_wine: number | null
+          qty_coconut: number | null
+          qty_soft: number | null
+          state: string
+          booking_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          revolut_order_id: string
+          paid_at: string
+          amount: number
+          currency?: string
+          qty_wine?: number | null
+          qty_coconut?: number | null
+          qty_soft?: number | null
+          state?: string
+          booking_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          revolut_order_id?: string
+          paid_at?: string
+          amount?: number
+          currency?: string
+          qty_wine?: number | null
+          qty_coconut?: number | null
+          qty_soft?: number | null
+          state?: string
+          booking_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           key: string

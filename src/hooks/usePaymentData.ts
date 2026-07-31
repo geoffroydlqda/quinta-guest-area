@@ -48,6 +48,9 @@ export function usePaymentData(bookingId: string | null | undefined) {
           .from("payment_installments")
           .select("id,booking_id,label,amount_due,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash")
           .eq("booking_id", bookingId)
+          // Le honesty bar (catégorie "bar") est un suivi interne : jamais
+          // montré au client dans la guest area.
+          .neq("category", "bar")
           .order("due_date", { ascending: true, nullsFirst: false }),
       ]);
       if (cancelled) return;
