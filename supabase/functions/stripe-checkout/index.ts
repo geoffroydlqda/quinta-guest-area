@@ -100,7 +100,7 @@ async function getOrCreateCustomer(key: string, email: string): Promise<string |
 // (choix Geoffroy : rails bancaires pour l'Europe, carte en secours pour US/CA & co).
 const SEPA_COUNTRIES = ["portugal","france","belgium","belgique","spain","espagne","espana","germany","allemagne","deutschland","netherlands","pays-bas","holland","italy","italie","italia","ireland","irlande","luxembourg","austria","autriche","united kingdom","uk","england","scotland","wales","switzerland","suisse","schweiz","poland","pologne","sweden","suede","denmark","danemark","norway","norvege","finland","finlande","greece","grece","czech","tchequie","hungary","hongrie","romania","roumanie","bulgaria","bulgarie","croatia","croatie","slovenia","slovenie","slovakia","slovaquie","estonia","estonie","latvia","lettonie","lithuania","lituanie","malta","malte","cyprus","chypre","iceland","islande","liechtenstein","monaco","andorra","andorre"];
 
-async function isOutsideSepa(booking: { client_id?: string | null; email: string | null }): Promise<boolean> {
+async function guestCountry(booking: { client_id?: string | null; email: string | null }): Promise<string> {
   let country = "";
   if (booking.client_id) {
     const { data } = await admin.from("client_profiles").select("country").eq("id", booking.client_id).maybeSingle();
@@ -110,8 +110,7 @@ async function isOutsideSepa(booking: { client_id?: string | null; email: string
     const { data } = await admin.from("client_profiles").select("country").eq("email", booking.email.toLowerCase()).maybeSingle();
     country = (data?.country ?? "").toLowerCase().trim();
   }
-  if (!country) return false; // pays inconnu -> rails bancaires uniquement
-  return !SEPA_COUNTRIES.some((c) => country.includes(c));
+  return country;
 }
 
 // Taux EUR->USD du jour (BCE via frankfurter.app), sans marge :
@@ -149,7 +148,10 @@ async function createSession(
   // Le virement (customer_balance) exige un Customer Stripe — si sa création
   // échoue, on retire juste ce rail de la session.
   const customerId = booking.email ? await getOrCreateCustomer(key, booking.email) : null;
-  const outsideSepa = await isOutsideSepa(booking as { client_id?: string | null; email: string | null });
+  const country = await guestCountry(booking as { client_id?: string | null; email: string | null });
+  // Pays inconnu -> zone SEPA par défaut (rails bancaires).
+  const outsideSepa = !!country && !SEPA_COUNTRIES.some((c) => country.includes(c));
+  const isBelgian = country.includes("belg");
   // Hors zone SEPA : présentation en USD (ACH ~5 $ plafonnés + carte), montant
   // converti au taux BCE du jour SANS marge — la cliente paie l'équivalent exact.
   // Si le taux est indisponible, repli : EUR piloté par le dashboard.
@@ -162,20 +164,26 @@ async function createSession(
   }
   // Parcours EUR : AUCUN payment_method_types -> ce sont les réglages du
   // dashboard Stripe (Payment methods) qui décident. (Choix Geoffroy, 31 juil. 2026.)
+  // Exception : fiche guest belge -> Bancontact ajouté explicitement (désactivé
+  // dans le dashboard pour tout le monde, pertinent uniquement pour la Belgique).
+  if (!usdMode && isBelgian) {
+    const beTypes = customerId ? ["sepa_debit", "customer_balance", "bancontact"] : ["sepa_debit", "bancontact"];
+    beTypes.forEach((t, i) => params.set(`payment_method_types[${i}]`, t));
+  }
   if (customerId) {
     params.set("customer", customerId);
     if (!usdMode) {
       // Virement bancaire (si activé dans le dashboard) : IBAN virtuel de
       // collecte au nom de Grupo OHM. Stripe ne propose que DE/FR/IE/NL
-      // (BE et PT refusés sur ce compte) -> FR, le plus familier pour la clientèle.
+      // (BE et PT refusés) -> IE, cohérent avec "Stripe est basé en Irlande".
       params.set("payment_method_options[customer_balance][funding_type]", "bank_transfer");
       params.set("payment_method_options[customer_balance][bank_transfer][type]", "eu_bank_transfer");
-      params.set("payment_method_options[customer_balance][bank_transfer][eu_bank_transfer][country]", "FR");
+      params.set("payment_method_options[customer_balance][bank_transfer][eu_bank_transfer][country]", "IE");
     }
   }
   if (!usdMode) {
     params.set("custom_text[submit][message]",
-      "Paying by bank transfer? The IBAN shown is a secure collection account operated by Stripe in the name of Grupo OHM — our company behind Quinta do Amor. Your payment reaches us directly.");
+      "Payments are handled by Stripe, the payment provider trusted by millions of businesses, through its European headquarters in Ireland. If you pay by bank transfer, the Irish IBAN shown is our dedicated, secure collection account in the name of Grupo OHM — the company behind Quinta do Amor. Your payment reaches us directly.");
   }
   const fmtEur = (n: number) => `€${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   insts.forEach((inst, idx) => {
