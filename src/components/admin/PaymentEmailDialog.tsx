@@ -186,7 +186,7 @@ export function PaymentEmailDialog({
                 <span className="inline-block rounded-md bg-primary px-5 py-2 text-primary-foreground font-semibold">
                   Pay {fmtEur(Number(inst.amount_due))}
                 </span>
-                <div className="mt-1 text-xs text-muted-foreground">Secure payment by card or bank debit, powered by Stripe.</div>
+                <div className="mt-1 text-xs text-muted-foreground">Secure bank payment (debit or transfer), powered by Stripe.</div>
                 <div className="mt-1.5 text-[11px] text-muted-foreground">
                   Inserted automatically — opens a fresh Stripe checkout on every click.
                 </div>

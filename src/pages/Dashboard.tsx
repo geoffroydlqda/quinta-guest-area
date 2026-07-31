@@ -683,7 +683,7 @@ function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstallment[]
         </Button>
       </div>
       <div className="mt-3 text-xs text-muted-foreground">
-        Secure payment by card, bank debit or wallet — you'll be redirected to our payment partner Stripe.
+        Secure payment — you'll be redirected to our payment partner Stripe.
       </div>
     </section>
   );

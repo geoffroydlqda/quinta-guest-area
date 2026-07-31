@@ -95,6 +95,25 @@ async function getOrCreateCustomer(key: string, email: string): Promise<string |
   }
 }
 
+
+// Pays de la fiche guest -> la carte n'est proposée QUE hors zone SEPA
+// (choix Geoffroy : rails bancaires pour l'Europe, carte en secours pour US/CA & co).
+const SEPA_COUNTRIES = ["portugal","france","belgium","belgique","spain","espagne","espana","germany","allemagne","deutschland","netherlands","pays-bas","holland","italy","italie","italia","ireland","irlande","luxembourg","austria","autriche","united kingdom","uk","england","scotland","wales","switzerland","suisse","schweiz","poland","pologne","sweden","suede","denmark","danemark","norway","norvege","finland","finlande","greece","grece","czech","tchequie","hungary","hongrie","romania","roumanie","bulgaria","bulgarie","croatia","croatie","slovenia","slovenie","slovakia","slovaquie","estonia","estonie","latvia","lettonie","lithuania","lituanie","malta","malte","cyprus","chypre","iceland","islande","liechtenstein","monaco","andorra","andorre"];
+
+async function isOutsideSepa(booking: { client_id?: string | null; email: string | null }): Promise<boolean> {
+  let country = "";
+  if (booking.client_id) {
+    const { data } = await admin.from("client_profiles").select("country").eq("id", booking.client_id).maybeSingle();
+    country = (data?.country ?? "").toLowerCase().trim();
+  }
+  if (!country && booking.email) {
+    const { data } = await admin.from("client_profiles").select("country").eq("email", booking.email.toLowerCase()).maybeSingle();
+    country = (data?.country ?? "").toLowerCase().trim();
+  }
+  if (!country) return false; // pays inconnu -> rails bancaires uniquement
+  return !SEPA_COUNTRIES.some((c) => country.includes(c));
+}
+
 async function createSession(
   insts: { id: string; label: string | null; amount_due: number }[],
   booking: { id: string; email: string | null; retreat_name: string | null; check_in_date: string | null; check_out_date: string | null },
@@ -117,9 +136,10 @@ async function createSession(
   // Le virement (customer_balance) exige un Customer Stripe — si sa création
   // échoue, on retire juste ce rail de la session.
   const customerId = booking.email ? await getOrCreateCustomer(key, booking.email) : null;
-  const types = customerId
-    ? ["sepa_debit", "customer_balance", "bancontact"]
-    : ["sepa_debit", "bancontact"];
+  const outsideSepa = await isOutsideSepa(booking as { client_id?: string | null; email: string | null });
+  const types = outsideSepa
+    ? (customerId ? ["card", "customer_balance"] : ["card"])
+    : (customerId ? ["sepa_debit", "customer_balance", "bancontact"] : ["sepa_debit", "bancontact"]);
   types.forEach((t, i) => params.set(`payment_method_types[${i}]`, t));
   if (customerId) {
     params.set("customer", customerId);
@@ -181,7 +201,7 @@ async function handlePayLink(req: Request): Promise<Response> {
     return redirect(`${PROD_ORIGIN}/payment-success?payment=invalid`);
   }
   const { data: booking } = await admin.from("bookings")
-    .select("id,email,retreat_name,check_in_date,check_out_date")
+    .select("id,email,retreat_name,check_in_date,check_out_date,client_id")
     .eq("id", inst.booking_id).maybeSingle();
   if (!booking) return redirect(`${PROD_ORIGIN}/payment-success?payment=invalid`);
 
@@ -233,7 +253,7 @@ serve(async (req) => {
     }
 
     const { data: booking, error: bErr } = await admin.from("bookings")
-      .select("id,user_id,email,retreat_name,first_name,check_in_date,check_out_date")
+      .select("id,user_id,email,retreat_name,first_name,check_in_date,check_out_date,client_id")
       .eq("id", insts[0].booking_id).maybeSingle();
     if (bErr) throw bErr;
     if (!booking) return json({ error: "Booking not found" }, 404);
