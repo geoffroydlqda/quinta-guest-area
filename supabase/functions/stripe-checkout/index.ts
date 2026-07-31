@@ -132,7 +132,7 @@ async function createSession(
   // pas de Link qui est un portefeuille de cartes) :
   // SEPA (~6 € plafonnés) · Virement bancaire (~5 € plafonnés, IBAN virtuel,
   // réconciliation auto) · Bancontact (clientèle belge).
-  // ⚠️ Conséquence assumée : clients hors zone euro (US/CA…) sans option en ligne.
+  // Exception : fiche guest hors zone SEPA (US/CA…) -> carte en secours.
   // Le virement (customer_balance) exige un Customer Stripe — si sa création
   // échoue, on retire juste ce rail de la session.
   const customerId = booking.email ? await getOrCreateCustomer(key, booking.email) : null;
