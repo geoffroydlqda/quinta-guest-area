@@ -165,16 +165,17 @@ async function createSession(
   if (customerId) {
     params.set("customer", customerId);
     if (!usdMode) {
-      // Virement bancaire (si activé dans le dashboard) : IBAN virtuel BELGE
-      // au nom de Grupo OHM — les fondateurs sont belges, note explicative ci-dessous.
+      // Virement bancaire (si activé dans le dashboard) : IBAN virtuel de
+      // collecte au nom de Grupo OHM. Stripe ne propose que DE/FR/IE/NL
+      // (BE et PT refusés sur ce compte) -> FR, le plus familier pour la clientèle.
       params.set("payment_method_options[customer_balance][funding_type]", "bank_transfer");
       params.set("payment_method_options[customer_balance][bank_transfer][type]", "eu_bank_transfer");
-      params.set("payment_method_options[customer_balance][bank_transfer][eu_bank_transfer][country]", "BE");
+      params.set("payment_method_options[customer_balance][bank_transfer][eu_bank_transfer][country]", "FR");
     }
   }
   if (!usdMode) {
     params.set("custom_text[submit][message]",
-      "Paying by bank transfer? You'll see a Belgian IBAN in the name of Grupo OHM — our company. The quinta is in Portugal, and its founders are Belgian. Payments are collected securely by Stripe.");
+      "Paying by bank transfer? The IBAN shown is a secure collection account operated by Stripe in the name of Grupo OHM — our company behind Quinta do Amor. Your payment reaches us directly.");
   }
   const fmtEur = (n: number) => `€${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   insts.forEach((inst, idx) => {
