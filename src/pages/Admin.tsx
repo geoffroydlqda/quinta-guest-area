@@ -642,8 +642,12 @@ const AdminContent = () => {
 // ------------------------------------------------------- Booking calendar
 // Vue mensuelle maison : une barre par booking (nom de l'événement), couleurs
 // par type, clic → fiche booking. Reflète la table bookings (source de vérité).
-const EVENT_TYPE_COLOR: Record<string, string> = {
-  retreat: "#57761f", wedding: "#2a78d6", other: "#c2622f", day_retreat: "#8a6a2f",
+// Barres du calendrier — pastels avec texte foncé (refonte light & vibrant)
+const EVENT_TYPE_COLOR: Record<string, { bg: string; ink: string }> = {
+  retreat: { bg: "#CAE8BD", ink: "#35532A" },
+  wedding: { bg: "#A8CBF7", ink: "#1D4F96" },
+  other: { bg: "#F6C69B", ink: "#8A4A1B" },
+  day_retreat: { bg: "#F3E0A2", ink: "#6F5B15" },
 };
 
 function BookingCalendar({ bookings, todayIso, onOpen }: {
@@ -741,12 +745,13 @@ function BookingCalendar({ bookings, todayIso, onOpen }: {
                     type="button"
                     onClick={() => onOpen(seg.b.id)}
                     title={`${eventName(seg.b)} · ${seg.b.check_in_date} → ${seg.b.check_out_date}`}
-                    className="pointer-events-auto text-left text-[11px] leading-none text-white px-1.5 h-[20px] flex items-center truncate hover:opacity-85"
+                    className="pointer-events-auto text-left text-[11px] leading-none font-medium px-1.5 h-[20px] flex items-center truncate hover:opacity-85"
                     style={{
                       gridColumn: `${seg.s + 1} / ${seg.e + 2}`,
                       gridRow: 1,
                       marginTop: `${seg.lane * 24}px`,
-                      background: EVENT_TYPE_COLOR[seg.b.event_type ?? "retreat"] ?? EVENT_TYPE_COLOR.retreat,
+                      background: (EVENT_TYPE_COLOR[seg.b.event_type ?? "retreat"] ?? EVENT_TYPE_COLOR.retreat).bg,
+                      color: (EVENT_TYPE_COLOR[seg.b.event_type ?? "retreat"] ?? EVENT_TYPE_COLOR.retreat).ink,
                       borderRadius: seg.startsHere && (seg.b.check_out_date! <= wEnd) ? "6px" : seg.startsHere ? "6px 2px 2px 6px" : (seg.b.check_out_date! <= wEnd) ? "2px 6px 6px 2px" : "2px",
                     }}
                   >
@@ -761,7 +766,7 @@ function BookingCalendar({ bookings, todayIso, onOpen }: {
       <div className="flex items-center gap-4 mt-3 text-[11px] text-muted-foreground flex-wrap">
         {Object.entries(EVENT_TYPE_COLOR).map(([k, c]) => (
           <span key={k} className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: c }} />
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: c.bg, border: `1px solid ${c.ink}33` }} />
             {EVENT_TYPE_LABEL[k]}
           </span>
         ))}
@@ -871,6 +876,14 @@ function DashboardView({
       overdueCount: overdue.length,
     };
   }, [installments, bookingById, todayIso, year]);
+
+  // Prochains paiements attendus (carte dashboard — refonte juil. 2026)
+  const nextPayments = useMemo(() =>
+    installments
+      .filter((i) => i.status !== "paid" && i.due_date && i.category !== "discount" && bookingById.has(i.booking_id))
+      .sort((a, b) => ((a.due_date ?? "") < (b.due_date ?? "") ? -1 : 1))
+      .slice(0, 5),
+  [installments, bookingById]);
 
   const charts = useMemo(() => {
     const rev = Array.from({ length: 12 }, () => ({ rental: 0, catering: 0, extra: 0, collected: 0 }));
@@ -1049,11 +1062,7 @@ function DashboardView({
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-4 items-start">
-        <BookingCalendar bookings={bookings} todayIso={todayIso} onOpen={onOpen} />
-
-        <div className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
           <Tile
             label={`Revenue ${year} (incl. VAT)`}
             value={fmtMoney(kpis.contracted)}
@@ -1077,28 +1086,29 @@ function DashboardView({
             icon={kpis.overdueTotal > 0 ? <AlertTriangle className="w-4 h-4" /> : <Hourglass className="w-4 h-4" />}
             chip={kpis.overdueTotal > 0 ? "bg-[#FFEAE7] text-[#F36F63]" : "bg-[#FFF8E4] text-[#b8912b]"}
           />
+          <Tile
+            label={`Season occupancy · ${year}`}
+            value={`${Math.round(seasonStats.pct)}%`}
+            sub={`${Math.round(seasonStats.pctBlocked)}% incl. turnaround · ${seasonStats.nights}/${seasonStats.totalNights} season nights (${fmtShort(seasonStats.start)} → ${fmtShort(seasonStats.end)})`}
+            icon={<CalendarCheck className="w-4 h-4" />}
+            chip="bg-[#F3EDFF] text-[#8a63d2]"
+          />
         </div>
 
-        <section className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-baseline justify-between gap-2 flex-wrap">
-            <div className="font-medium text-sm">Season occupancy · {year}</div>
-            <div className="text-xs text-muted-foreground">{fmtShort(seasonStats.start)} → {fmtShort(seasonStats.end)}</div>
-          </div>
-          <div className="flex items-baseline gap-3 mt-2">
-            <div className="text-3xl font-semibold">{Math.round(seasonStats.pct)}%</div>
-            <div className="text-xs text-muted-foreground">
-              {Math.round(seasonStats.pctBlocked)}% incl. turnaround
-            </div>
-          </div>
-          <div className="mt-2.5 h-2.5 rounded-full bg-[#EAF6DF] overflow-hidden flex">
-            <div className="h-full bg-primary" style={{ width: `${Math.min(100, seasonStats.pct)}%` }} />
-            <div className="h-full bg-primary/40" style={{ width: `${Math.max(0, Math.min(100, seasonStats.pctBlocked) - Math.min(100, seasonStats.pct))}%` }} />
-          </div>
-          <div className="text-xs text-muted-foreground mt-1.5">
-            {seasonStats.nights} of {seasonStats.totalNights} season nights with guests on site
-            {seasonStats.turnaround > 0 && ` · +${seasonStats.turnaround} blocked for cleaning`}
-          </div>
-        </section>
+      <div className="grid lg:grid-cols-[1.55fr_1fr] gap-4 items-start">
+        <div className="space-y-4">
+          <BookingCalendar bookings={bookings} todayIso={todayIso} onOpen={onOpen} />
+          <section className="rounded-xl border border-border bg-card p-4">
+            <div className="font-medium text-sm mb-2">Revenue by month · {year} <span className="text-muted-foreground font-normal">(incl. VAT)</span></div>
+            <MonthlyRevenueChart months={charts.rev} />
+          </section>
+          <section className="rounded-xl border border-border bg-card p-4">
+            <div className="font-medium text-sm mb-2">Occupancy · {year} <span className="text-muted-foreground font-normal">(nights with guests on site — off-season dimmed)</span></div>
+            <OccupancyChart months={charts.occ} inSeason={seasonStats.inSeasonMonths} />
+          </section>
+        </div>
+
+        <div className="space-y-4">
         {targetStats ? (
           <section className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-baseline justify-between gap-2 flex-wrap">
@@ -1132,7 +1142,7 @@ function DashboardView({
                         )}
                       </span>
                     </div>
-                    <div className="mt-1 h-2 rounded-full bg-[#EAF6DF] overflow-hidden flex">
+                    <div className="mt-1 h-2 rounded-full bg-muted overflow-hidden flex">
                       <div className="h-full bg-primary" style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
                       {r.expected > 0 && (
                         <div className="h-full bg-primary/40" style={{ width: `${Math.max(0, Math.min(100, (pct ?? 0) + pctExp) - Math.min(100, pct ?? 0))}%` }} />
@@ -1148,6 +1158,43 @@ function DashboardView({
             No revenue target set for {year}.
           </section>
         )}
+
+        <section className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-baseline justify-between gap-2 flex-wrap">
+            <div className="font-medium text-sm">Next payments</div>
+            {nextPayments.length > 0 && <div className="text-xs text-muted-foreground">by due date</div>}
+          </div>
+          {nextPayments.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic mt-2">Nothing pending — all settled.</p>
+          ) : (
+            <div className="mt-1 divide-y divide-border/60">
+              {nextPayments.map((i) => {
+                const late = (i.due_date ?? "") < todayIso;
+                const days = Math.round((new Date(`${i.due_date}T12:00:00`).getTime() - new Date(`${todayIso}T12:00:00`).getTime()) / 86400000);
+                const when = late
+                  ? `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} late`
+                  : days === 0 ? "due today" : days === 1 ? "due tomorrow" : `in ${days} days`;
+                return (
+                  <button
+                    key={i.id}
+                    type="button"
+                    onClick={() => onOpen(i.booking_id)}
+                    className="w-full flex items-center gap-2 py-2 text-left hover:bg-muted/50 rounded-md px-1 -mx-1 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">{eventName(i.booking_id)}</div>
+                      <div className={`text-xs ${late ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                        {i.label || "Installment"} · {fmtShort(i.due_date!)} · {when}
+                      </div>
+                    </div>
+                    <div className="text-sm font-semibold whitespace-nowrap tabular-nums">{fmtMoney(Number(i.amount_due || 0))}</div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         <section className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-baseline justify-between gap-2 flex-wrap">
             <div className="font-medium text-sm">Guest nationalities · {year}</div>
@@ -1168,7 +1215,7 @@ function DashboardView({
                       </span>
                       <span className="text-muted-foreground">{count} · {Math.round(pct)}%</span>
                     </div>
-                    <div className="mt-1 h-2 rounded-full bg-[#EAF6DF] overflow-hidden">
+                    <div className="mt-1 h-2 rounded-full bg-muted overflow-hidden">
                       <div className={`h-full ${name === "Unknown" ? "bg-primary/30" : "bg-primary"}`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
@@ -1181,17 +1228,6 @@ function DashboardView({
           )}
         </section>
         </div>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-4">
-        <section className="rounded-xl border border-border bg-card p-4">
-          <div className="font-medium text-sm mb-2">Revenue by month · {year} <span className="text-muted-foreground font-normal">(incl. VAT)</span></div>
-          <MonthlyRevenueChart months={charts.rev} />
-        </section>
-        <section className="rounded-xl border border-border bg-card p-4">
-          <div className="font-medium text-sm mb-2">Occupancy · {year} <span className="text-muted-foreground font-normal">(nights with guests on site — off-season dimmed)</span></div>
-          <OccupancyChart months={charts.occ} inSeason={seasonStats.inSeasonMonths} />
-        </section>
       </div>
 
     </div>

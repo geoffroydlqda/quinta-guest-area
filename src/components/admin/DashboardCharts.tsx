@@ -10,10 +10,10 @@ import { useMemo, useState } from "react";
  *   <3:1 est couvert par la règle relief (légendes + tooltips + labels).
  * - occupation : #79B84B (mono-série).
  */
-const C_RENTAL = "#79B84B";
+const C_RENTAL = "#8FC46A";
 const C_CATERING = "#6EA6FF";
 const C_EXTRA = "#EF9455";
-const C_COLLECTED = "#79B84B";
+const C_COLLECTED = "#8FC46A";
 const C_GRID = "#E7E8E1";
 const C_TEXT_MUTED = "#6E746B";
 

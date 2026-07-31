@@ -119,8 +119,8 @@
     --card-foreground: 94 7% 19%;
     --popover: 0 0% 100%;
     --popover-foreground: 94 7% 19%;
-    --primary: 95 43% 51%;           /* Primary Green #79B84B */
-    --primary-foreground: 0 0% 100%;
+    --primary: 102 48% 83%;          /* Vert doux #CAE8BD (retour Geoffroy : #79B84B trop flashy) */
+    --primary-foreground: 104 33% 25%; /* Texte vert foncé #35532A sur pastel */
     --secondary: 91 56% 92%;         /* Light Sage #EAF6DF */
     --secondary-foreground: 95 43% 39%; /* Hover Green #679E3F */
     --muted: 69 13% 93%;
@@ -133,7 +133,7 @@
     --success-foreground: 0 0% 100%;
     --border: 69 13% 90%;            /* Borders #E7E8E1 */
     --input: 69 13% 90%;
-    --ring: 95 43% 51%;
+    --ring: 102 48% 70%;
     --radius: 1rem;
   }
 
