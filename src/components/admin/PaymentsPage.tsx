@@ -175,15 +175,18 @@ export function PaymentsPage({
   }, [allRows, search, statusFilter, yearFilter, catFilter]);
 
   const totals = useMemo(() => {
-    let total = 0, totalHt = 0, paid = 0, overdue = 0;
+    let total = 0, totalHt = 0, paid = 0, paidCash = 0, paidBank = 0, overdue = 0;
     for (const r of rows) {
       const a = Number(r.inst.amount_due || 0);
       total += a;
       totalHt += Number(r.inst.amount_excl_vat ?? 0);
-      if (r.bucket === "paid") paid += a;
+      if (r.bucket === "paid") {
+        paid += a;
+        if (r.inst.is_cash) paidCash += a; else paidBank += a;
+      }
       if (r.bucket === "overdue") overdue += a;
     }
-    return { total, totalHt, paid, outstanding: total - paid, overdue };
+    return { total, totalHt, paid, paidCash, paidBank, outstanding: total - paid, overdue };
   }, [rows]);
 
   // ------------------------------------------------------------------ actions
@@ -355,7 +358,7 @@ export function PaymentsPage({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Tile label="Total (filtered)" value={fmt0(totals.total)} sub={`${fmt0(totals.totalHt)} excl. VAT`} />
         <Tile label="Collected" value={fmt0(totals.paid)} tone="success"
-          sub={totals.total > 0 ? `${Math.round((totals.paid / totals.total) * 100)}%` : undefined} />
+          sub={`${totals.total > 0 ? `${Math.round((totals.paid / totals.total) * 100)}% · ` : ""}${fmt0(totals.paidBank)} bank & card · ${fmt0(totals.paidCash)} cash`} />
         <Tile label="Outstanding" value={fmt0(totals.outstanding)} />
         <Tile label="Overdue" value={fmt0(totals.overdue)} tone={totals.overdue > 0 ? "danger" : undefined} />
       </div>
