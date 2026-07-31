@@ -9,6 +9,7 @@ import { Loader2, Download, RefreshCw, Trash2, FileDown, Mail, ChevronDown, Chev
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 import { useToast } from "@/hooks/use-toast";
 
@@ -16,6 +17,7 @@ import { CreateBookingDialog } from "@/components/admin/CreateBookingDialog";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { MonthlyRevenueChart, OccupancyChart } from "@/components/admin/DashboardCharts";
 import { PaymentsPage } from "@/components/admin/PaymentsPage";
+import { AddressAutocomplete, NationalityCombobox, PLACEHOLDER_CLS } from "@/components/admin/GuestFieldInputs";
 import { renderRoomMapCanvas, downloadRoomMapPdf, type RoomMapEntry } from "@/lib/roomMapPdf";
 import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
@@ -1317,6 +1319,7 @@ type ClientProfile = {
   city: string | null;
   country: string | null;
   nationality: string | null;
+  notes: string | null;
 };
 
 type ClientForm = Omit<ClientProfile, "id">;
@@ -1324,6 +1327,7 @@ type ClientForm = Omit<ClientProfile, "id">;
 const EMPTY_CLIENT: ClientForm = {
   email: "", first_name: null, last_name: null, company_name: null, phone: null,
   tax_number: null, address: null, zip_code: null, city: null, country: null, nationality: null,
+  notes: null,
 };
 
 function GuestsView({ bookings, installments, onOpen, onReload }: {
@@ -1355,7 +1359,7 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
 
   const fetchProfiles = async () => {
     const { data, error } = await supabase.from("client_profiles")
-      .select("id,email,first_name,last_name,company_name,phone,tax_number,address,zip_code,city,country,nationality");
+      .select("id,email,first_name,last_name,company_name,phone,tax_number,address,zip_code,city,country,nationality,notes");
     if (!error && data) setProfilesArr(data as ClientProfile[]);
   };
   useEffect(() => { fetchProfiles(); }, []);
@@ -1446,6 +1450,7 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
       city: current.profile?.city ?? null,
       country: current.profile?.country ?? null,
       nationality: current.profile?.nationality ?? null,
+      notes: current.profile?.notes ?? null,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, profilesArr]);
@@ -1580,7 +1585,7 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
         value={form[key] ?? ""}
         placeholder={placeholder}
         onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value || null }))}
-        className="h-9"
+        className={PLACEHOLDER_CLS}
       />
     </div>
   );
@@ -1679,7 +1684,7 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
                       value={form.email ?? ""}
                       placeholder="guest@email.com"
                       onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                      className="h-9"
+                      className={PLACEHOLDER_CLS}
                     />
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       Used for guest-area invitations and payment reminders — applies to all this guest's bookings.
@@ -1688,13 +1693,42 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
                   {field("Company name", "company_name", "Optional — invoiced entity")}
                   {field("Tax number", "tax_number", "VAT / NIF")}
                   {field("Phone number", "phone", "+351 …")}
-                  {field("Nationality", "nationality", "e.g. Belgian")}
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Nationality</label>
+                    <NationalityCombobox
+                      value={form.nationality ?? ""}
+                      onChange={(v) => setForm((f) => ({ ...f, nationality: v || null }))}
+                    />
+                  </div>
                   <div className="sm:col-span-2 grid gap-3 sm:grid-cols-[2fr,1fr]">
-                    {field("Street address", "address", "Street and number")}
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-1">Street address</label>
+                      <AddressAutocomplete
+                        value={form.address ?? ""}
+                        onChange={(v) => setForm((f) => ({ ...f, address: v || null }))}
+                        onSelect={(a) => setForm((f) => ({
+                          ...f,
+                          address: a.street || f.address,
+                          zip_code: a.zip || f.zip_code,
+                          city: a.city || f.city,
+                          country: a.country || f.country,
+                        }))}
+                      />
+                    </div>
                     {field("Zip code", "zip_code", "1050-174")}
                   </div>
                   {field("City", "city", "Lisboa")}
                   {field("Country", "country", "Portugal")}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-muted-foreground mb-1">Notes</label>
+                    <Textarea
+                      value={form.notes ?? ""}
+                      placeholder="Internal notes — preferences, context, anything useful. Never shown to the guest."
+                      onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value || null }))}
+                      rows={3}
+                      className="placeholder:italic placeholder:text-muted-foreground/50"
+                    />
+                  </div>
                 </div>
                 <div className="mt-3 flex justify-end">
                   <Button size="sm" onClick={saveProfile} disabled={saving}>
