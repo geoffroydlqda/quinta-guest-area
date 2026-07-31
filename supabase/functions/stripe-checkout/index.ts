@@ -152,22 +152,29 @@ async function createSession(
   const outsideSepa = await isOutsideSepa(booking as { client_id?: string | null; email: string | null });
   // Hors zone SEPA : présentation en USD (ACH ~5 $ plafonnés + carte), montant
   // converti au taux BCE du jour SANS marge — la cliente paie l'équivalent exact.
-  // Si le taux est indisponible, repli : EUR + carte.
+  // Si le taux est indisponible, repli : EUR piloté par le dashboard.
   const rate = outsideSepa ? await eurUsdRate() : null;
   const usdMode = outsideSepa && rate !== null;
-  const types = usdMode
-    ? ["us_bank_account", "card"]
-    : outsideSepa
-      ? (customerId ? ["card", "customer_balance"] : ["card"])
-      : (customerId ? ["sepa_debit", "customer_balance", "bancontact"] : ["sepa_debit", "bancontact"]);
-  types.forEach((t, i) => params.set(`payment_method_types[${i}]`, t));
+  if (usdMode) {
+    // Parcours international : fixé dans le code (un toggle dashboard est global
+    // et ne peut pas exprimer "carte pour les non-européennes uniquement").
+    ["us_bank_account", "card"].forEach((t, i) => params.set(`payment_method_types[${i}]`, t));
+  }
+  // Parcours EUR : AUCUN payment_method_types -> ce sont les réglages du
+  // dashboard Stripe (Payment methods) qui décident. (Choix Geoffroy, 31 juil. 2026.)
   if (customerId) {
     params.set("customer", customerId);
     if (!usdMode) {
+      // Virement bancaire (si activé dans le dashboard) : IBAN virtuel BELGE
+      // au nom de Grupo OHM — les fondateurs sont belges, note explicative ci-dessous.
       params.set("payment_method_options[customer_balance][funding_type]", "bank_transfer");
       params.set("payment_method_options[customer_balance][bank_transfer][type]", "eu_bank_transfer");
-      params.set("payment_method_options[customer_balance][bank_transfer][eu_bank_transfer][country]", "FR");
+      params.set("payment_method_options[customer_balance][bank_transfer][eu_bank_transfer][country]", "BE");
     }
+  }
+  if (!usdMode) {
+    params.set("custom_text[submit][message]",
+      "Paying by bank transfer? You'll see a Belgian IBAN in the name of Grupo OHM — our company. The quinta is in Portugal, and its founders are Belgian. Payments are collected securely by Stripe.");
   }
   const fmtEur = (n: number) => `€${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   insts.forEach((inst, idx) => {
