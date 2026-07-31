@@ -74,6 +74,27 @@ function redirect(url: string) {
   return new Response(null, { status: 302, headers: { Location: url } });
 }
 
+// Le virement bancaire (customer_balance) exige un Customer Stripe :
+// on le retrouve par email, sinon on le crée.
+async function getOrCreateCustomer(key: string, email: string): Promise<string | null> {
+  try {
+    const q = await fetch(`https://api.stripe.com/v1/customers?email=${encodeURIComponent(email)}&limit=1`, {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    const qb = await q.json();
+    if (q.ok && qb.data?.[0]?.id) return qb.data[0].id;
+    const c = await fetch("https://api.stripe.com/v1/customers", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ email }).toString(),
+    });
+    const cb = await c.json();
+    return c.ok ? (cb.id ?? null) : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
 async function createSession(
   insts: { id: string; label: string | null; amount_due: number }[],
   booking: { id: string; email: string | null; retreat_name: string | null; check_in_date: string | null; check_out_date: string | null },
@@ -87,9 +108,23 @@ async function createSession(
 
   const params = new URLSearchParams();
   params.set("mode", "payment");
-  params.set("payment_method_types[0]", "card");
-  params.set("payment_method_types[1]", "sepa_debit");
-  params.set("payment_method_types[2]", "link");
+
+  // Ordre voulu : rails les moins chers d'abord, carte en dernier recours.
+  // SEPA (~6 € plafonnés) · Virement bancaire (~5 € plafonnés, IBAN virtuel,
+  // réconciliation auto) · Bancontact (clientèle belge, < carte) · Carte · Link.
+  // Le virement (customer_balance) exige un Customer Stripe — si sa création
+  // échoue, on retire juste ce rail de la session.
+  const customerId = booking.email ? await getOrCreateCustomer(key, booking.email) : null;
+  const types = customerId
+    ? ["sepa_debit", "customer_balance", "bancontact", "card", "link"]
+    : ["sepa_debit", "bancontact", "card", "link"];
+  types.forEach((t, i) => params.set(`payment_method_types[${i}]`, t));
+  if (customerId) {
+    params.set("customer", customerId);
+    params.set("payment_method_options[customer_balance][funding_type]", "bank_transfer");
+    params.set("payment_method_options[customer_balance][bank_transfer][type]", "eu_bank_transfer");
+    params.set("payment_method_options[customer_balance][bank_transfer][eu_bank_transfer][country]", "FR");
+  }
   insts.forEach((inst, idx) => {
     const cents = Math.round(Number(inst.amount_due) * 100);
     const name = `${inst.label || "Payment"} — ${booking.retreat_name || "Quinta do Amor"}`;
@@ -107,7 +142,8 @@ async function createSession(
   params.set("payment_intent_data[metadata][installment_ids]", idsCsv);
   params.set("payment_intent_data[description]",
     `${booking.retreat_name || "Quinta do Amor"} — ${insts.map((i) => i.label).join(" + ")}`.slice(0, 250));
-  if (booking.email) params.set("customer_email", booking.email);
+  // customer et customer_email sont mutuellement exclusifs chez Stripe
+  if (!customerId && booking.email) params.set("customer_email", booking.email);
   params.set("success_url", successUrl);
   params.set("cancel_url", cancelUrl);
 
