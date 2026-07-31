@@ -113,7 +113,7 @@ export function AddressAutocomplete({
 // -------------------------------------------------------------- nationalité
 
 // Choix par PAYS (avec drapeau) — demande Geoffroy 31 juil. 2026.
-const COUNTRIES: [string, string][] = [
+export const COUNTRIES: [string, string][] = [
   ["AR","Argentina"],["AU","Australia"],["AT","Austria"],["BE","Belgium"],["BR","Brazil"],
   ["BG","Bulgaria"],["CA","Canada"],["CL","Chile"],["CN","China"],["CO","Colombia"],
   ["HR","Croatia"],["CY","Cyprus"],["CZ","Czechia"],["DK","Denmark"],["EG","Egypt"],
@@ -129,7 +129,7 @@ const COUNTRIES: [string, string][] = [
   ["UY","Uruguay"],["VN","Vietnam"],
 ];
 
-const flagOf = (iso: string) =>
+export const flagOf = (iso: string) =>
   String.fromCodePoint(...iso.toUpperCase().split("").map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 
 export function NationalityCombobox({

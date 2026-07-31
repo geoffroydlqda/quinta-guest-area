@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,7 +17,7 @@ import { CreateBookingDialog } from "@/components/admin/CreateBookingDialog";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { MonthlyRevenueChart, OccupancyChart } from "@/components/admin/DashboardCharts";
 import { PaymentsPage } from "@/components/admin/PaymentsPage";
-import { AddressAutocomplete, NationalityCombobox, PLACEHOLDER_CLS } from "@/components/admin/GuestFieldInputs";
+import { AddressAutocomplete, NationalityCombobox, PLACEHOLDER_CLS, COUNTRIES, flagOf } from "@/components/admin/GuestFieldInputs";
 import { renderRoomMapCanvas, downloadRoomMapPdf, type RoomMapEntry } from "@/lib/roomMapPdf";
 import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
@@ -783,6 +783,47 @@ function DashboardView({
     return b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email;
   };
 
+  // Répartition des nationalités (la data préférée de l'investisseur) :
+  // un point par booking de l'année, nationalité lue sur la fiche guest.
+  const [natProfiles, setNatProfiles] = useState<{ id: string; email: string; nationality: string | null }[]>([]);
+  useEffect(() => {
+    supabase.from("client_profiles").select("id,email,nationality")
+      .then(({ data: d }) => setNatProfiles(d ?? []));
+  }, []);
+  const nationalityStats = useMemo(() => {
+    // Anciennes valeurs saisies en gentilé -> pays (pour le drapeau et l'agrégat)
+    const DEMONYMS: Record<string, string> = {
+      belgian: "Belgium", french: "France", portuguese: "Portugal", dutch: "Netherlands",
+      german: "Germany", british: "United Kingdom", english: "United Kingdom",
+      american: "United States", swiss: "Switzerland", spanish: "Spain", italian: "Italy",
+      irish: "Ireland", polish: "Poland", canadian: "Canada", australian: "Australia",
+    };
+    const byId = new Map(natProfiles.map((p) => [p.id, p]));
+    const byEmail = new Map(natProfiles.map((p) => [(p.email || "").toLowerCase(), p]));
+    const counts = new Map<string, number>();
+    let total = 0;
+    for (const b of bookings) {
+      if (!(b.check_in_date || "").startsWith(year)) continue;
+      if (/^internal\+/i.test(b.email || "")) continue;
+      const prof = (b.client_id && byId.get(b.client_id)) || byEmail.get((b.email || "").toLowerCase());
+      let nat = (prof?.nationality || "").trim();
+      if (nat) nat = DEMONYMS[nat.toLowerCase()] ?? nat;
+      const key = nat || "Unknown";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+      total++;
+    }
+    const rows = [...counts.entries()].sort((a, b2) => {
+      if (a[0] === "Unknown") return 1;
+      if (b2[0] === "Unknown") return -1;
+      return b2[1] - a[1];
+    });
+    return { rows, total };
+  }, [natProfiles, bookings, year]);
+  const flagFor = (name: string) => {
+    const hit = COUNTRIES.find(([, n]) => n.toLowerCase() === name.toLowerCase());
+    return hit ? flagOf(hit[0]) : null;
+  };
+
   const kpis = useMemo(() => {
     const thisYear = installments.filter((i) =>
       (bookingById.get(i.booking_id)?.check_in_date || "").startsWith(year)
@@ -1064,6 +1105,38 @@ function DashboardView({
             No revenue target set for {year}.
           </section>
         )}
+        <section className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-baseline justify-between gap-2 flex-wrap">
+            <div className="font-medium text-sm">Guest nationalities · {year}</div>
+            <div className="text-xs text-muted-foreground">{nationalityStats.total} booking{nationalityStats.total === 1 ? "" : "s"}</div>
+          </div>
+          {nationalityStats.total === 0 ? (
+            <p className="text-sm text-muted-foreground italic mt-2">No bookings for {year}.</p>
+          ) : (
+            <div className="mt-2.5 space-y-2">
+              {nationalityStats.rows.map(([name, count]) => {
+                const pct = (count / nationalityStats.total) * 100;
+                const flag = flagFor(name);
+                return (
+                  <div key={name}>
+                    <div className="flex items-baseline justify-between text-xs">
+                      <span className={name === "Unknown" ? "text-muted-foreground italic" : ""}>
+                        {flag && <span className="mr-1.5">{flag}</span>}{name}
+                      </span>
+                      <span className="text-muted-foreground">{count} · {Math.round(pct)}%</span>
+                    </div>
+                    <div className="mt-1 h-2 rounded-full bg-[#dfe5d2] overflow-hidden">
+                      <div className={`h-full ${name === "Unknown" ? "bg-primary/30" : "bg-primary"}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {nationalityStats.rows.some(([n]) => n === "Unknown") && (
+            <p className="text-[11px] text-muted-foreground mt-2">Fill in Nationality on guest files to shrink the Unknown share.</p>
+          )}
+        </section>
         </div>
       </div>
 
@@ -1438,7 +1511,7 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
   useEffect(() => {
     if (!current) return;
     const ref = current.bookings[current.bookings.length - 1];
-    setForm({
+    const hydrated: ClientForm = {
       email: current.email,
       first_name: current.profile?.first_name ?? ref.first_name,
       last_name: current.profile?.last_name ?? ref.last_name,
@@ -1451,9 +1524,50 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
       country: current.profile?.country ?? null,
       nationality: current.profile?.nationality ?? null,
       notes: current.profile?.notes ?? null,
-    });
+    };
+    setForm(hydrated);
+    lastSavedRef.current = JSON.stringify({ ...hydrated, email: "" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, profilesArr]);
+
+  // Auto-save (débouncé) de tous les champs SAUF l'email — lui garde le bouton
+  // Save et sa confirmation (il se propage à tous les bookings du guest).
+  const lastSavedRef = useRef<string>("");
+  const [autoSaved, setAutoSaved] = useState<"idle" | "saving" | "saved">("idle");
+  useEffect(() => {
+    if (!current) return;
+    const snapshot = JSON.stringify({ ...form, email: "" });
+    if (snapshot === lastSavedRef.current) return;
+    const t = setTimeout(async () => {
+      setAutoSaved("saving");
+      try {
+        const payload = { ...form, email: current.email }; // jamais l'email en auto
+        let profileId = current.profile?.id;
+        if (profileId) {
+          const { error } = await supabase.from("client_profiles").update(payload).eq("id", profileId);
+          if (error) throw error;
+        } else {
+          const { data: d2, error } = await supabase.from("client_profiles")
+            .upsert(payload, { onConflict: "email" }).select("id").single();
+          if (error) throw error;
+          profileId = d2.id;
+          await linkBookings(profileId, current.bookings.filter((b) => !b.client_id).map((b) => b.id));
+        }
+        lastSavedRef.current = snapshot;
+        setAutoSaved("saved");
+        setProfilesArr((arr) => {
+          const rest = arr.filter((pr) => pr.id !== profileId);
+          return [...rest, { id: profileId!, ...payload } as ClientProfile];
+        });
+        setTimeout(() => setAutoSaved((v) => (v === "saved" ? "idle" : v)), 2000);
+      } catch (e) {
+        setAutoSaved("idle");
+        toast({ title: "Auto-save failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+      }
+    }, 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
 
   const linkBookings = async (clientId: string, bookingIds: string[]) => {
     if (!bookingIds.length) return;
@@ -1730,10 +1844,15 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
                     />
                   </div>
                 </div>
-                <div className="mt-3 flex justify-end">
-                  <Button size="sm" onClick={saveProfile} disabled={saving}>
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save profile"}
-                  </Button>
+                <div className="mt-3 flex items-center justify-end gap-3">
+                  <span className="text-xs text-muted-foreground">
+                    {autoSaved === "saving" ? "Saving…" : autoSaved === "saved" ? "Saved ✓" : "Changes save automatically — except the email."}
+                  </span>
+                  {current && form.email.trim().toLowerCase() !== (current.email || "").toLowerCase() && (
+                    <Button size="sm" onClick={saveProfile} disabled={saving}>
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply new email"}
+                    </Button>
+                  )}
                 </div>
               </div>
             </section>
