@@ -20,7 +20,7 @@ const NAV = [
   { to: "/admin/payments", label: "Payments", icon: Wallet },
   { to: "/admin/catering", label: "Catering", icon: ChefHat },
   { to: "/admin/transportation", label: "Transportation", icon: Car },
-  { to: "/admin/rooms", label: "Room setup", icon: BedDouble },
+  { to: "/admin/rooms", label: "Housekeeping", icon: BedDouble },
 ] as const;
 
 /* Onglets principaux de la tab bar mobile (choix Geoffroy, 31 juil. 2026) */
@@ -28,7 +28,7 @@ const MOBILE_MAIN = [
   { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/bookings", label: "Bookings", icon: CalendarRange },
   { to: "/admin/transportation", label: "Transport", icon: Car },
-  { to: "/admin/rooms", label: "Rooms", icon: BedDouble },
+  { to: "/admin/rooms", label: "Housekeep.", icon: BedDouble },
 ] as const;
 
 const MOBILE_MORE = [

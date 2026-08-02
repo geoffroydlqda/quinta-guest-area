@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      housekeeping_sessions: {
+        Row: {
+          id: string
+          booking_id: string
+          date: string
+          start_time: string | null
+          end_time: string | null
+          team: string[]
+          notes: string | null
+          gcal_event_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          booking_id: string
+          date: string
+          start_time?: string | null
+          end_time?: string | null
+          team?: string[]
+          notes?: string | null
+          gcal_event_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          booking_id?: string
+          date?: string
+          start_time?: string | null
+          end_time?: string | null
+          team?: string[]
+          notes?: string | null
+          gcal_event_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bar_sales: {
         Row: {
           id: string

@@ -22,6 +22,7 @@ import { renderRoomMapCanvas, downloadRoomMapPdf, type RoomMapEntry } from "@/li
 import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { HonestyBarCard } from "@/components/admin/HonestyBarCard";
+import { HousekeepingScheduler } from "@/components/admin/HousekeepingScheduler";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
 import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass, FlaskConical } from "lucide-react";
@@ -97,7 +98,7 @@ const SECTION_TITLES: Record<string, string> = {
   payments: "Payments",
   catering: "Catering",
   transportation: "Transportation",
-  rooms: "Room setup",
+  rooms: "Housekeeping",
 };
 
 const fmtShort = (d: string | null) =>
@@ -2540,6 +2541,17 @@ function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) =
   const isLive = (s: StayPlan) =>
     (s.booking.check_in_date ?? "") <= todayIso && (s.booking.check_out_date ?? s.booking.check_in_date ?? "") >= todayIso;
 
+  // Housekeeping : tous les séjours réels (avec ou sans room plan)
+  const hkBookings = useMemo(() => (data.bookings || [])
+    .filter((b) => !b.is_test && b.check_in_date)
+    .map((b) => ({
+      id: b.id,
+      name: b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email,
+      check_in_date: b.check_in_date,
+      check_out_date: b.check_out_date,
+      guest_count: b.guest_count ?? null,
+    })), [data]);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
   const selected = stays.find((s) => s.booking.id === selectedId) ?? upcoming[0] ?? pastAndLive[0] ?? null;
@@ -2567,13 +2579,18 @@ function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) =
 
   if (stays.length === 0) {
     return (
-      <div className="border border-border rounded-xl bg-card p-8 text-center text-sm text-muted-foreground">
-        No room plans yet — plans appear here once a guest (or you, via "Open as guest") assigns rooms in Room Setup.
+      <div className="space-y-4">
+        <HousekeepingScheduler bookings={hkBookings} />
+        <div className="border border-border rounded-xl bg-card p-8 text-center text-sm text-muted-foreground">
+          No room plans yet — plans appear here once a guest (or you, via "Open as guest") assigns rooms in Room Setup.
+        </div>
       </div>
     );
   }
 
   return (
+    <div className="space-y-4">
+    <HousekeepingScheduler bookings={hkBookings} />
     <div className="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
       {/* Plan mis en avant */}
       <section className="rounded-xl border border-border bg-card p-4">
@@ -2647,6 +2664,7 @@ function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) =
           ))}
         </ul>
       </section>
+    </div>
     </div>
   );
 
