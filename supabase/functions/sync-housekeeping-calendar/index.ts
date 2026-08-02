@@ -127,6 +127,17 @@ serve(async (req) => {
     }
     const gHeaders = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
+    // Erreurs Google renvoyées en 200 + {error} : supabase.functions.invoke ne
+    // lit pas le corps des non-2xx, le toast afficherait "non-2xx status code".
+    const saEmail = (await getSaCreds()).email;
+    const gError = async (verb: string, r: Response) => {
+      const body = (await r.text()).slice(0, 200);
+      const hint = r.status === 404 || r.status === 403
+        ? ` — the Housekeeping calendar is probably not shared with ${saEmail} ("Make changes to events").`
+        : "";
+      return json({ error: `Calendar ${verb} ${r.status}: ${body}${hint}` });
+    };
+
     if (action === "delete") {
       const eventId = parsed.data.event_id;
       if (!eventId) return json({ error: "event_id required" }, 400);
@@ -134,7 +145,7 @@ serve(async (req) => {
         method: "DELETE", headers: gHeaders,
       });
       if (!r.ok && r.status !== 404 && r.status !== 410) {
-        return json({ error: `Calendar delete ${r.status}: ${(await r.text()).slice(0, 200)}` }, 502);
+        return await gError("delete", r);
       }
       return json({ deleted: true });
     }
@@ -183,11 +194,11 @@ serve(async (req) => {
         method: "PATCH", headers: gHeaders, body: JSON.stringify(payload),
       });
       if (r.status === 404 || r.status === 410) eventId = null; // recréer
-      else if (!r.ok) return json({ error: `Calendar update ${r.status}: ${(await r.text()).slice(0, 200)}` }, 502);
+      else if (!r.ok) return await gError("update", r);
     }
     if (!eventId) {
       const r = await fetch(base, { method: "POST", headers: gHeaders, body: JSON.stringify(payload) });
-      if (!r.ok) return json({ error: `Calendar create ${r.status}: ${(await r.text()).slice(0, 200)}` }, 502);
+      if (!r.ok) return await gError("create", r);
       const d = await r.json();
       eventId = d.id;
       await admin.from("housekeeping_sessions").update({ gcal_event_id: eventId, updated_at: new Date().toISOString() }).eq("id", s.id);

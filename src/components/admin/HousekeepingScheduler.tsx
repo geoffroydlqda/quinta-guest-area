@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  BedDouble, Camera, CalendarPlus, ChevronDown, ChevronRight, ExternalLink,
+  BedDouble, Camera, CalendarPlus, Check, ChevronDown, ChevronRight, ExternalLink,
   FileDown, Loader2, Pencil, Sparkles, Trash2, Users,
 } from "lucide-react";
 import { renderRoomMapCanvas, downloadRoomMapPdf, type RoomMapEntry } from "@/lib/roomMapPdf";
@@ -66,11 +66,13 @@ const fmtDY = (d: string | null) =>
 const hhmm = (t: string | null) => (t ?? "").slice(0, 5);
 
 // ------------------------------------------------------------ session form
-function SessionForm({ booking, initial, onCancel, onSaved }: {
+function SessionForm({ booking, initial, onCancel, onSaved, registerSubmit }: {
   booking: HkBooking;
   initial?: Session;
   onCancel: () => void;
   onSaved: (s: Session) => void;
+  /** Le bouton Schedule de l'en-tête devient Confirm : il déclenche ce save. */
+  registerSubmit?: (fn: () => void) => void;
 }) {
   const { toast } = useToast();
   const [date, setDate] = useState(initial?.date ?? booking.check_out_date ?? "");
@@ -84,6 +86,7 @@ function SessionForm({ booking, initial, onCancel, onSaved }: {
     setTeam((t) => (t.includes(name) ? t.filter((n) => n !== name) : [...t, name]));
 
   const save = async () => {
+    if (saving) return;
     if (!date) { toast({ title: "Pick a date", variant: "destructive" }); return; }
     setSaving(true);
     try {
@@ -168,20 +171,25 @@ function SessionForm({ booking, initial, onCancel, onSaved }: {
           className="placeholder:italic placeholder:text-muted-foreground/50"
         />
       </label>
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end items-center gap-2">
+        {saving && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
         <Button size="sm" variant="ghost" onClick={onCancel} disabled={saving}>Cancel</Button>
-        <Button size="sm" onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <CalendarPlus className="w-4 h-4 mr-1" />}
-          {initial ? "Save changes" : "Schedule"}
-        </Button>
       </div>
+      <RegisterSubmit register={registerSubmit} fn={save} />
     </div>
   );
+}
+
+/** Enregistre la fonction de sauvegarde auprès du bouton Confirm de l'en-tête. */
+function RegisterSubmit({ register, fn }: { register?: (fn: () => void) => void; fn: () => void }) {
+  useEffect(() => { register?.(fn); });
+  return null;
 }
 
 // ------------------------------------------------------------ room plan
 function RoomPlanInline({ booking, plan }: { booking: HkBooking; plan: HkRoomPlan }) {
   const [mapUrl, setMapUrl] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(false);
   useEffect(() => {
     let cancelled = false;
     renderRoomMapCanvas(roomsArrangement, plan.entries)
@@ -207,9 +215,25 @@ function RoomPlanInline({ booking, plan }: { booking: HkBooking; plan: HkRoomPla
         </Button>
       </div>
       {mapUrl ? (
-        <img src={mapUrl} alt={`Room map — ${booking.name}`} className="w-full h-auto rounded-lg border border-border" />
+        <>
+          <button type="button" onClick={() => setZoom(true)} title="Click to enlarge" className="block">
+            <img
+              src={mapUrl}
+              alt={`Room map — ${booking.name}`}
+              className="w-full max-w-[320px] h-auto rounded-lg border border-border cursor-zoom-in hover:opacity-90 transition-opacity"
+            />
+          </button>
+          {zoom && (
+            <div
+              className="fixed inset-0 z-50 bg-foreground/70 flex items-center justify-center p-4 cursor-zoom-out"
+              onClick={() => setZoom(false)}
+            >
+              <img src={mapUrl} alt={`Room map — ${booking.name}`} className="max-h-full max-w-full rounded-xl shadow-2xl" />
+            </div>
+          )}
+        </>
       ) : (
-        <div className="h-48 flex items-center justify-center text-muted-foreground">
+        <div className="h-24 w-full max-w-[320px] flex items-center justify-center text-muted-foreground rounded-lg border border-border">
           <Loader2 className="w-5 h-5 animate-spin" />
         </div>
       )}
@@ -366,6 +390,7 @@ export function HousekeepingScheduler({ bookings, planByBooking, onOpenBooking }
   const [formFor, setFormFor] = useState<string | null>(null);
   const [editing, setEditing] = useState<Session | null>(null);
   const [showPast, setShowPast] = useState(false);
+  const submitRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     supabase.from("housekeeping_sessions").select("*").order("date", { ascending: true })
@@ -469,8 +494,17 @@ export function HousekeepingScheduler({ bookings, planByBooking, onOpenBooking }
                   >
                     <ExternalLink className="w-3.5 h-3.5" /> Booking
                   </button>
-                  <Button size="sm" variant="secondary" onClick={() => { setEditing(null); setFormFor(formFor === b.id ? null : b.id); }}>
-                    <CalendarPlus className="w-4 h-4 mr-1" /> Schedule
+                  <Button
+                    size="sm"
+                    variant={formFor === b.id ? "default" : "secondary"}
+                    onClick={() => {
+                      if (formFor === b.id) submitRef.current?.();
+                      else { setEditing(null); setFormFor(b.id); }
+                    }}
+                  >
+                    {formFor === b.id
+                      ? <><Check className="w-4 h-4 mr-1" /> Confirm</>
+                      : <><CalendarPlus className="w-4 h-4 mr-1" /> Schedule</>}
                   </Button>
                 </span>
               </div>
@@ -509,6 +543,7 @@ export function HousekeepingScheduler({ bookings, planByBooking, onOpenBooking }
                   initial={editing ?? undefined}
                   onCancel={() => { setFormFor(null); setEditing(null); }}
                   onSaved={onSaved}
+                  registerSubmit={(fn) => { submitRef.current = fn; }}
                 />
               )}
             </div>
