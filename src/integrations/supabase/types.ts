@@ -53,6 +53,30 @@ export type Database = {
         }
         Relationships: []
       }
+      hk_incidents: {
+        Row: {
+          id: string
+          booking_id: string
+          description: string | null
+          photo_urls: string[]
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          booking_id: string
+          description?: string | null
+          photo_urls?: string[]
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          booking_id?: string
+          description?: string | null
+          photo_urls?: string[]
+          created_at?: string
+        }
+        Relationships: []
+      }
       bar_sales: {
         Row: {
           id: string

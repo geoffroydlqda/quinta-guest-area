@@ -19,6 +19,7 @@ import { MonthlyRevenueChart, OccupancyChart } from "@/components/admin/Dashboar
 import { PaymentsPage } from "@/components/admin/PaymentsPage";
 import { AddressAutocomplete, NationalityCombobox, PLACEHOLDER_CLS, COUNTRIES, flagOf } from "@/components/admin/GuestFieldInputs";
 import { renderRoomMapCanvas, downloadRoomMapPdf, type RoomMapEntry } from "@/lib/roomMapPdf";
+import { openKitchenSheet } from "@/lib/kitchenSheet";
 import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { HonestyBarCard } from "@/components/admin/HonestyBarCard";
@@ -57,7 +58,7 @@ type Profile = {
 type Room = { user_id: string; booking_id?: string | null; email: string; queen_shared_qty: number; twins_shared_qty: number; queen_ensuite_qty: number; twins_ensuite_qty: number; remarks_roomsetup: string | null; remarks: string | null; status_roomsetup: string };
 type Passenger = { id: string; first_name: string; last_name?: string | null; phone: string | null; flight_number: string | null };
 type Trip = { id: string; user_id: string; booking_id?: string | null; trip_direction: string; pickup_location: string; dropoff_location: string; trip_date: string; trip_time: string; passengers_count: number; taxi_size: string; price_estimate: string; custom_price: number | null; google_calendar_event_id?: string | null; sync_status?: string | null; last_synced_at?: string | null; sync_error?: string | null; passengers?: Passenger[] };
-type FoodPlan = { user_id: string; booking_id?: string | null; selections: any; diet_preference: string | null; status_food: string };
+type FoodPlan = { user_id: string; booking_id?: string | null; selections: any; diet_preference: string | null; status_food: string; diet_config?: any; meal_times?: any; notes_food?: string | null };
 
 type BookingRow = {
   id: string; retreat_name: string; first_name: string | null; last_name: string | null;
@@ -565,7 +566,7 @@ const AdminContent = () => {
         )}
 
         {view === "catering" && (
-          <CateringView bookings={data.bookings || []} todayIso={todayIso} onOpen={navigateToBooking} />
+          <CateringView bookings={data.bookings || []} food={data.food || []} todayIso={todayIso} onOpen={navigateToBooking} />
         )}
 
         {view === "bookings" && (
@@ -1319,11 +1320,16 @@ type StaffRow = {
   daily_fee: number; paid_days: number;
 };
 
-function CateringView({ bookings, todayIso, onOpen }: {
+function CateringView({ bookings, food, todayIso, onOpen }: {
   bookings: BookingRow[];
+  food: FoodPlan[];
   todayIso: string;
   onOpen: (bookingId: string) => void;
 }) {
+  // Food plan d'un booking (par booking_id, fallback user_id)
+  const foodFor = (b: BookingRow) =>
+    food.find((f) => f.booking_id === b.id) ??
+    food.find((f) => !f.booking_id && b.user_id && f.user_id === b.user_id) ?? null;
   const { toast } = useToast();
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [pastOpen, setPastOpen] = useState(false);
@@ -1385,7 +1391,7 @@ function CateringView({ bookings, todayIso, onOpen }: {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">Upcoming & current events</h2>
         <div className="space-y-3">
           {upcoming.map((b) => (
-            <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso}
+            <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso} foodPlan={foodFor(b)}
               onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} totalFor={totalFor} />
           ))}
           {upcoming.length === 0 && <p className="text-sm text-muted-foreground italic">No upcoming events.</p>}
@@ -1401,7 +1407,7 @@ function CateringView({ bookings, todayIso, onOpen }: {
         {pastOpen && (
           <div className="space-y-3">
             {past.map((b) => (
-              <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso}
+              <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso} foodPlan={foodFor(b)}
                 onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} totalFor={totalFor} />
             ))}
           </div>
@@ -1411,10 +1417,11 @@ function CateringView({ bookings, todayIso, onOpen }: {
   );
 }
 
-function CateringEventCard({ booking: b, rows, todayIso, onOpen, onAdd, onUpdate, onRemove, totalFor }: {
+function CateringEventCard({ booking: b, rows, todayIso, foodPlan, onOpen, onAdd, onUpdate, onRemove, totalFor }: {
   booking: BookingRow;
   rows: StaffRow[];
   todayIso: string;
+  foodPlan: FoodPlan | null;
   onOpen: (id: string) => void;
   onAdd: (bookingId: string, v: { name: string; role: string | null; daily_fee: number; paid_days: number }) => Promise<boolean>;
   onUpdate: (id: string, patch: Partial<Pick<StaffRow, "daily_fee" | "paid_days">>) => void;
@@ -1464,9 +1471,21 @@ function CateringEventCard({ booking: b, rows, todayIso, onOpen, onAdd, onUpdate
             <span> · kitchen staff usually paid {suggestedDays} days (nights + 1)</span>
           </div>
         </div>
-        <div className="text-right shrink-0">
-          <div className="text-sm font-semibold">{rows.length ? fmtMoney(totalFor(rows)) : "—"}</div>
-          <div className="text-[11px] text-muted-foreground">staff cost</div>
+        <div className="flex items-center gap-3 shrink-0">
+          {foodPlan && Array.isArray(foodPlan.selections) && foodPlan.selections.some((s: any) => s?.fullBoard || s?.breakfast || s?.lunch || s?.dinner) && (
+            <Button
+              size="sm"
+              variant="outline"
+              title="Printable food plan for the kitchen — day by day, portions by diet, dietary notes"
+              onClick={() => openKitchenSheet(b, foodPlan)}
+            >
+              <FileDown className="w-4 h-4 mr-1" /> Kitchen sheet
+            </Button>
+          )}
+          <div className="text-right">
+            <div className="text-sm font-semibold">{rows.length ? fmtMoney(totalFor(rows)) : "—"}</div>
+            <div className="text-[11px] text-muted-foreground">staff cost</div>
+          </div>
         </div>
       </div>
 
@@ -2488,18 +2507,9 @@ function NotifyGuestButton({ userId, guestName }: { userId: string; guestName: s
  * les autres séjours sont listés et affichables/téléchargeables d'un clic.
  */
 function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) => void }) {
-  type StayPlan = {
-    booking: BookingRow;
-    name: string;
-    entries: RoomMapEntry[];
-    guestsPlaced: number;
-    remarks: string | null;
-  };
-
-  const todayIso = new Date().toISOString().slice(0, 10);
-
-  const stays: StayPlan[] = useMemo(() => {
-    const list: StayPlan[] = [];
+  // Room plans par booking (bedroom arrangement rempli côté guest area)
+  const planByBooking = useMemo(() => {
+    const m = new Map<string, { entries: RoomMapEntry[]; remarks: string | null; guestsPlaced: number }>();
     for (const b of data.bookings || []) {
       const room: any = (data.rooms as any[]).find(
         (r) => r.booking_id === b.id || (b.user_id && r.user_id === b.user_id && !r.booking_id)
@@ -2515,33 +2525,17 @@ function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) =
           bedType: Number(e.roomId) === 1 || Number(e.roomId) === 6 ? "king" : (e.bedType === "king" ? "king" : "twin"),
         }));
       if (entries.length === 0) continue;
-      list.push({
-        booking: b,
-        name: b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email,
+      m.set(b.id, {
         entries,
-        guestsPlaced: entries.reduce((s, e) => s + e.guests.length, 0),
         remarks: room?.remarks_roomsetup || room?.remarks || null,
+        guestsPlaced: entries.reduce((s, e) => s + e.guests.length, 0),
       });
     }
-    return list;
-  }, [data, todayIso]);
+    return m;
+  }, [data]);
 
-  // "Next" = premier séjour dont le check-in est à venir (un séjour en cours
-  // n'est pas "next" : il est live, et rejoint le groupe replié avec les passés).
-  const upcoming = useMemo(
-    () => stays.filter((s) => (s.booking.check_in_date ?? "") > todayIso)
-      .sort((a, b) => (a.booking.check_in_date ?? "").localeCompare(b.booking.check_in_date ?? "")),
-    [stays, todayIso]
-  );
-  const pastAndLive = useMemo(
-    () => stays.filter((s) => (s.booking.check_in_date ?? "") <= todayIso)
-      .sort((a, b) => (b.booking.check_in_date ?? "").localeCompare(a.booking.check_in_date ?? "")),
-    [stays, todayIso]
-  );
-  const isLive = (s: StayPlan) =>
-    (s.booking.check_in_date ?? "") <= todayIso && (s.booking.check_out_date ?? s.booking.check_in_date ?? "") >= todayIso;
-
-  // Housekeeping : tous les séjours réels (avec ou sans room plan)
+  // Tous les séjours réels (avec ou sans room plan) — une seule liste,
+  // tout se déplie au clic (sessions, plan, incidents).
   const hkBookings = useMemo(() => (data.bookings || [])
     .filter((b) => !b.is_test && b.check_in_date)
     .map((b) => ({
@@ -2552,147 +2546,7 @@ function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) =
       guest_count: b.guest_count ?? null,
     })), [data]);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pastOpen, setPastOpen] = useState(false);
-  const selected = stays.find((s) => s.booking.id === selectedId) ?? upcoming[0] ?? pastAndLive[0] ?? null;
-  const isNext = selected != null && upcoming[0] != null && selected.booking.id === upcoming[0].booking.id;
-
-  const [mapUrl, setMapUrl] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    setMapUrl(null);
-    if (!selected) return;
-    renderRoomMapCanvas(roomsArrangement, selected.entries)
-      .then((canvas) => { if (!cancelled) setMapUrl(canvas.toDataURL("image/jpeg", 0.85)); })
-      .catch(() => { if (!cancelled) setMapUrl(null); });
-    return () => { cancelled = true; };
-  }, [selected?.booking.id, stays.length]);
-
-  const fmtD = (d: string | null) =>
-    d ? new Date(`${d}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
-
-  const download = (s: StayPlan) =>
-    downloadRoomMapPdf(roomsArrangement, s.entries, {
-      title: `Quinta do Amor — Room map — ${s.name}`,
-      subtitle: `${fmtD(s.booking.check_in_date)} → ${fmtD(s.booking.check_out_date)} · ${s.guestsPlaced} guests placed`,
-    });
-
-  if (stays.length === 0) {
-    return (
-      <div className="space-y-4">
-        <HousekeepingScheduler bookings={hkBookings} />
-        <div className="border border-border rounded-xl bg-card p-8 text-center text-sm text-muted-foreground">
-          No room plans yet — plans appear here once a guest (or you, via "Open as guest") assigns rooms in Room Setup.
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-    <HousekeepingScheduler bookings={hkBookings} />
-    <div className="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
-      {/* Plan mis en avant */}
-      <section className="rounded-xl border border-border bg-card p-4">
-        {selected && (
-          <>
-            <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <button type="button" className="font-semibold hover:underline" onClick={() => onOpen(selected.booking.id)}>
-                    {selected.name}
-                  </button>
-                  {isNext && (
-                    <span className="text-[10px] uppercase px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground font-medium">
-                      Next stay
-                    </span>
-                  )}
-                  {!isNext && isLive(selected) && (
-                    <span className="text-[10px] uppercase px-1.5 py-0.5 rounded-full border border-primary text-[#35532A] font-medium">
-                      Live now
-                    </span>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {fmtD(selected.booking.check_in_date)} → {fmtD(selected.booking.check_out_date)} · {selected.guestsPlaced}/{selected.booking.guest_count} guests placed
-                </div>
-              </div>
-              <Button size="sm" onClick={() => download(selected)}>
-                <FileDown className="w-4 h-4 mr-1" /> Download PDF
-              </Button>
-            </div>
-            {mapUrl ? (
-              <img src={mapUrl} alt={`Room map — ${selected.name}`} className="w-full h-auto rounded-lg border border-border" />
-            ) : (
-              <div className="h-64 flex items-center justify-center text-muted-foreground">
-                <Loader2 className="w-6 h-6 animate-spin" />
-              </div>
-            )}
-            {selected.remarks && (
-              <p className="text-xs text-muted-foreground italic mt-2 whitespace-pre-wrap">{selected.remarks}</p>
-            )}
-          </>
-        )}
-      </section>
-
-      {/* Liste des séjours */}
-      <section className="rounded-xl border border-border bg-card">
-        <div className="px-4 py-3 border-b border-border font-medium text-sm">Upcoming stays</div>
-        <ul className="divide-y divide-border max-h-[70vh] overflow-y-auto">
-          {upcoming.length === 0 && (
-            <li className="px-4 py-3 text-sm text-muted-foreground italic">No upcoming stay with a room plan.</li>
-          )}
-          {upcoming.map((s, i) => (
-            <li key={s.booking.id}>
-              <StayRow s={s} tag={i === 0 ? "next" : null} />
-            </li>
-          ))}
-          <li>
-            <button
-              type="button"
-              onClick={() => setPastOpen((v) => !v)}
-              className="w-full flex items-center gap-1 px-4 py-2.5 text-sm font-medium hover:bg-muted/60"
-            >
-              {pastOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-              Past & current stays <span className="text-muted-foreground font-normal">({pastAndLive.length})</span>
-            </button>
-          </li>
-          {pastOpen && pastAndLive.map((s) => (
-            <li key={s.booking.id}>
-              <StayRow s={s} tag={isLive(s) ? "live" : null} />
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
-    </div>
-  );
-
-  function StayRow({ s, tag }: { s: StayPlan; tag: "next" | "live" | null }) {
-    return (
-      <div
-        className={`flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer ${selected?.booking.id === s.booking.id ? "bg-primary/10" : "hover:bg-muted/60"}`}
-        onClick={() => setSelectedId(s.booking.id)}
-      >
-        <div className="min-w-0">
-          <div className="text-sm font-medium truncate">
-            {s.name}
-            {tag && <span className="ml-1.5 text-[10px] uppercase text-[#35532A] font-semibold">{tag}</span>}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {fmtD(s.booking.check_in_date)} · {s.guestsPlaced} guests placed
-          </div>
-        </div>
-        <Button
-          size="icon" variant="ghost" className="h-7 w-7 shrink-0"
-          title="Download PDF"
-          onClick={(e) => { e.stopPropagation(); download(s); }}
-        >
-          <FileDown className="w-3.5 h-3.5" />
-        </Button>
-      </div>
-    );
-  }
+  return <HousekeepingScheduler bookings={hkBookings} planByBooking={planByBooking} onOpenBooking={onOpen} />;
 }
 
 const Admin = () => (
