@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useMemo } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -37,12 +37,8 @@ interface BookingContextValue {
 const STORAGE_KEY = 'qda_active_booking_id';
 const IMPERSONATION_KEY = 'qda_impersonate_booking_id';
 
-const ADMIN_EMAILS = [
-  'hello@quintamor.com',
-  'loïs@quintamor.com',
-  'lois@quintamor.com',
-  '977luisferreira@gmail.com',
-].map((e) => e.toLowerCase());
+// Liste unique dans src/lib/admin.ts (cosmétique — la vérité est en base)
+import { ADMIN_EMAILS } from '@/lib/admin';
 
 const BookingContext = createContext<BookingContextValue | undefined>(undefined);
 
@@ -108,6 +104,12 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     setImpersonatedBooking(data as Booking);
   }, [isAdmin]);
 
+  // Rattachement auto par email vérifié (multi-retraites, 3 août 2026) :
+  // au premier chargement de la session, les bookings au même email pas
+  // encore réclamés sont attachés au compte — un organisateur récurrent
+  // retrouve toutes ses retraites sans lien d'invitation.
+  const claimTriedFor = useRef<string | null>(null);
+
   const loadBookings = useCallback(async () => {
     if (!user) {
       setBookings([]);
@@ -116,6 +118,14 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       return;
     }
     setIsLoading(true);
+    if (claimTriedFor.current !== user.id) {
+      claimTriedFor.current = user.id;
+      try {
+        await supabase.functions.invoke('claim-by-email');
+      } catch {
+        // best effort — les liens d'invitation restent le filet de sécurité
+      }
+    }
     const { data, error } = await supabase
       .from('bookings')
       .select('*')
