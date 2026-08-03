@@ -589,7 +589,20 @@ const AdminGuestDetailContent = () => {
               />
             </div>
             <div>
-              <div className="text-muted-foreground">First name</div>
+              <div className="text-muted-foreground flex items-center gap-2">
+                First name
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[#35532A] hover:underline"
+                  title="Open the guest profile"
+                  onClick={() => {
+                    const key = ((booking as any)?.client_id as string | null) || (email || "").toLowerCase();
+                    if (key) navigate(`/admin/guests?guest=${encodeURIComponent(key)}`);
+                  }}
+                >
+                  <ExternalLink className="w-3 h-3" /> Guest profile
+                </button>
+              </div>
               <NameField
                 bookingId={booking?.id ?? null}
                 value={firstName}
@@ -638,7 +651,42 @@ const AdminGuestDetailContent = () => {
             </div>
             <div>
               <div className="text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" /> Stay dates</div>
-              <div className="font-medium">{fmtDate(checkIn)} → {fmtDate(checkOut)}</div>
+              <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
+                {(["check_in_date", "check_out_date"] as const).map((field, i) => (
+                  <span key={field} className="flex items-center gap-1.5">
+                    {i === 1 && <span className="text-muted-foreground text-xs">→</span>}
+                    <input
+                      type="date"
+                      disabled={!booking}
+                      defaultValue={((booking as any)?.[field] as string | null) ?? ""}
+                      className="h-8 rounded-md border border-input bg-background px-2 text-sm font-medium"
+                      onBlur={async (e) => {
+                        if (!booking) return;
+                        const v = e.target.value;
+                        const prev = ((booking as any)?.[field] as string | null) ?? "";
+                        if (!v || v === prev) return;
+                        const otherField = field === "check_in_date" ? "check_out_date" : "check_in_date";
+                        const other = ((booking as any)?.[otherField] as string | null) ?? "";
+                        if (other && ((field === "check_in_date" && v >= other) || (field === "check_out_date" && v <= other))) {
+                          toast({ title: "Invalid dates", description: "Check-out must be after check-in.", variant: "destructive" });
+                          e.target.value = prev;
+                          return;
+                        }
+                        const { error } = await supabase.from("bookings").update({ [field]: v } as any).eq("id", booking.id);
+                        if (error) toast({ title: "Failed to save", description: error.message, variant: "destructive" });
+                        else {
+                          (booking as any)[field] = v;
+                          toast({
+                            title: field === "check_in_date" ? "Check-in date saved" : "Check-out date saved",
+                            description: "Calendar event updated. Remember payments due dates, food plan days and housekeeping sessions don't move automatically.",
+                          });
+                          supabase.functions.invoke("sync-booking-calendar", { body: { booking_id: booking.id } }).catch(() => {});
+                        }
+                      }}
+                    />
+                  </span>
+                ))}
+              </div>
             </div>
             <div>
               <div className="text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Check-in · check-out time</div>
