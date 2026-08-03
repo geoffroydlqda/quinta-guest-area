@@ -169,7 +169,7 @@ export function StayDatesPicker({
         <div>
           <h2 className="text-lg font-medium">Your stay dates</h2>
           <p className="text-sm text-muted-foreground">
-            When are you visiting Quinta do Amor?
+            Set when you booked — contact us to change them
           </p>
         </div>
         {hasDates && (
@@ -193,66 +193,20 @@ export function StayDatesPicker({
       <div className="grid sm:grid-cols-3 gap-4 mb-4">
         {/* Check-in Date */}
         <div>
-          <Label className="text-sm text-muted-foreground mb-2 block">
-            Check-in <span className="text-destructive">*</span>
-            {isSavingCheckIn && <Loader2 className="w-3 h-3 inline ml-2 animate-spin" />}
-          </Label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "w-full justify-start text-left font-normal h-11",
-                  !localCheckIn && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {localCheckIn ? format(localCheckIn, "PPP") : "Select date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={localCheckIn}
-                onSelect={handleCheckInSelect}
-                disabled={(date) => date < new Date()}
-                initialFocus
-                className="p-3 pointer-events-auto"
-              />
-            </PopoverContent>
-          </Popover>
+          <Label className="text-sm text-muted-foreground mb-2 block">Check-in</Label>
+          <div className="w-full h-11 flex items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium">
+            <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+            {localCheckIn ? format(localCheckIn, "PPP") : "To be confirmed"}
+          </div>
         </div>
 
         {/* Check-out Date */}
         <div>
-          <Label className="text-sm text-muted-foreground mb-2 block">
-            Check-out <span className="text-destructive">*</span>
-            {isSavingCheckOut && <Loader2 className="w-3 h-3 inline ml-2 animate-spin" />}
-          </Label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
-                  "w-full justify-start text-left font-normal h-11",
-                  !localCheckOut && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {localCheckOut ? format(localCheckOut, "PPP") : "Select date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={localCheckOut}
-                onSelect={handleCheckOutSelect}
-                disabled={(date) => (localCheckIn ? date <= localCheckIn : date < new Date())}
-                initialFocus
-                className="p-3 pointer-events-auto"
-              />
-            </PopoverContent>
-          </Popover>
+          <Label className="text-sm text-muted-foreground mb-2 block">Check-out</Label>
+          <div className="w-full h-11 flex items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium">
+            <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+            {localCheckOut ? format(localCheckOut, "PPP") : "To be confirmed"}
+          </div>
         </div>
 
         {/* Number of Guests */}
@@ -277,25 +231,19 @@ export function StayDatesPicker({
         </div>
       </div>
 
-      {localCheckIn && localCheckOut && !isAfter(localCheckOut, localCheckIn) && (
-        <div className="flex items-center gap-2 text-destructive text-sm mt-2">
-          <AlertCircle className="w-4 h-4" />
-          Check-out must be after check-in
-        </div>
-      )}
-
-      {!hasDates && (
-        <div className="mt-4 p-4 rounded-xl bg-destructive/10 border border-destructive/30">
+      {hasDates ? (
+        <p className="text-xs text-muted-foreground">
+          Need different dates? Email{' '}
+          <a href="mailto:hello@quintamor.com" className="text-primary hover:underline">hello@quintamor.com</a>{' '}
+          and we'll adjust them for you.
+        </p>
+      ) : (
+        <div className="mt-2 p-4 rounded-xl bg-muted/50 border border-border">
           <div className="flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-destructive">
-                Please select your stay dates
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Food planning is only available after setting your check-in and check-out dates.
-              </p>
-            </div>
+            <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-muted-foreground">
+              Your stay dates will be confirmed by Quinta do Amor — food planning opens once they're set.
+            </p>
           </div>
         </div>
       )}
