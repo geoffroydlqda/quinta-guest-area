@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Preview — Un compte, plusieurs retraites</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream:#f6efea; --card:#fdfaf7; --ink:#232019; --ink2:#6d675c;
+    --green:#6d7855; --green-soft:#e9ece1; --green-deep:#4d563c;
+    --hair:rgba(35,32,25,.1);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',system-ui,sans-serif; background:#eceae4; color:var(--ink); padding:28px 24px 60px; }
+  h1 { font-size:20px; font-weight:800; letter-spacing:-.02em; max-width:1240px; margin:0 auto; }
+  .lead { max-width:1240px; margin:6px auto 24px; font-size:13.5px; color:var(--ink2); line-height:1.6; }
+  .flow { display:flex; gap:26px; justify-content:center; flex-wrap:wrap; max-width:1300px; margin:0 auto; }
+  .step { width:390px; }
+  .step-t { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--green-deep); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+  .step-t .n { width:22px; height:22px; border-radius:99px; background:var(--green); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:12px; }
+  .screen { background:var(--cream); border-radius:22px; border:1px solid var(--hair); box-shadow:0 18px 40px -18px rgba(35,32,25,.3); overflow:hidden; min-height:520px; }
+  .scr-head { padding:18px 20px 0; }
+  .brand { font-weight:700; letter-spacing:.12em; font-size:12px; color:var(--green-deep); }
+  .scr-body { padding:16px 20px 24px; }
+  .card { background:var(--card); border:1px solid var(--hair); border-radius:16px; padding:16px; }
+  .in { width:100%; border:1px solid var(--hair); border-radius:10px; background:#fff; padding:10px 12px; font-size:13px; color:var(--ink2); margin-top:8px; }
+  .btn { display:block; width:100%; text-align:center; background:var(--green); color:#fff; font-weight:600; font-size:13.5px; border-radius:10px; padding:11px; margin-top:12px; }
+  .btn.ghost { background:#fff; color:var(--green-deep); border:1px solid var(--hair); }
+  .note { font-size:11px; color:var(--ink2); margin-top:12px; line-height:1.55; }
+  .hl { background:#fff7e0; border:1px solid #eddf9d; border-radius:10px; padding:8px 10px; font-size:11.5px; color:#6b5d1e; margin-top:12px; }
+
+  .rt-card { background:var(--card); border:1px solid var(--hair); border-radius:16px; padding:14px 16px; margin-bottom:10px; display:flex; align-items:center; gap:12px; }
+  .rt-card.active { border-color:var(--green); box-shadow:0 0 0 2px var(--green-soft); }
+  .rt-ava { width:42px; height:42px; border-radius:12px; background:var(--green-soft); color:var(--green-deep); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+  .rt-card b { display:block; font-size:13.5px; }
+  .rt-card .d { font-size:11.5px; color:var(--ink2); margin-top:2px; }
+  .rt-chip { margin-left:auto; font-size:10.5px; font-weight:600; padding:3px 9px; border-radius:99px; white-space:nowrap; }
+  .c-green { background:var(--green-soft); color:var(--green-deep); }
+  .c-amber { background:#fdf1dd; color:#96660f; }
+  .past { font-size:12px; color:var(--ink2); padding:8px 2px; }
+
+  .dash-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .hi { font-size:17px; font-weight:700; }
+  .switch { display:inline-flex; align-items:center; gap:7px; background:#fff; border:1px solid var(--hair); border-radius:99px; padding:7px 12px; font-size:12px; font-weight:600; color:var(--green-deep); box-shadow:0 2px 6px rgba(35,32,25,.06); }
+  .switch .car { font-size:9px; color:var(--ink2); }
+  .dd { margin-top:8px; background:#fff; border:1px solid var(--hair); border-radius:14px; box-shadow:0 12px 30px -12px rgba(35,32,25,.3); overflow:hidden; width:270px; margin-left:auto; }
+  .dd .it { padding:10px 14px; font-size:12.5px; display:flex; justify-content:space-between; gap:8px; border-bottom:1px solid var(--hair); }
+  .dd .it:last-child { border-bottom:none; }
+  .dd .it.on { background:var(--green-soft); font-weight:600; }
+  .dd .it span { color:var(--ink2); font-size:11px; }
+  .tile { background:var(--card); border:1px solid var(--hair); border-radius:14px; padding:13px; margin-top:10px; }
+  .tile b { font-size:13px; }
+  .tile .d { font-size:11.5px; color:var(--ink2); margin-top:2px; }
+
+  .mech { max-width:1240px; margin:30px auto 0; background:#fff; border:1px solid var(--hair); border-radius:16px; padding:20px 24px; font-size:13px; line-height:1.7; color:#454136; }
+  .mech b { color:var(--ink); }
+  .mech ul { margin:8px 0 0 18px; }
+  .mech li { margin-bottom:6px; }
+</style>
+</head>
+<body>
+  <h1>Preview — Un compte, plusieurs retraites (cas Isabel Muir 2027)</h1>
+  <p class="lead">Rien n'est implémenté : maquette à valider. Le principe : un organisateur crée <b>un seul compte</b> avec son email de réservation ; toutes ses retraites (présentes et futures) le suivent automatiquement, et il bascule de l'une à l'autre librement.</p>
+
+  <div class="flow">
+    <!-- Étape 1 -->
+    <div class="step">
+      <div class="step-t"><span class="n">1</span> Connexion ou création de compte</div>
+      <div class="screen">
+        <div class="scr-head"><div class="brand">QUINTA DO AMOR · GUEST AREA</div></div>
+        <div class="scr-body">
+          <div class="card">
+            <b style="font-size:15px;">Welcome back</b>
+            <div style="font-size:12px;color:var(--ink2);margin-top:3px;">Sign in or create your account</div>
+            <input class="in" value="slinkpolestudio@gmail.com" readonly>
+            <input class="in" value="••••••••••" readonly>
+            <span class="btn">Continue</span>
+            <span class="btn ghost">Continue with Google</span>
+            <p class="note">Isabel utilise <b>l'email de ses réservations</b>. À la première connexion (email vérifié), toutes les réservations à ce nom sont rattachées à son compte — sans lien d'invitation. Les liens d'invitation continuent de fonctionner pour les nouveaux guests.</p>
+          </div>
+          <div class="hl">Écran inchangé — c'est le rattachement derrière qui est nouveau.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Étape 2 -->
+    <div class="step">
+      <div class="step-t"><span class="n">2</span> Choix de la retraite</div>
+      <div class="screen">
+        <div class="scr-head"><div class="brand">QUINTA DO AMOR · GUEST AREA</div></div>
+        <div class="scr-body">
+          <b style="font-size:16px;">Hi Isabel — your retreats</b>
+          <div style="font-size:12px;color:var(--ink2);margin:3px 0 14px;">Pick the one you want to work on.</div>
+          <div class="rt-card active">
+            <span class="rt-ava">SR</span>
+            <span><b>Slink Retreat III</b><span class="d">17 → 20 Jun 2027 · 14 guests</span></span>
+            <span class="rt-chip c-amber">Room setup to do</span>
+          </div>
+          <div class="rt-card">
+            <span class="rt-ava">BP</span>
+            <span><b>BJJ x Pole retreat</b><span class="d">8 → 12 Jul 2027 · 16 guests</span></span>
+            <span class="rt-chip c-green">Up to date</span>
+          </div>
+          <div class="rt-card">
+            <span class="rt-ava">SR</span>
+            <span><b>Slink Retreat</b><span class="d">12 → 16 Aug 2027 · 14 guests</span></span>
+            <span class="rt-chip c-amber">Food plan to do</span>
+          </div>
+          <div class="past">▸ Past retreats (2)</div>
+          <p class="note">Un guest avec une seule réservation ne voit jamais cet écran : il atterrit directement sur son dashboard, comme aujourd'hui.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Étape 3 -->
+    <div class="step">
+      <div class="step-t"><span class="n">3</span> Bascule depuis le dashboard</div>
+      <div class="screen">
+        <div class="scr-head"><div class="brand">QUINTA DO AMOR · GUEST AREA</div></div>
+        <div class="scr-body">
+          <div class="dash-head">
+            <span class="hi">Hi, Isabel</span>
+            <span class="switch">Slink Retreat III · Jun 2027 <span class="car">▼</span></span>
+          </div>
+          <div class="dd">
+            <div class="it on">Slink Retreat III <span>17–20 Jun</span></div>
+            <div class="it">BJJ x Pole retreat <span>8–12 Jul</span></div>
+            <div class="it">Slink Retreat <span>12–16 Aug</span></div>
+            <div class="it" style="color:var(--green-deep);font-weight:600;">See all retreats →</div>
+          </div>
+          <div class="tile"><b>Your stay dates</b><div class="d">Thu 17 Jun → Sun 20 Jun · 14 guests</div></div>
+          <div class="tile"><b>Room setup · Food · Transportation</b><div class="d">Chaque outil s'applique à la retraite sélectionnée — aucune confusion possible entre les événements.</div></div>
+          <p class="note">Le sélecteur reste visible sur toutes les pages (Room setup, Food, Transportation, Payments) avec le nom + les dates de la retraite active.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mech">
+    <b>Ce qui serait construit derrière (si tu valides) :</b>
+    <ul>
+      <li><b>Rattachement automatique par email vérifié</b> : à chaque connexion, une fonction serveur attache au compte toutes les réservations dont l'email correspond et qui ne sont pas encore réclamées. Sécurisé : Supabase vérifie l'email à la création du compte (confirmation) — personne ne peut réclamer les bookings d'un autre.</li>
+      <li><b>Les liens d'invitation ne changent pas</b> : ils restent le chemin principal pour un nouveau guest ; ils deviennent simplement optionnels pour un organisateur récurrent comme Isabel.</li>
+      <li><b>Le sélecteur et le switcher existent déjà</b> dans l'app (écran /bookings + StaySwitcher) — je les polis (statuts "to do", passés repliés) plutôt que de les créer.</li>
+      <li><b>Côté admin, rien ne change</b> : tu verras simplement les bookings passer en "claimed" dès qu'Isabel se connecte, sans envoyer 3 invitations.</li>
+    </ul>
+  </div>
+</body>
+</html>
