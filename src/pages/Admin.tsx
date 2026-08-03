@@ -377,6 +377,38 @@ const AdminContent = () => {
 
   const visibleUnscheduled = categoryFilter === "all" ? unscheduledEvents : [];
 
+  // Événements à venir groupés par année (demande Geoffroy, 3 août 2026)
+  const upcomingByYear = useMemo(() => {
+    const m = new Map<string, EventRow[]>();
+    for (const e of visibleUpcoming) {
+      const y = (e.checkIn ?? "").slice(0, 4) || "Undated";
+      const a = m.get(y) || [];
+      a.push(e);
+      m.set(y, a);
+    }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [visibleUpcoming]);
+
+  // Chevauchements de dates entre séjours à venir / en cours (hors passés) :
+  // deux événements se chevauchent si l'un commence avant la fin de l'autre
+  // (les back-to-back check-out/check-in le même jour ne comptent pas).
+  const overlaps = useMemo(() => {
+    const evs = filteredEvents.filter((e) => e.checkIn && e.checkOut && e.checkOut >= todayIso);
+    const pairs: { a: EventRow; b: EventRow }[] = [];
+    const ids = new Set<string>();
+    for (let i = 0; i < evs.length; i++) {
+      for (let j = i + 1; j < evs.length; j++) {
+        const a = evs[i], b = evs[j];
+        if (a.checkIn! < b.checkOut! && b.checkIn! < a.checkOut!) {
+          pairs.push({ a, b });
+          ids.add(a.bookingId);
+          ids.add(b.bookingId);
+        }
+      }
+    }
+    return { pairs, ids };
+  }, [filteredEvents, todayIso]);
+
   const toolStatus = (uid: string | null, bookingId?: string | null) => {
     const matchRoom = (r: any) =>
       (bookingId && r.booking_id === bookingId) || (uid && r.user_id === uid);
@@ -602,29 +634,51 @@ const AdminContent = () => {
               ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
             </div>
 
+            {overlaps.pairs.length > 0 && (
+              <div className="mb-4 rounded-xl border border-[#F36F63]/50 bg-[#FFEAE7]/70 px-4 py-3 text-sm space-y-1">
+                <div className="font-semibold text-[#A03028] flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4" /> Overlapping stays
+                </div>
+                {overlaps.pairs.map(({ a, b }, i) => (
+                  <div key={i} className="text-[13px] text-[#7a2a23]">
+                    <button type="button" className="font-medium hover:underline" onClick={() => navigateToBooking(a.bookingId)}>{a.retreatName || a.email}</button>
+                    {" "}({fmtShort(a.checkIn)} → {fmtShort(a.checkOut)}) overlaps{" "}
+                    <button type="button" className="font-medium hover:underline" onClick={() => navigateToBooking(b.bookingId)}>{b.retreatName || b.email}</button>
+                    {" "}({fmtShort(b.checkIn)} → {fmtShort(b.checkOut)})
+                  </div>
+                ))}
+              </div>
+            )}
+
             {(categoryFilter === "all" || categoryFilter === "live" || categoryFilter === "upcoming") && (
-              <section className="mb-6">
-                <h2 className="text-base font-medium mb-2">Upcoming events <span className="text-muted-foreground text-sm font-normal">({visibleUpcoming.length})</span></h2>
-                {visibleUpcoming.length === 0 ? (
+              visibleUpcoming.length === 0 ? (
+                <section className="mb-6">
+                  <h2 className="text-base font-medium mb-2">Upcoming events <span className="text-muted-foreground text-sm font-normal">(0)</span></h2>
                   <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No upcoming events.</div>
-                ) : (
-                  <EventTable
-                    events={visibleUpcoming}
-                    toolStatus={toolStatus}
-                    categoryOf={categoryOfEvent}
-                    paymentForEvent={paymentForEvent}
-                    paymentProgress={paymentProgressFor}
-                    natFor={natForEvent}
-                    todayIso={todayIso}
-                    onRowClick={(bookingId) => navigateToBooking(bookingId)}
-                    onOpenGuest={navigateToGuest}
-                    onDeleteBooking={deleteBookingDirect}
-                    onRenameBooking={renameBookingDirect}
-                    onSetEventType={setEventTypeDirect}
-                    showLive
-                  />
-                )}
-              </section>
+                </section>
+              ) : (
+                upcomingByYear.map(([yr, evs]) => (
+                  <section key={yr} className="mb-6">
+                    <h2 className="text-base font-medium mb-2">Upcoming events {yr} <span className="text-muted-foreground text-sm font-normal">({evs.length})</span></h2>
+                    <EventTable
+                      events={evs}
+                      toolStatus={toolStatus}
+                      categoryOf={categoryOfEvent}
+                      paymentForEvent={paymentForEvent}
+                      paymentProgress={paymentProgressFor}
+                      natFor={natForEvent}
+                      todayIso={todayIso}
+                      overlapIds={overlaps.ids}
+                      onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                      onOpenGuest={navigateToGuest}
+                      onDeleteBooking={deleteBookingDirect}
+                      onRenameBooking={renameBookingDirect}
+                      onSetEventType={setEventTypeDirect}
+                      showLive
+                    />
+                  </section>
+                ))
+              )
             )}
 
             {(categoryFilter === "all" || categoryFilter === "past") && (
@@ -2587,6 +2641,7 @@ function EventTable({
   paymentProgress,
   natFor,
   todayIso,
+  overlapIds,
   onRowClick,
   onOpenGuest,
   onDeleteBooking,
@@ -2601,6 +2656,7 @@ function EventTable({
   paymentProgress: (e: EventRowProps) => { paid: number; total: number };
   natFor: (e: EventRowProps) => string | null;
   todayIso: string;
+  overlapIds?: Set<string>;
   onRowClick: (bookingId: string) => void;
   onOpenGuest: (ev: EventRowProps) => void;
   onDeleteBooking: (bookingId: string, email: string) => void;
@@ -2711,6 +2767,14 @@ function EventTable({
                     {isLive && (
                       <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-green-100 text-green-800 border border-green-300">
                         Live
+                      </span>
+                    )}
+                    {overlapIds?.has(ev.bookingId) && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#FFEAE7] text-[#A03028] border border-[#F36F63]/60"
+                        title="This stay overlaps another booking — check the dates"
+                      >
+                        <AlertTriangle className="w-3 h-3" /> Overlap
                       </span>
                     )}
                   </div>
