@@ -612,6 +612,14 @@ export function FinancePage({ bookings, installments }: {
                                 </button>
                               ) : null;
                             })()}
+                            {t.kind === "review" && (
+                              <select className="mt-1 block h-6 max-w-[200px] rounded-md border border-input bg-background px-1 text-[10px] text-muted-foreground"
+                                value="" onChange={(e) => e.target.value && patch(t.id, { kind: e.target.value, category: null, vat_rate: null, amount_net: null, reviewed: true })}>
+                                <option value="">Not an expense…</option>
+                                <option value="internal">Internal transfer (own accounts)</option>
+                                <option value="vat_payment">VAT payment (cash only)</option>
+                              </select>
+                            )}
                           </>
                         ) : (
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${k.cls}`}>{k.label}</span>
