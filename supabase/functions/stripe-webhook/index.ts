@@ -77,6 +77,7 @@ async function markPaid(installmentIds: string[], sessionId: string, fxRate: num
     if (inst.status === "paid") continue; // idempotent — Stripe renvoie parfois deux fois
     const { error } = await admin.from("payment_installments").update({
       status: "paid",
+      paid_on: new Date().toISOString().slice(0, 10),
       stripe_session_id: sessionId,
       // Paiement présenté en USD : taux figé + montant dollars payé (trace compta)
       ...(fxRate ? {

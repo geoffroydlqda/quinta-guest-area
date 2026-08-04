@@ -195,7 +195,7 @@ export function PaymentsPage({
   const togglePaid = async (r: Row, paid: boolean) => {
     const { error } = await supabase
       .from("payment_installments")
-      .update({ status: paid ? "paid" : "pending" })
+      .update({ status: paid ? "paid" : "pending", paid_on: paid ? new Date().toISOString().slice(0, 10) : null })
       .eq("id", r.inst.id);
     if (error) toast({ title: "Failed", description: error.message, variant: "destructive" });
     else onReload();

@@ -661,6 +661,7 @@ export type Database = {
           vat_rate: number | null
           paid_usd: number | null
           group_id: string | null
+          paid_on: string | null
           usd_rate: number | null
           stripe_session_id: string | null
           invoice_number: string | null
@@ -685,6 +686,7 @@ export type Database = {
           vat_rate?: number | null
           paid_usd?: number | null
           group_id?: string | null
+          paid_on?: string | null
           usd_rate?: number | null
           stripe_session_id?: string | null
           invoice_number?: string | null
@@ -709,6 +711,7 @@ export type Database = {
           vat_rate?: number | null
           paid_usd?: number | null
           group_id?: string | null
+          paid_on?: string | null
           usd_rate?: number | null
           stripe_session_id?: string | null
           invoice_number?: string | null

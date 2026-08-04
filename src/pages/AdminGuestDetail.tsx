@@ -1517,7 +1517,9 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const setPaidStatus = async (inst: Installment, paid: boolean) => {
     const next = paid ? "paid" : "pending";
-    const { error } = await supabase.from("payment_installments").update({ status: next }).eq("id", inst.id);
+    // paid_on = date réelle d'encaissement (trésorerie — surtout pour le cash)
+    const { error } = await supabase.from("payment_installments")
+      .update({ status: next, paid_on: paid ? new Date().toISOString().slice(0, 10) : null }).eq("id", inst.id);
     if (error) toast({ title: "Failed", description: error.message, variant: "destructive" });
     else await loadAll();
   };

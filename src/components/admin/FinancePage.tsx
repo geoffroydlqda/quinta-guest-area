@@ -65,7 +65,8 @@ export type FinBooking = {
 
 export type FinInstallment = {
   booking_id: string; amount_due: number; amount_excl_vat?: number | null;
-  category?: string | null; is_cash?: boolean;
+  category?: string | null; is_cash?: boolean; status?: string;
+  due_date?: string | null; paid_on?: string | null;
 };
 
 const fmt0 = (v: number) =>
@@ -114,7 +115,7 @@ function autoKind(desc: string, amount: number, rules: FinRule[]): Partial<FinTx
   if (/stripe/.test(d) && amount > 0) return { kind: "guest_payment", reviewed: true };
   if (/(payout|settlement).*(merchant)|merchant.*(payout|settlement)/.test(d) && amount > 0)
     return { kind: "bar_payout", reviewed: true };
-  if (/^to (eur|usd|gbp|savings|pocket)|^exchanged|between own accounts|vault/.test(d))
+  if (/^to (eur|usd|gbp|savings|pocket)|^exchanged|between own accounts|vault|cash deposit|dep[oó]sito.*numer[aá]rio/.test(d))
     return { kind: "internal", reviewed: true };
   if (/autoridade tribut|(^|\s)at($|\s)|imposto|\biva\b/.test(d) && amount < 0)
     return { kind: "vat_payment", reviewed: true };
@@ -275,13 +276,26 @@ export function FinancePage({ bookings, installments }: {
   const cash = useMemo(() => {
     const cin = Array.from({ length: 12 }, () => 0);
     const cout = Array.from({ length: 12 }, () => 0);
+    const cashDrawer = Array.from({ length: 12 }, () => 0);
     for (const t of txs) {
       if (t.kind === "internal" || !t.date.startsWith(year)) continue;
       const m = Number(t.date.slice(5, 7)) - 1;
       if (t.amount > 0) cin[m] += t.amount; else cout[m] += -t.amount;
     }
-    return { cin, cout };
-  }, [txs, year]);
+    // Encaissements CASH : lus directement dans Payments (échéances is_cash
+    // payées, hors bookings test) — jamais ressaisis, jamais dans Revolut.
+    // Date = paid_on (réelle) avec repli sur l'échéance.
+    for (const i of installments) {
+      if (!i.is_cash || i.status !== "paid") continue;
+      if (!bookingById.has(i.booking_id)) continue; // exclut les tests
+      const d = i.paid_on ?? i.due_date;
+      if (!d || !d.startsWith(year)) continue;
+      const m = Number(d.slice(5, 7)) - 1;
+      cin[m] += Number(i.amount_due || 0);
+      cashDrawer[m] += Number(i.amount_due || 0);
+    }
+    return { cin, cout, cashDrawer };
+  }, [txs, installments, bookingById, year]);
 
   const reviewCount = txs.filter((t) => t.kind === "review").length;
   const visible = filter === "review" ? txs.filter((t) => t.kind === "review") : txs.slice(0, 300);
@@ -547,7 +561,7 @@ export function FinancePage({ bookings, installments }: {
                 <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#8FC46A] inline-block" /> Cash in</span>
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#EF9455] inline-block" /> Cash out</span>
-                  <span className="ml-auto">In {fmt0(cash.cin.reduce((s, v) => s + v, 0))} · Out {fmt0(cash.cout.reduce((s, v) => s + v, 0))} · Net <b className="text-foreground">{fmt0(cash.cin.reduce((s, v) => s + v, 0) - cash.cout.reduce((s, v) => s + v, 0))}</b></span>
+                  <span className="ml-auto">In {fmt0(cash.cin.reduce((s, v) => s + v, 0))} <span className="text-[10px]">(incl. cash {fmt0(cash.cashDrawer.reduce((s, v) => s + v, 0))} from Payments)</span> · Out {fmt0(cash.cout.reduce((s, v) => s + v, 0))} · Net <b className="text-foreground">{fmt0(cash.cin.reduce((s, v) => s + v, 0) - cash.cout.reduce((s, v) => s + v, 0))}</b></span>
                 </div>
               </>
             );

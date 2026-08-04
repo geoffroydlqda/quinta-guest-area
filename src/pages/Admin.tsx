@@ -91,6 +91,7 @@ type Installment = {
   is_cash?: boolean;
   moloni_document_id?: number | null;
   invoice_number?: string | null;
+  paid_on?: string | null;
 };
 
 const SECTION_TITLES: Record<string, string> = {
@@ -231,7 +232,7 @@ const AdminContent = () => {
     if (!silent) setLoading(true);
     const [res, instRes] = await Promise.all([
       supabase.functions.invoke("admin-list-data"),
-      supabase.from("payment_installments").select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,payment_link,is_cash,moloni_document_id,invoice_number"),
+      supabase.from("payment_installments").select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,payment_link,is_cash,moloni_document_id,invoice_number,paid_on"),
     ]);
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });
