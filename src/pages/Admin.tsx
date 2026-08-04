@@ -769,6 +769,7 @@ const AdminContent = () => {
               id: b.id,
               name: b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email,
               check_in_date: b.check_in_date,
+              check_out_date: b.check_out_date,
               event_type: b.event_type ?? null,
               is_test: !!b.is_test,
             }))}

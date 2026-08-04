@@ -62,8 +62,14 @@ type FinTx = {
 type FinRule = { id: string; pattern: string; kind: string; category: string | null; vat_rate: number | null };
 
 export type FinBooking = {
-  id: string; name: string; check_in_date: string | null; event_type: string | null; is_test: boolean;
+  id: string; name: string; check_in_date: string | null; check_out_date?: string | null;
+  event_type: string | null; is_test: boolean;
 };
+
+// Catégories variables : les seules qu'on rattache automatiquement à un séjour
+const VARIABLE_CATS = new Set(
+  FIN_CATEGORIES.filter((g) => g.group.startsWith("Variable")).flatMap((g) => g.items)
+);
 
 export type FinInstallment = {
   booking_id: string; amount_due: number; amount_excl_vat?: number | null;
@@ -299,7 +305,9 @@ export function FinancePage({ bookings, installments }: {
     }
     const vat = vatOverride ?? t.vat_rate ?? 23;
     const net = Math.round(Math.abs(t.amount) / (1 + vat / 100) * 100) / 100;
-    await patch(t.id, { kind: "expense", category, vat_rate: vat, amount_net: net, reviewed: true });
+    // Dépense variable sans événement -> rattachement auto si un seul séjour colle avec la date
+    const autoEvent = !t.booking_id && VARIABLE_CATS.has(category) ? eventForDate(t.date) : null;
+    await patch(t.id, { kind: "expense", category, vat_rate: vat, amount_net: net, reviewed: true, ...(autoEvent ? { booking_id: autoEvent.id } : {}) });
     // Règle apprenante : la contrepartie retiendra cette catégorie
     const pattern = (t.description ?? "").trim().slice(0, 24);
     if (pattern.length >= 4 && !rules.some((r) => r.pattern.toLowerCase() === pattern.toLowerCase())) {
@@ -349,6 +357,43 @@ export function FinancePage({ bookings, installments }: {
   const unsplit = async (t: FinTx) => {
     await supabase.from("fin_transactions").delete().eq("parent_id", t.id);
     await supabase.from("fin_transactions").update({ kind: "review", reviewed: false }).eq("id", t.id);
+    load();
+  };
+
+  // ---- Rattachement auto dépense <-> séjour --------------------------------
+  // La date tombe dans la fenêtre [check-in - 6 jours (courses de préparation),
+  // check-out + 1 jour] d'UN SEUL événement -> on peut lier sans ambiguïté.
+  const eventForDate = (date: string): FinBooking | null => {
+    const ts = new Date(`${date}T12:00:00`).getTime();
+    const D = 86400000;
+    // 1) La date tombe PENDANT un séjour -> ce séjour gagne (priorité en saison back-to-back)
+    const during = realBookings.filter((b) => {
+      if (!b.check_in_date) return false;
+      const from = new Date(`${b.check_in_date}T12:00:00`).getTime();
+      const to = new Date(`${b.check_out_date ?? b.check_in_date}T12:00:00`).getTime();
+      return ts >= from && ts <= to;
+    });
+    if (during.length === 1) return during[0];
+    if (during.length > 1) return null;
+    // 2) Sinon, fenêtre de préparation : jusqu'à 6 jours avant le check-in d'UN SEUL séjour
+    const pre = realBookings.filter((b) => {
+      if (!b.check_in_date) return false;
+      const from = new Date(`${b.check_in_date}T12:00:00`).getTime();
+      return ts >= from - 6 * D && ts < from;
+    });
+    return pre.length === 1 ? pre[0] : null;
+  };
+
+  const autoLinkEvents = async () => {
+    const targets = txs.filter((t) => t.kind === "expense" && !t.booking_id && t.category && VARIABLE_CATS.has(t.category));
+    if (!targets.length) { toast({ title: "Nothing to link", description: "No unlinked variable expenses (food, staff, bar stock…) found." }); return; }
+    let linked = 0, ambiguous = 0;
+    for (const t of targets) {
+      const b = eventForDate(t.date);
+      if (b) { await supabase.from("fin_transactions").update({ booking_id: b.id }).eq("id", t.id); linked++; }
+      else ambiguous++;
+    }
+    toast({ title: "Events linked", description: `${linked} expense(s) linked to their event${ambiguous ? ` — ${ambiguous} left for manual review (zero or several events match the date)` : ""}.` });
     load();
   };
 
@@ -507,6 +552,10 @@ export function FinancePage({ bookings, installments }: {
               ))}
             </div>
             <span className="ml-auto flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={autoLinkEvents}
+                title="Link every unlinked variable expense (food, staff, bar stock…) to the event whose dates match — ambiguous ones are left for manual review">
+                ✨ Auto-link events
+              </Button>
               <Button size="sm" variant="outline" onClick={() => setShowManual((v) => !v)}>
                 <Plus className="w-4 h-4 mr-1" /> Manual expense
               </Button>
@@ -630,19 +679,31 @@ export function FinancePage({ bookings, installments }: {
                           <button type="button" className="text-[11px] font-medium text-[#7C3AED] hover:underline"
                             onClick={() => unsplit(t)}>Undo split</button>
                         ) : editable || t.kind === "guest_payment" ? (
-                          <span className="inline-flex items-center gap-1.5">
-                            <select className="h-7 rounded-md border border-input bg-background px-1 text-xs max-w-[180px]"
-                              value={t.booking_id ?? ""} onChange={(e) => patch(t.id, { booking_id: e.target.value || null })}>
-                              <option value="">—</option>
-                              {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                            </select>
-                            {editable && !t.parent_id && (
-                              <button type="button" className="text-[10px] font-medium text-[#7C3AED] hover:underline whitespace-nowrap"
-                                onClick={() => (splitFor === t.id ? setSplitFor(null) : openSplit(t))}>
-                                {splitFor === t.id ? "Close" : "Split"}
-                              </button>
-                            )}
-                          </span>
+                          <>
+                            <span className="inline-flex items-center gap-1.5">
+                              <select className="h-7 rounded-md border border-input bg-background px-1 text-xs max-w-[180px]"
+                                value={t.booking_id ?? ""} onChange={(e) => patch(t.id, { booking_id: e.target.value || null })}>
+                                <option value="">—</option>
+                                {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                              </select>
+                              {editable && !t.parent_id && (
+                                <button type="button" className="text-[10px] font-medium text-[#7C3AED] hover:underline whitespace-nowrap"
+                                  onClick={() => (splitFor === t.id ? setSplitFor(null) : openSplit(t))}>
+                                  {splitFor === t.id ? "Close" : "Split"}
+                                </button>
+                              )}
+                            </span>
+                            {!t.booking_id && t.amount < 0 && (() => {
+                              const b = eventForDate(t.date);
+                              return b ? (
+                                <button type="button" className="mt-1 block max-w-[200px] truncate text-left text-[10px] font-medium text-[#1C5CAB] hover:underline"
+                                  title={`The date falls inside this event's window (check-in −6 days → check-out)`}
+                                  onClick={() => patch(t.id, { booking_id: b.id })}>
+                                  ✨ {b.name} — accept
+                                </button>
+                              ) : null;
+                            })()}
+                          </>
                         ) : "—"}
                       </td>
                       <td className="px-3 py-2">
