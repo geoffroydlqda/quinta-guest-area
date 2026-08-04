@@ -14,6 +14,87 @@ export type Database = {
   }
   public: {
     Tables: {
+      fin_transactions: {
+        Row: {
+          id: string
+          source: string
+          dedup_key: string | null
+          date: string
+          description: string | null
+          amount: number
+          currency: string
+          kind: string
+          category: string | null
+          vat_rate: number | null
+          amount_net: number | null
+          booking_id: string | null
+          notes: string | null
+          reviewed: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          source?: string
+          dedup_key?: string | null
+          date: string
+          description?: string | null
+          amount: number
+          currency?: string
+          kind?: string
+          category?: string | null
+          vat_rate?: number | null
+          amount_net?: number | null
+          booking_id?: string | null
+          notes?: string | null
+          reviewed?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          source?: string
+          dedup_key?: string | null
+          date?: string
+          description?: string | null
+          amount?: number
+          currency?: string
+          kind?: string
+          category?: string | null
+          vat_rate?: number | null
+          amount_net?: number | null
+          booking_id?: string | null
+          notes?: string | null
+          reviewed?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      fin_rules: {
+        Row: {
+          id: string
+          pattern: string
+          kind: string
+          category: string | null
+          vat_rate: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          pattern: string
+          kind?: string
+          category?: string | null
+          vat_rate?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          pattern?: string
+          kind?: string
+          category?: string | null
+          vat_rate?: number | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       housekeeping_sessions: {
         Row: {
           id: string

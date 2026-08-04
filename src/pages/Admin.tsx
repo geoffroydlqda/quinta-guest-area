@@ -24,6 +24,7 @@ import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { HonestyBarCard } from "@/components/admin/HonestyBarCard";
 import { HousekeepingScheduler } from "@/components/admin/HousekeepingScheduler";
+import { FinancePage } from "@/components/admin/FinancePage";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
 import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass, FlaskConical } from "lucide-react";
@@ -100,6 +101,7 @@ const SECTION_TITLES: Record<string, string> = {
   catering: "Catering",
   transportation: "Transportation",
   rooms: "Housekeeping",
+  finance: "Finance",
 };
 
 const fmtShort = (d: string | null) =>
@@ -759,6 +761,19 @@ const AdminContent = () => {
         )}
 
         {view === "rooms" && <RoomsView data={data} onOpen={navigateToBooking} />}
+
+        {view === "finance" && (
+          <FinancePage
+            bookings={(data.bookings || []).map((b) => ({
+              id: b.id,
+              name: b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email,
+              check_in_date: b.check_in_date,
+              event_type: b.event_type ?? null,
+              is_test: !!b.is_test,
+            }))}
+            installments={installments}
+          />
+        )}
       </main>
 
       <CreateBookingDialog

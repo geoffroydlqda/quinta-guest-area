@@ -3,7 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard, CalendarRange, Users, Wallet, Car,
-  BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X,
+  BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X, Landmark,
 } from "lucide-react";
 
 /**
@@ -21,6 +21,7 @@ const NAV = [
   { to: "/admin/catering", label: "Catering", icon: ChefHat },
   { to: "/admin/transportation", label: "Transportation", icon: Car },
   { to: "/admin/rooms", label: "Housekeeping", icon: BedDouble },
+  { to: "/admin/finance", label: "Finance", icon: Landmark },
 ] as const;
 
 /* Onglets principaux de la tab bar mobile (choix Geoffroy, 31 juil. 2026) */
@@ -33,6 +34,7 @@ const MOBILE_MAIN = [
 
 const MOBILE_MORE = [
   { to: "/admin/payments", label: "Payments", icon: Wallet },
+  { to: "/admin/finance", label: "Finance", icon: Landmark },
   { to: "/admin/guests", label: "Guests", icon: Users },
   { to: "/admin/catering", label: "Catering", icon: ChefHat },
 ] as const;

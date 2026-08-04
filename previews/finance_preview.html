@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Preview — Finance (Expenses · P&L · Cash flow)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --page:#F6F7F2; --card:#fff; --ink:#31352E; --ink2:#6E746B; --hair:#E7E8E1;
+    --olive:#CAE8BD; --olive-deep:#35532A; --sage:#EAF6DF;
+    --in:#8FC46A; --out:#EF9455; --bad:#F36F63; --bad-bg:#FFEAE7;
+    --warn:#B45309; --warn-bg:#FDF1E0; --ok:#178A3F; --ok-bg:#E5F5EA;
+    --info:#1C5CAB; --info-bg:#E8F0FB; --violet:#8a63d2; --violet-bg:#F3EDFF;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',system-ui,sans-serif; background:#ECEEE6; color:var(--ink); }
+  .doc-head { background:#fff; border-bottom:1px solid var(--hair); padding:24px 32px 0; }
+  .doc-head h1 { font-size:19px; font-weight:800; letter-spacing:-.02em; }
+  .doc-head p { font-size:13px; color:var(--ink2); margin-top:4px; max-width:900px; }
+  .doc-tabs { display:flex; gap:4px; margin-top:16px; }
+  .doc-tab { background:transparent; border:none; color:var(--ink2); font:inherit; font-size:13px; font-weight:600; padding:9px 14px; border-radius:10px 10px 0 0; cursor:pointer; }
+  .doc-tab.on { background:#ECEEE6; color:var(--ink); }
+  .stage { display:none; padding:24px 22px 60px; }
+  .stage.on { display:block; }
+  .frame { max-width:1160px; margin:0 auto; background:var(--page); border:1px solid var(--hair); border-radius:18px; padding:22px 24px; box-shadow:0 18px 40px -22px rgba(35,32,25,.25); }
+  .note { max-width:1160px; margin:0 auto 14px; background:#fffbe8; border:1px solid #ecdf9a; border-radius:12px; padding:10px 14px; font-size:12.5px; color:#6b5d1e; }
+  h2.pg { font-size:18px; font-weight:700; letter-spacing:-.01em; margin-bottom:4px; }
+  .sub { font-size:12.5px; color:var(--ink2); margin-bottom:16px; }
+  .card { background:#fff; border-radius:16px; border:1px solid var(--hair); box-shadow:0 1px 2px rgba(35,32,25,.05); }
+  .chip { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:3px 9px; border-radius:99px; white-space:nowrap; }
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+  .kpi { background:#fff; border:1px solid var(--hair); border-radius:16px; padding:14px 16px; }
+  .kpi .l { font-size:11.5px; font-weight:600; color:var(--ink2); }
+  .kpi .v { font-size:23px; font-weight:800; letter-spacing:-.02em; margin-top:4px; }
+  .kpi .s { font-size:11px; color:var(--ink2); margin-top:3px; }
+  table.t { width:100%; border-collapse:collapse; font-size:12.5px; }
+  .t th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--ink2); font-weight:700; padding:10px 12px; border-bottom:1px solid var(--hair); background:#FBFCF8; }
+  .t td { padding:9px 12px; border-bottom:1px solid #F2F3EC; vertical-align:middle; }
+  .t tr:last-child td { border-bottom:none; }
+  .amt { font-variant-numeric:tabular-nums; font-weight:600; text-align:right; }
+  .sel { border:1px solid var(--hair); border-radius:8px; padding:4px 8px; font-size:11.5px; background:#fff; color:var(--ink); }
+  .cap { max-width:1160px; margin:16px auto 0; font-size:12.5px; color:var(--ink2); line-height:1.65; background:#fff; border-radius:12px; padding:14px 18px; border:1px solid var(--hair); }
+  .cap b { color:var(--ink); }
+  .cap ul { margin:6px 0 0 18px; }
+  .cap li { margin-bottom:4px; }
+  .grid2 { display:grid; grid-template-columns:1.5fr 1fr; gap:14px; align-items:start; }
+</style>
+</head>
+<body>
+
+<div class="doc-head">
+  <h1>Preview — Onglet Finance : Expenses · P&L · Cash flow</h1>
+  <p>Maquette à valider, rien n'est construit. Source unique des mouvements : ton compte Revolut Business (sync API temps quasi réel). Règle d'or : <b>la trésorerie compte l'argent quand il bouge, le P&L compte la valeur quand elle est gagnée/consommée</b> — jamais les deux pour la même ligne.</p>
+  <div class="doc-tabs">
+    <button class="doc-tab on" onclick="show(0,this)">1 · Transactions (inbox Revolut)</button>
+    <button class="doc-tab" onclick="show(1,this)">2 · P&L live</button>
+    <button class="doc-tab" onclick="show(2,this)">3 · Cash flow</button>
+  </div>
+</div>
+
+<!-- ================= 1 · TRANSACTIONS ================= -->
+<section class="stage on">
+  <div class="note"><b>Le principe :</b> chaque transaction Revolut arrive ici automatiquement. Beaucoup se taguent toutes seules (paiements guests, payouts Stripe, transferts internes, frais bancaires). Toi, tu ne traites que la file "À catégoriser" : 2 clics par dépense — catégorie + événement éventuel.</div>
+  <div class="frame">
+    <h2 class="pg">Finance — Transactions</h2>
+    <div class="sub">Synced from Revolut Business · last sync 5 min ago · <b style="color:var(--olive-deep)">7 to review</b></div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">To review</div><div class="v">7</div><div class="s">out of 143 this month</div></div>
+      <div class="kpi"><div class="l">Auto-matched</div><div class="v">128</div><div class="s">guest payments, payouts, transfers, fees</div></div>
+      <div class="kpi"><div class="l">Expenses August (net)</div><div class="v">€6 240</div><div class="s">categorised, excl. VAT</div></div>
+      <div class="kpi"><div class="l">Linked to events</div><div class="v">€3 890</div><div class="s">62% of variable costs</div></div>
+    </div>
+    <div class="card">
+      <table class="t">
+        <tr><th>Date</th><th>Description (Revolut)</th><th style="text-align:right">Amount</th><th>VAT</th><th>Category</th><th>Event</th><th>Status</th></tr>
+        <tr>
+          <td>Aug 2</td><td><b>CONTINENTE LOULE</b><span style="display:block;font-size:10.5px;color:var(--ink2)">Card ·2941</span></td>
+          <td class="amt">−€342,80</td>
+          <td><span class="sel">6% ▾</span></td>
+          <td><span class="sel">Retreat — catering / food ▾</span></td>
+          <td><span class="sel">Slink Retreat (Aug) ▾</span></td>
+          <td><span class="chip" style="background:var(--warn-bg);color:var(--warn)">To review</span></td>
+        </tr>
+        <tr>
+          <td>Aug 2</td><td><b>ISADORA M.</b><span style="display:block;font-size:10.5px;color:var(--ink2)">Bank transfer</span></td>
+          <td class="amt">−€480,00</td>
+          <td><span class="sel">0% ▾</span></td>
+          <td><span class="chip" style="background:var(--violet-bg);color:var(--violet)">Matches staff cost — Slink (Catering tab)</span></td>
+          <td>Slink Retreat</td>
+          <td><span class="chip" style="background:var(--warn-bg);color:var(--warn)">Confirm link</span></td>
+        </tr>
+        <tr>
+          <td>Aug 1</td><td><b>STRIPE PAYOUT</b><span style="display:block;font-size:10.5px;color:var(--ink2)">ST-3XK29…</span></td>
+          <td class="amt" style="color:var(--ok)">+€3 997,50</td>
+          <td>—</td>
+          <td><span class="chip" style="background:var(--ok-bg);color:var(--ok)">Guest payment — already in P&L</span></td>
+          <td>Slink Retreat</td>
+          <td><span class="chip" style="background:var(--ok-bg);color:var(--ok)">Auto</span></td>
+        </tr>
+        <tr>
+          <td>Aug 1</td><td><b>REVOLUT MERCHANT PAYOUT</b></td>
+          <td class="amt" style="color:var(--ok)">+€184,00</td>
+          <td>—</td>
+          <td><span class="chip" style="background:var(--ok-bg);color:var(--ok)">Bar sales — already in P&L</span></td>
+          <td>—</td>
+          <td><span class="chip" style="background:var(--ok-bg);color:var(--ok)">Auto</span></td>
+        </tr>
+        <tr>
+          <td>Jul 31</td><td><b>EDP COMERCIAL</b><span style="display:block;font-size:10.5px;color:var(--ink2)">Direct debit</span></td>
+          <td class="amt">−€289,14</td>
+          <td>23%</td>
+          <td>Electricity <span style="font-size:10px;color:var(--ink2)">(règle auto : EDP → Electricity)</span></td>
+          <td>—</td>
+          <td><span class="chip" style="background:var(--ok-bg);color:var(--ok)">Auto</span></td>
+        </tr>
+        <tr>
+          <td>Jul 31</td><td><b>TO EUR SAVINGS</b></td>
+          <td class="amt">−€5 000,00</td>
+          <td>—</td>
+          <td><span class="chip" style="background:#F0F1EA;color:var(--ink2)">Internal transfer — excluded</span></td>
+          <td>—</td>
+          <td><span class="chip" style="background:var(--ok-bg);color:var(--ok)">Auto</span></td>
+        </tr>
+        <tr>
+          <td>Jul 30</td><td><b>AT — IVA 2º TRIMESTRE</b></td>
+          <td class="amt">−€4 118,00</td>
+          <td>—</td>
+          <td><span class="chip" style="background:var(--info-bg);color:var(--info)">VAT payment — cash only, not P&L</span></td>
+          <td>—</td>
+          <td><span class="chip" style="background:var(--ok-bg);color:var(--ok)">Auto</span></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="cap"><b>Ce que montre cet écran :</b>
+    <ul>
+      <li><b>Auto-tags anti-double comptage</b> : les entrées "Stripe payout" / "Merchant payout" / virements guests sont reconnues et marquées <i>already in P&L</i> — elles comptent dans la trésorerie, jamais une 2e fois dans les revenus. Transferts internes exclus des deux. Paiements de TVA à l'AT : trésorerie oui, P&L non (la TVA n'est pas une charge).</li>
+      <li><b>Rapprochement intelligent</b> : un virement à Isadora est détecté comme correspondant au staff cuisine déjà encodé dans Catering → tu confirmes le lien, aucune dépense doublonnée.</li>
+      <li><b>Règles apprenantes</b> : la 1re fois que tu catégorises "EDP → Electricity", les suivantes se font seules.</li>
+      <li><b>TVA par ligne</b> (23/13/6/0) → le P&L est en HT comme ton modèle, et tu vois la TVA déductible cumulée.</li>
+      <li>Dépenses cash / hors Revolut : bouton "+ Manual expense".</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= 2 · P&L ================= -->
+<section class="stage">
+  <div class="note"><b>Le principe :</b> le P&L est en <b>engagement (accrual), HT</b>. Revenus = échéances des événements, reconnues au mois du séjour (un acompte payé en mai pour juillet compte en juillet). Charges liées à un événement → mois de l'événement ; charges fixes → mois de la facture. Mêmes catégories que ton Financial Model.</div>
+  <div class="frame">
+    <h2 class="pg">Finance — P&L 2026 <span style="font-weight:400;font-size:13px;color:var(--ink2)">· net of VAT · accrual</span></h2>
+    <div class="sub">Views: <b>By month</b> · By event · By category</div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Revenue YTD</div><div class="v">€194 800</div><div class="s">events €192 400 + bar €2 400</div></div>
+      <div class="kpi"><div class="l">Variable costs</div><div class="v">€48 300</div><div class="s">25% of revenue</div></div>
+      <div class="kpi"><div class="l">Fixed costs</div><div class="v">€61 200</div><div class="s">payroll, POM, utilities…</div></div>
+      <div class="kpi"><div class="l">EBITDA YTD</div><div class="v" style="color:var(--olive-deep)">€85 300</div><div class="s">marge 44%</div></div>
+    </div>
+    <div class="grid2">
+      <div class="card" style="padding:14px 16px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px;">By month (extrait)</div>
+        <table class="t">
+          <tr><th></th><th style="text-align:right">Jun</th><th style="text-align:right">Jul</th><th style="text-align:right">Aug</th></tr>
+          <tr><td><b>Revenue — events</b></td><td class="amt">28 400</td><td class="amt">41 900</td><td class="amt">36 200</td></tr>
+          <tr><td><b>Revenue — bar</b></td><td class="amt">380</td><td class="amt">610</td><td class="amt">450</td></tr>
+          <tr><td style="color:var(--ink2)">Retreat — catering / food</td><td class="amt">−3 120</td><td class="amt">−4 480</td><td class="amt">−3 900</td></tr>
+          <tr><td style="color:var(--ink2)">Retreat — catering / staff</td><td class="amt">−2 400</td><td class="amt">−3 200</td><td class="amt">−2 800</td></tr>
+          <tr><td style="color:var(--ink2)">Cleaning (in season)</td><td class="amt">−980</td><td class="amt">−1 240</td><td class="amt">−1 100</td></tr>
+          <tr><td style="color:var(--ink2)">Utilities</td><td class="amt">−690</td><td class="amt">−760</td><td class="amt">−810</td></tr>
+          <tr><td style="color:var(--ink2)">Core team payroll</td><td class="amt">−4 500</td><td class="amt">−4 500</td><td class="amt">−4 500</td></tr>
+          <tr><td style="color:var(--ink2)">Other fixed</td><td class="amt">−2 310</td><td class="amt">−2 890</td><td class="amt">−2 445</td></tr>
+          <tr style="background:var(--sage)"><td><b>EBITDA</b></td><td class="amt"><b>14 780</b></td><td class="amt"><b>25 440</b></td><td class="amt"><b>21 095</b></td></tr>
+        </table>
+      </div>
+      <div class="card" style="padding:14px 16px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px;">By event — Slink Retreat · Jul 28 → Aug 2</div>
+        <table class="t">
+          <tr><td>Rental (net)</td><td class="amt">6 500</td></tr>
+          <tr><td>Catering (net)</td><td class="amt">4 070</td></tr>
+          <tr><td>Extras + bar</td><td class="amt">690</td></tr>
+          <tr style="border-top:1px solid var(--hair)"><td><b>Revenue</b></td><td class="amt"><b>11 260</b></td></tr>
+          <tr><td style="color:var(--ink2)">Catering food</td><td class="amt">−1 490</td></tr>
+          <tr><td style="color:var(--ink2)">Catering staff (from Catering tab)</td><td class="amt">−1 280</td></tr>
+          <tr><td style="color:var(--ink2)">Cleaning & laundry</td><td class="amt">−420</td></tr>
+          <tr><td style="color:var(--ink2)">Extras & supplies</td><td class="amt">−260</td></tr>
+          <tr style="background:var(--sage)"><td><b>Event margin</b></td><td class="amt"><b>7 810 · 69%</b></td></tr>
+        </table>
+        <div style="font-size:11px;color:var(--ink2);margin-top:8px;">Marge par événement = revenus de l'événement − dépenses liées (booking_id) − staff cuisine déjà encodé. Comparable d'un retreat à l'autre.</div>
+      </div>
+    </div>
+  </div>
+  <div class="cap"><b>Fiabilité du P&L :</b>
+    <ul>
+      <li><b>Revenus déjà fiables</b> : les échéances (HT stocké ligne par ligne) sont la source de vérité, reconnues au mois du check-in — ton exemple mai/juillet est traité exactement comme tu l'as décrit.</li>
+      <li><b>Le staff cuisine et le bar déjà dans l'app</b> alimentent le P&L automatiquement — pas de ressaisie, pas de doublon.</li>
+      <li><b>Mêmes catégories que ton Financial Model</b> (Core team, POM, Insurance, G&A, Utilities, Marketing, variables Wedding/Retreat) → tu peux comparer actuals vs budget ligne à ligne, et l'export vers ta feuille reste possible.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= 3 · CASH FLOW ================= -->
+<section class="stage">
+  <div class="note"><b>Le principe :</b> la trésorerie ne regarde qu'une chose — les mouvements bancaires réels, au mois où ils ont lieu. L'acompte de mai compte ici en mai. Solde = celui de Revolut, rapproché automatiquement.</div>
+  <div class="frame">
+    <h2 class="pg">Finance — Cash flow 2026</h2>
+    <div class="sub">Revolut Business + Merchant · updated 5 min ago</div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Cash today</div><div class="v">€48 210</div><div class="s">Business €41 320 · Savings €5 000 · Merchant €1 890</div></div>
+      <div class="kpi"><div class="l">Cash in — August</div><div class="v" style="color:var(--olive-deep)">+€21 480</div><div class="s">deposits, balances, bar</div></div>
+      <div class="kpi"><div class="l">Cash out — August</div><div class="v">−€13 240</div><div class="s">incl. IVA €4 118</div></div>
+      <div class="kpi"><div class="l">Net — August</div><div class="v" style="color:var(--olive-deep)">+€8 240</div><div class="s">6th positive month in a row</div></div>
+    </div>
+    <div class="card" style="padding:16px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Monthly cash in / out <span style="font-weight:400;font-size:11px;color:var(--ink2)">— survole pour le détail</span></div>
+      <div style="display:flex;align-items:flex-end;gap:14px;height:190px;border-bottom:1px solid var(--hair);padding:0 6px;">
+        <!-- mois : in (vert) / out (abricot), étiquette nette -->
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:0;" title="March">
+          <div style="display:flex;align-items:flex-end;gap:3px;height:160px;">
+            <div style="width:22px;height:38px;background:var(--in);border-radius:4px 4px 2px 2px;"></div>
+            <div style="width:22px;height:52px;background:var(--out);border-radius:4px 4px 2px 2px;"></div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;" title="April">
+          <div style="display:flex;align-items:flex-end;gap:3px;height:160px;">
+            <div style="width:22px;height:72px;background:var(--in);border-radius:4px 4px 2px 2px;"></div>
+            <div style="width:22px;height:58px;background:var(--out);border-radius:4px 4px 2px 2px;"></div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;" title="May">
+          <div style="display:flex;align-items:flex-end;gap:3px;height:160px;">
+            <div style="width:22px;height:118px;background:var(--in);border-radius:4px 4px 2px 2px;"></div>
+            <div style="width:22px;height:64px;background:var(--out);border-radius:4px 4px 2px 2px;"></div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;" title="June">
+          <div style="display:flex;align-items:flex-end;gap:3px;height:160px;">
+            <div style="width:22px;height:96px;background:var(--in);border-radius:4px 4px 2px 2px;"></div>
+            <div style="width:22px;height:70px;background:var(--out);border-radius:4px 4px 2px 2px;"></div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;" title="July">
+          <div style="display:flex;align-items:flex-end;gap:3px;height:160px;">
+            <div style="width:22px;height:142px;background:var(--in);border-radius:4px 4px 2px 2px;"></div>
+            <div style="width:22px;height:88px;background:var(--out);border-radius:4px 4px 2px 2px;"></div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;" title="August">
+          <div style="display:flex;align-items:flex-end;gap:3px;height:160px;">
+            <div style="width:22px;height:124px;background:var(--in);border-radius:4px 4px 2px 2px;"></div>
+            <div style="width:22px;height:76px;background:var(--out);border-radius:4px 4px 2px 2px;"></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;padding:6px 6px 0;">
+        <div style="flex:1;text-align:center;font-size:10.5px;color:var(--ink2)">Mar<br><b style="color:var(--ink)">−€1 8k</b></div>
+        <div style="flex:1;text-align:center;font-size:10.5px;color:var(--ink2)">Apr<br><b style="color:var(--ink)">+€1 9k</b></div>
+        <div style="flex:1;text-align:center;font-size:10.5px;color:var(--ink2)">May<br><b style="color:var(--ink)">+€7 2k</b></div>
+        <div style="flex:1;text-align:center;font-size:10.5px;color:var(--ink2)">Jun<br><b style="color:var(--ink)">+€3 5k</b></div>
+        <div style="flex:1;text-align:center;font-size:10.5px;color:var(--ink2)">Jul<br><b style="color:var(--ink)">+€7 3k</b></div>
+        <div style="flex:1;text-align:center;font-size:10.5px;color:var(--ink2)">Aug<br><b style="color:var(--ink)">+€6 4k</b></div>
+      </div>
+      <div style="display:flex;gap:16px;margin-top:12px;font-size:11.5px;color:var(--ink2)">
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--in);border-radius:3px;margin-right:5px;"></span>Cash in</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--out);border-radius:3px;margin-right:5px;"></span>Cash out</span>
+      </div>
+    </div>
+  </div>
+  <div class="cap"><b>Ce que montre cet écran :</b>
+    <ul>
+      <li><b>Cash in / cash out mensuels</b> depuis le ledger Revolut (transferts internes exclus), net du mois en étiquette, solde du jour ventilé par compte.</li>
+      <li><b>Décalage trésorerie / P&L visible</b> : mai est un gros mois de cash (acomptes de l'été) alors que le P&L de mai est modeste — c'est exactement l'information dont tu as besoin pour piloter les creux d'hiver.</li>
+      <li>V2 possible : projection 3 mois (échéances à venir + dépenses récurrentes connues) = prévision de trésorerie.</li>
+    </ul>
+  </div>
+</section>
+
+<script>
+  function show(i, btn) {
+    document.querySelectorAll('.stage').forEach((s, j) => s.classList.toggle('on', j === i));
+    document.querySelectorAll('.doc-tab').forEach(t => t.classList.remove('on'));
+    btn.classList.add('on');
+    window.scrollTo({top: 0});
+  }
+</script>
+</body>
+</html>
