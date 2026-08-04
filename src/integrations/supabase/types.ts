@@ -30,6 +30,7 @@ export type Database = {
           booking_id: string | null
           notes: string | null
           reviewed: boolean
+          parent_id: string | null
           created_at: string
         }
         Insert: {
@@ -47,6 +48,7 @@ export type Database = {
           booking_id?: string | null
           notes?: string | null
           reviewed?: boolean
+          parent_id?: string | null
           created_at?: string
         }
         Update: {
@@ -64,6 +66,7 @@ export type Database = {
           booking_id?: string | null
           notes?: string | null
           reviewed?: boolean
+          parent_id?: string | null
           created_at?: string
         }
         Relationships: []

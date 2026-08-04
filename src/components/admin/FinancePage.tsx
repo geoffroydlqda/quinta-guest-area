@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,7 @@ const KIND_LABEL: Record<string, { label: string; cls: string }> = {
   vat_payment: { label: "VAT payment — cash only", cls: "bg-[#E8F0FB] text-[#1C5CAB]" },
   other_income: { label: "Other income", cls: "bg-[#E5F5EA] text-[#178A3F]" },
   review: { label: "To review", cls: "bg-[#FDF1E0] text-[#B45309]" },
+  split: { label: "Split across events", cls: "bg-[#F3EDFF] text-[#8a63d2]" },
 };
 
 type FinTx = {
@@ -55,6 +56,7 @@ type FinTx = {
   description: string | null; amount: number; currency: string; kind: string;
   category: string | null; vat_rate: number | null; amount_net: number | null;
   booking_id: string | null; notes: string | null; reviewed: boolean;
+  parent_id?: string | null;
 };
 
 type FinRule = { id: string; pattern: string; kind: string; category: string | null; vat_rate: number | null };
@@ -137,6 +139,9 @@ export function FinancePage({ bookings, installments }: {
   const [filter, setFilter] = useState<"review" | "all">("review");
   const [showManual, setShowManual] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
+  const [splitFor, setSplitFor] = useState<string | null>(null);
+  const [splitLines, setSplitLines] = useState<{ amount: string; category: string; booking_id: string; vat: string }[]>([]);
 
   const realBookings = useMemo(() => bookings.filter((b) => !b.is_test), [bookings]);
   const bookingById = useMemo(() => new Map(realBookings.map((b) => [b.id, b])), [realBookings]);
@@ -220,6 +225,49 @@ export function FinancePage({ bookings, installments }: {
     }
   };
 
+  const openSplit = (t: FinTx) => {
+    setSplitFor(t.id);
+    const half = Math.abs(t.amount) / 2;
+    setSplitLines([
+      { amount: half.toFixed(2), category: t.category ?? "", booking_id: "", vat: String(t.vat_rate ?? 23) },
+      { amount: (Math.abs(t.amount) - half).toFixed(2), category: t.category ?? "", booking_id: "", vat: String(t.vat_rate ?? 23) },
+    ]);
+  };
+
+  const saveSplit = async (t: FinTx) => {
+    const lines = splitLines.filter((l) => Number(l.amount) > 0);
+    if (lines.length < 2) { toast({ title: "At least 2 parts", variant: "destructive" }); return; }
+    if (lines.some((l) => !l.category)) { toast({ title: "Each part needs a category", variant: "destructive" }); return; }
+    const sum = lines.reduce((s, l) => s + Number(l.amount), 0);
+    if (Math.abs(sum - Math.abs(t.amount)) > 0.01) {
+      toast({ title: "Parts must add up", description: `Parts total €${sum.toFixed(2)} — transaction is €${Math.abs(t.amount).toFixed(2)}.`, variant: "destructive" });
+      return;
+    }
+    const children = lines.map((l) => {
+      const vat = Number(l.vat);
+      return {
+        source: "split", date: t.date,
+        description: `${t.description ?? "Split"} (part)`,
+        amount: -Math.abs(Number(l.amount)),
+        kind: "expense", category: l.category, vat_rate: vat,
+        amount_net: Math.round(Math.abs(Number(l.amount)) / (1 + vat / 100) * 100) / 100,
+        booking_id: l.booking_id || null, parent_id: t.id, reviewed: true,
+      };
+    });
+    const { error } = await supabase.from("fin_transactions").insert(children);
+    if (error) { toast({ title: "Split failed", description: error.message, variant: "destructive" }); return; }
+    await supabase.from("fin_transactions").update({ kind: "split", reviewed: true, category: null, amount_net: null }).eq("id", t.id);
+    toast({ title: "Transaction split", description: `${children.length} parts created — treasury unchanged, P&L per event.` });
+    setSplitFor(null);
+    load();
+  };
+
+  const unsplit = async (t: FinTx) => {
+    await supabase.from("fin_transactions").delete().eq("parent_id", t.id);
+    await supabase.from("fin_transactions").update({ kind: "review", reviewed: false }).eq("id", t.id);
+    load();
+  };
+
   const setVat = async (t: FinTx, vat: number) => {
     const net = Math.round(Math.abs(t.amount) / (1 + vat / 100) * 100) / 100;
     await patch(t.id, { vat_rate: vat, amount_net: t.kind === "expense" ? net : t.amount_net });
@@ -278,7 +326,7 @@ export function FinancePage({ bookings, installments }: {
     const cout = Array.from({ length: 12 }, () => 0);
     const cashDrawer = Array.from({ length: 12 }, () => 0);
     for (const t of txs) {
-      if (t.kind === "internal" || !t.date.startsWith(year)) continue;
+      if (t.kind === "internal" || t.kind === "split" || !t.date.startsWith(year)) continue;
       const m = Number(t.date.slice(5, 7)) - 1;
       if (t.amount > 0) cin[m] += t.amount; else cout[m] += -t.amount;
     }
@@ -435,10 +483,12 @@ export function FinancePage({ bookings, installments }: {
                   const k = KIND_LABEL[t.kind] ?? KIND_LABEL.review;
                   const editable = t.kind === "expense" || t.kind === "review";
                   return (
-                    <tr key={t.id} className="border-t border-border/60">
+                  <Fragment key={t.id}>
+                    <tr className="border-t border-border/60">
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums text-xs">{t.date.slice(5)}</td>
                       <td className="px-3 py-2 max-w-[240px]"><span className="block truncate font-medium" title={t.description ?? ""}>{t.description}</span>
-                        {t.source === "manual" && <span className="text-[10px] text-muted-foreground">manual</span>}</td>
+                        {t.source === "manual" && <span className="text-[10px] text-muted-foreground">manual</span>}
+                        {t.source === "split" && <span className="text-[10px] font-medium text-[#7C3AED]">↳ part</span>}</td>
                       <td className={`px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap ${t.amount > 0 ? "text-[#178A3F]" : ""}`}>{fmt2(t.amount)}</td>
                       <td className="px-3 py-2">
                         {editable ? (
@@ -456,12 +506,23 @@ export function FinancePage({ bookings, installments }: {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        {editable || t.kind === "guest_payment" ? (
-                          <select className="h-7 rounded-md border border-input bg-background px-1 text-xs max-w-[180px]"
-                            value={t.booking_id ?? ""} onChange={(e) => patch(t.id, { booking_id: e.target.value || null })}>
-                            <option value="">—</option>
-                            {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                          </select>
+                        {t.kind === "split" ? (
+                          <button type="button" className="text-[11px] font-medium text-[#7C3AED] hover:underline"
+                            onClick={() => unsplit(t)}>Undo split</button>
+                        ) : editable || t.kind === "guest_payment" ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <select className="h-7 rounded-md border border-input bg-background px-1 text-xs max-w-[180px]"
+                              value={t.booking_id ?? ""} onChange={(e) => patch(t.id, { booking_id: e.target.value || null })}>
+                              <option value="">—</option>
+                              {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                            </select>
+                            {editable && !t.parent_id && (
+                              <button type="button" className="text-[10px] font-medium text-[#7C3AED] hover:underline whitespace-nowrap"
+                                onClick={() => (splitFor === t.id ? setSplitFor(null) : openSplit(t))}>
+                                {splitFor === t.id ? "Close" : "Split"}
+                              </button>
+                            )}
+                          </span>
                         ) : "—"}
                       </td>
                       <td className="px-3 py-2">
@@ -474,6 +535,62 @@ export function FinancePage({ bookings, installments }: {
                         )}
                       </td>
                     </tr>
+                    {splitFor === t.id && (() => {
+                      const target = Math.abs(t.amount);
+                      const partsSum = splitLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+                      const ok = Math.abs(partsSum - target) <= 0.01;
+                      return (
+                        <tr className="border-t border-border/40 bg-[#F7F3FD]">
+                          <td colSpan={7} className="px-4 py-3">
+                            <div className="text-[11px] font-semibold text-[#5B21B6] mb-2">
+                              Split €{target.toFixed(2)} across events — parts must add up exactly. Treasury keeps the single original payment; the P&L gets one line per event.
+                            </div>
+                            <div className="space-y-2">
+                              {splitLines.map((l, i) => (
+                                <div key={i} className="flex flex-wrap items-center gap-2">
+                                  <input type="number" step="0.01" min="0" className="h-7 w-24 rounded-md border border-input bg-background px-2 text-xs text-right"
+                                    value={l.amount}
+                                    onChange={(e) => setSplitLines(splitLines.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} />
+                                  <CategorySelect value={l.category}
+                                    onChange={(c) => setSplitLines(splitLines.map((x, j) => (j === i ? { ...x, category: c } : x)))} />
+                                  <select className="h-7 rounded-md border border-input bg-background px-1 text-xs"
+                                    value={l.vat}
+                                    onChange={(e) => setSplitLines(splitLines.map((x, j) => (j === i ? { ...x, vat: e.target.value } : x)))}>
+                                    {[23, 13, 6, 0].map((v) => <option key={v} value={v}>{v}%</option>)}
+                                  </select>
+                                  <select className="h-7 rounded-md border border-input bg-background px-1 text-xs max-w-[180px]"
+                                    value={l.booking_id}
+                                    onChange={(e) => setSplitLines(splitLines.map((x, j) => (j === i ? { ...x, booking_id: e.target.value } : x)))}>
+                                    <option value="">No event</option>
+                                    {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                  </select>
+                                  {splitLines.length > 2 && (
+                                    <button type="button" className="text-xs text-muted-foreground hover:text-destructive"
+                                      onClick={() => setSplitLines(splitLines.filter((_, j) => j !== i))}>✕</button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-3">
+                              <button type="button" className="text-[11px] font-medium text-[#5B21B6] hover:underline"
+                                onClick={() => setSplitLines([...splitLines, { amount: "", category: t.category ?? "", booking_id: "", vat: String(t.vat_rate ?? 23) }])}>
+                                + Add part
+                              </button>
+                              <span className={`text-[11px] tabular-nums font-medium ${ok ? "text-[#178A3F]" : "text-destructive"}`}>
+                                Parts: €{partsSum.toFixed(2)} / €{target.toFixed(2)}
+                              </span>
+                              <span className="flex-1" />
+                              <button type="button" className="h-7 rounded-md px-3 text-xs font-medium text-muted-foreground hover:bg-muted"
+                                onClick={() => setSplitFor(null)}>Cancel</button>
+                              <button type="button" disabled={!ok}
+                                className="h-7 rounded-md bg-[#7C3AED] px-3 text-xs font-semibold text-white disabled:opacity-40"
+                                onClick={() => saveSplit(t)}>Save split</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })()}
+                  </Fragment>
                   );
                 })}
               </tbody>
