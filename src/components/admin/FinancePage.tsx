@@ -100,6 +100,34 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
+// ---- Suggestions de catégorie (nom du business, contexte) -----------------
+// Marchands portugais / SaaS connus -> catégorie la plus probable + TVA usuelle.
+// Le clic "Accept" passe par categorize(), donc crée aussi une règle apprenante.
+const SUGGESTIONS: { re: RegExp; category: string; vat: number }[] = [
+  { re: /intermarche|continente|pingo doce|lidl|aldi|auchan|minipre|mercadona|aux fins gourmets|talho|padaria|frutaria|makro|recheio|celeiro|pr[oó]vida/, category: "Retreat — catering / food", vat: 6 },
+  { re: /vinho|garrafeira|adega|wine/, category: "Bar — stock", vat: 13 },
+  { re: /\bedp\b|su eletricidade|endesa|iberdrola/, category: "Electricity", vat: 23 },
+  { re: /aguas|águas|simarsul/, category: "Water", vat: 6 },
+  { re: /galp gas|r[uú]brica g[aá]s|butano|propano/, category: "Gas", vat: 23 },
+  { re: /nos comunicacoes|\bmeo\b|vodafone|starlink/, category: "Internet", vat: 23 },
+  { re: /repsol|posto bp|\bgalp\b|prio |cepsa|combust/, category: "Fuel", vat: 23 },
+  { re: /leroy merlin|maxmat|bricomarche|\baki\b|brico|ferragens|zimbrafogo/, category: "General maintenance", vat: 23 },
+  { re: /amazon|decathlon|ikea|conforama|casa\b.*decor/, category: "Equipment & furniture", vat: 23 },
+  { re: /notion|sqsp|squarespace|intuit|quickbooks|google|adobe|canva|openai|anthropic|claude|supabase|vercel|resend|moloni|stripe.*fee/, category: "Software", vat: 23 },
+  { re: /municipio|financas|freguesia|\bimi\b|\bimt\b|selo/, category: "Taxes & duties", vat: 0 },
+  { re: /piscina|pool/, category: "Pool maintenance", vat: 23 },
+  { re: /jardim|jardinagem|garden/, category: "Gardening (seasonal)", vat: 23 },
+  { re: /seguro|fidelidade|tranquilidade|allianz|ageas|generali/, category: "Insurance — property", vat: 0 },
+  { re: /contabil|accounting/, category: "Accounting", vat: 23 },
+  { re: /farmacia|wells|clinica/, category: "Property operations & supplies", vat: 23 },
+];
+function suggestFor(t: { description: string | null; notes: string | null; amount: number }): { category: string; vat: number } | null {
+  if (t.amount > 0) return null;
+  const d = `${t.description ?? ""} ${t.notes ?? ""}`.toLowerCase();
+  for (const s of SUGGESTIONS) if (s.re.test(d)) return s;
+  return null;
+}
+
 // Classification automatique anti-double comptage
 function autoKind(desc: string, amount: number, rules: FinRule[]): Partial<FinTx> {
   const d = desc.toLowerCase();
@@ -139,6 +167,7 @@ export function FinancePage({ bookings, installments }: {
   const [filter, setFilter] = useState<"review" | "all">("review");
   const [showManual, setShowManual] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const expFileRef = useRef<HTMLInputElement>(null);
   // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
   const [splitFor, setSplitFor] = useState<string | null>(null);
   const [splitLines, setSplitLines] = useState<{ amount: string; category: string; booking_id: string; vat: string }[]>([]);
@@ -205,6 +234,57 @@ export function FinancePage({ bookings, installments }: {
     }
   };
 
+  // ---- Import CSV "Expenses" Revolut (descriptions / notes d'équipe) -------
+  // Le relevé bancaire ne contient pas les notes saisies dans l'onglet
+  // Expenses de Revolut Business. Ce second import les rapproche des
+  // transactions existantes (date ±3 jours + montant identique) et les
+  // enregistre en notes — utilisées ensuite par les suggestions.
+  const importExpensesCsv = async (file: File) => {
+    setImporting(true);
+    try {
+      const rows = parseCsv(await file.text());
+      if (rows.length < 2) throw new Error("Empty file");
+      const header = rows[0].map((h) => h.trim().toLowerCase());
+      const iDate = header.findIndex((h) => h.includes("date"));
+      const iAmt = header.findIndex((h) => h === "amount" || h.includes("amount") || h.includes("total"));
+      if (iDate === -1 || iAmt === -1) throw new Error("Missing Date/Amount columns — export the list from Revolut Business → Expenses.");
+      const textCols = header
+        .map((h, i) => ({ h, i }))
+        .filter(({ h, i }) => i !== iDate && i !== iAmt && /note|description|label|categor|merchant|expense|report|reason/.test(h));
+      if (!textCols.length) throw new Error("No description/note column found in this file.");
+      const used = new Set<string>();
+      let matched = 0, missed = 0;
+      const updates: { id: string; notes: string }[] = [];
+      for (const r of rows.slice(1)) {
+        const date = (r[iDate] ?? "").trim().slice(0, 10).replace(/(\d{2})\/(\d{2})\/(\d{4})/, "$3-$2-$1");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+        const amt = Math.abs(Number((r[iAmt] ?? "").replace(/[€\s]/g, "")));
+        if (!Number.isFinite(amt) || amt === 0) continue;
+        const note = textCols.map(({ h, i }) => (r[i] ?? "").trim() && `${h}: ${(r[i] ?? "").trim()}`).filter(Boolean).join(" · ");
+        if (!note) continue;
+        const cand = txs
+          .filter((t) => !used.has(t.id) && Math.abs(Math.abs(t.amount) - amt) <= 0.01 &&
+            Math.abs(new Date(t.date).getTime() - new Date(date).getTime()) <= 3 * 86400000)
+          .sort((a, b) => Math.abs(new Date(a.date).getTime() - new Date(date).getTime()) - Math.abs(new Date(b.date).getTime() - new Date(date).getTime()))[0];
+        if (!cand) { missed++; continue; }
+        used.add(cand.id);
+        updates.push({ id: cand.id, notes: note });
+        matched++;
+      }
+      for (const u of updates) await supabase.from("fin_transactions").update({ notes: u.notes }).eq("id", u.id);
+      toast({
+        title: "Expense notes merged",
+        description: `${matched} transaction(s) enriched${missed ? ` — ${missed} line(s) had no matching bank transaction` : ""}.`,
+      });
+      await load();
+    } catch (e) {
+      toast({ title: "Import failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    } finally {
+      setImporting(false);
+      if (expFileRef.current) expFileRef.current.value = "";
+    }
+  };
+
   // ---- Catégorisation ------------------------------------------------------
   const patch = async (id: string, p: Partial<FinTx>) => {
     setTxs((arr) => arr.map((t) => (t.id === id ? { ...t, ...p } : t)));
@@ -212,8 +292,12 @@ export function FinancePage({ bookings, installments }: {
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); load(); }
   };
 
-  const categorize = async (t: FinTx, category: string) => {
-    const vat = t.vat_rate ?? 23;
+  const categorize = async (t: FinTx, category: string, vatOverride?: number) => {
+    if (t.amount > 0) {
+      toast({ title: "Incoming money is never an expense", description: "Classify it as guest payment, bar payout, internal or other income instead.", variant: "destructive" });
+      return;
+    }
+    const vat = vatOverride ?? t.vat_rate ?? 23;
     const net = Math.round(Math.abs(t.amount) / (1 + vat / 100) * 100) / 100;
     await patch(t.id, { kind: "expense", category, vat_rate: vat, amount_net: net, reviewed: true });
     // Règle apprenante : la contrepartie retiendra cette catégorie
@@ -432,6 +516,11 @@ export function FinancePage({ bookings, installments }: {
                 {importing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
                 Import Revolut CSV
               </Button>
+              <input ref={expFileRef} type="file" accept=".csv" className="hidden"
+                onChange={(e) => e.target.files?.[0] && importExpensesCsv(e.target.files[0])} />
+              <Button size="sm" variant="outline" onClick={() => expFileRef.current?.click()} disabled={importing} title="Merge the descriptions from Revolut Business → Expenses into your imported transactions">
+                <ReceiptText className="w-4 h-4 mr-1" /> Add expense notes
+              </Button>
             </span>
           </div>
 
@@ -487,6 +576,7 @@ export function FinancePage({ bookings, installments }: {
                     <tr className="border-t border-border/60">
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums text-xs">{t.date.slice(5)}</td>
                       <td className="px-3 py-2 max-w-[240px]"><span className="block truncate font-medium" title={t.description ?? ""}>{t.description}</span>
+                        {t.notes && <span className="block truncate text-[10px] italic text-[#1C5CAB]" title={t.notes}>{t.notes}</span>}
                         {t.source === "manual" && <span className="text-[10px] text-muted-foreground">manual</span>}
                         {t.source === "split" && <span className="text-[10px] font-medium text-[#7C3AED]">↳ part</span>}</td>
                       <td className={`px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap ${t.amount > 0 ? "text-[#178A3F]" : ""}`}>{fmt2(t.amount)}</td>
@@ -499,8 +589,30 @@ export function FinancePage({ bookings, installments }: {
                         ) : "—"}
                       </td>
                       <td className="px-3 py-2">
-                        {editable ? (
-                          <CategorySelect value={t.category ?? ""} onChange={(c) => categorize(t, c)} />
+                        {editable && t.amount > 0 ? (
+                          <select className="h-7 rounded-md border border-input bg-background px-1 text-xs"
+                            value={t.kind === "review" ? "" : t.kind}
+                            onChange={(e) => e.target.value && patch(t.id, { kind: e.target.value, category: null, vat_rate: null, amount_net: null, reviewed: true })}>
+                            <option value="">Money in — classify…</option>
+                            <option value="guest_payment">Guest payment</option>
+                            <option value="bar_payout">Bar payout</option>
+                            <option value="internal">Internal transfer</option>
+                            <option value="other_income">Other income</option>
+                          </select>
+                        ) : editable ? (
+                          <>
+                            <CategorySelect value={t.category ?? ""} onChange={(c) => categorize(t, c)} />
+                            {!t.category && (() => {
+                              const s = suggestFor(t);
+                              return s ? (
+                                <button type="button" className="mt-1 block max-w-[200px] truncate text-left text-[10px] font-medium text-[#1C5CAB] hover:underline"
+                                  title={`Apply "${s.category}" at ${s.vat}% VAT (based on the merchant name)`}
+                                  onClick={() => categorize(t, s.category, s.vat)}>
+                                  ✨ {s.category} · {s.vat}% — accept
+                                </button>
+                              ) : null;
+                            })()}
+                          </>
                         ) : (
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${k.cls}`}>{k.label}</span>
                         )}
