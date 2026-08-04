@@ -176,6 +176,7 @@ export function FinancePage({ bookings, installments }: {
   const expFileRef = useRef<HTMLInputElement>(null);
   // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
   const [splitFor, setSplitFor] = useState<string | null>(null);
+  const [deleteArm, setDeleteArm] = useState<string | null>(null);
   const [splitLines, setSplitLines] = useState<{ amount: string; category: string; booking_id: string; vat: string }[]>([]);
 
   const realBookings = useMemo(() => bookings.filter((b) => !b.is_test), [bookings]);
@@ -714,6 +715,20 @@ export function FinancePage({ bookings, installments }: {
                           <button type="button" className="ml-1.5 text-[10px] text-muted-foreground hover:underline"
                             onClick={() => patch(t.id, { kind: "review", reviewed: false })}>edit</button>
                         )}
+                        {t.kind !== "split" && (deleteArm === t.id ? (
+                          <button type="button" className="ml-1.5 text-[10px] font-semibold text-destructive hover:underline"
+                            onClick={async () => {
+                              setDeleteArm(null);
+                              const { error } = await supabase.from("fin_transactions").delete().eq("id", t.id);
+                              if (error) toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+                              else toast({ title: "Transaction deleted", description: "Use this only for duplicates — deleting real transactions skews the treasury." });
+                              load();
+                            }}>sure?</button>
+                        ) : (
+                          <button type="button" className="ml-1.5 text-[10px] text-muted-foreground/60 hover:text-destructive hover:underline"
+                            title="Delete this transaction (duplicates only)"
+                            onClick={() => { setDeleteArm(t.id); setTimeout(() => setDeleteArm((v) => (v === t.id ? null : v)), 3000); }}>✕</button>
+                        ))}
                       </td>
                     </tr>
                     {splitFor === t.id && (() => {
