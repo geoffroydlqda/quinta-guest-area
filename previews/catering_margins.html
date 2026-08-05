@@ -64,9 +64,9 @@
     <div class="sub">Quinta do Amor · retreats with in-house catering, season 2026 (19 May → 2 Aug) · all amounts net of VAT</div>
     <div class="kpis">
       <div class="kpi"><div class="v">€19,509</div><div class="l">Catering revenue (5 events)</div></div>
-      <div class="kpi"><div class="v" style="color:#B25C1F">€5,073</div><div class="l">Food cost</div><div class="s">26% of revenue</div></div>
+      <div class="kpi"><div class="v" style="color:#B25C1F">€4,266</div><div class="l">Food cost</div><div class="s">21.9% of revenue</div></div>
       <div class="kpi"><div class="v" style="color:#2456A8">€9,000</div><div class="l">Staff (chef + service)</div><div class="s">46% of revenue</div></div>
-      <div class="kpi"><div class="v" style="color:var(--brand)">€4,265</div><div class="l">Margin after energy &amp; usage</div><div class="s">21.9% of revenue</div></div>
+      <div class="kpi"><div class="v" style="color:var(--brand)">€5,072</div><div class="l">Margin after energy &amp; usage</div><div class="s">26.0% of revenue</div></div>
     </div>
   </div>
 
@@ -89,28 +89,28 @@
       <tbody id="tbody"></tbody>
     </table>
     <div class="sens">
-      <div class="box">💶 <b>Staff is the #1 cost</b> — 46 cents of every catering euro go to the kitchen team, vs 26 for food.</div>
-      <div class="box">📈 A <b>+10% staff raise</b> ≈ +€180 per retreat → season margin drops from <b>21.9%</b> to <b>≈17.3%</b> (−€900 over 5 events).</div>
-      <div class="box">⚖️ Norm check: food at <b>€20–23 per guest-night</b> is on target for this level of service. The lever is pricing &amp; group size, not squeezing the team or the plates.</div>
+      <div class="box">💶 <b>Staff is the #1 cost</b> — 46 cents of every catering euro go to the kitchen team, vs 22 for food.</div>
+      <div class="box">📈 A <b>+10% staff raise</b> ≈ +€180 per retreat → season margin drops from <b>26.0%</b> to <b>≈21.4%</b> (−€900 over 5 events).</div>
+      <div class="box">⚖️ Norm check: food runs at <b>€10–19 per guest-night</b> — efficient for this level of service. The lever is pricing &amp; group size, not squeezing the team or the plates.</div>
     </div>
   </div>
 
   <div class="card">
     <h2>How this was computed — assumptions</h2>
     <div class="note">
-      <b>Revenue</b> = catering payment lines per event in the guest area (net of 13% VAT). <b>Food</b> = grocery &amp; supplier purchases from the expense sheet, matched to each event by the team's expense notes first, then by date window (during the stay, or up to 6 days before check-in). Bar stock, ice, team meals and equipment are excluded. <b>Staff</b> = actual paid days for Slink (chef €200 × 6d + service €120 × 5d); for events without recorded staff costs, the same pattern is applied: chef €200 × (nights + 1) + service €120 × nights (marked *). <b>Energy &amp; usage</b> = 6% of catering revenue, per hospitality-sector norms (energy 3–5% + consumables/wear 1–2%) — deliberately not taken from the expense sheet to avoid double counting utilities.<br><br>
-      <span class="flag">⚠ Caveats:</span> <b>Our Suite Life</b> food (€11/guest-night) looks under-captured — May purchases were rarely labelled; true margin is likely lower. <b>Slink</b> food misses the August shopping (sheet ends 31 Jul) — true margin is lower than shown. <b>Ilo Retreat</b> and <b>Tommy &amp; friends</b> had a paid kitchen team (€2,440 est. / €2,120 actual) and food (€1,416 / €1,698) but <b>no catering revenue line</b> — catering was folded into the rental price or not billed. Worth fixing before drawing conclusions on those two.
+      <b>Revenue</b> = catering payment lines per event in the guest area (net of 13% VAT). <b>Food</b> = grocery &amp; supplier purchases from the expense sheet, matched to each event by purchase DATE (during the stay, or up to 6 days before check-in); several team labels named retreats that had ended weeks earlier (e.g. "babes on waves" on late-July purchases) and were overridden by the date. Bar stock, ice, team meals and equipment are excluded. <b>Staff</b> = actual paid days for Slink (chef €200 × 6d + service €120 × 5d); for events without recorded staff costs, the same pattern is applied: chef €200 × (nights + 1) + service €120 × nights (marked *). <b>Energy &amp; usage</b> = 6% of catering revenue, per hospitality-sector norms (energy 3–5% + consumables/wear 1–2%) — deliberately not taken from the expense sheet to avoid double counting utilities.<br><br>
+      <span class="flag">⚠ Caveats:</span> <b>Our Suite Life</b> food (€11/guest-night) looks under-captured — May purchases were rarely labelled; true margin is likely lower. <b>Slink</b> food misses the August shopping (sheet ends 31 Jul) — true margin is lower than shown. <b>Ilo Retreat</b> and <b>Tommy &amp; friends</b> had a paid kitchen team (€2,440 est. / €2,120 actual) and food (€1,831 / €2,577) but <b>no catering revenue line</b> — catering was folded into the rental price or not billed. Worth fixing before drawing conclusions on those two.
     </div>
   </div>
 </div>
 <div class="tip" id="tip"></div>
 <script>
 const EVENTS = [
-  {name:"Our Suite Life", dates:"19–25 May", g:10, n:6, rev:3765.49, food:671.87, foodFlag:"May purchases under-labelled — food likely incomplete", staff:2120, staffEst:true, energy:225.93},
-  {name:"Mindful Movement", dates:"16–21 Jun", g:10, n:5, rev:3106.19, food:1140.37, staff:1800, staffEst:true, energy:186.37},
-  {name:"Babes on Waves", dates:"25–29 Jun", g:17, n:4, rev:4319.47, food:1455.94, staff:1480, staffEst:true, energy:259.17},
-  {name:"The Deep Dive Retreat", dates:"30 Jun – 5 Jul", g:12, n:5, rev:3727.43, food:1225.42, staff:1800, staffEst:true, energy:223.65},
-  {name:"Slink Pole Dance Retreat", dates:"28 Jul – 2 Aug", g:14, n:5, rev:4590.27, food:579.28, foodFlag:"August shopping missing from the sheet — food incomplete", staff:1800, staffEst:false, energy:275.42},
+  {name:"Our Suite Life", dates:"19–25 May", g:10, n:6, rev:3765.49, food:677.07, foodFlag:"May purchases under-labelled — food likely incomplete", staff:2120, staffEst:true, energy:225.93},
+  {name:"Mindful Movement", dates:"16–21 Jun", g:10, n:5, rev:3106.19, food:925.49, staff:1800, staffEst:true, energy:186.37},
+  {name:"Babes on Waves", dates:"25–29 Jun", g:17, n:4, rev:4319.47, food:821.99, staff:1480, staffEst:true, energy:259.17},
+  {name:"The Deep Dive Retreat", dates:"30 Jun – 5 Jul", g:12, n:5, rev:3727.43, food:1131.78, staff:1800, staffEst:true, energy:223.65},
+  {name:"Slink Pole Dance Retreat", dates:"28 Jul – 2 Aug", g:14, n:5, rev:4590.27, food:709.90, foodFlag:"August shopping missing from the sheet — food incomplete", staff:1800, staffEst:false, energy:275.42},
 ];
 const MAX = 4700;
 const fmt = v => "€" + v.toLocaleString("en-GB",{maximumFractionDigits:0});
