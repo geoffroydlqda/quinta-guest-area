@@ -30,6 +30,9 @@ function json(body: unknown, status = 200) {
 const BodySchema = z.object({
   installment_id: z.string().uuid().optional(),
   installment_ids: z.array(z.string().uuid()).min(1).max(10).optional(),
+  // Bascule manuelle en USD (guest US dont la fiche n'a pas de nationalité :
+  // le parcours EUR ne lui propose aucun rail utilisable).
+  usd: z.boolean().optional(),
 });
 
 const PROD_ORIGIN = "https://guest.quintamor.com";
@@ -131,6 +134,7 @@ async function createSession(
   booking: { id: string; email: string | null; retreat_name: string | null; check_in_date: string | null; check_out_date: string | null },
   successUrl: string,
   cancelUrl: string,
+  forceUsd = false,
 ) {
   const key = await stripeKey();
   const stay = booking.check_in_date && booking.check_out_date
@@ -149,8 +153,9 @@ async function createSession(
   // échoue, on retire juste ce rail de la session.
   const customerId = booking.email ? await getOrCreateCustomer(key, booking.email) : null;
   const country = await guestCountry(booking as { client_id?: string | null; email: string | null });
-  // Pays inconnu -> zone SEPA par défaut (rails bancaires).
-  const outsideSepa = !!country && !SEPA_COUNTRIES.some((c) => country.includes(c));
+  // Pays inconnu -> zone SEPA par défaut (rails bancaires). forceUsd = le guest
+  // a cliqué "Paying from a US bank?" sur son dashboard.
+  const outsideSepa = forceUsd || (!!country && !SEPA_COUNTRIES.some((c) => country.includes(c)));
   const isBelgian = country.includes("belg");
   // Hors zone SEPA : présentation en USD (ACH ~5 $ plafonnés + carte), montant
   // converti au taux BCE du jour SANS marge — la cliente paie l'équivalent exact.
@@ -273,6 +278,7 @@ async function handlePayLink(req: Request): Promise<Response> {
     payable, booking,
     `${PROD_ORIGIN}/payment-success?payment=success`,
     `${PROD_ORIGIN}/payment-success?payment=cancelled`,
+    url.searchParams.get("usd") === "1",
   );
   return redirect(session.url);
 }
@@ -335,6 +341,7 @@ serve(async (req) => {
       insts, booking,
       `${origin}/dashboard?payment=success&session_id={CHECKOUT_SESSION_ID}`,
       `${origin}/dashboard?payment=cancelled`,
+      parsed.data.usd === true,
     );
     return json({ url: session.url, session_id: session.id, test_mode });
   } catch (e) {

@@ -592,12 +592,12 @@ function usePayInstallment() {
   const { toast } = useToast();
   const [payingId, setPayingId] = useState<string | null>(null);
 
-  const payMany = async (insts: PaymentInstallment[]) => {
+  const payMany = async (insts: PaymentInstallment[], usd = false) => {
     if (insts.length === 0) return;
     setPayingId(insts[0].id);
     try {
       const { data, error } = await supabase.functions.invoke('stripe-checkout', {
-        body: { installment_ids: insts.map((i) => i.id) },
+        body: { installment_ids: insts.map((i) => i.id), ...(usd ? { usd: true } : {}) },
       });
       if (error || !data?.url) {
         throw new Error(data?.error || error?.message || 'Could not start the payment');
@@ -657,7 +657,7 @@ function InstallmentRow({ inst, onPay, paying }: { inst: PaymentInstallment; onP
   );
 }
 
-function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstallment[]; onPay: (insts: PaymentInstallment[]) => void; paying: boolean }) {
+function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstallment[]; onPay: (insts: PaymentInstallment[], usd?: boolean) => void; paying: boolean }) {
   const todayIso = new Date().toISOString().slice(0, 10);
   const first = insts[0];
   const overdue = !!first.due_date && first.due_date < todayIso;
@@ -684,6 +684,15 @@ function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstallment[]
       </div>
       <div className="mt-3 text-xs text-muted-foreground">
         Secure payment — you'll be redirected to our payment partner Stripe.
+        {' '}
+        <button
+          type="button"
+          onClick={() => onPay(insts, true)}
+          disabled={paying}
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Paying from outside Europe? Pay in USD instead (US bank debit or card)
+        </button>
       </div>
     </section>
   );
