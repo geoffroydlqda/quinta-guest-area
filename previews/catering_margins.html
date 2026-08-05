@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Catering — per-event economics · Quinta do Amor</title>
+<style>
+  :root{
+    --ink:#1F241C; --ink2:#4A5046; --muted:#6E746B; --grid:#E7E8E1;
+    --surface:#FFFFFF; --bg:#F6F7F2; --brand:#35532A;
+    --food:#EF9455; --staff:#6EA6FF; --energy:#B08CF8; --margin:#8FC46A; --neg:#F36F63;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink);padding:28px 16px}
+  .wrap{max-width:880px;margin:0 auto}
+  .card{background:var(--surface);border:1px solid var(--grid);border-radius:16px;padding:24px;margin-bottom:16px}
+  h1{font-size:19px;font-weight:700;color:var(--brand)}
+  .sub{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+  .kpi{background:var(--bg);border-radius:12px;padding:12px 14px}
+  .kpi .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+  .kpi .l{font-size:11px;color:var(--muted);margin-top:2px}
+  .kpi .s{font-size:11px;color:var(--ink2);margin-top:1px;font-variant-numeric:tabular-nums}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:11.5px;color:var(--ink2);margin:18px 0 6px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .tick-sw{width:2px;height:12px;background:var(--ink);display:inline-block;border-radius:1px}
+  .row{margin:14px 0}
+  .row .head{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;margin-bottom:5px}
+  .row .name{font-weight:600}
+  .row .meta{color:var(--muted);font-size:11px;margin-left:8px;font-weight:400}
+  .chip{font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums;padding:2px 8px;border-radius:999px}
+  .chip.pos{background:#EAF6DF;color:var(--brand)}
+  .chip.neg{background:#FDE8E6;color:#B3261E}
+  .track{position:relative;height:22px}
+  .seg{position:absolute;top:2px;height:18px;cursor:default}
+  .seg.first{border-radius:4px 0 0 4px}
+  .seg:hover{filter:brightness(0.93)}
+  .rev-tick{position:absolute;top:-3px;width:2px;height:28px;background:var(--ink);border-radius:1px}
+  .rev-lab{position:absolute;top:-2px;font-size:10px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .axis{position:relative;height:16px;margin-top:6px;border-top:1px solid var(--grid)}
+  .axis span{position:absolute;top:2px;font-size:10px;color:var(--muted);transform:translateX(-50%);font-variant-numeric:tabular-nums}
+  .tip{position:fixed;pointer-events:none;background:var(--ink);color:#fff;font-size:11.5px;padding:6px 9px;border-radius:8px;opacity:0;transition:opacity .12s;z-index:10;max-width:240px}
+  .note{font-size:11.5px;color:var(--muted);line-height:1.55}
+  .note b{color:var(--ink2)}
+  h2{font-size:13.5px;font-weight:700;margin-bottom:10px;color:var(--brand)}
+  table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+  th{text-align:right;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--grid)}
+  th:first-child,td:first-child{text-align:left}
+  td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--grid)}
+  td.pos{color:var(--brand);font-weight:600} td.neg{color:#B3261E;font-weight:600}
+  tr.total td{font-weight:700;border-bottom:none;background:var(--bg)}
+  .flag{color:#B45309}
+  .sens{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+  .sens .box{flex:1;min-width:180px;background:var(--bg);border-radius:12px;padding:12px 14px;font-size:12px;line-height:1.5}
+  .sens .box b{font-variant-numeric:tabular-nums}
+  @media(max-width:640px){.kpis{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Catering — what each event really earns</h1>
+    <div class="sub">Quinta do Amor · retreats with in-house catering, season 2026 (19 May → 2 Aug) · all amounts net of VAT</div>
+    <div class="kpis">
+      <div class="kpi"><div class="v">€19,509</div><div class="l">Catering revenue (5 events)</div></div>
+      <div class="kpi"><div class="v" style="color:#B25C1F">€5,073</div><div class="l">Food cost</div><div class="s">26% of revenue</div></div>
+      <div class="kpi"><div class="v" style="color:#2456A8">€9,000</div><div class="l">Staff (chef + service)</div><div class="s">46% of revenue</div></div>
+      <div class="kpi"><div class="v" style="color:var(--brand)">€4,265</div><div class="l">Margin after energy &amp; usage</div><div class="s">21.9% of revenue</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="legend">
+      <span><i class="sw" style="background:var(--food)"></i>Food</span>
+      <span><i class="sw" style="background:var(--staff)"></i>Staff</span>
+      <span><i class="sw" style="background:var(--energy)"></i>Energy &amp; usage (sector norm)</span>
+      <span><i class="tick-sw"></i>Catering revenue</span>
+      <span><i class="sw" style="background:var(--margin)"></i>Margin</span>
+    </div>
+    <div id="chart"></div>
+    <div class="axis" id="axis"></div>
+  </div>
+
+  <div class="card">
+    <h2>Detail per event</h2>
+    <table>
+      <thead><tr><th>Event</th><th>Guests × nights</th><th>Revenue</th><th>Food</th><th>Food €/guest-night</th><th>Staff</th><th>Energy &amp; usage</th><th>Margin</th><th>Margin %</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="sens">
+      <div class="box">💶 <b>Staff is the #1 cost</b> — 46 cents of every catering euro go to the kitchen team, vs 26 for food.</div>
+      <div class="box">📈 A <b>+10% staff raise</b> ≈ +€180 per retreat → season margin drops from <b>21.9%</b> to <b>≈17.3%</b> (−€900 over 5 events).</div>
+      <div class="box">⚖️ Norm check: food at <b>€20–23 per guest-night</b> is on target for this level of service. The lever is pricing &amp; group size, not squeezing the team or the plates.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>How this was computed — assumptions</h2>
+    <div class="note">
+      <b>Revenue</b> = catering payment lines per event in the guest area (net of 13% VAT). <b>Food</b> = grocery &amp; supplier purchases from the expense sheet, matched to each event by the team's expense notes first, then by date window (during the stay, or up to 6 days before check-in). Bar stock, ice, team meals and equipment are excluded. <b>Staff</b> = actual paid days for Slink (chef €200 × 6d + service €120 × 5d); for events without recorded staff costs, the same pattern is applied: chef €200 × (nights + 1) + service €120 × nights (marked *). <b>Energy &amp; usage</b> = 6% of catering revenue, per hospitality-sector norms (energy 3–5% + consumables/wear 1–2%) — deliberately not taken from the expense sheet to avoid double counting utilities.<br><br>
+      <span class="flag">⚠ Caveats:</span> <b>Our Suite Life</b> food (€11/guest-night) looks under-captured — May purchases were rarely labelled; true margin is likely lower. <b>Slink</b> food misses the August shopping (sheet ends 31 Jul) — true margin is lower than shown. <b>Ilo Retreat</b> and <b>Tommy &amp; friends</b> had a paid kitchen team (€2,440 est. / €2,120 actual) and food (€1,416 / €1,698) but <b>no catering revenue line</b> — catering was folded into the rental price or not billed. Worth fixing before drawing conclusions on those two.
+    </div>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+<script>
+const EVENTS = [
+  {name:"Our Suite Life", dates:"19–25 May", g:10, n:6, rev:3765.49, food:671.87, foodFlag:"May purchases under-labelled — food likely incomplete", staff:2120, staffEst:true, energy:225.93},
+  {name:"Mindful Movement", dates:"16–21 Jun", g:10, n:5, rev:3106.19, food:1140.37, staff:1800, staffEst:true, energy:186.37},
+  {name:"Babes on Waves", dates:"25–29 Jun", g:17, n:4, rev:4319.47, food:1455.94, staff:1480, staffEst:true, energy:259.17},
+  {name:"The Deep Dive Retreat", dates:"30 Jun – 5 Jul", g:12, n:5, rev:3727.43, food:1225.42, staff:1800, staffEst:true, energy:223.65},
+  {name:"Slink Pole Dance Retreat", dates:"28 Jul – 2 Aug", g:14, n:5, rev:4590.27, food:579.28, foodFlag:"August shopping missing from the sheet — food incomplete", staff:1800, staffEst:false, energy:275.42},
+];
+const MAX = 4700;
+const fmt = v => "€" + v.toLocaleString("en-GB",{maximumFractionDigits:0});
+const fmt2 = v => "€" + v.toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2});
+const chart = document.getElementById("chart");
+const tip = document.getElementById("tip");
+function seg(left,w,color,label,text){
+  const s = document.createElement("div");
+  s.className = "seg" + (left===0 ? " first" : "");
+  s.style.cssText = `left:${left}%;width:${Math.max(w-0.25,0.4)}%;background:${color}`;
+  s.onmousemove = e => { tip.style.opacity=1; tip.innerHTML=text; tip.style.left=Math.min(e.clientX+12,window.innerWidth-260)+"px"; tip.style.top=(e.clientY+14)+"px"; };
+  s.onmouseleave = () => tip.style.opacity=0;
+  return s;
+}
+EVENTS.forEach(ev => {
+  const margin = ev.rev - ev.food - ev.staff - ev.energy;
+  const pct = margin/ev.rev*100;
+  const row = document.createElement("div"); row.className = "row";
+  const head = document.createElement("div"); head.className = "head";
+  head.innerHTML = `<span class="name">${ev.name}<span class="meta">${ev.dates} · ${ev.g} guests · ${ev.n} nights</span></span>
+    <span class="chip ${margin>=0?'pos':'neg'}">${margin>=0?'+':'−'}${fmt(Math.abs(margin))} · ${pct.toFixed(1)}%</span>`;
+  const track = document.createElement("div"); track.className = "track";
+  let x = 0;
+  const parts = [
+    [ev.food, "var(--food)", "Food" + (ev.foodFlag ? " ⚠" : ""), (ev.foodFlag?ev.foodFlag+"<br>":"")],
+    [ev.staff, "var(--staff)", "Staff" + (ev.staffEst ? " (est.*)" : " (actual)"), ev.staffEst?"Estimated: chef €200 × "+(ev.n+1)+"d + service €120 × "+ev.n+"d<br>":"Actual paid days<br>"],
+    [ev.energy, "var(--energy)", "Energy & usage", "6% of catering revenue (sector norm)<br>"],
+  ];
+  parts.forEach(([v,c,l,extra]) => {
+    const w = v/MAX*100;
+    track.appendChild(seg(x, w, c, l, `<b>${ev.name}</b><br>${l}: ${fmt2(v)} (${(v/ev.rev*100).toFixed(0)}% of revenue)<br>${extra}`));
+    x += w;
+  });
+  if (margin > 0) {
+    const w = margin/MAX*100;
+    track.appendChild(seg(x, w, "var(--margin)", "Margin", `<b>${ev.name}</b><br>Margin: ${fmt2(margin)} (${pct.toFixed(1)}% of revenue)`));
+  }
+  const tick = document.createElement("div"); tick.className = "rev-tick";
+  tick.style.left = (ev.rev/MAX*100) + "%";
+  const lab = document.createElement("div"); lab.className = "rev-lab";
+  lab.style.left = (ev.rev/MAX*100 + 0.8) + "%"; lab.textContent = fmt(ev.rev);
+  track.appendChild(tick); track.appendChild(lab);
+  row.appendChild(head); row.appendChild(track); chart.appendChild(row);
+});
+const axis = document.getElementById("axis");
+[0,1000,2000,3000,4000].forEach(v => {
+  const s = document.createElement("span"); s.style.left = (v/MAX*100)+"%"; s.textContent = v===0?"0":"€"+(v/1000)+"k"; axis.appendChild(s);
+});
+const tbody = document.getElementById("tbody");
+let T = {rev:0,food:0,staff:0,energy:0,margin:0};
+EVENTS.forEach(ev => {
+  const margin = ev.rev-ev.food-ev.staff-ev.energy, pct = margin/ev.rev*100;
+  T.rev+=ev.rev; T.food+=ev.food; T.staff+=ev.staff; T.energy+=ev.energy; T.margin+=margin;
+  const fgn = ev.food/(ev.g*ev.n);
+  tbody.insertAdjacentHTML("beforeend", `<tr><td>${ev.name}${ev.foodFlag?' <span class="flag">⚠</span>':''}</td><td>${ev.g} × ${ev.n}</td><td>${fmt2(ev.rev)}</td><td>${fmt2(ev.food)}</td><td>€${fgn.toFixed(1)}</td><td>${fmt2(ev.staff)}${ev.staffEst?'*':''}</td><td>${fmt2(ev.energy)}</td><td class="${margin>=0?'pos':'neg'}">${fmt2(margin)}</td><td class="${margin>=0?'pos':'neg'}">${pct.toFixed(1)}%</td></tr>`);
+});
+tbody.insertAdjacentHTML("beforeend", `<tr class="total"><td>Season total</td><td></td><td>${fmt2(T.rev)}</td><td>${fmt2(T.food)}</td><td></td><td>${fmt2(T.staff)}</td><td>${fmt2(T.energy)}</td><td class="pos">${fmt2(T.margin)}</td><td class="pos">${(T.margin/T.rev*100).toFixed(1)}%</td></tr>`);
+</script>
+</body>
+</html>
