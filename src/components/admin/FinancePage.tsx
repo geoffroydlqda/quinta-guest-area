@@ -989,10 +989,17 @@ export function FinancePage({ bookings, installments }: {
                 <div className="flex gap-2 px-1 mt-1">
                   {MONTHS.map((m, i) => {
                     const net = cash.cin[i] - cash.cout[i];
+                    const active = cash.cin[i] !== 0 || cash.cout[i] !== 0;
                     return (
                       <div key={m} className="flex-1 text-center text-[10px] text-muted-foreground leading-tight">
                         {m}<br />
-                        <b className={net < 0 ? "text-destructive" : "text-foreground"}>{net !== 0 ? fmt0(net) : "·"}</b>
+                        {active ? (
+                          <>
+                            <span className="tabular-nums text-[#4E8A2E]">{fmt0(cash.cin[i])}</span><br />
+                            <span className="tabular-nums text-[#B25C1F]">−{fmt0(cash.cout[i])}</span><br />
+                            <b className={`tabular-nums ${net < 0 ? "text-destructive" : "text-foreground"}`}>{fmt0(net)}</b>
+                          </>
+                        ) : "·"}
                       </div>
                     );
                   })}
