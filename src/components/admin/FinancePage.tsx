@@ -181,6 +181,7 @@ export function FinancePage({ bookings, installments }: {
   const [rules, setRules] = useState<FinRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [filter, setFilter] = useState<"review" | "in" | "all">("review");
   const [showManual, setShowManual] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -256,6 +257,29 @@ export function FinancePage({ bookings, installments }: {
     setTxs((arr) => arr.map((t) => (t.id === id ? { ...t, ...p } : t)));
     const { error } = await supabase.from("fin_transactions").update(p).eq("id", id);
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); load(); }
+  };
+
+  // ---- Sync Revolut à la demande (l'horaire tourne via cron) ---------------
+  const syncRevolut = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("revolut-sync", { body: {} });
+      if (error) throw new Error(error.message);
+      if (data?.connected === false) {
+        toast({
+          title: "Revolut not connected",
+          description: "Open Revolut Business → Settings → API and click 'Enable API access' to (re)authorise the sync.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Revolut synced", description: `${data?.inserted ?? 0} new transaction(s) imported.` });
+        await load();
+      }
+    } catch (e) {
+      toast({ title: "Sync failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
   };
 
   // ---- Note libre par ligne ------------------------------------------------
@@ -588,9 +612,15 @@ export function FinancePage({ bookings, installments }: {
               </Button>
               <input ref={fileRef} type="file" accept=".csv" className="hidden"
                 onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} />
-              <Button size="sm" onClick={() => fileRef.current?.click()} disabled={importing}>
+              <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={importing}
+                title="Manual fallback — the Revolut sync normally makes this unnecessary">
                 {importing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
-                Import Revolut CSV
+                Import CSV
+              </Button>
+              <Button size="sm" onClick={syncRevolut} disabled={syncing}
+                title="Pull the latest transactions from Revolut Business right now (they also sync automatically every hour)">
+                {syncing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Landmark className="w-4 h-4 mr-1" />}
+                Sync Revolut
               </Button>
             </span>
           </div>

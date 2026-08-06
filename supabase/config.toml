@@ -22,3 +22,8 @@ verify_jwt = false
 
 [functions.revolut-bar-sync]
 verify_jwt = false
+
+# GET = callback OAuth Revolut (redirection après consentement, sans JWT).
+# Le POST garde son contrôle d'auth manuel (x-cron-key ou JWT admin) dans le code.
+[functions.revolut-sync]
+verify_jwt = false
