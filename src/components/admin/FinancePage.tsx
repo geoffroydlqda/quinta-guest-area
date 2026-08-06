@@ -184,7 +184,6 @@ export function FinancePage({ bookings, installments }: {
   const [filter, setFilter] = useState<"review" | "in" | "all">("review");
   const [showManual, setShowManual] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const expFileRef = useRef<HTMLInputElement>(null);
   // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
   const [splitFor, setSplitFor] = useState<string | null>(null);
   const [deleteArm, setDeleteArm] = useState<string | null>(null);
@@ -252,62 +251,21 @@ export function FinancePage({ bookings, installments }: {
     }
   };
 
-  // ---- Import CSV "Expenses" Revolut (descriptions / notes d'équipe) -------
-  // Le relevé bancaire ne contient pas les notes saisies dans l'onglet
-  // Expenses de Revolut Business. Ce second import les rapproche des
-  // transactions existantes (date ±3 jours + montant identique) et les
-  // enregistre en notes — utilisées ensuite par les suggestions.
-  const importExpensesCsv = async (file: File) => {
-    setImporting(true);
-    try {
-      const rows = parseCsv(await file.text());
-      if (rows.length < 2) throw new Error("Empty file");
-      const header = rows[0].map((h) => h.trim().toLowerCase());
-      const iDate = header.findIndex((h) => h.includes("date"));
-      const iAmt = header.findIndex((h) => h === "amount" || h.includes("amount") || h.includes("total"));
-      if (iDate === -1 || iAmt === -1) throw new Error("Missing Date/Amount columns — export the list from Revolut Business → Expenses.");
-      const textCols = header
-        .map((h, i) => ({ h, i }))
-        .filter(({ h, i }) => i !== iDate && i !== iAmt && /note|description|label|categor|merchant|expense|report|reason/.test(h));
-      if (!textCols.length) throw new Error("No description/note column found in this file.");
-      const used = new Set<string>();
-      let matched = 0, missed = 0;
-      const updates: { id: string; notes: string }[] = [];
-      for (const r of rows.slice(1)) {
-        const date = (r[iDate] ?? "").trim().slice(0, 10).replace(/(\d{2})\/(\d{2})\/(\d{4})/, "$3-$2-$1");
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-        const amt = Math.abs(Number((r[iAmt] ?? "").replace(/[€\s]/g, "")));
-        if (!Number.isFinite(amt) || amt === 0) continue;
-        const note = textCols.map(({ h, i }) => (r[i] ?? "").trim() && `${h}: ${(r[i] ?? "").trim()}`).filter(Boolean).join(" · ");
-        if (!note) continue;
-        const cand = txs
-          .filter((t) => !used.has(t.id) && Math.abs(Math.abs(t.amount) - amt) <= 0.01 &&
-            Math.abs(new Date(t.date).getTime() - new Date(date).getTime()) <= 3 * 86400000)
-          .sort((a, b) => Math.abs(new Date(a.date).getTime() - new Date(date).getTime()) - Math.abs(new Date(b.date).getTime() - new Date(date).getTime()))[0];
-        if (!cand) { missed++; continue; }
-        used.add(cand.id);
-        updates.push({ id: cand.id, notes: note });
-        matched++;
-      }
-      for (const u of updates) await supabase.from("fin_transactions").update({ notes: u.notes }).eq("id", u.id);
-      toast({
-        title: "Expense notes merged",
-        description: `${matched} transaction(s) enriched${missed ? ` — ${missed} line(s) had no matching bank transaction` : ""}.`,
-      });
-      await load();
-    } catch (e) {
-      toast({ title: "Import failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
-    } finally {
-      setImporting(false);
-      if (expFileRef.current) expFileRef.current.value = "";
-    }
-  };
-
   // ---- Catégorisation ------------------------------------------------------
   const patch = async (id: string, p: Partial<FinTx>) => {
     setTxs((arr) => arr.map((t) => (t.id === id ? { ...t, ...p } : t)));
     const { error } = await supabase.from("fin_transactions").update(p).eq("id", id);
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); load(); }
+  };
+
+  // ---- Note libre par ligne ------------------------------------------------
+  const [noteFor, setNoteFor] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const saveNote = async (t: FinTx) => {
+    setNoteFor(null);
+    const v = noteDraft.trim();
+    if ((t.notes ?? "") === v) return;
+    await patch(t.id, { notes: v || null });
   };
 
   const categorize = async (t: FinTx, category: string, vatOverride?: number) => {
@@ -394,19 +352,6 @@ export function FinancePage({ bookings, installments }: {
       return ts >= from - 6 * D && ts < from;
     });
     return pre.length === 1 ? pre[0] : null;
-  };
-
-  const autoLinkEvents = async () => {
-    const targets = txs.filter((t) => t.kind === "expense" && !t.booking_id && t.category && VARIABLE_CATS.has(t.category));
-    if (!targets.length) { toast({ title: "Nothing to link", description: "No unlinked variable expenses (food, staff, bar stock…) found." }); return; }
-    let linked = 0, ambiguous = 0;
-    for (const t of targets) {
-      const b = eventForDate(t.date);
-      if (b) { await supabase.from("fin_transactions").update({ booking_id: b.id }).eq("id", t.id); linked++; }
-      else ambiguous++;
-    }
-    toast({ title: "Events linked", description: `${linked} expense(s) linked to their event${ambiguous ? ` — ${ambiguous} left for manual review (zero or several events match the date)` : ""}.` });
-    load();
   };
 
   const setVat = async (t: FinTx, vat: number) => {
@@ -638,10 +583,6 @@ export function FinancePage({ bookings, installments }: {
                 title="Download the currently filtered transactions (all rows, not just the first 300) as a CSV file">
                 ⬇ Export CSV
               </Button>
-              <Button size="sm" variant="outline" onClick={autoLinkEvents}
-                title="Link every unlinked variable expense (food, staff, bar stock…) to the event whose dates match — ambiguous ones are left for manual review">
-                ✨ Auto-link events
-              </Button>
               <Button size="sm" variant="outline" onClick={() => setShowManual((v) => !v)}>
                 <Plus className="w-4 h-4 mr-1" /> Manual expense
               </Button>
@@ -650,11 +591,6 @@ export function FinancePage({ bookings, installments }: {
               <Button size="sm" onClick={() => fileRef.current?.click()} disabled={importing}>
                 {importing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
                 Import Revolut CSV
-              </Button>
-              <input ref={expFileRef} type="file" accept=".csv" className="hidden"
-                onChange={(e) => e.target.files?.[0] && importExpensesCsv(e.target.files[0])} />
-              <Button size="sm" variant="outline" onClick={() => expFileRef.current?.click()} disabled={importing} title="Merge the descriptions from Revolut Business → Expenses into your imported transactions">
-                <ReceiptText className="w-4 h-4 mr-1" /> Add expense notes
               </Button>
             </span>
           </div>
@@ -708,10 +644,23 @@ export function FinancePage({ bookings, installments }: {
                   const editable = t.kind === "expense" || t.kind === "review";
                   return (
                   <Fragment key={t.id}>
-                    <tr className="border-t border-border/60">
+                    <tr className="group border-t border-border/60">
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums text-xs">{t.date.slice(5)}</td>
                       <td className="px-3 py-2 max-w-[240px]"><span className="block truncate font-medium" title={t.description ?? ""}>{t.description}</span>
-                        {t.notes && <span className="block truncate text-[10px] italic text-[#1C5CAB]" title={t.notes}>{t.notes}</span>}
+                        {noteFor === t.id ? (
+                          <input autoFocus value={noteDraft} placeholder="Add a note…"
+                            className="mt-0.5 h-6 w-full rounded border border-input bg-background px-1.5 text-[10px] italic"
+                            onChange={(e) => setNoteDraft(e.target.value)}
+                            onBlur={() => saveNote(t)}
+                            onKeyDown={(e) => { if (e.key === "Enter") saveNote(t); if (e.key === "Escape") setNoteFor(null); }} />
+                        ) : t.notes ? (
+                          <button type="button" className="block max-w-full truncate text-left text-[10px] italic text-[#1C5CAB] hover:underline"
+                            title={`${t.notes} — click to edit`}
+                            onClick={() => { setNoteFor(t.id); setNoteDraft(t.notes ?? ""); }}>{t.notes}</button>
+                        ) : (
+                          <button type="button" className="block text-left text-[10px] italic text-muted-foreground/0 hover:text-muted-foreground group-hover:text-muted-foreground/60"
+                            onClick={() => { setNoteFor(t.id); setNoteDraft(""); }}>+ note</button>
+                        )}
                         {t.source === "manual" && <span className="text-[10px] text-muted-foreground">manual</span>}
                         {t.source === "split" && <span className="text-[10px] font-medium text-[#7C3AED]">↳ part</span>}</td>
                       <td className="px-3 py-2 max-w-[110px]">
@@ -887,10 +836,28 @@ export function FinancePage({ bookings, installments }: {
                   );
                 })}
               </tbody>
+              {!loading && filtered.length > 0 && (() => {
+                const rows = filtered.filter((t) => t.kind !== "split");
+                const tin = rows.reduce((s, t) => s + (t.amount > 0 ? t.amount : 0), 0);
+                const tout = rows.reduce((s, t) => s + (t.amount < 0 ? -t.amount : 0), 0);
+                return (
+                  <tfoot>
+                    <tr className="border-t-2 border-border bg-muted/60">
+                      <td colSpan={3} className="px-3 py-2 text-xs font-semibold">
+                        Totals — {rows.length} row{rows.length > 1 ? "s" : ""}{monthFilter || eventFilter || filter !== "all" ? " (filtered)" : ""}
+                      </td>
+                      <td className={`px-3 py-2 text-right tabular-nums text-xs font-bold whitespace-nowrap ${tin - tout < 0 ? "text-destructive" : ""}`}>{fmt2(tin - tout)}</td>
+                      <td colSpan={4} className="px-3 py-2 text-[11px] text-muted-foreground whitespace-nowrap">
+                        In <b className="text-[#178A3F] tabular-nums">{fmt2(tin)}</b> · Out <b className="tabular-nums">−{fmt2(tout)}</b>
+                      </td>
+                    </tr>
+                  </tfoot>
+                );
+              })()}
             </table>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Anti-double counting: guest payments, bar payouts and internal transfers never create P&L lines — revenue lives in the event installments. VAT payments count in cash flow only.
+            Anti-double counting: guest payments, bar payouts and internal transfers never create P&L lines — revenue lives in the event installments. VAT payments count in cash flow only. Totals above are the raw sum of the listed lines (split parents excluded).
           </p>
         </>
       )}
@@ -980,8 +947,14 @@ export function FinancePage({ bookings, installments }: {
               <>
                 <div className="flex items-end gap-2 h-44 mt-4 border-b border-border px-1">
                   {MONTHS.map((m, i) => (
-                    <div key={m} className="flex-1 flex items-end justify-center gap-[3px] h-full" title={`${m}: in ${fmt0(cash.cin[i])} · out ${fmt0(cash.cout[i])}`}>
-                      <div className="w-[46%] max-w-[26px] rounded-t bg-[#8FC46A]" style={{ height: `${(cash.cin[i] / max) * 100}%` }} />
+                    <div key={m} className="flex-1 flex items-end justify-center gap-[3px] h-full"
+                      title={`${m}: in ${fmt0(cash.cin[i])}${cash.capital[i] > 0 ? ` (incl. owner contribution ${fmt0(cash.capital[i])})` : ""} · out ${fmt0(cash.cout[i])}`}>
+                      <div className="w-[46%] max-w-[26px] flex flex-col justify-end" style={{ height: `${(cash.cin[i] / max) * 100}%` }}>
+                        {cash.capital[i] > 0 && (
+                          <div className="w-full rounded-t bg-[#B08CF8]" style={{ height: `${(cash.capital[i] / Math.max(cash.cin[i], 0.01)) * 100}%` }} />
+                        )}
+                        <div className={`w-full flex-1 bg-[#8FC46A] ${cash.capital[i] > 0 ? "" : "rounded-t"}`} />
+                      </div>
                       <div className="w-[46%] max-w-[26px] rounded-t bg-[#EF9455]" style={{ height: `${(cash.cout[i] / max) * 100}%` }} />
                     </div>
                   ))}
@@ -1006,6 +979,9 @@ export function FinancePage({ bookings, installments }: {
                 </div>
                 <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#8FC46A] inline-block" /> Cash in</span>
+                  {cash.capital.some((v) => v > 0) && (
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#B08CF8] inline-block" /> Owner contribution</span>
+                  )}
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#EF9455] inline-block" /> Cash out</span>
                   <span className="ml-auto">In {fmt0(cash.cin.reduce((s, v) => s + v, 0))} <span className="text-[10px]">(incl. cash {fmt0(cash.cashDrawer.reduce((s, v) => s + v, 0))} from Payments{cash.capital.some((v) => v > 0) ? ` · owner contributions ${fmt0(cash.capital.reduce((s, v) => s + v, 0))}` : ""})</span> · Out {fmt0(cash.cout.reduce((s, v) => s + v, 0))} · Net <b className="text-foreground">{fmt0(cash.cin.reduce((s, v) => s + v, 0) - cash.cout.reduce((s, v) => s + v, 0))}</b></span>
                 </div>
