@@ -127,12 +127,13 @@ async function accessToken(): Promise<string | null> {
 // (persistée). Aucun match -> tous les comptes + warning dans les logs.
 type RevAccount = { id: string; name?: string; currency?: string; state?: string };
 
-async function allowedAccounts(token: string): Promise<{ ids: Set<string> | null; names: string[] }> {
+async function allowedAccounts(token: string): Promise<{ ids: Set<string> | null; allIds: Set<string>; names: string[] }> {
   const r = await fetch("https://b2b.revolut.com/api/1.0/accounts", {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!r.ok) throw new Error(`Revolut accounts ${r.status}: ${(await r.text()).slice(0, 300)}`);
   const accounts = (await r.json()) as RevAccount[];
+  const allIds = new Set(accounts.map((a) => a.id));
   const configured = await internalValue("revolut_b2b_account_ids");
   let picked: RevAccount[];
   if (configured) {
@@ -144,10 +145,10 @@ async function allowedAccounts(token: string): Promise<{ ids: Set<string> | null
   }
   if (!picked.length) {
     console.warn("[revolut-sync] no Quinta account matched — syncing ALL accounts:", accounts.map((a) => `${a.name} (${a.currency})`).join(", "));
-    return { ids: null, names: accounts.map((a) => a.name ?? a.id) };
+    return { ids: null, allIds, names: accounts.map((a) => a.name ?? a.id) };
   }
   console.log("[revolut-sync] syncing accounts:", picked.map((a) => `${a.name} (${a.currency})`).join(", "));
-  return { ids: new Set(picked.map((a) => a.id)), names: picked.map((a) => a.name ?? a.id) };
+  return { ids: new Set(picked.map((a) => a.id)), allIds, names: picked.map((a) => a.name ?? a.id) };
 }
 
 // ---- Classification (miroir de FinancePage.autoKind, côté serveur) --------
@@ -192,7 +193,7 @@ function autoKind(desc: string, amount: number, rules: Rule[]) {
     }
   }
   if (/stripe/.test(d) && amount > 0) return { kind: "guest_payment", reviewed: true };
-  if (/^(recharge par|recharge |from )/.test(d) && amount > 0) return { kind: "guest_payment", reviewed: true };
+  if (/^(recharge par|recharge |from |payment from )/.test(d) && amount > 0 && !/^from (eur|usd|gbp) /.test(d)) return { kind: "guest_payment", reviewed: true };
   if (/(payout|settlement).*(merchant)|merchant.*(payout|settlement)/.test(d) && amount > 0)
     return { kind: "bar_payout", reviewed: true };
   if (/^to (eur|usd|gbp|savings|pocket)|^exchanged|between own accounts|vault|cash deposit|dep[oó]sito.*numer[aá]rio/.test(d))
@@ -247,8 +248,13 @@ async function syncTransactions(token: string) {
     // Seuls les mouvements des comptes Quinta sont retenus
     const legs = acc.ids ? legsAll.filter((l) => l.account_id && acc.ids!.has(l.account_id)) : legsAll;
     if (!legs.length) continue;
-    // Change interne (2 legs) -> transfert entre comptes propres, exclu P&L + cash
-    const isExchange = legsAll.length > 1;
+    // Transfert/change entre comptes DU PÉRIMÈTRE Quinta -> internal (exclu
+    // P&L + cash). Un mouvement Quinta <-> autre compte du business (ex. EUR
+    // Main) reste à classer (apport, revenu…) : du point de vue Quinta, c'est
+    // de l'argent qui entre/sort. Un payout Merchant a l'allure d'un
+    // "transfer" mais sa source n'est aucun compte listé.
+    const scope = acc.ids ?? acc.allIds;
+    const isInternalMove = legsAll.length > 1 && legsAll.every((l) => !l.account_id || scope.has(l.account_id));
     const leg = legs.find((l) => (l.currency ?? "EUR") === "EUR") ?? legs[0];
     if (!leg || leg.amount == null) continue;
     const amount = Math.round((Number(leg.amount) - Math.abs(Number(leg.fee ?? 0))) * 100) / 100;
@@ -256,10 +262,18 @@ async function syncTransactions(token: string) {
     const when = t.completed_at ?? t.created_at ?? new Date().toISOString();
     const date = lisbonDate(when);
     if (date < SYNC_FROM) continue; // l'historique vient des imports, pas de l'API
-    const desc = (leg.description ?? t.type ?? "Revolut transaction").trim();
-    const cls = isExchange
-      ? { kind: "internal", reviewed: true }
-      : autoKind(desc, amount, (rules ?? []) as Rule[]);
+    let desc = (leg.description ?? t.type ?? "Revolut transaction").trim();
+    let cls;
+    if (isInternalMove) {
+      cls = { kind: "internal", reviewed: true };
+    } else if (!leg.description && (t.type ?? "").toLowerCase() === "transfer" && amount > 0) {
+      // Payout quotidien Revolut Merchant (honesty bar) : entrée "transfer"
+      // sans description — les ventes vivent dans bar_sales, cash flow only.
+      desc = "Merchant payout";
+      cls = { kind: "bar_payout", reviewed: true };
+    } else {
+      cls = autoKind(desc, amount, (rules ?? []) as Rule[]);
+    }
     const booking = "category" in cls && cls.category && VARIABLE_CATS.has(cls.category) && amount < 0
       ? eventForDate(date, (bookings ?? []) as Booking[])
       : null;
