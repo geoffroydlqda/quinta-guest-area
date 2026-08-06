@@ -467,9 +467,11 @@ export function FinancePage({ bookings, installments }: {
 
   const reviewCount = txs.filter((t) => t.kind === "review").length;
 
-  // ---- Filtres mois / événement -------------------------------------------
+  // ---- Filtres mois / événement / recherche -------------------------------
   const [monthFilter, setMonthFilter] = useState("");
   const [eventFilter, setEventFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const monthsAvailable = useMemo(() => {
     const ms = new Set<string>();
     for (const t of txs) ms.add(t.date.slice(0, 7));
@@ -483,8 +485,14 @@ export function FinancePage({ bookings, installments }: {
     if (filter === "in") arr = arr.filter((t) => t.amount > 0);
     if (monthFilter) arr = arr.filter((t) => t.date.startsWith(monthFilter));
     if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
+    const q = norm(search.trim());
+    if (q) {
+      arr = arr.filter((t) =>
+        norm(`${t.description ?? ""} ${t.notes ?? ""} ${t.payer ?? ""} ${t.category ?? ""} ${t.booking_id ? bookingById.get(t.booking_id)?.name ?? "" : ""}`).includes(q)
+        || Math.abs(t.amount).toFixed(2).includes(q));
+    }
     return arr;
-  }, [txs, filter, monthFilter, eventFilter]);
+  }, [txs, filter, monthFilter, eventFilter, search, bookingById]);
   const visible = useMemo(() => filtered.slice(0, 300), [filtered]);
 
   // ---- Export CSV de la plage affichée (tous les filtres, sans la limite d'affichage)
@@ -586,6 +594,9 @@ export function FinancePage({ bookings, installments }: {
                 </button>
               ))}
             </div>
+            <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search description, note, payer, amount…"
+              className="h-7 w-[230px] rounded-full border border-border bg-card px-3 text-xs placeholder:text-muted-foreground/60" />
             <select className="h-7 rounded-full border border-border bg-card px-2.5 text-xs"
               value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
               <option value="">All months</option>
@@ -596,9 +607,9 @@ export function FinancePage({ bookings, installments }: {
               <option value="">All events</option>
               {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
-            {(monthFilter || eventFilter) && (
+            {(monthFilter || eventFilter || search) && (
               <button type="button" className="text-xs text-muted-foreground hover:underline"
-                onClick={() => { setMonthFilter(""); setEventFilter(""); }}>
+                onClick={() => { setMonthFilter(""); setEventFilter(""); setSearch(""); }}>
                 ✕ Clear
               </button>
             )}
@@ -667,7 +678,7 @@ export function FinancePage({ bookings, installments }: {
                   <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin inline" /></td></tr>
                 ) : visible.length === 0 ? (
                   <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-muted-foreground italic">
-                    {filter === "review" ? "Nothing to review — inbox zero 🎉" : monthFilter || eventFilter ? "No transactions match these filters." : "No transactions yet — import a Revolut CSV to start."}
+                    {monthFilter || eventFilter || search ? "No transactions match these filters." : filter === "review" ? "Nothing to review — inbox zero 🎉" : "No transactions yet — connect Revolut or import a CSV to start."}
                   </td></tr>
                 ) : visible.map((t) => {
                   const k = KIND_LABEL[t.kind] ?? KIND_LABEL.review;
