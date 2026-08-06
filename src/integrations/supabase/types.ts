@@ -31,6 +31,7 @@ export type Database = {
           notes: string | null
           reviewed: boolean
           parent_id: string | null
+          payer: string | null
           created_at: string
         }
         Insert: {
@@ -49,6 +50,7 @@ export type Database = {
           notes?: string | null
           reviewed?: boolean
           parent_id?: string | null
+          payer?: string | null
           created_at?: string
         }
         Update: {
@@ -67,6 +69,7 @@ export type Database = {
           notes?: string | null
           reviewed?: boolean
           parent_id?: string | null
+          payer?: string | null
           created_at?: string
         }
         Relationships: []

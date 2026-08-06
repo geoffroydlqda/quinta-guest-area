@@ -56,7 +56,7 @@ type FinTx = {
   description: string | null; amount: number; currency: string; kind: string;
   category: string | null; vat_rate: number | null; amount_net: number | null;
   booking_id: string | null; notes: string | null; reviewed: boolean;
-  parent_id?: string | null;
+  parent_id?: string | null; payer?: string | null;
 };
 
 type FinRule = { id: string; pattern: string; kind: string; category: string | null; vat_rate: number | null };
@@ -70,6 +70,16 @@ export type FinBooking = {
 const VARIABLE_CATS = new Set(
   FIN_CATEGORIES.filter((g) => g.group.startsWith("Variable")).flatMap((g) => g.items)
 );
+
+// P&L : coûts VARIABLES au sens du modèle financier (validé avec Geoffroy,
+// 6 août 2026) — uniquement les 8 tags retreat/wedding. "Bar — stock" et
+// "Other variable" restent dans le bloc fixe & autres.
+const PNL_VARIABLE_CATS = new Set([
+  "Retreat — catering / staff", "Retreat — catering / food",
+  "Retreat — venue / cleaning & fixed", "Retreat - extras",
+  "Wedding — catering / staff", "Wedding — catering / food",
+  "Wedding — venue / cleaning & fixed", "Wedding - extras",
+]);
 
 export type FinInstallment = {
   booking_id: string; amount_due: number; amount_excl_vat?: number | null;
@@ -446,9 +456,15 @@ export function FinancePage({ bookings, installments }: {
     }
     const totalExp = Array.from({ length: 12 }, (_, m) =>
       [...byCat.values()].reduce((s, a) => s + a[m], 0));
+    // Variable (8 tags retreat/wedding) vs fixe & autres
+    const totalVar = Array.from({ length: 12 }, (_, m) =>
+      [...byCat.entries()].filter(([c]) => PNL_VARIABLE_CATS.has(c)).reduce((s, [, a]) => s + a[m], 0));
+    const totalFix = Array.from({ length: 12 }, (_, m) => totalExp[m] - totalVar[m]);
+    const grossMargin = Array.from({ length: 12 }, (_, m) =>
+      revEvents[m] + revBar[m] + otherIncome[m] - totalVar[m]);
     const ebitda = Array.from({ length: 12 }, (_, m) =>
       revEvents[m] + revBar[m] + otherIncome[m] - totalExp[m]);
-    return { revEvents, revBar, otherIncome, byCat, totalExp, ebitda };
+    return { revEvents, revBar, otherIncome, byCat, totalExp, totalVar, totalFix, grossMargin, ebitda };
   }, [txs, installments, bookingById, year]);
 
   const cash = useMemo(() => {
@@ -476,7 +492,23 @@ export function FinancePage({ bookings, installments }: {
   }, [txs, installments, bookingById, year]);
 
   const reviewCount = txs.filter((t) => t.kind === "review").length;
-  const visible = filter === "review" ? txs.filter((t) => t.kind === "review") : txs.slice(0, 300);
+
+  // ---- Filtres mois / événement -------------------------------------------
+  const [monthFilter, setMonthFilter] = useState("");
+  const [eventFilter, setEventFilter] = useState("");
+  const monthsAvailable = useMemo(() => {
+    const ms = new Set<string>();
+    for (const t of txs) ms.add(t.date.slice(0, 7));
+    return [...ms].sort().reverse();
+  }, [txs]);
+  const monthLabel = (m: string) => `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+
+  const visible = useMemo(() => {
+    let arr = filter === "review" ? txs.filter((t) => t.kind === "review") : txs;
+    if (monthFilter) arr = arr.filter((t) => t.date.startsWith(monthFilter));
+    if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
+    return arr.slice(0, 300);
+  }, [txs, filter, monthFilter, eventFilter]);
 
   // ---- Dépense manuelle ----------------------------------------------------
   const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
@@ -552,6 +584,22 @@ export function FinancePage({ bookings, installments }: {
                 </button>
               ))}
             </div>
+            <select className="h-7 rounded-full border border-border bg-card px-2.5 text-xs"
+              value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
+              <option value="">All months</option>
+              {monthsAvailable.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
+            </select>
+            <select className="h-7 rounded-full border border-border bg-card px-2.5 text-xs max-w-[190px]"
+              value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}>
+              <option value="">All events</option>
+              {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            {(monthFilter || eventFilter) && (
+              <button type="button" className="text-xs text-muted-foreground hover:underline"
+                onClick={() => { setMonthFilter(""); setEventFilter(""); }}>
+                ✕ Clear
+              </button>
+            )}
             <span className="ml-auto flex items-center gap-2">
               <Button size="sm" variant="outline" onClick={autoLinkEvents}
                 title="Link every unlinked variable expense (food, staff, bar stock…) to the event whose dates match — ambiguous ones are left for manual review">
@@ -606,17 +654,17 @@ export function FinancePage({ bookings, installments }: {
             <table className="w-full text-sm">
               <thead className="bg-muted/80">
                 <tr className="text-left">
-                  {["Date", "Description", "Amount", "VAT", "Category", "Event", "Status"].map((h) => (
+                  {["Date", "Description", "Payer", "Amount", "VAT", "Category", "Event", "Status"].map((h) => (
                     <th key={h} className="px-3 py-2.5 text-[11px] uppercase tracking-wider font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin inline" /></td></tr>
+                  <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin inline" /></td></tr>
                 ) : visible.length === 0 ? (
-                  <tr><td colSpan={7} className="px-3 py-8 text-center text-sm text-muted-foreground italic">
-                    {filter === "review" ? "Nothing to review — inbox zero 🎉" : "No transactions yet — import a Revolut CSV to start."}
+                  <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-muted-foreground italic">
+                    {filter === "review" ? "Nothing to review — inbox zero 🎉" : monthFilter || eventFilter ? "No transactions match these filters." : "No transactions yet — import a Revolut CSV to start."}
                   </td></tr>
                 ) : visible.map((t) => {
                   const k = KIND_LABEL[t.kind] ?? KIND_LABEL.review;
@@ -629,6 +677,9 @@ export function FinancePage({ bookings, installments }: {
                         {t.notes && <span className="block truncate text-[10px] italic text-[#1C5CAB]" title={t.notes}>{t.notes}</span>}
                         {t.source === "manual" && <span className="text-[10px] text-muted-foreground">manual</span>}
                         {t.source === "split" && <span className="text-[10px] font-medium text-[#7C3AED]">↳ part</span>}</td>
+                      <td className="px-3 py-2 max-w-[110px]">
+                        {t.payer ? <span className="block truncate text-[11px] text-muted-foreground" title={t.payer}>{t.payer}</span> : <span className="text-muted-foreground/40">—</span>}
+                      </td>
                       <td className={`px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap ${t.amount > 0 ? "text-[#178A3F]" : ""}`}>{fmt2(t.amount)}</td>
                       <td className="px-3 py-2">
                         {editable ? (
@@ -663,12 +714,20 @@ export function FinancePage({ bookings, installments }: {
                               ) : null;
                             })()}
                             {t.kind === "review" && (
-                              <select className="mt-1 block h-6 max-w-[200px] rounded-md border border-input bg-background px-1 text-[10px] text-muted-foreground"
-                                value="" onChange={(e) => e.target.value && patch(t.id, { kind: e.target.value, category: null, vat_rate: null, amount_net: null, reviewed: true })}>
-                                <option value="">Not an expense…</option>
-                                <option value="internal">Internal transfer (own accounts)</option>
-                                <option value="vat_payment">VAT payment (cash only)</option>
-                              </select>
+                              <span className="mt-1 block whitespace-nowrap text-[10px] text-muted-foreground/70">
+                                not an expense?{" "}
+                                <button type="button" className="font-medium text-muted-foreground hover:text-foreground hover:underline"
+                                  title="Transfer between own accounts — excluded from P&L and cash flow"
+                                  onClick={() => patch(t.id, { kind: "internal", category: null, vat_rate: null, amount_net: null, reviewed: true })}>
+                                  internal
+                                </button>
+                                {" · "}
+                                <button type="button" className="font-medium text-muted-foreground hover:text-foreground hover:underline"
+                                  title="VAT payment to the tax authority — cash flow only, never a P&L cost"
+                                  onClick={() => patch(t.id, { kind: "vat_payment", category: null, vat_rate: null, amount_net: null, reviewed: true })}>
+                                  VAT
+                                </button>
+                              </span>
                             )}
                           </>
                         ) : (
@@ -737,7 +796,7 @@ export function FinancePage({ bookings, installments }: {
                       const ok = Math.abs(partsSum - target) <= 0.01;
                       return (
                         <tr className="border-t border-border/40 bg-[#F7F3FD]">
-                          <td colSpan={7} className="px-4 py-3">
+                          <td colSpan={8} className="px-4 py-3">
                             <div className="text-[11px] font-semibold text-[#5B21B6] mb-2">
                               Split €{target.toFixed(2)} across events — parts must add up exactly. Treasury keeps the single original payment; the P&L gets one line per event.
                             </div>
@@ -822,13 +881,42 @@ export function FinancePage({ bookings, installments }: {
                   <td className="py-1.5 px-2 text-right tabular-nums font-bold">{fmt0(arr.reduce((s, v) => s + v, 0))}</td>
                 </tr>
               ))}
-              {[...pnl.byCat.entries()].sort((a, b) => ALL_CATEGORIES.indexOf(a[0]) - ALL_CATEGORIES.indexOf(b[0])).map(([cat, arr]) => (
-                <tr key={cat} className="border-t border-border/40">
-                  <td className="py-1.5 pr-2 text-muted-foreground sticky left-0 bg-card whitespace-nowrap">{cat}</td>
-                  {arr.map((v, i) => <td key={i} className="py-1.5 px-2 text-right tabular-nums">{v ? `−${fmt0(v).slice(v < 0 ? 1 : 0)}` : "·"}</td>)}
-                  <td className="py-1.5 px-2 text-right tabular-nums font-semibold">−{fmt0(arr.reduce((s, v) => s + v, 0))}</td>
-                </tr>
-              ))}
+              {([
+                ["Variable costs — per event", (c: string) => PNL_VARIABLE_CATS.has(c), pnl.totalVar, "Total variable costs"],
+                ["Fixed & other costs", (c: string) => !PNL_VARIABLE_CATS.has(c), pnl.totalFix, "Total fixed & other"],
+              ] as const).map(([groupLabel, belongs, totals, totalLabel]) => {
+                const rows = [...pnl.byCat.entries()].filter(([c]) => belongs(c))
+                  .sort((a, b) => ALL_CATEGORIES.indexOf(a[0]) - ALL_CATEGORIES.indexOf(b[0]));
+                if (rows.length === 0) return null;
+                return (
+                  <Fragment key={groupLabel}>
+                    <tr className="border-t border-border/60">
+                      <td colSpan={14} className="pt-3 pb-1 pr-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground sticky left-0 bg-card">{groupLabel}</td>
+                    </tr>
+                    {rows.map(([cat, arr]) => (
+                      <tr key={cat} className="border-t border-border/40">
+                        <td className="py-1.5 pr-2 pl-3 text-muted-foreground sticky left-0 bg-card whitespace-nowrap">{cat}</td>
+                        {arr.map((v, i) => <td key={i} className="py-1.5 px-2 text-right tabular-nums">{v ? `−${fmt0(v).slice(v < 0 ? 1 : 0)}` : "·"}</td>)}
+                        <td className="py-1.5 px-2 text-right tabular-nums font-semibold">−{fmt0(arr.reduce((s, v) => s + v, 0))}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-border/60">
+                      <td className="py-1.5 pr-2 font-semibold sticky left-0 bg-card whitespace-nowrap">{totalLabel}</td>
+                      {totals.map((v, i) => <td key={i} className="py-1.5 px-2 text-right tabular-nums font-semibold">{v ? `−${fmt0(v).slice(v < 0 ? 1 : 0)}` : "·"}</td>)}
+                      <td className="py-1.5 px-2 text-right tabular-nums font-bold">−{fmt0(totals.reduce((s, v) => s + v, 0))}</td>
+                    </tr>
+                    {groupLabel === "Variable costs — per event" && (
+                      <tr className="border-t border-border bg-[#F4F7EF]">
+                        <td className="py-1.5 pr-2 font-semibold sticky left-0 bg-[#F4F7EF] whitespace-nowrap">Margin after variable costs</td>
+                        {pnl.grossMargin.map((v, i) => (
+                          <td key={i} className={`py-1.5 px-2 text-right tabular-nums font-semibold ${v < 0 ? "text-destructive" : ""}`}>{v ? fmt0(v) : "·"}</td>
+                        ))}
+                        <td className="py-1.5 px-2 text-right tabular-nums font-bold">{fmt0(pnl.grossMargin.reduce((s, v) => s + v, 0))}</td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
               <tr className="border-t-2 border-border bg-secondary/60">
                 <td className="py-2 pr-2 font-bold sticky left-0 bg-secondary/60">EBITDA</td>
                 {pnl.ebitda.map((v, i) => (
