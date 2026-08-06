@@ -45,6 +45,7 @@ const KIND_LABEL: Record<string, { label: string; cls: string }> = {
   guest_payment: { label: "Guest payment — already in P&L", cls: "bg-[#E5F5EA] text-[#178A3F]" },
   bar_payout: { label: "Bar payout — already in P&L", cls: "bg-[#E5F5EA] text-[#178A3F]" },
   internal: { label: "Internal transfer — excluded", cls: "bg-muted text-muted-foreground" },
+  capital: { label: "Owner contribution — cash only", cls: "bg-[#EDE9FE] text-[#5B21B6]" },
   vat_payment: { label: "VAT payment — cash only", cls: "bg-[#E8F0FB] text-[#1C5CAB]" },
   other_income: { label: "Other income", cls: "bg-[#E5F5EA] text-[#178A3F]" },
   review: { label: "To review", cls: "bg-[#FDF1E0] text-[#B45309]" },
@@ -180,7 +181,7 @@ export function FinancePage({ bookings, installments }: {
   const [rules, setRules] = useState<FinRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
-  const [filter, setFilter] = useState<"review" | "all">("review");
+  const [filter, setFilter] = useState<"review" | "in" | "all">("review");
   const [showManual, setShowManual] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const expFileRef = useRef<HTMLInputElement>(null);
@@ -471,24 +472,28 @@ export function FinancePage({ bookings, installments }: {
     const cin = Array.from({ length: 12 }, () => 0);
     const cout = Array.from({ length: 12 }, () => 0);
     const cashDrawer = Array.from({ length: 12 }, () => 0);
+    const capital = Array.from({ length: 12 }, () => 0);
     for (const t of txs) {
       if (t.kind === "internal" || t.kind === "split" || !t.date.startsWith(year)) continue;
       const m = Number(t.date.slice(5, 7)) - 1;
       if (t.amount > 0) cin[m] += t.amount; else cout[m] += -t.amount;
+      if (t.kind === "capital" && t.amount > 0) capital[m] += t.amount;
     }
     // Encaissements CASH : lus directement dans Payments (échéances is_cash
     // payées, hors bookings test) — jamais ressaisis, jamais dans Revolut.
     // Date = paid_on (réelle) avec repli sur l'échéance.
+    let cashUndated = 0; // is_cash payées SANS date -> invisibles dans les mois
     for (const i of installments) {
       if (!i.is_cash || i.status !== "paid") continue;
       if (!bookingById.has(i.booking_id)) continue; // exclut les tests
       const d = i.paid_on ?? i.due_date;
-      if (!d || !d.startsWith(year)) continue;
+      if (!d) { cashUndated += Number(i.amount_due || 0); continue; }
+      if (!d.startsWith(year)) continue;
       const m = Number(d.slice(5, 7)) - 1;
       cin[m] += Number(i.amount_due || 0);
       cashDrawer[m] += Number(i.amount_due || 0);
     }
-    return { cin, cout, cashDrawer };
+    return { cin, cout, cashDrawer, capital, cashUndated };
   }, [txs, installments, bookingById, year]);
 
   const reviewCount = txs.filter((t) => t.kind === "review").length;
@@ -503,12 +508,40 @@ export function FinancePage({ bookings, installments }: {
   }, [txs]);
   const monthLabel = (m: string) => `${MONTHS[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
 
-  const visible = useMemo(() => {
-    let arr = filter === "review" ? txs.filter((t) => t.kind === "review") : txs;
+  const filtered = useMemo(() => {
+    let arr = txs;
+    if (filter === "review") arr = arr.filter((t) => t.kind === "review");
+    if (filter === "in") arr = arr.filter((t) => t.amount > 0);
     if (monthFilter) arr = arr.filter((t) => t.date.startsWith(monthFilter));
     if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
-    return arr.slice(0, 300);
+    return arr;
   }, [txs, filter, monthFilter, eventFilter]);
+  const visible = useMemo(() => filtered.slice(0, 300), [filtered]);
+
+  // ---- Export CSV de la plage affichée (tous les filtres, sans la limite d'affichage)
+  const exportCsv = () => {
+    const esc = (v: unknown) => {
+      const s = v == null ? "" : String(v);
+      return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ["date", "description", "note", "payer", "amount", "currency", "vat_rate", "amount_net", "kind", "category", "event", "source"];
+    const lines = [header.join(",")];
+    for (const t of filtered) {
+      lines.push([
+        t.date, esc(t.description), esc(t.notes), esc(t.payer), t.amount, t.currency,
+        t.vat_rate ?? "", t.amount_net ?? "", t.kind, esc(t.category),
+        esc(t.booking_id ? bookingById.get(t.booking_id)?.name ?? "" : ""), t.source,
+      ].join(","));
+    }
+    const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const parts = ["transactions", monthFilter || "all-months"];
+    if (eventFilter) parts.push((bookingById.get(eventFilter)?.name ?? "event").toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+    a.href = url; a.download = `${parts.join("_")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // ---- Dépense manuelle ----------------------------------------------------
   const [mDate, setMDate] = useState(new Date().toISOString().slice(0, 10));
@@ -577,10 +610,10 @@ export function FinancePage({ bookings, installments }: {
         <>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex bg-card border border-border rounded-full p-0.5">
-              {(["review", "all"] as const).map((f) => (
+              {(["review", "in", "all"] as const).map((f) => (
                 <button key={f} type="button" onClick={() => setFilter(f)}
                   className={`rounded-full px-3.5 py-1 text-xs font-semibold ${filter === f ? "bg-foreground text-background" : "text-muted-foreground"}`}>
-                  {f === "review" ? `To review (${reviewCount})` : "All"}
+                  {f === "review" ? `To review (${reviewCount})` : f === "in" ? "Money in" : "All"}
                 </button>
               ))}
             </div>
@@ -601,6 +634,10 @@ export function FinancePage({ bookings, installments }: {
               </button>
             )}
             <span className="ml-auto flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={exportCsv}
+                title="Download the currently filtered transactions (all rows, not just the first 300) as a CSV file">
+                ⬇ Export CSV
+              </Button>
               <Button size="sm" variant="outline" onClick={autoLinkEvents}
                 title="Link every unlinked variable expense (food, staff, bar stock…) to the event whose dates match — ambiguous ones are left for manual review">
                 ✨ Auto-link events
@@ -695,8 +732,9 @@ export function FinancePage({ bookings, installments }: {
                             value={t.kind === "review" ? "" : t.kind}
                             onChange={(e) => e.target.value && patch(t.id, { kind: e.target.value, category: null, vat_rate: null, amount_net: null, reviewed: true })}>
                             <option value="">Money in — classify…</option>
-                            <option value="guest_payment">Guest payment</option>
+                            <option value="guest_payment">Guest payment (real revenue)</option>
                             <option value="bar_payout">Bar payout</option>
+                            <option value="capital">Owner contribution (apport)</option>
                             <option value="internal">Internal transfer</option>
                             <option value="other_income">Other income</option>
                           </select>
@@ -959,11 +997,16 @@ export function FinancePage({ bookings, installments }: {
                     );
                   })}
                 </div>
-                <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#8FC46A] inline-block" /> Cash in</span>
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#EF9455] inline-block" /> Cash out</span>
-                  <span className="ml-auto">In {fmt0(cash.cin.reduce((s, v) => s + v, 0))} <span className="text-[10px]">(incl. cash {fmt0(cash.cashDrawer.reduce((s, v) => s + v, 0))} from Payments)</span> · Out {fmt0(cash.cout.reduce((s, v) => s + v, 0))} · Net <b className="text-foreground">{fmt0(cash.cin.reduce((s, v) => s + v, 0) - cash.cout.reduce((s, v) => s + v, 0))}</b></span>
+                  <span className="ml-auto">In {fmt0(cash.cin.reduce((s, v) => s + v, 0))} <span className="text-[10px]">(incl. cash {fmt0(cash.cashDrawer.reduce((s, v) => s + v, 0))} from Payments{cash.capital.some((v) => v > 0) ? ` · owner contributions ${fmt0(cash.capital.reduce((s, v) => s + v, 0))}` : ""})</span> · Out {fmt0(cash.cout.reduce((s, v) => s + v, 0))} · Net <b className="text-foreground">{fmt0(cash.cin.reduce((s, v) => s + v, 0) - cash.cout.reduce((s, v) => s + v, 0))}</b></span>
                 </div>
+                {cash.cashUndated > 0 && (
+                  <p className="mt-2 text-[11px] text-[#B45309]">
+                    ⚠ {fmt0(cash.cashUndated)} of paid cash installments have no payment date in Payments — they are not shown in any month above. Set their "paid on" date to include them.
+                  </p>
+                )}
               </>
             );
           })()}
