@@ -272,7 +272,7 @@ export function FinancePage({ bookings, installments }: {
           variant: "destructive",
         });
       } else {
-        toast({ title: "Revolut synced", description: `${data?.inserted ?? 0} new transaction(s) imported.` });
+        toast({ title: "Revolut synced", description: `${data?.inserted ?? 0} new transaction(s) imported${Array.isArray(data?.accounts) && data.accounts.length ? ` from ${data.accounts.join(", ")}` : ""}.` });
         await load();
       }
     } catch (e) {

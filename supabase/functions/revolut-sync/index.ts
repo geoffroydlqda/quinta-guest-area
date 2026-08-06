@@ -120,6 +120,36 @@ async function accessToken(): Promise<string | null> {
   return data.access_token ?? null;
 }
 
+// ---- Comptes synchronisés --------------------------------------------------
+// Le business a plusieurs comptes Revolut ; on ne synchronise QUE ceux de la
+// Quinta do Amor. Sélection : app_settings.internal.revolut_b2b_account_ids
+// (ids séparés par des virgules) ; sinon auto-détection par nom /quinta/i
+// (persistée). Aucun match -> tous les comptes + warning dans les logs.
+type RevAccount = { id: string; name?: string; currency?: string; state?: string };
+
+async function allowedAccounts(token: string): Promise<{ ids: Set<string> | null; names: string[] }> {
+  const r = await fetch("https://b2b.revolut.com/api/1.0/accounts", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) throw new Error(`Revolut accounts ${r.status}: ${(await r.text()).slice(0, 300)}`);
+  const accounts = (await r.json()) as RevAccount[];
+  const configured = await internalValue("revolut_b2b_account_ids");
+  let picked: RevAccount[];
+  if (configured) {
+    const set = new Set(configured.split(",").map((s) => s.trim()).filter(Boolean));
+    picked = accounts.filter((a) => set.has(a.id));
+  } else {
+    picked = accounts.filter((a) => /quinta/i.test(a.name ?? ""));
+    if (picked.length) await setInternalValue("revolut_b2b_account_ids", picked.map((a) => a.id).join(","));
+  }
+  if (!picked.length) {
+    console.warn("[revolut-sync] no Quinta account matched — syncing ALL accounts:", accounts.map((a) => `${a.name} (${a.currency})`).join(", "));
+    return { ids: null, names: accounts.map((a) => a.name ?? a.id) };
+  }
+  console.log("[revolut-sync] syncing accounts:", picked.map((a) => `${a.name} (${a.currency})`).join(", "));
+  return { ids: new Set(picked.map((a) => a.id)), names: picked.map((a) => a.name ?? a.id) };
+}
+
 // ---- Classification (miroir de FinancePage.autoKind, côté serveur) --------
 type Rule = { pattern: string; kind: string; category: string | null; vat_rate: number | null };
 type Booking = { id: string; check_in_date: string | null; check_out_date: string | null; is_test: boolean | null };
@@ -176,7 +206,7 @@ function autoKind(desc: string, amount: number, rules: Rule[]) {
 
 // ---- Sync ------------------------------------------------------------------
 type RevLeg = {
-  leg_id?: string; amount?: number; fee?: number; currency?: string;
+  leg_id?: string; account_id?: string; amount?: number; fee?: number; currency?: string;
   description?: string; counterparty?: { account_type?: string };
 };
 type RevTx = {
@@ -189,6 +219,7 @@ function lisbonDate(iso: string): string {
 }
 
 async function syncTransactions(token: string) {
+  const acc = await allowedAccounts(token);
   const from = (await internalValue("revolut_b2b_last_sync")) ?? SYNC_FROM;
   // Fenêtre de sécurité : on repart 7 jours en arrière (transactions SEPA
   // qui passent de pending à completed) — le dedup par id absorbe le reste.
@@ -212,9 +243,12 @@ async function syncTransactions(token: string) {
   const payloads = [];
   for (const t of txs) {
     if ((t.state ?? "").toLowerCase() !== "completed") continue;
-    const legs = t.legs ?? [];
+    const legsAll = t.legs ?? [];
+    // Seuls les mouvements des comptes Quinta sont retenus
+    const legs = acc.ids ? legsAll.filter((l) => l.account_id && acc.ids!.has(l.account_id)) : legsAll;
+    if (!legs.length) continue;
     // Change interne (2 legs) -> transfert entre comptes propres, exclu P&L + cash
-    const isExchange = legs.length > 1;
+    const isExchange = legsAll.length > 1;
     const leg = legs.find((l) => (l.currency ?? "EUR") === "EUR") ?? legs[0];
     if (!leg || leg.amount == null) continue;
     const amount = Math.round((Number(leg.amount) - Math.abs(Number(leg.fee ?? 0))) * 100) / 100;
@@ -245,7 +279,7 @@ async function syncTransactions(token: string) {
   }
   await setInternalValue("revolut_b2b_last_sync", new Date().toISOString().slice(0, 10));
   console.log(`[revolut-sync] window from ${fromDate}: ${txs.length} fetched, ${payloads.length} eligible, ${inserted} upserted`);
-  return { fetched: txs.length, eligible: payloads.length, inserted };
+  return { fetched: txs.length, eligible: payloads.length, inserted, accounts: acc.names };
 }
 
 serve(async (req) => {
@@ -259,12 +293,12 @@ serve(async (req) => {
       const data = await tokenRequest({ grant_type: "authorization_code", code });
       if (!data.refresh_token) throw new Error("No refresh_token in Revolut response");
       await setInternalValue("revolut_b2b_refresh_token", data.refresh_token);
-      let firstSync = { fetched: 0, eligible: 0, inserted: 0 };
+      let firstSync: { fetched: number; eligible: number; inserted: number; accounts?: string[] } = { fetched: 0, eligible: 0, inserted: 0 };
       if (data.access_token) firstSync = await syncTransactions(data.access_token);
       return new Response(
         `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;text-align:center">
         <h2>✅ Revolut Business connecté</h2>
-        <p>${firstSync.inserted} transaction(s) synchronisée(s). La synchro tourne désormais toutes les heures.</p>
+        <p>${firstSync.inserted} transaction(s) synchronisée(s)${firstSync.accounts?.length ? ` — compte(s) : ${firstSync.accounts.join(", ")}` : ""}. La synchro tourne désormais toutes les heures.</p>
         <p><a href="https://guest.quintamor.com/admin/finance">Retour à l'onglet Finance</a></p>
         </body></html>`,
         { status: 200, headers: { ...corsHeaders, "Content-Type": "text/html; charset=utf-8" } }
