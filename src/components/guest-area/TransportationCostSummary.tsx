@@ -13,29 +13,31 @@ export function TransportationCostSummaryCard({ summary }: TransportationCostSum
   }
 
   return (
-    <div className="bg-card rounded-2xl border border-border p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Euro className="w-5 h-5 text-primary" />
-        <h3 className="text-lg font-medium">Cost summary</h3>
+    <div className="guest-card p-6">
+      <div className="flex items-center gap-2.5 mb-4">
+        <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
+          <Euro className="w-4 h-4" />
+        </span>
+        <h3 className="text-base font-semibold tracking-tight">Cost summary</h3>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex justify-between items-center py-2 border-b border-border">
+      <div className="space-y-1">
+        <div className="flex justify-between items-baseline py-1.5 text-sm">
           <span className="text-muted-foreground">Total trips</span>
-          <span className="font-medium">{totalTrips}</span>
+          <span className="font-semibold tabular-nums">{totalTrips}</span>
         </div>
 
-        {subtotal > 0 && (
-          <div className="flex justify-between items-center py-2 bg-primary/5 rounded-lg px-3 -mx-3">
-            <span className="font-medium">Transportation subtotal</span>
-            <span className="text-lg font-bold text-primary">€{subtotal}</span>
+        {customOfferCount > 0 && (
+          <div className="flex justify-between items-baseline py-1.5 text-sm">
+            <span className="text-muted-foreground">Custom offer trips</span>
+            <span className="font-semibold tabular-nums">{customOfferCount}</span>
           </div>
         )}
 
-        {customOfferCount > 0 && (
-          <div className="flex justify-between items-center py-2">
-            <span className="text-muted-foreground">Custom offer trips</span>
-            <span className="font-medium">{customOfferCount}</span>
+        {subtotal > 0 && (
+          <div className="flex justify-between items-center py-3 px-4 mt-2 bg-[#EAF6DF] rounded-xl">
+            <span className="font-semibold text-sm">Transportation subtotal</span>
+            <span className="text-lg font-bold text-[#35532A] tabular-nums">€{subtotal}</span>
           </div>
         )}
       </div>

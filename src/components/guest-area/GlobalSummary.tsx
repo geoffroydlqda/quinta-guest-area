@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ChevronRight, BedDouble, Car, Utensils, Users, Euro } from 'lucide-react';
+import { ChevronRight, BedDouble, Car, Utensils, Users } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { ToolStatuses, GuestProfile } from '@/types/guest';
 import type { TransportationCostSummary } from '@/lib/transportationPricing';
 
@@ -52,6 +53,50 @@ function formatDateLocal(dateStr: string, options: Intl.DateTimeFormatOptions): 
   return date.toLocaleDateString('en-GB', options);
 }
 
+// ---- Purely presentational building blocks ----
+
+function SummarySection({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: React.ReactNode }) {
+  return (
+    <section className="py-5 first:pt-0 last:pb-0">
+      <div className="flex items-center gap-2.5 mb-3">
+        <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center flex-shrink-0">
+          <Icon className="w-4 h-4" />
+        </span>
+        <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
+      </div>
+      <div className="pl-[42px]">{children}</div>
+    </section>
+  );
+}
+
+function SummaryRow({ label, value }: { label: React.ReactNode; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between items-baseline gap-3 py-1 text-sm">
+      <span className="text-muted-foreground min-w-0">{label}</span>
+      <span className="font-semibold text-foreground tabular-nums text-right shrink-0">{value}</span>
+    </div>
+  );
+}
+
+function SectionTotal({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between items-baseline gap-3 mt-2.5 pt-2.5 border-t border-border/70 text-sm">
+      <span className="font-medium">{label}</span>
+      <span className="font-bold text-[#35532A] tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function NotSetLink({ to, disabled }: { to: string; disabled?: boolean }) {
+  return (
+    <Button asChild variant="outline" size="sm" className="rounded-full text-muted-foreground" disabled={disabled}>
+      <Link to={to}>
+        Not set <ChevronRight className="w-4 h-4 ml-1" />
+      </Link>
+    </Button>
+  );
+}
+
 export function GlobalSummary({
   profile,
   toolStatuses,
@@ -70,37 +115,31 @@ export function GlobalSummary({
     (activeDiets.length > 0 || foodData.fullBoardDays > 0 || foodData.breakfastOnlyDays > 0 || foodData.customDays > 0 || hasMealTimes);
 
   return (
-    <div className="bg-card rounded-2xl border border-border p-6">
-      <h2 className="text-xl font-semibold mb-6">Summary</h2>
+    <div className="guest-card p-6 sm:p-8">
+      {/* Header — stay meta kept small and muted (fixed by the admin) */}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold tracking-tight">Summary</h2>
+        <p className="text-xs text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          <span>
+            {hasDates ? (
+              <>
+                {formatDateLocal(profile.check_in_date!, { day: 'numeric', month: 'short' })} — {formatDateLocal(profile.check_out_date!, { day: 'numeric', month: 'short', year: 'numeric' })}
+              </>
+            ) : (
+              <span className="italic">Stay dates to be confirmed</span>
+            )}
+          </span>
+          <span aria-hidden>·</span>
+          <span className="inline-flex items-center gap-1">
+            <Users className="w-3 h-3" />
+            {profile.guests_count} guest{profile.guests_count !== 1 ? 's' : ''}
+          </span>
+        </p>
+      </div>
 
-      <div className="space-y-4">
-        {/* Stay Dates & Guests */}
-        <div className="flex items-center justify-between py-3 border-b border-border">
-          <span className="text-muted-foreground font-medium">Stay dates</span>
-          {hasDates ? (
-            <span className="font-semibold">
-              {formatDateLocal(profile.check_in_date!, { day: 'numeric', month: 'short' })} — {formatDateLocal(profile.check_out_date!, { day: 'numeric', month: 'short', year: 'numeric' })}
-            </span>
-          ) : (
-            <span className="text-muted-foreground italic">Not set</span>
-          )}
-        </div>
-
-        {/* Guests Count */}
-        <div className="flex items-center justify-between py-3 border-b border-border">
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-primary" />
-            <span className="text-muted-foreground font-medium">Guests</span>
-          </div>
-          <span className="font-semibold">{profile.guests_count}</span>
-        </div>
-
-        {/* Room Setup */}
-        <div className="py-3 border-b border-border">
-          <div className="flex items-center gap-2 mb-2">
-            <BedDouble className="w-4 h-4 text-primary" />
-            <span className="font-semibold">Room Setup</span>
-          </div>
+      <div className="divide-y divide-border/70">
+        {/* Rooms */}
+        <SummarySection icon={BedDouble} title="Rooms">
           {hasRoomSetup ? (
             (() => {
               const BATHROOM_PARTNER: Record<number, number> = { 2: 3, 3: 2, 4: 5, 5: 4, 7: 8, 8: 7 };
@@ -112,7 +151,7 @@ export function GlobalSummary({
                 const bedLabel = (b: 'king' | 'queen' | 'twin' | null) =>
                   b === 'twin' ? 'Twin beds' : b === 'king' || b === 'queen' ? 'King size bed' : '—';
                 return (
-                  <div className="text-sm space-y-1 pl-6">
+                  <div className="space-y-0.5">
                     {sorted.map((r) => {
                       const isFixed = r.isFixed || r.roomId === 1 || r.roomId === 6;
                       const suffixParts: string[] = [];
@@ -120,129 +159,51 @@ export function GlobalSummary({
                       else suffixParts.push(`shared with Room ${BATHROOM_PARTNER[r.roomId] ?? '?'}`);
                       if (r.note === 'Upstairs') suffixParts.push('Upstairs');
                       return (
-                        <div key={r.roomId} className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            Room {r.roomId} <span className="text-muted-foreground">· {suffixParts.join(' · ')}</span>
-                          </span>
-                          <span className="font-semibold text-foreground">
-                            {bedLabel(r.bedType)}{isFixed ? ' · fixed' : ''}
-                          </span>
-                        </div>
+                        <SummaryRow
+                          key={r.roomId}
+                          label={<>Room {r.roomId} <span className="text-muted-foreground/80">· {suffixParts.join(' · ')}</span></>}
+                          value={<>{bedLabel(r.bedType)}{isFixed ? <span className="text-muted-foreground font-normal"> · fixed</span> : ''}</>}
+                        />
                       );
                     })}
                   </div>
                 );
               }
               return (
-                <div className="text-sm text-muted-foreground space-y-1 pl-6">
-                  <div className="flex justify-between">
-                    <span>King (en-suite bathroom) — fixed</span>
-                    <span className="font-semibold text-foreground">2</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>King size bed (shared bathroom)</span>
-                    <span className="font-semibold text-foreground">{roomSetupData!.queenSharedCount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Twins (shared bathroom)</span>
-                    <span className="font-semibold text-foreground">{roomSetupData!.twinsSharedCount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>King size bed (en-suite bathroom)</span>
-                    <span className="font-semibold text-foreground">{roomSetupData!.queenEnsuiteCount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Twins (en-suite bathroom)</span>
-                    <span className="font-semibold text-foreground">{roomSetupData!.twinsEnsuiteCount}</span>
-                  </div>
+                <div className="space-y-0.5">
+                  <SummaryRow label="King (en-suite bathroom) — fixed" value={2} />
+                  <SummaryRow label="King size bed (shared bathroom)" value={roomSetupData!.queenSharedCount} />
+                  <SummaryRow label="Twins (shared bathroom)" value={roomSetupData!.twinsSharedCount} />
+                  <SummaryRow label="King size bed (en-suite bathroom)" value={roomSetupData!.queenEnsuiteCount} />
+                  <SummaryRow label="Twins (en-suite bathroom)" value={roomSetupData!.twinsEnsuiteCount} />
                 </div>
               );
             })()
           ) : (
-            <Button asChild variant="outline" size="sm" className="ml-6">
-              <Link to="/room-setup">
-                Not set <ChevronRight className="w-4 h-4 ml-1" />
-              </Link>
-            </Button>
+            <NotSetLink to="/room-setup" />
           )}
-        </div>
+        </SummarySection>
 
-        {/* Transportation */}
-        <div className="py-3 border-b border-border">
-          <div className="flex items-center gap-2 mb-2">
-            <Car className="w-4 h-4 text-primary" />
-            <span className="font-semibold">Transportation</span>
-          </div>
-          {hasTransportation ? (
-            <div className="text-sm text-muted-foreground pl-6 space-y-1">
-              <div className="flex justify-between">
-                <span>{transportationData!.totalTrips} trip{transportationData!.totalTrips !== 1 ? 's' : ''} scheduled</span>
-              </div>
-              {transportationData!.subtotal > 0 && (
-                <div className="flex justify-between items-center">
-                  <span className="flex items-center gap-1">
-                    <Euro className="w-3 h-3" />
-                    Transportation subtotal
-                  </span>
-                  <span className="font-semibold text-foreground">€{transportationData!.subtotal}</span>
-                </div>
-              )}
-              {transportationData!.customOfferCount > 0 && (
-                <div className="flex justify-between">
-                  <span>Custom offer trips</span>
-                  <span className="font-semibold text-foreground">{transportationData!.customOfferCount}</span>
-                </div>
-              )}
-            </div>
-          ) : (
-            <Button asChild variant="outline" size="sm" className="ml-6">
-              <Link to="/transportation">
-                Not set <ChevronRight className="w-4 h-4 ml-1" />
-              </Link>
-            </Button>
-          )}
-        </div>
-
-        {/* Food */}
-        <div className="py-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Utensils className="w-4 h-4 text-primary" />
-            <span className="font-semibold">Food</span>
-          </div>
+        {/* Meals */}
+        <SummarySection icon={Utensils} title="Meals">
           {hasFood ? (
-            <div className="text-sm text-muted-foreground space-y-1 pl-6">
+            <div className="space-y-0.5">
               {hasMealTimes && (
-                <div className="space-y-1 mb-2">
-                  <div className="font-medium text-foreground">Meal times</div>
-                  {mealTimes!.breakfast_time && (
-                    <div className="flex justify-between">
-                      <span>Breakfast</span>
-                      <span className="font-semibold text-foreground">{mealTimes!.breakfast_time}</span>
-                    </div>
-                  )}
-                  {mealTimes!.lunch_time && (
-                    <div className="flex justify-between">
-                      <span>Lunch</span>
-                      <span className="font-semibold text-foreground">{mealTimes!.lunch_time}</span>
-                    </div>
-                  )}
-                  {mealTimes!.dinner_time && (
-                    <div className="flex justify-between">
-                      <span>Dinner</span>
-                      <span className="font-semibold text-foreground">{mealTimes!.dinner_time}</span>
-                    </div>
-                  )}
+                <div className="mb-2.5">
+                  <div className="guest-kicker mb-1">Meal times</div>
+                  {mealTimes!.breakfast_time && <SummaryRow label="Breakfast" value={mealTimes!.breakfast_time} />}
+                  {mealTimes!.lunch_time && <SummaryRow label="Lunch" value={mealTimes!.lunch_time} />}
+                  {mealTimes!.dinner_time && <SummaryRow label="Dinner" value={mealTimes!.dinner_time} />}
                 </div>
               )}
               {activeDiets.length > 0 && (
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {activeDiets.map((d) => (
-                    <div key={d.type} className="flex justify-between">
-                      <span>{d.label}</span>
-                      <span className="font-semibold text-foreground">
-                        {d.guests} guest{d.guests !== 1 ? 's' : ''}
-                      </span>
-                    </div>
+                    <SummaryRow
+                      key={d.type}
+                      label={d.label}
+                      value={`${d.guests} guest${d.guests !== 1 ? 's' : ''}`}
+                    />
                   ))}
                 </div>
               )}
@@ -252,7 +213,7 @@ export function GlobalSummary({
                   .sort((a, b) => a.date.localeCompare(b.date));
                 if (activeDays.length === 0) {
                   return (
-                    <>
+                    <div className="space-y-0.5 text-sm text-muted-foreground">
                       {foodData!.fullBoardDays > 0 && (
                         <div>Full board: {foodData!.fullBoardDays} day{foodData!.fullBoardDays !== 1 ? 's' : ''}</div>
                       )}
@@ -262,11 +223,11 @@ export function GlobalSummary({
                       {foodData!.customDays > 0 && (
                         <div>Custom selection: {foodData!.customDays} day{foodData!.customDays !== 1 ? 's' : ''}</div>
                       )}
-                    </>
+                    </div>
                   );
                 }
                 return (
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-2.5 space-y-1">
                     {activeDays.map((s) => {
                       const meals: string[] = [];
                       if (s.fullBoard) meals.push('Full board');
@@ -279,7 +240,7 @@ export function GlobalSummary({
                         ? ` — ${s.guests_count_day} guest${s.guests_count_day !== 1 ? 's' : ''}`
                         : '';
                       return (
-                        <div key={s.date} className="text-xs">
+                        <div key={s.date} className="text-xs text-muted-foreground">
                           <span className="font-medium text-foreground">{parseLocalDateLong(s.date)}{guestsLabel}</span>: {meals.join(' + ')}
                         </div>
                       );
@@ -288,23 +249,33 @@ export function GlobalSummary({
                 );
               })()}
               {foodData!.totalCost !== undefined && foodData!.totalCost > 0 && (
-                <div className="flex justify-between items-center mt-2 pt-2 border-t border-border">
-                  <span className="flex items-center gap-1">
-                    <Euro className="w-3 h-3" />
-                    Estimated total
-                  </span>
-                  <span className="font-semibold text-foreground">€{foodData!.totalCost}</span>
-                </div>
+                <SectionTotal label="Estimated total" value={`€${foodData!.totalCost}`} />
               )}
             </div>
           ) : (
-            <Button asChild variant="outline" size="sm" className="ml-6" disabled={!hasDates}>
-              <Link to={hasDates ? "/food" : "#"}>
-                Not set <ChevronRight className="w-4 h-4 ml-1" />
-              </Link>
-            </Button>
+            <NotSetLink to={hasDates ? "/food" : "#"} disabled={!hasDates} />
           )}
-        </div>
+        </SummarySection>
+
+        {/* Transfers */}
+        <SummarySection icon={Car} title="Transfers">
+          {hasTransportation ? (
+            <div className="space-y-0.5">
+              <SummaryRow
+                label="Trips scheduled"
+                value={transportationData!.totalTrips}
+              />
+              {transportationData!.customOfferCount > 0 && (
+                <SummaryRow label="Custom offer trips" value={transportationData!.customOfferCount} />
+              )}
+              {transportationData!.subtotal > 0 && (
+                <SectionTotal label="Transfers subtotal" value={`€${transportationData!.subtotal}`} />
+              )}
+            </div>
+          ) : (
+            <NotSetLink to="/transportation" />
+          )}
+        </SummarySection>
       </div>
     </div>
   );

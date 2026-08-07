@@ -25,12 +25,12 @@ export function ToolPageLayout({ title, description, isLocked = false, statusInf
     : '/dashboard';
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="guest-ui min-h-screen bg-background text-foreground flex flex-col">
       {/* Sticky header with back button */}
-      <div className="sticky top-0 z-50 bg-background border-b border-border">
+      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border/70">
         <GuestAreaHeader />
-        <div className="container mx-auto px-4 py-3">
-          <Button asChild variant="ghost" size="sm" className="gap-2">
+        <div className="container mx-auto px-4 py-2">
+          <Button asChild variant="ghost" size="sm" className="gap-2 -ml-2 text-muted-foreground hover:text-foreground">
             <Link to={dashboardHref}>
               <ArrowLeft className="w-4 h-4" />
               Back to Dashboard
@@ -38,28 +38,28 @@ export function ToolPageLayout({ title, description, isLocked = false, statusInf
           </Button>
         </div>
       </div>
-      
-      <main className="container mx-auto px-4 py-8 flex-1">
-        <div className="mb-6">
-          <h1 className="text-3xl md:text-4xl mb-2">{title}</h1>
+
+      <main className="container mx-auto px-4 py-8 md:py-10 flex-1">
+        <div className="mb-8">
+          <h1 className="guest-display text-3xl md:text-4xl font-semibold tracking-tight text-[#35532A] mb-2">{title}</h1>
           {description && (
-            <p className="text-muted-foreground">{description}</p>
+            <p className="text-sm md:text-base text-muted-foreground">{description}</p>
           )}
         </div>
-        
+
         {statusInfo
           ? <EditLockBanner variant="tool" statusInfo={statusInfo} />
           : (isLocked && <EditLockBanner variant="tool" />)}
-        
+
         {children}
-        
+
         {/* OK Button at bottom of page */}
         {showOkButton && (
-          <div className="mt-8 flex justify-center">
-            <Button 
+          <div className="mt-10 flex justify-center">
+            <Button
               onClick={() => navigate(dashboardHref)}
               size="lg"
-              className="min-w-32"
+              className="min-w-32 rounded-full bg-[#35532A] text-white hover:bg-[#2A4221]"
             >
               OK
             </Button>
@@ -67,8 +67,8 @@ export function ToolPageLayout({ title, description, isLocked = false, statusInf
         )}
       </main>
 
-      <footer className="border-t border-border py-6 mt-12">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
+      <footer className="border-t border-border/70 py-8 mt-12">
+        <div className="container mx-auto px-4 text-center text-xs text-muted-foreground">
           <p>Quinta do Amor © {new Date().getFullYear()}</p>
         </div>
       </footer>

@@ -241,9 +241,9 @@ const Transportation = () => {
         </div>
 
         {/* Driver Intro Card - Bigger image */}
-        <div className="rounded-2xl bg-card border border-border p-6">
+        <div className="guest-card p-6">
           <div className="flex items-start gap-5">
-            <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden flex-shrink-0 bg-muted border-4 border-primary/20">
+            <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden flex-shrink-0 bg-muted border-4 border-[#EAF6DF]">
               <img 
                 src={driverImage} 
                 alt="Luis" 
@@ -260,9 +260,9 @@ const Transportation = () => {
         </div>
 
         {/* Luggage Note */}
-        <div className="rounded-xl bg-primary/10 border border-primary/30 p-4">
+        <div className="rounded-2xl bg-[#EAF6DF] border border-[#CAE8BD] p-4">
           <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+            <Info className="w-4 h-4 text-[#35532A] flex-shrink-0 mt-0.5" />
             <p className="text-sm">
               Please consider the luggage of your guests. If you expect big suitcases, we recommend not filling the taxis.
             </p>
@@ -270,19 +270,14 @@ const Transportation = () => {
         </div>
 
         {/* Pricing Info */}
-        <div className="rounded-xl bg-muted/50 border border-border p-5">
-          <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-            <div className="text-sm">
-              <p className="font-medium mb-2">Taxi pricing</p>
-              <ul className="space-y-1 text-muted-foreground">
-                <li>• 4-seat taxi: <strong>€{getTaxiPrices().seats4}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
-                <li>• 6-seat taxi: <strong>€{getTaxiPrices().seats6}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
-                <li>• 8-seat taxi: <strong>€{getTaxiPrices().seats8}</strong> per trip (Lisbon / Lisbon Airport ↔ Quinta)</li>
-                <li>• Other routes: Custom offer</li>
-              </ul>
-            </div>
-          </div>
+        <div className="guest-card p-5">
+          <p className="guest-kicker mb-3">Taxi pricing</p>
+          <ul className="space-y-1.5 text-sm text-muted-foreground">
+            <li className="flex justify-between gap-3"><span>4-seat taxi <span className="text-muted-foreground/70">· Lisbon / Lisbon Airport ↔ Quinta</span></span><strong className="text-foreground tabular-nums">€{getTaxiPrices().seats4}</strong></li>
+            <li className="flex justify-between gap-3"><span>6-seat taxi <span className="text-muted-foreground/70">· Lisbon / Lisbon Airport ↔ Quinta</span></span><strong className="text-foreground tabular-nums">€{getTaxiPrices().seats6}</strong></li>
+            <li className="flex justify-between gap-3"><span>8-seat taxi <span className="text-muted-foreground/70">· Lisbon / Lisbon Airport ↔ Quinta</span></span><strong className="text-foreground tabular-nums">€{getTaxiPrices().seats8}</strong></li>
+            <li className="flex justify-between gap-3"><span>Other routes</span><strong className="text-foreground">Custom offer</strong></li>
+          </ul>
         </div>
 
         {/* Existing Trips */}
@@ -294,7 +289,7 @@ const Transportation = () => {
           });
           return (
           <div className="space-y-4">
-            <h2 className="text-lg font-medium">Your trips</h2>
+            <h2 className="guest-kicker">Your trips</h2>
             {sortedTrips.map((trip) => (
               <TripCard
                 key={trip.id}
@@ -316,10 +311,12 @@ const Transportation = () => {
         {!isLocked && (
           <>
             {showAddTrip ? (
-              <Card>
+              <Card className="guest-card border-border/70 shadow-none">
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Car className="w-5 h-5" />
+                  <CardTitle className="text-base font-semibold tracking-tight flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
+                      <Car className="w-4 h-4" />
+                    </span>
                     New Trip
                   </CardTitle>
                 </CardHeader>
@@ -545,7 +542,7 @@ const Transportation = () => {
                 </CardContent>
               </Card>
             ) : (
-              <Button onClick={() => setShowAddTrip(true)} variant="outline" className="w-full gap-2">
+              <Button onClick={() => setShowAddTrip(true)} variant="outline" className="w-full gap-2 h-12 rounded-2xl border-dashed text-muted-foreground hover:text-[#35532A] hover:border-[#79B84B]/50 hover:bg-[#EAF6DF]/50">
                 <Plus className="w-4 h-4" />
                 Add trip
               </Button>
@@ -554,8 +551,8 @@ const Transportation = () => {
         )}
 
         {/* Notes */}
-        <div>
-          <Label>Notes (optional)</Label>
+        <div className="guest-card p-6">
+          <Label className="text-base font-semibold tracking-tight mb-3 block">Notes (optional)</Label>
           <Textarea
             placeholder="Any special requirements or notes..."
             value={request?.notes_transportation || ''}
@@ -627,50 +624,50 @@ function TripCard({
   }
 
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <p className="font-medium">{trip.trip_direction}</p>
-            <p className="text-sm text-muted-foreground">
-              {trip.pickup_location} → {trip.dropoff_location}
+    <Card className="guest-card border-border/70 shadow-none">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="min-w-0">
+            <p className="guest-kicker mb-1">{trip.trip_direction}</p>
+            <p className="text-sm font-semibold">
+              {trip.pickup_location} <span className="text-muted-foreground font-normal">→</span> {trip.dropoff_location}
             </p>
           </div>
           {!disabled && (
-            <div className="flex gap-1">
-              <Button variant="ghost" size="icon" onClick={() => setIsEditing(true)} title="Edit trip">
+            <div className="flex gap-0.5 shrink-0">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditing(true)} title="Edit trip">
                 <Pencil className="w-4 h-4 text-muted-foreground" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={onDuplicate} title="Duplicate trip">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDuplicate} title="Duplicate trip">
                 <Copy className="w-4 h-4 text-muted-foreground" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={onDelete}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete}>
                 <Trash2 className="w-4 h-4 text-destructive" />
               </Button>
             </div>
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-sm mb-4">
           <div>
-            <span className="text-muted-foreground">Date: </span>
-            {format(parseLocalDate(trip.trip_date), 'dd MMM yyyy')}
+            <span className="block text-[11px] font-medium text-muted-foreground">Date</span>
+            <span className="font-medium tabular-nums">{format(parseLocalDate(trip.trip_date), 'dd MMM yyyy')}</span>
           </div>
           <div>
-            <span className="text-muted-foreground">Time: </span>
-            {trip.trip_time}
+            <span className="block text-[11px] font-medium text-muted-foreground">Time</span>
+            <span className="font-medium tabular-nums">{trip.trip_time}</span>
           </div>
           <div>
-            <span className="text-muted-foreground">Taxi: </span>
-            {trip.taxi_size}
+            <span className="block text-[11px] font-medium text-muted-foreground">Taxi</span>
+            <span className="font-medium">{trip.taxi_size}</span>
           </div>
           <div>
-            <span className="text-muted-foreground">Passengers: </span>
-            {trip.passengers_count}
+            <span className="block text-[11px] font-medium text-muted-foreground">Passengers</span>
+            <span className="font-medium tabular-nums">{trip.passengers_count}</span>
           </div>
           <div>
-            <span className="text-muted-foreground">Price: </span>
-            <span className="font-medium">
+            <span className="block text-[11px] font-medium text-muted-foreground">Price</span>
+            <span className="font-semibold text-[#35532A] tabular-nums">
               {trip.custom_price !== null && trip.custom_price !== undefined
                 ? `${Number(trip.custom_price)}€`
                 : trip.price_estimate}
@@ -680,11 +677,11 @@ function TripCard({
 
         {/* Passengers */}
         {trip.passengers && trip.passengers.length > 0 && (
-          <div className="border-t border-border pt-3 mt-3">
-            <p className="text-sm font-medium mb-2">Passengers</p>
+          <div className="border-t border-border/70 pt-3 mt-3">
+            <p className="text-[11px] font-medium text-muted-foreground mb-2">Passengers</p>
             <div className="space-y-2">
               {trip.passengers.map((p) => (
-                <div key={p.id} className="flex items-center justify-between text-sm bg-muted/50 rounded-lg p-2">
+                <div key={p.id} className="flex items-center justify-between text-sm bg-muted/40 rounded-lg px-3 py-2">
                   <div>
                     <span className="font-medium">{p.first_name}</span>
                     <span className="text-muted-foreground ml-2">{p.phone}</span>
@@ -705,7 +702,7 @@ function TripCard({
 
         {/* Add Passenger */}
         {!disabled && (
-          <div className="border-t border-border pt-3 mt-3">
+          <div className="border-t border-border/70 pt-3 mt-3">
             {showAddPassenger ? (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
@@ -818,10 +815,12 @@ function EditTripForm({
   };
 
   return (
-    <Card>
+    <Card className="guest-card border-border/70 shadow-none">
       <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Pencil className="w-5 h-5" />
+        <CardTitle className="text-base font-semibold tracking-tight flex items-center gap-2.5">
+          <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
+            <Pencil className="w-4 h-4" />
+          </span>
           Edit Trip
         </CardTitle>
       </CardHeader>

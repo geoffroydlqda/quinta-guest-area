@@ -9,12 +9,12 @@ interface EditLockBannerProps {
 
 function PendingBanner({ message }: { message: string }) {
   return (
-    <div className="rounded-xl bg-muted/40 border border-border p-4 mb-6">
+    <div className="rounded-2xl bg-card border border-border/70 p-4 mb-6">
       <div className="flex items-start gap-3">
-        <Clock className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+        <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
         <div>
-          <p className="font-medium text-foreground">Pending completion</p>
-          <p className="text-sm text-muted-foreground mt-1">{message}</p>
+          <p className="text-sm font-semibold text-foreground">Pending completion</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{message}</p>
         </div>
       </div>
     </div>
@@ -24,18 +24,12 @@ function PendingBanner({ message }: { message: string }) {
 function LateUpdatesBanner({ message }: { message: string }) {
   // Yellow / beige warning — visible but friendly
   return (
-    <div
-      className="rounded-xl p-4 mb-6 border"
-      style={{
-        backgroundColor: 'hsl(48 96% 89%)',
-        borderColor: 'hsl(43 96% 56%)',
-      }}
-    >
+    <div className="rounded-2xl p-4 mb-6 border bg-amber-50 border-amber-200">
       <div className="flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: 'hsl(32 95% 35%)' }} />
+        <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
         <div>
-          <p className="font-semibold" style={{ color: 'hsl(26 95% 22%)' }}>Late updates</p>
-          <p className="text-sm mt-1" style={{ color: 'hsl(26 60% 22%)' }}>{message}</p>
+          <p className="text-sm font-semibold text-amber-900">Late updates</p>
+          <p className="text-sm mt-0.5 text-amber-800">{message}</p>
         </div>
       </div>
     </div>
@@ -44,12 +38,12 @@ function LateUpdatesBanner({ message }: { message: string }) {
 
 function FinalizedBanner({ message }: { message: string }) {
   return (
-    <div className="rounded-xl bg-destructive/10 border border-destructive/40 p-4 mb-6">
+    <div className="rounded-2xl bg-destructive/10 border border-destructive/30 p-4 mb-6">
       <div className="flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+        <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
         <div>
-          <p className="font-semibold text-destructive">Finalized</p>
-          <p className="text-sm text-muted-foreground mt-1">{message}</p>
+          <p className="text-sm font-semibold text-destructive">Finalized</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{message}</p>
         </div>
       </div>
     </div>

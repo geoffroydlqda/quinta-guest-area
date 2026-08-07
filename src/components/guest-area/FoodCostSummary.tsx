@@ -28,10 +28,12 @@ export function FoodCostSummaryCard({ summary }: FoodCostSummaryProps) {
   );
 
   return (
-    <div className="bg-card rounded-2xl border border-border p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Euro className="w-5 h-5 text-primary" />
-        <h3 className="text-lg font-semibold">Cost summary</h3>
+    <div className="guest-card p-6">
+      <div className="flex items-center gap-2.5 mb-4">
+        <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
+          <Euro className="w-4 h-4" />
+        </span>
+        <h3 className="text-base font-semibold tracking-tight">Cost summary</h3>
       </div>
 
       {activeDiets.length === 0 ? (
@@ -47,7 +49,7 @@ export function FoodCostSummaryCard({ summary }: FoodCostSummaryProps) {
       ) : (
         <div className="space-y-4">
           {activeDiets.map((d) => (
-            <div key={d.type} className="rounded-lg border border-border p-3.5">
+            <div key={d.type} className="rounded-xl border border-border/70 p-4">
               <div className="flex justify-between items-baseline mb-1.5">
                 <span className="font-semibold text-sm">
                   {d.label}
@@ -64,12 +66,12 @@ export function FoodCostSummaryCard({ summary }: FoodCostSummaryProps) {
 
           <div className="flex justify-between items-center text-xs text-muted-foreground px-1">
             <span>Guests with a food plan</span>
-            <span>{dietTotal}</span>
+            <span className="tabular-nums">{dietTotal}</span>
           </div>
 
-          <div className="flex justify-between items-center py-3 bg-primary/5 rounded-lg px-3">
-            <span className="font-semibold">Estimated total food cost</span>
-            <span className="text-lg font-bold text-primary tabular-nums">{fmt(grandTotal)}</span>
+          <div className="flex justify-between items-center py-3 bg-[#EAF6DF] rounded-xl px-4">
+            <span className="font-semibold text-sm">Estimated total food cost</span>
+            <span className="text-lg font-bold text-[#35532A] tabular-nums">{fmt(grandTotal)}</span>
           </div>
 
           <p className="text-xs text-muted-foreground">

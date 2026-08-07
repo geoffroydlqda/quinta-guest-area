@@ -27,12 +27,12 @@ export function StaySwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2 max-w-[220px]">
-          <CalendarDays className="h-4 w-4 shrink-0" />
-          <span className="truncate">
+        <Button variant="outline" size="sm" className="gap-2 max-w-[220px] rounded-full border-border/80 text-foreground">
+          <CalendarDays className="h-4 w-4 shrink-0 text-[#35532A]" />
+          <span className="truncate font-medium">
             {activeBooking?.retreat_name || shortRange(activeBooking?.check_in_date ?? null, activeBooking?.check_out_date ?? null)}
           </span>
-          <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+          <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">

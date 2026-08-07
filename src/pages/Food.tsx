@@ -111,12 +111,14 @@ const Food = () => {
         </div>
 
         {/* Meal times (global) */}
-        <div className="bg-card rounded-2xl border border-border p-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Clock className="w-4 h-4 text-primary" />
-            <Label className="text-base font-semibold">Meal times</Label>
+        <div className="guest-card p-6">
+          <div className="flex items-center gap-2.5 mb-1">
+            <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
+              <Clock className="w-4 h-4" />
+            </span>
+            <Label className="text-base font-semibold tracking-tight">Meal times</Label>
           </div>
-          <p className="text-sm text-muted-foreground mb-4">
+          <p className="text-sm text-muted-foreground mb-4 mt-1">
             Optional. Select your preferred times for the entire stay.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -145,8 +147,8 @@ const Food = () => {
         </div>
 
         {/* Food Preferences (multi-diet) */}
-        <div className="bg-card rounded-2xl border border-border p-6">
-          <Label className="text-base font-semibold mb-1 block">Food preferences</Label>
+        <div className="guest-card p-6">
+          <Label className="text-base font-semibold tracking-tight mb-1 block">Food preferences</Label>
           <p className="text-sm text-muted-foreground mb-4">
             Assign the number of guests to each diet type. Some guests may have no food plan.
           </p>
@@ -160,8 +162,8 @@ const Food = () => {
                 <div
                   key={meta.type}
                   className={cn(
-                    "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg border",
-                    overLimit && value > 0 ? "border-destructive/60 bg-destructive/5" : "border-border"
+                    "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-xl border",
+                    overLimit && value > 0 ? "border-destructive/60 bg-destructive/5" : "border-border/70"
                   )}
                 >
                   <div>
@@ -219,19 +221,19 @@ const Food = () => {
         </div>
 
         {/* Food Table */}
-        <div className="bg-card rounded-2xl border border-border overflow-hidden">
+        <div className="guest-card overflow-hidden">
           <div className="overflow-x-auto">
             <div style={{ minWidth: '760px' }}>
               <div
-                className="border-b border-border"
+                className="border-b border-border/70 bg-muted/40"
                 style={{ display: 'grid', gridTemplateColumns: '180px 100px 1fr 1fr 1fr 1fr' }}
               >
-                <div className="p-4 font-semibold text-left">Date</div>
-                <div className="p-4 font-semibold text-center border-l border-border">Guests</div>
-                <div className="p-4 font-semibold text-center border-l border-border">Full Board</div>
-                <div className="p-4 font-semibold text-center border-l border-border">Breakfast</div>
-                <div className="p-4 font-semibold text-center border-l border-border">Lunch</div>
-                <div className="p-4 font-semibold text-center border-l border-border">Dinner (+ dessert)</div>
+                <div className="px-4 py-3 guest-kicker text-left">Date</div>
+                <div className="px-4 py-3 guest-kicker text-center">Guests</div>
+                <div className="px-4 py-3 guest-kicker text-center">Full Board</div>
+                <div className="px-4 py-3 guest-kicker text-center">Breakfast</div>
+                <div className="px-4 py-3 guest-kicker text-center">Lunch</div>
+                <div className="px-4 py-3 guest-kicker text-center">Dinner (+ dessert)</div>
               </div>
 
               {days.map((day, index) => {
@@ -247,23 +249,26 @@ const Food = () => {
                 return (
                   <div
                     key={day.date}
-                    className={cn("border-b border-border", index % 2 === 0 && "bg-muted/30")}
+                    className={cn("border-b border-border/60 last:border-b-0", index % 2 === 1 && "bg-muted/20")}
                     style={{ display: 'grid', gridTemplateColumns: '180px 100px 1fr 1fr 1fr 1fr' }}
                   >
-                    <div className="p-4">
-                      <p className="font-semibold">{format(parseISO(day.date), 'EEE, dd MMM')}</p>
+                    <div className="px-4 py-3.5">
+                      <p className="text-sm">
+                        <span className="font-semibold">{format(parseISO(day.date), 'EEE')}</span>
+                        <span className="text-muted-foreground"> {format(parseISO(day.date), 'dd MMM')}</span>
+                      </p>
                       {day.isCheckIn && (
-                        <span className="text-xs text-primary font-medium block">
+                        <span className="text-[11px] text-[#679E3F] font-medium block mt-0.5">
                           Check-in — dinner only
                         </span>
                       )}
                       {day.isCheckOut && (
-                        <span className="text-xs text-primary font-medium block">
+                        <span className="text-[11px] text-[#679E3F] font-medium block mt-0.5">
                           Check-out — breakfast only
                         </span>
                       )}
                     </div>
-                    <div className="p-3 flex items-center justify-center border-l border-border">
+                    <div className="px-3 py-2.5 flex items-center justify-center">
                       <Input
                         type="number"
                         min={0}
@@ -274,40 +279,40 @@ const Food = () => {
                           const v = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
                           if (!Number.isNaN(v)) updateDayGuests(day.date, v);
                         }}
-                        className="h-9 w-16 text-center px-1"
+                        className="h-8 w-14 text-center px-1 text-sm tabular-nums"
                         aria-label={`Guests on ${day.date}`}
                       />
                     </div>
-                    <div className="p-4 flex items-center justify-center border-l border-border">
+                    <div className="px-4 py-2.5 flex items-center justify-center">
                       {!day.isCheckIn && !day.isCheckOut ? (
                         <MealToggle selected={selection.fullBoard} disabled={isLocked || hasIndividualMeal}
                           onClick={() => updateDaySelection(day.date, { fullBoard: !selection.fullBoard })} />
                       ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
+                        <span className="text-muted-foreground/50 text-sm">—</span>
                       )}
                     </div>
-                    <div className="p-4 flex items-center justify-center border-l border-border">
+                    <div className="px-4 py-2.5 flex items-center justify-center">
                       {!day.isCheckIn ? (
                         <MealToggle selected={selection.breakfast} disabled={isLocked || selection.fullBoard}
                           onClick={() => updateDaySelection(day.date, { breakfast: !selection.breakfast })} />
                       ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
+                        <span className="text-muted-foreground/50 text-sm">—</span>
                       )}
                     </div>
-                    <div className="p-4 flex items-center justify-center border-l border-border">
+                    <div className="px-4 py-2.5 flex items-center justify-center">
                       {!day.isCheckIn && !day.isCheckOut ? (
                         <MealToggle selected={selection.lunch} disabled={isLocked || selection.fullBoard}
                           onClick={() => updateDaySelection(day.date, { lunch: !selection.lunch })} />
                       ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
+                        <span className="text-muted-foreground/50 text-sm">—</span>
                       )}
                     </div>
-                    <div className="p-4 flex items-center justify-center border-l border-border">
+                    <div className="px-4 py-2.5 flex items-center justify-center">
                       {!day.isCheckOut ? (
                         <MealToggle selected={selection.dinner} disabled={isLocked || selection.fullBoard}
                           onClick={() => updateDaySelection(day.date, { dinner: !selection.dinner })} />
                       ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
+                        <span className="text-muted-foreground/50 text-sm">—</span>
                       )}
                     </div>
                   </div>
@@ -318,12 +323,12 @@ const Food = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-          <span>• Full board = all 3 meals</span>
+        <div className="flex flex-wrap gap-4 text-xs text-muted-foreground px-1">
+          <span>Full board = all 3 meals</span>
         </div>
 
-        <div>
-          <Label className="font-semibold">Notes (optional)</Label>
+        <div className="guest-card p-6">
+          <Label className="text-base font-semibold tracking-tight mb-3 block">Notes (optional)</Label>
           <Textarea
             placeholder="Dietary requirements, allergies, or preferences..."
             value={foodPlan.notes_food || ''}
@@ -346,13 +351,13 @@ function MealToggle({ selected, disabled, onClick }: { selected: boolean; disabl
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "w-10 h-10 rounded-lg border-2 transition-all flex items-center justify-center",
-        selected && "bg-primary border-primary text-primary-foreground",
-        !selected && !disabled && "border-border hover:border-primary/50",
+        "w-9 h-9 rounded-full border transition-all flex items-center justify-center",
+        selected && "bg-[#CAE8BD] border-[#79B84B] text-[#35532A]",
+        !selected && !disabled && "border-border hover:border-[#79B84B]/60 hover:bg-[#EAF6DF]/60",
         disabled && !selected && "opacity-30 cursor-not-allowed border-border bg-muted"
       )}
     >
-      {selected && <Check className="w-5 h-5" />}
+      {selected && <Check className="w-[18px] h-[18px]" strokeWidth={2.5} />}
     </button>
   );
 }

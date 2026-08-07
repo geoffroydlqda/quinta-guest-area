@@ -411,15 +411,15 @@ const RoomSetup = () => {
     >
       <div className="max-w-5xl mx-auto space-y-6">
         {targetGuests !== null && (
-          <div className="bg-card rounded-2xl border border-border p-4 space-y-2">
+          <div className="guest-card p-5 space-y-2.5">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <p className="text-sm font-medium">
+              <p className="text-sm font-semibold tabular-nums">
                 {guestsPlaced} of {targetGuests} guest{targetGuests !== 1 ? 's' : ''} placed
                 <span className="text-muted-foreground font-normal"> · {roomsWithGuests} room{roomsWithGuests !== 1 ? 's' : ''} with guests</span>
               </p>
               <AutoSaveIndicator status={saveStatus} />
             </div>
-            <Progress value={Math.min(100, targetGuests > 0 ? (guestsPlaced / targetGuests) * 100 : 0)} />
+            <Progress className="h-1.5" value={Math.min(100, targetGuests > 0 ? (guestsPlaced / targetGuests) * 100 : 0)} />
             {overAssigned && (
               <p className="text-sm text-destructive flex items-start gap-1.5">
                 <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -440,7 +440,7 @@ const RoomSetup = () => {
           </div>
         )}
 
-        <div className="rounded-xl overflow-hidden border border-border bg-white group">
+        <div className="guest-card overflow-hidden bg-white group">
           <div className="relative w-fit mx-auto cursor-pointer" onClick={() => setMapOpen(true)}>
             <img
               src={liveMapUrl ?? roomsArrangement}
@@ -515,14 +515,14 @@ const RoomSetup = () => {
         <MapLightbox open={mapOpen} onOpenChange={setMapOpen} imageSrc={liveMapUrl} />
 
         <div className="grid gap-2 md:grid-cols-2">
-          <div className="rounded-lg bg-muted/50 border border-border px-3 py-2 flex items-start gap-2">
-            <Crown className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+          <div className="rounded-xl bg-muted/50 border border-border/70 px-3.5 py-2.5 flex items-start gap-2">
+            <Crown className="w-4 h-4 text-[#679E3F] flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-snug">
               <span className="font-medium text-foreground">Rooms 1 & 6:</span> fixed King beds, en-suite.
             </p>
           </div>
-          <div className="rounded-lg bg-muted/50 border border-border px-3 py-2 flex items-start gap-2">
-            <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+          <div className="rounded-xl bg-muted/50 border border-border/70 px-3.5 py-2.5 flex items-start gap-2">
+            <Info className="w-4 h-4 text-[#679E3F] flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-snug">
               <span className="font-medium text-foreground">Rooms 7 & 8:</span> upstairs via kitchen, smaller shared bath, best view — often for facilitators.
             </p>
@@ -589,8 +589,8 @@ const RoomSetup = () => {
             )}
         </div>
 
-        <div className="bg-card rounded-2xl border border-border p-6">
-          <Label htmlFor="remarks" className="text-base font-medium mb-3 block">
+        <div className="guest-card p-6">
+          <Label htmlFor="remarks" className="text-base font-semibold tracking-tight mb-3 block">
             Room setup remarks (optional)
           </Label>
           <Textarea

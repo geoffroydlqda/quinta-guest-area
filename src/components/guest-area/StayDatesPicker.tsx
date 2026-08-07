@@ -161,19 +161,16 @@ export function StayDatesPicker({
     !isNaN(localGuestsNum) && localGuestsNum >= 1 && localGuestsNum <= 22;
 
   return (
-    <div className="bg-card rounded-2xl border border-border p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-          <CalendarIcon className="w-5 h-5 text-primary" />
-        </div>
+    <div className="guest-card p-5 sm:p-6">
+      <div className="flex items-start justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-lg font-medium">Your stay dates</h2>
-          <p className="text-sm text-muted-foreground">
-            Set when you booked — contact us to change them
+          <h2 className="guest-kicker">Your stay</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Dates are set with your booking — contact us to change them
           </p>
         </div>
         {hasDates && (
-          <Check className="w-5 h-5 text-success ml-auto" />
+          <Check className="w-4 h-4 text-[#35B86E] flex-shrink-0" />
         )}
       </div>
 
@@ -183,35 +180,35 @@ export function StayDatesPicker({
             <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
             <p className="text-sm text-muted-foreground">
               Your information is finalized. Please contact{' '}
-              <a href="mailto:hello@quintamor.com" className="text-primary hover:underline">hello@quintamor.com</a>{' '}
+              <a href="mailto:hello@quintamor.com" className="text-[#35532A] hover:underline">hello@quintamor.com</a>{' '}
               for any changes.
             </p>
           </div>
         </div>
       )}
 
-      <div className="grid sm:grid-cols-3 gap-4 mb-4">
+      <div className="grid sm:grid-cols-3 gap-4 sm:gap-6 mb-4">
         {/* Check-in Date */}
         <div>
-          <Label className="text-sm text-muted-foreground mb-2 block">Check-in</Label>
-          <div className="w-full h-11 flex items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium">
-            <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-            {localCheckIn ? format(localCheckIn, "PPP") : "To be confirmed"}
+          <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">Check-in</Label>
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground min-h-[2.25rem]">
+            <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+            {localCheckIn ? format(localCheckIn, "PPP") : <span className="text-muted-foreground font-normal">To be confirmed</span>}
           </div>
         </div>
 
         {/* Check-out Date */}
         <div>
-          <Label className="text-sm text-muted-foreground mb-2 block">Check-out</Label>
-          <div className="w-full h-11 flex items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium">
-            <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-            {localCheckOut ? format(localCheckOut, "PPP") : "To be confirmed"}
+          <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">Check-out</Label>
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground min-h-[2.25rem]">
+            <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+            {localCheckOut ? format(localCheckOut, "PPP") : <span className="text-muted-foreground font-normal">To be confirmed</span>}
           </div>
         </div>
 
         {/* Number of Guests */}
         <div>
-          <Label className="text-sm text-muted-foreground mb-2 block">
+          <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
             Guests <span className="text-destructive">*</span>
             {isSavingGuests && <Loader2 className="w-3 h-3 inline ml-2 animate-spin" />}
           </Label>
@@ -222,7 +219,7 @@ export function StayDatesPicker({
             value={localGuestsStr}
             onChange={(e) => handleGuestsChange(e.target.value)}
             disabled={isLocked}
-            className={cn("h-11", guestsError && "border-destructive")}
+            className={cn("h-9 max-w-[8rem] tabular-nums", guestsError && "border-destructive")}
             placeholder="Number of guests"
           />
           {guestsError && (
@@ -234,7 +231,7 @@ export function StayDatesPicker({
       {hasDates ? (
         <p className="text-xs text-muted-foreground">
           Need different dates? Email{' '}
-          <a href="mailto:hello@quintamor.com" className="text-primary hover:underline">hello@quintamor.com</a>{' '}
+          <a href="mailto:hello@quintamor.com" className="text-[#35532A] hover:underline">hello@quintamor.com</a>{' '}
           and we'll adjust them for you.
         </p>
       ) : (

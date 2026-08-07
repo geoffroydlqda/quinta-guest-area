@@ -11,23 +11,27 @@ export function AutoSaveIndicator({ status, className }: AutoSaveIndicatorProps)
   if (status === 'idle') return null;
 
   return (
-    <div className={cn("flex items-center gap-1.5 text-sm", className)}>
+    <div className={cn("inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1",
+      status === 'saving' && "bg-muted text-muted-foreground",
+      status === 'saved' && "bg-[#EAF6DF] text-[#35532A]",
+      status === 'error' && "bg-destructive/10 text-destructive",
+      className)}>
       {status === 'saving' && (
         <>
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-          <span className="text-muted-foreground">Saving…</span>
+          <Loader2 className="w-3 h-3 animate-spin" />
+          <span>Saving…</span>
         </>
       )}
       {status === 'saved' && (
         <>
-          <Check className="w-3.5 h-3.5 text-success" />
-          <span className="text-success">Saved</span>
+          <Check className="w-3 h-3" />
+          <span>Saved</span>
         </>
       )}
       {status === 'error' && (
         <>
-          <AlertCircle className="w-3.5 h-3.5 text-destructive" />
-          <span className="text-destructive">Error saving</span>
+          <AlertCircle className="w-3 h-3" />
+          <span>Error saving</span>
         </>
       )}
     </div>

@@ -48,24 +48,26 @@ export function GuestAreaHeader({ showLogout = true }: GuestAreaHeaderProps) {
           </Button>
         </div>
       )}
-      <header className="bg-card/80 backdrop-blur-sm border-b border-border sticky top-0 z-50">
+      <header className="bg-card/85 backdrop-blur-md border-b border-border/70 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <img src={qdaLogo} alt="Quinta do Amor" className="h-12 w-auto" />
-            <div className="hidden sm:block">
-              <h1 className="text-lg font-medium leading-tight">Guest Area</h1>
-              <p className="text-sm text-muted-foreground">Quinta do Amor</p>
+            <img src={qdaLogo} alt="Quinta do Amor" className="h-10 w-auto" />
+            <div className="hidden sm:block min-w-0">
+              <h1 className="guest-display text-base font-semibold leading-tight tracking-tight text-[#35532A] truncate">
+                Quinta do Amor
+              </h1>
+              <p className="guest-kicker">Guest Area</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
             <StaySwitcher />
             {showLogout && (
               <>
-                <span className="text-sm text-muted-foreground hidden lg:block">
+                <span className="text-xs text-muted-foreground hidden lg:block max-w-[220px] truncate">
                   {user?.email}
                 </span>
-                <Button variant="ghost" size="sm" onClick={handleSignOut} className="gap-2">
+                <Button variant="ghost" size="sm" onClick={handleSignOut} className="gap-2 text-muted-foreground hover:text-foreground">
                   <LogOut className="h-4 w-4" />
                   <span className="hidden sm:inline">Log out</span>
                 </Button>

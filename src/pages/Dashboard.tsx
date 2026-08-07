@@ -20,7 +20,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { featureFlags } from '@/lib/featureFlags';
 import { isAdminEmail } from '@/lib/admin';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, RefreshCw, LogOut, AlertCircle, CreditCard, Download, Utensils, Car, FileText, MessageCircle, Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, CloudFog } from 'lucide-react';
+import { Loader2, Send, RefreshCw, LogOut, AlertCircle, Check, CreditCard, Download, Utensils, Car, FileText, MessageCircle, Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, CloudFog } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import type { FoodDaySelection, TransportationTrip, DietConfig } from '@/types/guest';
 import { dietConfigTotal, EMPTY_DIET_CONFIG } from '@/types/guest';
@@ -348,7 +348,7 @@ const DashboardContent = () => {
   // Loading state
   if (isLoading || bookingsLoading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+      <div className="guest-ui min-h-screen bg-background flex flex-col items-center justify-center gap-4">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="text-muted-foreground">Loading your profile...</p>
       </div>
@@ -358,7 +358,7 @@ const DashboardContent = () => {
   // Error or timeout state
   if (error || timedOut || !profile) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 px-4">
+      <div className="guest-ui min-h-screen bg-background flex flex-col items-center justify-center gap-6 px-4">
         <div className="text-center space-y-2">
           <h2 className="text-xl font-medium">We couldn't load your profile</h2>
           <p className="text-muted-foreground max-w-md">
@@ -387,10 +387,10 @@ const DashboardContent = () => {
       return <Navigate to={`/invite/${pendingInvite}`} replace />;
     }
     return (
-      <div className="min-h-screen bg-background flex flex-col">
+      <div className="guest-ui min-h-screen bg-background text-foreground flex flex-col">
         <GuestAreaHeader />
         <main className="flex-1 flex items-center justify-center px-4">
-          <div className="max-w-md w-full text-center space-y-4 bg-card rounded-2xl border border-border p-8">
+          <div className="max-w-md w-full text-center space-y-4 guest-card p-8">
             <h2 className="text-xl font-medium">No stay linked to your account yet</h2>
             <p className="text-muted-foreground">
               Your Guest Area activates once your booking is connected. If you received
@@ -399,7 +399,7 @@ const DashboardContent = () => {
             </p>
             <p className="text-muted-foreground">
               No invitation yet? Write to us at{' '}
-              <a href="mailto:hello@quintamor.com" className="text-primary underline">
+              <a href="mailto:hello@quintamor.com" className="text-[#35532A] underline">
                 hello@quintamor.com
               </a>{' '}
               and we'll connect your stay.
@@ -411,9 +411,15 @@ const DashboardContent = () => {
   }
 
   const displayName = profile.first_name || profile.full_name?.split(' ')[0] || '';
+  const stayMetaParts = [
+    activeBooking?.retreat_name || null,
+    bookingCheckIn && bookingCheckOut
+      ? `${fmtDate(bookingCheckIn)} — ${fmtDate(bookingCheckOut)}`
+      : null,
+  ].filter(Boolean);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="guest-ui min-h-screen bg-background text-foreground flex flex-col">
       <GuestAreaHeader />
 
       {/* Profile Completion Modal */}
@@ -422,38 +428,29 @@ const DashboardContent = () => {
         onComplete={completeProfile}
       />
 
-      <main className="container mx-auto px-4 py-8 flex-1">
-        <div className="max-w-4xl mx-auto space-y-8 animate-fade-up">
+      <main className="container mx-auto px-4 py-8 md:py-12 flex-1">
+        <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 animate-fade-up">
           {/* Welcome */}
-          <div className="text-center">
-            <h1 className="text-3xl md:text-4xl mb-2">
-              {displayName ? `Hi, ${displayName}` : 'Welcome'}
+          <div className="pb-1">
+            <h1 className="guest-display text-3xl md:text-5xl font-semibold tracking-tight text-[#35532A] mb-2">
+              {displayName ? `Welcome back, ${displayName}` : 'Welcome'}
             </h1>
-            <p className="text-muted-foreground">
-              Manage your stay at Quinta do Amor
+            <p className="text-sm text-muted-foreground">
+              {stayMetaParts.length > 0
+                ? stayMetaParts.join(' · ')
+                : 'Manage your stay at Quinta do Amor'}
             </p>
           </div>
 
           {/* Status Banner */}
           <EditLockBanner statusInfo={guestStatus} />
 
-          {/* Section 1: Stay Dates */}
-          <StayDatesPicker
-            checkInDate={bookingCheckIn}
-            checkOutDate={bookingCheckOut}
-            guestsCount={bookingGuestsCount}
-            statusOverall={profile?.status_overall ?? 'draft'}
-            onCheckInChange={updateCheckInDate}
-            onCheckOutChange={updateCheckOutDate}
-            onGuestsCountChange={updateGuestsCount}
-          />
+          {/* Payments first — the guest's clearest call to action */}
+          <PaymentOverview bookingId={activeBookingId} />
 
-          {/* WhatsApp group link (if admin set one) */}
-          <WhatsAppGroupCard url={activeBooking?.whatsapp_group_url ?? null} />
-
-          {/* Section 2: Tool Tiles — Room Setup, Food, Transportation */}
+          {/* Tool Tiles — what the guest needs to set up */}
           <div>
-            <h2 className="text-xl font-medium mb-4">Your setup</h2>
+            <h2 className="guest-kicker mb-3">Your setup</h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <ToolTile
                 title="Room Setup"
@@ -491,6 +488,20 @@ const DashboardContent = () => {
             </div>
           </div>
 
+          {/* Stay dates & guests — admin-fixed info, kept discreet */}
+          <StayDatesPicker
+            checkInDate={bookingCheckIn}
+            checkOutDate={bookingCheckOut}
+            guestsCount={bookingGuestsCount}
+            statusOverall={profile?.status_overall ?? 'draft'}
+            onCheckInChange={updateCheckInDate}
+            onCheckOutChange={updateCheckOutDate}
+            onGuestsCountChange={updateGuestsCount}
+          />
+
+          {/* WhatsApp group link (if admin set one) */}
+          <WhatsAppGroupCard url={activeBooking?.whatsapp_group_url ?? null} />
+
           {/* Weather block (Arrábida) */}
           <WeatherCard
             checkIn={bookingCheckIn}
@@ -498,11 +509,7 @@ const DashboardContent = () => {
             bookingId={activeBookingId ?? null}
           />
 
-          {/* Payment Overview (read-only) */}
-          <PaymentOverview bookingId={activeBookingId} />
-
-
-          {/* Section 3: Global Summary */}
+          {/* Global Summary */}
           <GlobalSummary
             profile={profile}
             toolStatuses={toolStatuses}
@@ -514,7 +521,7 @@ const DashboardContent = () => {
 
           {/* Diet validation banner */}
           {dietExceedsGuests && (
-            <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-4 flex items-start gap-2">
+            <div className="rounded-2xl bg-destructive/10 border border-destructive/30 p-4 flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
               <p className="text-sm text-destructive font-medium">
                 The total number of meal preferences exceeds the number of guests. Please adjust them in the Food tool before submitting.
@@ -523,12 +530,12 @@ const DashboardContent = () => {
           )}
 
           {/* Submit Button */}
-          <div className="bg-card rounded-2xl border border-border p-6">
+          <div className="guest-card p-6">
             <Button
               onClick={handleSubmitInformation}
               disabled={isSubmitting || !hasDatesSet || isLocked || dietExceedsGuests}
               size="lg"
-              className="w-full sm:w-auto gap-2"
+              className="w-full sm:w-auto gap-2 rounded-full bg-[#35532A] text-white hover:bg-[#2A4221]"
             >
               {isSubmitting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -544,8 +551,8 @@ const DashboardContent = () => {
         </div>
       </main>
 
-      <footer className="border-t border-border py-6 mt-12">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
+      <footer className="border-t border-border/70 py-8 mt-12">
+        <div className="container mx-auto px-4 text-center text-xs text-muted-foreground">
           <p>Quinta do Amor © {new Date().getFullYear()}</p>
         </div>
       </footer>
@@ -580,19 +587,47 @@ function fmtDate(d: string | null | undefined) {
   return dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function installmentBadge(s: PaymentInstallment) {
+// Presentation-only status kind: 'pending' is split into "due soon" (within
+// 14 days) and "scheduled" for the timeline — same underlying data.
+type InstallmentKind = 'paid' | 'overdue' | 'due_soon' | 'scheduled';
+
+function installmentKind(s: PaymentInstallment): InstallmentKind {
   const todayIso = todayLisbon();
-  let kind: 'paid' | 'overdue' | 'pending' = 'pending';
-  if (s.status === 'paid') kind = 'paid';
-  else if (s.due_date && s.due_date < todayIso) kind = 'overdue';
+  if (s.status === 'paid') return 'paid';
+  if (s.due_date && s.due_date < todayIso) return 'overdue';
+  if (s.due_date) {
+    const due = new Date(s.due_date + 'T00:00:00');
+    const today = new Date(todayIso + 'T00:00:00');
+    const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+    if (days <= 14) return 'due_soon';
+  }
+  return 'scheduled';
+}
+
+function installmentBadge(s: PaymentInstallment) {
+  const kind = installmentKind(s);
   const map = {
-    paid: { label: 'Paid', cls: 'bg-green-100 text-green-800 border border-green-300' },
-    overdue: { label: 'Overdue', cls: 'bg-red-100 text-red-800 border border-red-300' },
-    pending: { label: 'Pending', cls: 'bg-amber-100 text-amber-900 border border-amber-300' },
+    paid: { label: 'Paid', cls: 'bg-[#EAF6DF] text-[#35532A]' },
+    overdue: { label: 'Overdue', cls: 'bg-destructive/10 text-[#C0392B]' },
+    due_soon: { label: 'Due soon', cls: 'bg-amber-50 text-amber-800' },
+    scheduled: { label: 'Scheduled', cls: 'bg-muted text-muted-foreground' },
   } as const;
   const cfg = map[kind];
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${cfg.cls}`}>{cfg.label}</span>;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${cfg.cls}`}>
+      {kind === 'paid' && <Check className="w-3 h-3" />}
+      {cfg.label}
+    </span>
+  );
 }
+
+// Timeline dot colour follows the same status kinds.
+const TIMELINE_DOT: Record<InstallmentKind, string> = {
+  paid: 'bg-[#79B84B] border-[#79B84B]',
+  overdue: 'bg-[#F36F63] border-[#F36F63]',
+  due_soon: 'bg-card border-amber-400',
+  scheduled: 'bg-card border-border',
+};
 
 function isPayableOnline(inst: PaymentInstallment) {
   return inst.status !== 'paid' && !inst.is_cash && String(inst.category ?? 'rental') !== 'discount' && Number(inst.amount_due) > 0;
@@ -639,30 +674,48 @@ async function downloadInstallmentInvoice(inst: PaymentInstallment) {
   window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
 }
 
+// One installment as a timeline entry: status dot on the left, light row content.
 function InstallmentRow({ inst, onPay, paying }: { inst: PaymentInstallment; onPay?: (inst: PaymentInstallment) => void; paying?: boolean }) {
+  const kind = installmentKind(inst);
   return (
-    <div className="py-2.5 flex items-center justify-between gap-3 border-t border-border first:border-t-0">
-      <div className="min-w-0">
-        <div className="text-sm font-medium truncate">{inst.label}</div>
-        <div className="text-xs text-muted-foreground">
-          Due {fmtDate(inst.due_date) || '—'}
+    <div className="relative pl-6 py-2.5">
+      <span
+        aria-hidden
+        className={`absolute left-0 top-[1.05rem] w-2.5 h-2.5 rounded-full border-2 ${TIMELINE_DOT[kind]}`}
+      />
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+        <div className="min-w-0">
+          <div className="text-sm font-medium truncate">{inst.label}</div>
+          <div className="text-xs text-muted-foreground">
+            Due {fmtDate(inst.due_date) || '—'}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-sm font-semibold tabular-nums">{fmtEur(inst.amount_due)}</span>
+          {installmentBadge(inst)}
+          {onPay && isPayableOnline(inst) && (
+            <Button size="sm" onClick={() => onPay(inst)} disabled={paying} className="rounded-full bg-[#35532A] text-white hover:bg-[#2A4221]">
+              {paying ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <CreditCard className="w-3.5 h-3.5 mr-1" />}
+              Pay
+            </Button>
+          )}
+          {inst.invoice_file_url && (
+            <Button size="sm" variant="outline" onClick={() => downloadInstallmentInvoice(inst)} className="rounded-full">
+              <Download className="w-3.5 h-3.5 mr-1" /> Invoice
+            </Button>
+          )}
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="text-sm font-medium">{fmtEur(inst.amount_due)}</span>
-        {installmentBadge(inst)}
-        {onPay && isPayableOnline(inst) && (
-          <Button size="sm" onClick={() => onPay(inst)} disabled={paying}>
-            {paying ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <CreditCard className="w-3.5 h-3.5 mr-1" />}
-            Pay
-          </Button>
-        )}
-        {inst.invoice_file_url && (
-          <Button size="sm" variant="outline" onClick={() => downloadInstallmentInvoice(inst)}>
-            <Download className="w-3.5 h-3.5 mr-1" /> Invoice
-          </Button>
-        )}
-      </div>
+    </div>
+  );
+}
+
+// Vertical guide line behind a list of InstallmentRow timeline entries.
+function InstallmentTimeline({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      <span aria-hidden className="absolute left-[4px] top-4 bottom-4 w-px bg-border" />
+      {children}
     </div>
   );
 }
@@ -673,26 +726,32 @@ function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstallment[]
   const overdue = !!first.due_date && first.due_date < todayIso;
   const total = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
   return (
-    <section className="bg-card rounded-2xl border-2 border-primary/30 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <section className="guest-card p-6 sm:p-8">
+      <div className={`guest-kicker ${overdue ? 'text-[#C0392B]' : ''}`}>
+        {overdue ? 'Payment due' : 'Next payment'}
+      </div>
+      <div className="mt-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-5">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
-            {overdue ? 'Payment due' : 'Next payment'}
+          <div className="text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums text-[#35532A]">
+            {fmtEur(total)}
           </div>
-          <div className="text-lg font-medium truncate">
+          <div className="mt-2 text-sm text-muted-foreground">
             {insts.map((i) => i.label).join(' + ')}
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {fmtEur(total)}{first.due_date ? ` · due ${fmtDate(first.due_date)}` : ''}
+            {first.due_date ? <> · due <span className="font-medium text-foreground">{fmtDate(first.due_date)}</span></> : ''}
             {insts.length > 1 ? ` · ${insts.length} items, one payment` : ''}
           </div>
         </div>
-        <Button size="lg" onClick={() => onPay(insts)} disabled={paying} className="shrink-0">
+        <Button
+          size="lg"
+          onClick={() => onPay(insts)}
+          disabled={paying}
+          className="shrink-0 w-full sm:w-auto rounded-full px-7 bg-[#35532A] text-white hover:bg-[#2A4221]"
+        >
           {paying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
           Pay {fmtEur(total)}
         </Button>
       </div>
-      <div className="mt-3 text-xs text-muted-foreground">
+      <div className="mt-4 pt-4 border-t border-border/70 text-xs text-muted-foreground">
         Secure payment — you'll be redirected to our payment partner Stripe.
         {' '}
         <button
@@ -733,10 +792,10 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
   // catering.length : un booking 100 % catering doit voir sa carte de paiement
   if (!hasAccommodation && !hasExtras && catering.length === 0) {
     return (
-      <div className="bg-card rounded-2xl border border-border p-6 flex items-start gap-3">
+      <div className="guest-card p-6 flex items-start gap-3">
         <CreditCard className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
         <div>
-          <div className="font-medium">Payment</div>
+          <div className="text-sm font-semibold">Payment</div>
           <div className="text-sm text-muted-foreground">Payment details will appear here once confirmed.</div>
         </div>
       </div>
@@ -759,30 +818,32 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
         <NextPaymentCard insts={nextGroup} onPay={payMany} paying={payingId === nextGroup[0].id} />
       )}
       {hasAccommodation && (
-        <section className="bg-card rounded-2xl border border-border p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <CreditCard className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-medium">Accommodation</h2>
+        <section className="guest-card p-6">
+          <div className="flex items-center gap-2.5 mb-5">
+            <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
+              <CreditCard className="w-4 h-4" />
+            </span>
+            <h2 className="text-base font-semibold tracking-tight">Accommodation</h2>
           </div>
 
           {totalDue > 0 && (
-            <div className="mb-4">
-              <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
-                <div className="h-full bg-green-500 transition-all" style={{ width: `${pct}%` }} />
+            <div className="mb-5">
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                <div className="h-full rounded-full bg-[#79B84B] transition-all" style={{ width: `${pct}%` }} />
               </div>
-              <div className="mt-2 flex justify-between text-sm">
-                <span className="text-foreground">{fmtEur(totalPaid)} paid</span>
-                <span className="text-muted-foreground">{fmtEur(remaining)} remaining</span>
+              <div className="mt-2 flex justify-between text-xs">
+                <span className="font-medium text-foreground tabular-nums">{fmtEur(totalPaid)} paid</span>
+                <span className="text-muted-foreground tabular-nums">{fmtEur(remaining)} remaining</span>
               </div>
             </div>
           )}
 
           {rental.length > 0 && (
-            <div>{rental.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</div>
+            <InstallmentTimeline>{rental.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</InstallmentTimeline>
           )}
 
           {totalDue > 0 && (
-            <div className="mt-3 pt-3 border-t border-border text-sm text-muted-foreground">
+            <div className="mt-3 pt-3 border-t border-border/70 text-xs text-muted-foreground tabular-nums">
               {fmtEur(totalPaid)} paid of {fmtEur(totalDue)} · {fmtEur(remaining)} remaining
             </div>
           )}
@@ -790,25 +851,29 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
       )}
 
       {catering.length > 0 && (
-        <section className="bg-card rounded-2xl border border-border p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Utensils className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-medium">Catering</h2>
+        <section className="guest-card p-6">
+          <div className="flex items-center gap-2.5 mb-5">
+            <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
+              <Utensils className="w-4 h-4" />
+            </span>
+            <h2 className="text-base font-semibold tracking-tight">Catering</h2>
           </div>
-          <div>{catering.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</div>
+          <InstallmentTimeline>{catering.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</InstallmentTimeline>
         </section>
       )}
 
       {hasExtras && (
-        <section className="bg-card rounded-2xl border border-border p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <FileText className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-medium">Extras</h2>
+        <section className="guest-card p-6">
+          <div className="flex items-center gap-2.5 mb-5">
+            <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
+              <FileText className="w-4 h-4" />
+            </span>
+            <h2 className="text-base font-semibold tracking-tight">Extras</h2>
           </div>
 
-          <div>{extras.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</div>
+          <InstallmentTimeline>{extras.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</InstallmentTimeline>
 
-          <div className="mt-3 pt-3 border-t border-border text-sm text-muted-foreground">
+          <div className="mt-3 pt-3 border-t border-border/70 text-xs text-muted-foreground tabular-nums">
             Extras total: {fmtEur(extrasTotal)} · {fmtEur(extrasPaid)} paid · {fmtEur(extrasOutstanding)} outstanding
           </div>
         </section>
@@ -821,17 +886,17 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
 function WhatsAppGroupCard({ url }: { url: string | null }) {
   if (!url) return null;
   return (
-    <section className="bg-card rounded-2xl border border-border p-6">
-      <div className="flex items-start gap-4">
-        <div className="rounded-full bg-primary/10 p-3 text-primary shrink-0">
-          <MessageCircle className="w-6 h-6" />
+    <section className="guest-card p-6">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="rounded-xl bg-[#EAF6DF] p-2.5 text-[#35532A] shrink-0">
+          <MessageCircle className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-medium">Group chat</h2>
+          <h2 className="text-base font-semibold tracking-tight">Group chat</h2>
           <p className="text-sm text-muted-foreground">Communicate with the Quinta team before, during and after your stay</p>
         </div>
         <a href={url} target="_blank" rel="noopener noreferrer">
-          <Button size="sm">Open WhatsApp group</Button>
+          <Button size="sm" className="rounded-full bg-[#35532A] text-white hover:bg-[#2A4221]">Open WhatsApp group</Button>
         </a>
       </div>
     </section>
@@ -1014,8 +1079,8 @@ function WeatherCard({ checkIn, checkOut, bookingId }: { checkIn: string | null;
 
   if (isLoading) {
     return (
-      <section className="bg-card rounded-2xl border border-border p-6">
-        <h2 className="text-lg font-medium mb-3">Weather forecast</h2>
+      <section className="guest-card p-6">
+        <h2 className="text-base font-semibold tracking-tight mb-3">Weather forecast</h2>
         <div className="flex gap-3 overflow-x-auto">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="w-24 h-28 rounded-xl bg-muted animate-pulse shrink-0" />
@@ -1038,11 +1103,11 @@ function WeatherCard({ checkIn, checkOut, bookingId }: { checkIn: string | null;
     : `Based on historical averages for ${monthName}. Detailed forecast available 14 days before your stay.`;
 
   return (
-    <section className="bg-card rounded-2xl border border-border p-6">
-      <div className="flex items-start justify-between mb-3 gap-2">
-        <h2 className="text-lg font-medium">Weather forecast</h2>
+    <section className="guest-card p-6">
+      <div className="flex items-start justify-between mb-4 gap-2">
+        <h2 className="text-base font-semibold tracking-tight">Weather forecast</h2>
         {showBadge && (
-          <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">
+          <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-[11px] font-medium">
             {badgeText}
           </span>
         )}
@@ -1055,12 +1120,12 @@ function WeatherCard({ checkIn, checkOut, bookingId }: { checkIn: string | null;
           return (
             <div
               key={d.date}
-              className="shrink-0 w-24 rounded-xl border border-border bg-background p-3 flex flex-col items-center gap-1"
+              className="shrink-0 w-24 rounded-xl border border-border/70 bg-background p-3 flex flex-col items-center gap-1"
             >
-              <div className="text-xs text-muted-foreground">{label}</div>
-              <Icon className="w-7 h-7 text-primary" />
-              <div className="text-sm">
-                <span className="font-medium">{d.temp_max}°</span>
+              <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
+              <Icon className="w-6 h-6 text-[#679E3F]" />
+              <div className="text-sm tabular-nums">
+                <span className="font-semibold">{d.temp_max}°</span>
                 <span className="text-muted-foreground"> / {d.temp_min}°</span>
               </div>
             </div>

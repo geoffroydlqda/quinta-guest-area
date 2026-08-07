@@ -32,9 +32,9 @@ const docsStatusLabels: Record<ToolStatus, string> = {
 };
 
 const statusColors: Record<ToolStatus, string> = {
-  not_set: 'bg-muted text-muted-foreground',
-  draft: 'bg-amber-100 text-amber-800 border-amber-200',
-  submitted: 'bg-green-100 text-green-800 border-green-200',
+  not_set: 'bg-muted text-muted-foreground border-transparent',
+  draft: 'bg-amber-50 text-amber-800 border-transparent',
+  submitted: 'bg-[#EAF6DF] text-[#35532A] border-transparent',
 };
 
 export function ToolTile({ title, description, icon, status, href, disabled }: ToolTileProps) {
@@ -55,29 +55,29 @@ export function ToolTile({ title, description, icon, status, href, disabled }: T
       to={disabled ? '#' : href}
       className={`block h-full ${disabled ? 'pointer-events-none opacity-60' : ''}`}
     >
-      <div className="bg-card rounded-2xl border border-border p-5 transition-all hover:shadow-md hover:border-primary/30 group h-full flex flex-col">
-        <div className="flex items-start justify-between mb-3">
-          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Icon className="w-6 h-6 text-primary" />
+      <div className="guest-card p-5 transition-all hover:shadow-md hover:border-[#CAE8BD] group h-full flex flex-col">
+        <div className="flex items-start justify-between mb-4">
+          <div className="w-11 h-11 rounded-xl bg-[#EAF6DF] flex items-center justify-center">
+            <Icon className="w-5 h-5 text-[#35532A]" />
           </div>
-          <Badge 
-            variant="outline" 
-            className={`${statusColors[displayStatus]} text-xs`}
+          <Badge
+            variant="outline"
+            className={`${statusColors[displayStatus]} rounded-full px-2.5 text-[11px] font-medium`}
           >
             {statusLabel}
           </Badge>
         </div>
-        
-        <h3 className="text-lg font-medium mb-1 group-hover:text-primary transition-colors">
+
+        <h3 className="text-base font-semibold tracking-tight mb-1 group-hover:text-[#35532A] transition-colors">
           {title}
         </h3>
-        <p className="text-sm text-muted-foreground mb-3 flex-1">
+        <p className="text-sm text-muted-foreground mb-4 flex-1">
           {description}
         </p>
-        
-        <div className="flex items-center text-sm text-primary font-medium mt-auto">
+
+        <div className="flex items-center text-sm text-[#35532A] font-medium mt-auto">
           {displayStatus === 'not_set' ? 'Set up' : 'View / Edit'}
-          <ChevronRight className="w-4 h-4 ml-1" />
+          <ChevronRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-0.5" />
         </div>
       </div>
     </Link>
