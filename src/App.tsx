@@ -15,6 +15,7 @@ import Dashboard from "./pages/Dashboard";
 import RoomSetup from "./pages/RoomSetup";
 import Transportation from "./pages/Transportation";
 import Food from "./pages/Food";
+import Payments from "./pages/Payments";
 import Documentation from "./pages/Documentation";
 import Admin from "./pages/Admin";
 import AdminGuestDetail from "./pages/AdminGuestDetail";
@@ -48,6 +49,7 @@ const App = () => (
               {/* Protected routes - require authentication */}
               <Route path="/bookings" element={<BookingSelector />} />
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/payments" element={<Payments />} />
               <Route path="/room-setup" element={
                 <ProtectedRoute>
                   <RoomSetup />

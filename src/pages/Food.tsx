@@ -80,7 +80,7 @@ const Food = () => {
 
   if (!hasDatesSet) {
     return (
-      <ToolPageLayout title="Food" description="Plan your meals during your stay">
+      <ToolPageLayout title="Catering" description="Plan your meals during your stay">
         <div className="max-w-2xl mx-auto">
           <div className="rounded-2xl bg-destructive/10 border border-destructive/30 p-8 text-center">
             <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
@@ -104,7 +104,7 @@ const Food = () => {
   }
 
   return (
-    <ToolPageLayout title="Food" description="Plan your meals during your stay" isLocked={isLocked} statusInfo={guestStatus}>
+    <ToolPageLayout title="Catering" description="Plan your meals during your stay" isLocked={isLocked} statusInfo={guestStatus}>
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex justify-end">
           <AutoSaveIndicator status={saveStatus} />

@@ -10,21 +10,28 @@ import { useToast } from '@/hooks/use-toast';
 import { getGuestStatus } from '@/lib/editLock';
 import { calculateFoodCostMulti } from '@/lib/foodPricing';
 import { calculateTransportationCost } from '@/lib/transportationPricing';
+import { Link } from 'react-router-dom';
 import { GuestAreaHeader } from '@/components/guest-area/GuestAreaHeader';
+import { GuestShell } from '@/components/guest-area/GuestShell';
 import { StayDatesPicker } from '@/components/guest-area/StayDatesPicker';
-import { ToolTile } from '@/components/guest-area/ToolTile';
 import { GlobalSummary } from '@/components/guest-area/GlobalSummary';
 import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
 import { ProfileCompletionModal } from '@/components/guest-area/ProfileCompletionModal';
+import {
+  fmtEur,
+  fmtDate,
+  NextPaymentCard,
+  nextPayableGroup,
+  usePayInstallment,
+} from '@/components/guest-area/PaymentSections';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { featureFlags } from '@/lib/featureFlags';
 import { isAdminEmail } from '@/lib/admin';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, RefreshCw, LogOut, AlertCircle, Check, CreditCard, Download, Utensils, Car, FileText, MessageCircle, Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, CloudFog } from 'lucide-react';
+import { Loader2, Send, RefreshCw, LogOut, AlertCircle, ArrowUpRight, MessageCircle, Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, CloudFog } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import type { FoodDaySelection, TransportationTrip, DietConfig } from '@/types/guest';
+import type { FoodDaySelection, TransportationTrip, DietConfig, ToolStatus } from '@/types/guest';
 import { dietConfigTotal, EMPTY_DIET_CONFIG } from '@/types/guest';
-import { usePaymentData, type PaymentInstallment } from '@/hooks/usePaymentData';
+import { usePaymentData } from '@/hooks/usePaymentData';
 
 const DashboardContent = () => {
   const { user, signOut } = useAuth();
@@ -54,6 +61,17 @@ const DashboardContent = () => {
   const [transportationTrips, setTransportationTrips] = useState<TransportationTrip[]>([]);
   const [foodData, setFoodData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Paiements : alimente les stats du résumé + la carte "Next payment".
+  const { payments: paymentList } = usePaymentData(activeBookingId);
+  const { payMany, payingId } = usePayInstallment();
+  const nextGroup = useMemo(() => nextPayableGroup(paymentList), [paymentList]);
+  const balanceDue = useMemo(
+    () => paymentList
+      .filter((i) => i.status !== 'paid' && String(i.category ?? 'rental') !== 'discount')
+      .reduce((s, i) => s + Number(i.amount_due || 0), 0),
+    [paymentList],
+  );
 
   // Retour de Stripe Checkout (?payment=success|cancelled)
   useEffect(() => {
@@ -418,77 +436,154 @@ const DashboardContent = () => {
       : null,
   ].filter(Boolean);
 
-  return (
-    <div className="guest-ui min-h-screen bg-background text-foreground flex flex-col">
-      <GuestAreaHeader />
+  // Lignes du tableau "Your setup" (style Substance : n° / zone / statut / lien)
+  const setupRows: { title: string; detail: string; status: ToolStatus; href: string }[] = [
+    {
+      title: 'Bedrooms',
+      detail: roomSetupData
+        ? [
+            roomSetupData.queenSharedCount + roomSetupData.queenEnsuiteCount > 0
+              ? `${roomSetupData.queenSharedCount + roomSetupData.queenEnsuiteCount} queen`
+              : null,
+            roomSetupData.twinsSharedCount + roomSetupData.twinsEnsuiteCount > 0
+              ? `${roomSetupData.twinsSharedCount + roomSetupData.twinsEnsuiteCount} twins`
+              : null,
+          ].filter(Boolean).join(' · ') || 'Choose beds for your group'
+        : 'Choose beds for your group',
+      status: toolStatuses.roomSetup,
+      href: '/room-setup',
+    },
+    {
+      title: 'Catering',
+      detail: foodData
+        ? `${foodData.fullBoardDays > 0 ? `${foodData.fullBoardDays} full-board day${foodData.fullBoardDays === 1 ? '' : 's'}` : 'Meal plan started'}`
+        : 'Plan your meals',
+      status: toolStatuses.food,
+      href: '/food',
+    },
+    {
+      title: 'Transportation',
+      detail: transportationData
+        ? `${transportationData.totalTrips} transfer${transportationData.totalTrips === 1 ? '' : 's'} planned`
+        : 'Arrange your transfers',
+      status: toolStatuses.transportation,
+      href: '/transportation',
+    },
+  ];
+  const doneCount = setupRows.filter((r) => r.status === 'submitted').length;
+  const nextDueDate = nextGroup.length > 0 ? nextGroup[0].due_date : null;
 
+  return (
+    <GuestShell active="overview">
       {/* Profile Completion Modal */}
       <ProfileCompletionModal
         isOpen={needsProfileCompletion}
         onComplete={completeProfile}
       />
 
-      <main className="container mx-auto px-4 py-8 md:py-12 flex-1">
-        <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 animate-fade-up">
-          {/* Welcome */}
-          <div className="pb-1">
-            <h1 className="guest-display text-3xl md:text-5xl font-semibold tracking-tight text-[#35532A] mb-2">
-              {displayName ? `Welcome back, ${displayName}` : 'Welcome'}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {stayMetaParts.length > 0
-                ? stayMetaParts.join(' · ')
-                : 'Manage your stay at Quinta do Amor'}
-            </p>
-          </div>
+      <div className="max-w-4xl space-y-8 md:space-y-10 animate-fade-up">
+        {/* ---- Hero (style Substance) ---- */}
+        <div>
+          <div className="guest-kicker mb-3">Stay summary</div>
+          <h1 className="guest-display text-4xl md:text-6xl font-semibold tracking-tight text-[#35532A]">
+            {displayName ? `Hello ${displayName}` : 'Welcome'}
+          </h1>
+          {stayMetaParts.length > 0 && (
+            <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {stayMetaParts.join(' · ')}
+            </div>
+          )}
+          <p className="mt-5 max-w-2xl text-base md:text-lg leading-relaxed text-muted-foreground">
+            Setup <strong className="text-foreground font-semibold">{doneCount} of {setupRows.length}</strong> complete.
+            {nextGroup.length > 0 ? (
+              <> Next payment <strong className="text-foreground font-semibold tabular-nums">{fmtEur(nextGroup.reduce((s, i) => s + Number(i.amount_due || 0), 0))}</strong>{nextDueDate ? <> due <strong className="text-foreground font-semibold">{fmtDate(nextDueDate)}</strong></> : null}.</>
+            ) : balanceDue > 0 ? (
+              <> Balance due <strong className="text-foreground font-semibold tabular-nums">{fmtEur(balanceDue)}</strong>.</>
+            ) : (
+              <> All payments are settled.</>
+            )}
+          </p>
+        </div>
 
-          {/* Status Banner */}
-          <EditLockBanner statusInfo={guestStatus} />
-
-          {/* Payments first — the guest's clearest call to action */}
-          <PaymentOverview bookingId={activeBookingId} />
-
-          {/* Tool Tiles — what the guest needs to set up */}
+        {/* ---- Stats row ---- */}
+        <div className="grid grid-cols-3 gap-4 border-y border-border/70 py-5">
           <div>
-            <h2 className="guest-kicker mb-3">Your setup</h2>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <ToolTile
-                title="Room Setup"
-                description="Configure bed types for your group"
-                icon="room"
-                status={toolStatuses.roomSetup}
-                href="/room-setup"
-                disabled={isLocked}
-              />
-              <ToolTile
-                title="Food"
-                description="Plan your meals"
-                icon="food"
-                status={toolStatuses.food}
-                href="/food"
-                disabled={!hasDatesSet || isLocked}
-              />
-              <ToolTile
-                title="Transportation"
-                description="Arrange taxi transfers"
-                icon="transport"
-                status={toolStatuses.transportation}
-                href="/transportation"
-                disabled={isLocked}
-              />
-              {featureFlags.showDocumentation && (
-                <ToolTile
-                  title="Documentation"
-                  description="Property info & house rules"
-                  icon="docs"
-                  status={toolStatuses.documentation}
-                  href="/documentation"
-                />
-              )}
+            <div className="guest-kicker mb-1.5">Setup</div>
+            <div className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums text-foreground">
+              {doneCount} <span className="text-muted-foreground font-normal">/ {setupRows.length}</span>
             </div>
           </div>
+          <div>
+            <div className="guest-kicker mb-1.5">Next payment</div>
+            <div className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums text-foreground">
+              {nextDueDate ? fmtDate(nextDueDate) : '—'}
+            </div>
+          </div>
+          <div>
+            <div className="guest-kicker mb-1.5">Balance due</div>
+            <div className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums text-foreground">
+              {fmtEur(balanceDue)}
+            </div>
+          </div>
+        </div>
 
-          {/* Stay dates & guests — admin-fixed info, kept discreet */}
+        {/* Status Banner */}
+        <EditLockBanner statusInfo={guestStatus} />
+
+        {/* ---- Your setup — tableau façon "En cours" ---- */}
+        <section>
+          <div className="flex items-end justify-between mb-2">
+            <h2 className="text-lg font-semibold tracking-tight">Your setup</h2>
+            <span className="guest-kicker">{doneCount} of {setupRows.length} done</span>
+          </div>
+          <div className="border-t border-border/70">
+            {setupRows.map((row, idx) => {
+              const statusCfg: Record<ToolStatus, { label: string; dot: string; text: string }> = {
+                not_set: { label: 'To do', dot: 'bg-card border-2 border-border', text: 'text-muted-foreground' },
+                draft: { label: 'In progress', dot: 'bg-amber-400', text: 'text-amber-700' },
+                submitted: { label: 'Done', dot: 'bg-[#79B84B]', text: 'text-[#35532A]' },
+              };
+              const cfg = statusCfg[row.status];
+              return (
+                <Link
+                  key={row.href}
+                  to={row.href}
+                  className="grid grid-cols-[1.75rem_1fr_auto_auto] items-center gap-3 sm:gap-4 py-4 border-b border-border/70 group hover:bg-card/60 -mx-2 px-2 rounded-lg transition-colors"
+                >
+                  <span className="text-xs text-muted-foreground tabular-nums">{idx + 1}</span>
+                  <div className="min-w-0">
+                    <div className="text-sm md:text-[15px] font-medium truncate">{row.title}</div>
+                    <div className="text-xs text-muted-foreground truncate">{row.detail}</div>
+                  </div>
+                  <span className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] ${cfg.text}`}>
+                    <span aria-hidden className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                    <span className="hidden sm:inline">{cfg.label}</span>
+                  </span>
+                  <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ---- Payments teaser : prochaine échéance + lien vers l'onglet ---- */}
+        {nextGroup.length > 0 && (
+          <NextPaymentCard insts={nextGroup} onPay={payMany} paying={payingId === nextGroup[0].id} />
+        )}
+        {paymentList.length > 0 && (
+          <Link
+            to="/payments"
+            className="guest-card px-5 py-4 flex items-center justify-between group"
+          >
+            <span className="text-sm font-medium">All payments & invoices</span>
+            <span className="flex items-center gap-1.5 text-sm text-muted-foreground group-hover:text-foreground transition-colors tabular-nums">
+              {balanceDue > 0 ? `${fmtEur(balanceDue)} outstanding` : 'All settled'}
+              <ArrowUpRight className="w-4 h-4" />
+            </span>
+          </Link>
+        )}
+
+        {/* Stay dates & guests — admin-fixed info, kept discreet */}
           <StayDatesPicker
             checkInDate={bookingCheckIn}
             checkOutDate={bookingCheckOut}
@@ -548,15 +643,8 @@ const DashboardContent = () => {
               {guestStatus.message}
             </p>
           </div>
-        </div>
-      </main>
-
-      <footer className="border-t border-border/70 py-8 mt-12">
-        <div className="container mx-auto px-4 text-center text-xs text-muted-foreground">
-          <p>Quinta do Amor © {new Date().getFullYear()}</p>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </GuestShell>
   );
 };
 
@@ -570,317 +658,6 @@ const Dashboard = () => {
 };
 
 
-
-// ============================================================
-// PaymentOverview — read-only payment summary for guests
-// ============================================================
-
-function fmtEur(n: number | null | undefined) {
-  const v = Number(n ?? 0);
-  return `€${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-}
-
-function fmtDate(d: string | null | undefined) {
-  if (!d) return '';
-  const dt = new Date(d + 'T00:00:00');
-  if (isNaN(dt.getTime())) return d;
-  return dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-// Presentation-only status kind: 'pending' is split into "due soon" (within
-// 14 days) and "scheduled" for the timeline — same underlying data.
-type InstallmentKind = 'paid' | 'overdue' | 'due_soon' | 'scheduled';
-
-function installmentKind(s: PaymentInstallment): InstallmentKind {
-  const todayIso = todayLisbon();
-  if (s.status === 'paid') return 'paid';
-  if (s.due_date && s.due_date < todayIso) return 'overdue';
-  if (s.due_date) {
-    const due = new Date(s.due_date + 'T00:00:00');
-    const today = new Date(todayIso + 'T00:00:00');
-    const days = Math.round((due.getTime() - today.getTime()) / 86400000);
-    if (days <= 14) return 'due_soon';
-  }
-  return 'scheduled';
-}
-
-function installmentBadge(s: PaymentInstallment) {
-  const kind = installmentKind(s);
-  const map = {
-    paid: { label: 'Paid', cls: 'bg-[#EAF6DF] text-[#35532A]' },
-    overdue: { label: 'Overdue', cls: 'bg-destructive/10 text-[#C0392B]' },
-    due_soon: { label: 'Due soon', cls: 'bg-amber-50 text-amber-800' },
-    scheduled: { label: 'Scheduled', cls: 'bg-muted text-muted-foreground' },
-  } as const;
-  const cfg = map[kind];
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${cfg.cls}`}>
-      {kind === 'paid' && <Check className="w-3 h-3" />}
-      {cfg.label}
-    </span>
-  );
-}
-
-// Timeline dot colour follows the same status kinds.
-const TIMELINE_DOT: Record<InstallmentKind, string> = {
-  paid: 'bg-[#79B84B] border-[#79B84B]',
-  overdue: 'bg-[#F36F63] border-[#F36F63]',
-  due_soon: 'bg-card border-amber-400',
-  scheduled: 'bg-card border-border',
-};
-
-function isPayableOnline(inst: PaymentInstallment) {
-  return inst.status !== 'paid' && !inst.is_cash && String(inst.category ?? 'rental') !== 'discount' && Number(inst.amount_due) > 0;
-}
-
-function usePayInstallment() {
-  const { toast } = useToast();
-  const [payingId, setPayingId] = useState<string | null>(null);
-
-  const payMany = async (insts: PaymentInstallment[], usd = false) => {
-    if (insts.length === 0) return;
-    setPayingId(insts[0].id);
-    try {
-      const { data, error } = await supabase.functions.invoke('stripe-checkout', {
-        body: { installment_ids: insts.map((i) => i.id), ...(usd ? { usd: true } : {}) },
-      });
-      if (error || !data?.url) {
-        throw new Error(data?.error || error?.message || 'Could not start the payment');
-      }
-      window.location.href = data.url;
-    } catch (e) {
-      setPayingId(null);
-      toast({
-        title: 'Payment unavailable',
-        description: e instanceof Error ? e.message : 'Please try again or contact us.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const pay = (inst: PaymentInstallment) => payMany([inst]);
-
-  return { pay, payMany, payingId };
-}
-
-async function downloadInstallmentInvoice(inst: PaymentInstallment) {
-  const path = inst.invoice_file_url;
-  if (!path) return;
-  const { data, error } = await supabase.storage.from('invoices').createSignedUrl(path, 60 * 60);
-  if (error || !data?.signedUrl) {
-    console.error('[invoice download]', error);
-    return;
-  }
-  window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
-}
-
-// One installment as a timeline entry: status dot on the left, light row content.
-function InstallmentRow({ inst, onPay, paying }: { inst: PaymentInstallment; onPay?: (inst: PaymentInstallment) => void; paying?: boolean }) {
-  const kind = installmentKind(inst);
-  return (
-    <div className="relative pl-6 py-2.5">
-      <span
-        aria-hidden
-        className={`absolute left-0 top-[1.05rem] w-2.5 h-2.5 rounded-full border-2 ${TIMELINE_DOT[kind]}`}
-      />
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-        <div className="min-w-0">
-          <div className="text-sm font-medium truncate">{inst.label}</div>
-          <div className="text-xs text-muted-foreground">
-            Due {fmtDate(inst.due_date) || '—'}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-sm font-semibold tabular-nums">{fmtEur(inst.amount_due)}</span>
-          {installmentBadge(inst)}
-          {onPay && isPayableOnline(inst) && (
-            <Button size="sm" onClick={() => onPay(inst)} disabled={paying} className="rounded-full bg-[#35532A] text-white hover:bg-[#2A4221]">
-              {paying ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <CreditCard className="w-3.5 h-3.5 mr-1" />}
-              Pay
-            </Button>
-          )}
-          {inst.invoice_file_url && (
-            <Button size="sm" variant="outline" onClick={() => downloadInstallmentInvoice(inst)} className="rounded-full">
-              <Download className="w-3.5 h-3.5 mr-1" /> Invoice
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Vertical guide line behind a list of InstallmentRow timeline entries.
-function InstallmentTimeline({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="relative">
-      <span aria-hidden className="absolute left-[4px] top-4 bottom-4 w-px bg-border" />
-      {children}
-    </div>
-  );
-}
-
-function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstallment[]; onPay: (insts: PaymentInstallment[], usd?: boolean) => void; paying: boolean }) {
-  const todayIso = todayLisbon();
-  const first = insts[0];
-  const overdue = !!first.due_date && first.due_date < todayIso;
-  const total = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
-  return (
-    <section className="guest-card p-6 sm:p-8">
-      <div className={`guest-kicker ${overdue ? 'text-[#C0392B]' : ''}`}>
-        {overdue ? 'Payment due' : 'Next payment'}
-      </div>
-      <div className="mt-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-5">
-        <div className="min-w-0">
-          <div className="text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums text-[#35532A]">
-            {fmtEur(total)}
-          </div>
-          <div className="mt-2 text-sm text-muted-foreground">
-            {insts.map((i) => i.label).join(' + ')}
-            {first.due_date ? <> · due <span className="font-medium text-foreground">{fmtDate(first.due_date)}</span></> : ''}
-            {insts.length > 1 ? ` · ${insts.length} items, one payment` : ''}
-          </div>
-        </div>
-        <Button
-          size="lg"
-          onClick={() => onPay(insts)}
-          disabled={paying}
-          className="shrink-0 w-full sm:w-auto rounded-full px-7 bg-[#35532A] text-white hover:bg-[#2A4221]"
-        >
-          {paying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
-          Pay {fmtEur(total)}
-        </Button>
-      </div>
-      <div className="mt-4 pt-4 border-t border-border/70 text-xs text-muted-foreground">
-        Secure payment — you'll be redirected to our payment partner Stripe.
-        {' '}
-        <button
-          type="button"
-          onClick={() => onPay(insts, true)}
-          disabled={paying}
-          className="underline underline-offset-2 hover:text-foreground"
-        >
-          Paying from outside Europe? Pay in USD instead (US bank debit or card)
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }) {
-  const { booking, payments, isLoading } = usePaymentData(bookingId);
-  const { pay, payMany, payingId } = usePayInstallment();
-
-  if (isLoading) return null;
-
-  const rental = payments.filter((i) => (i.category ?? 'rental') === 'rental');
-  const catering = payments.filter((i) => i.category === 'catering');
-  const extras = payments.filter((i) => i.category === 'extra');
-
-  // Prochaines échéances payables en ligne : toutes celles qui partagent la
-  // due date la plus proche (ex. rental + catering) -> un seul paiement Stripe.
-  const payable = payments
-    .filter(isPayableOnline)
-    .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'));
-  const nextGroup = payable.length > 0
-    ? payable.filter((i) => (i.due_date ?? '9999') === (payable[0].due_date ?? '9999'))
-    : [];
-
-  const hasAccommodation = rental.length > 0 || (booking?.total_rental_price ?? 0) > 0;
-  const hasExtras = extras.length > 0;
-
-  // catering.length : un booking 100 % catering doit voir sa carte de paiement
-  if (!hasAccommodation && !hasExtras && catering.length === 0) {
-    return (
-      <div className="guest-card p-6 flex items-start gap-3">
-        <CreditCard className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
-        <div>
-          <div className="text-sm font-semibold">Payment</div>
-          <div className="text-sm text-muted-foreground">Payment details will appear here once confirmed.</div>
-        </div>
-      </div>
-    );
-  }
-
-  // Ce que la cliente paie : prix de base − remise.
-  const totalDue = Math.max(0, Number(booking?.total_rental_price ?? 0) - Number(booking?.rental_discount ?? 0));
-  const totalPaid = rental.filter((i) => i.status === 'paid').reduce((s, i) => s + Number(i.amount_due || 0), 0);
-  const remaining = Math.max(totalDue - totalPaid, 0);
-  const pct = totalDue > 0 ? Math.min(100, Math.round((totalPaid / totalDue) * 100)) : 0;
-
-  const extrasTotal = extras.reduce((s, i) => s + Number(i.amount_due || 0), 0);
-  const extrasPaid = extras.filter((i) => i.status === 'paid').reduce((s, i) => s + Number(i.amount_due || 0), 0);
-  const extrasOutstanding = Math.max(extrasTotal - extrasPaid, 0);
-
-  return (
-    <div className="space-y-4">
-      {nextGroup.length > 0 && (
-        <NextPaymentCard insts={nextGroup} onPay={payMany} paying={payingId === nextGroup[0].id} />
-      )}
-      {hasAccommodation && (
-        <section className="guest-card p-6">
-          <div className="flex items-center gap-2.5 mb-5">
-            <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
-              <CreditCard className="w-4 h-4" />
-            </span>
-            <h2 className="text-base font-semibold tracking-tight">Accommodation</h2>
-          </div>
-
-          {totalDue > 0 && (
-            <div className="mb-5">
-              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div className="h-full rounded-full bg-[#79B84B] transition-all" style={{ width: `${pct}%` }} />
-              </div>
-              <div className="mt-2 flex justify-between text-xs">
-                <span className="font-medium text-foreground tabular-nums">{fmtEur(totalPaid)} paid</span>
-                <span className="text-muted-foreground tabular-nums">{fmtEur(remaining)} remaining</span>
-              </div>
-            </div>
-          )}
-
-          {rental.length > 0 && (
-            <InstallmentTimeline>{rental.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</InstallmentTimeline>
-          )}
-
-          {totalDue > 0 && (
-            <div className="mt-3 pt-3 border-t border-border/70 text-xs text-muted-foreground tabular-nums">
-              {fmtEur(totalPaid)} paid of {fmtEur(totalDue)} · {fmtEur(remaining)} remaining
-            </div>
-          )}
-        </section>
-      )}
-
-      {catering.length > 0 && (
-        <section className="guest-card p-6">
-          <div className="flex items-center gap-2.5 mb-5">
-            <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
-              <Utensils className="w-4 h-4" />
-            </span>
-            <h2 className="text-base font-semibold tracking-tight">Catering</h2>
-          </div>
-          <InstallmentTimeline>{catering.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</InstallmentTimeline>
-        </section>
-      )}
-
-      {hasExtras && (
-        <section className="guest-card p-6">
-          <div className="flex items-center gap-2.5 mb-5">
-            <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
-              <FileText className="w-4 h-4" />
-            </span>
-            <h2 className="text-base font-semibold tracking-tight">Extras</h2>
-          </div>
-
-          <InstallmentTimeline>{extras.map((i) => <InstallmentRow key={i.id} inst={i} onPay={pay} paying={payingId === i.id} />)}</InstallmentTimeline>
-
-          <div className="mt-3 pt-3 border-t border-border/70 text-xs text-muted-foreground tabular-nums">
-            Extras total: {fmtEur(extrasTotal)} · {fmtEur(extrasPaid)} paid · {fmtEur(extrasOutstanding)} outstanding
-          </div>
-        </section>
-      )}
-    </div>
-  );
-}
 
 // ---------- WhatsApp group card ----------
 function WhatsAppGroupCard({ url }: { url: string | null }) {

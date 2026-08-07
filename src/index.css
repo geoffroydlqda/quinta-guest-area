@@ -207,6 +207,15 @@
     @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground;
   }
 
+  /* Barre d'onglets mobile de la GuestShell : scroll horizontal sans scrollbar. */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Admin : police sobre et lisible (Inter), le branding typewriter reste côté guest */
   .admin-ui,
   .admin-ui h1, .admin-ui h2, .admin-ui h3, .admin-ui h4, .admin-ui h5, .admin-ui h6,

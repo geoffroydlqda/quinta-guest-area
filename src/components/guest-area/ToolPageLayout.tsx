@@ -1,7 +1,6 @@
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { GuestAreaHeader } from './GuestAreaHeader';
+import { GuestShell, type GuestTab } from './GuestShell';
 import { EditLockBanner } from './EditLockBanner';
 import { useActiveBooking } from '@/contexts/BookingContext';
 import type { GuestStatusInfo } from '@/lib/editLock';
@@ -16,31 +15,39 @@ interface ToolPageLayoutProps {
   children: React.ReactNode;
 }
 
+/** Onglet sidebar actif d'après la route de l'outil. */
+const TAB_BY_PATH: Record<string, GuestTab> = {
+  '/room-setup': 'rooms',
+  '/food': 'catering',
+  '/transportation': 'transportation',
+};
+
+/** Kicker au-dessus du titre : catégorie de la page (les titres portent déjà
+ *  le nom de l'onglet, on évite le doublon kicker == titre). */
+const KICKER_BY_TAB: Record<GuestTab, string> = {
+  overview: 'Stay summary',
+  rooms: 'Your setup',
+  catering: 'Your setup',
+  transportation: 'Your setup',
+  payments: 'Payments',
+};
+
 export function ToolPageLayout({ title, description, isLocked = false, statusInfo, showOkButton = true, children }: ToolPageLayoutProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isImpersonating, impersonatedBooking } = useActiveBooking();
+
+  const active = TAB_BY_PATH[location.pathname] ?? 'overview';
 
   const dashboardHref = isImpersonating && impersonatedBooking
     ? `/dashboard?impersonate=${impersonatedBooking.id}`
     : '/dashboard';
 
   return (
-    <div className="guest-ui min-h-screen bg-background text-foreground flex flex-col">
-      {/* Sticky header with back button */}
-      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border/70">
-        <GuestAreaHeader />
-        <div className="container mx-auto px-4 py-2">
-          <Button asChild variant="ghost" size="sm" className="gap-2 -ml-2 text-muted-foreground hover:text-foreground">
-            <Link to={dashboardHref}>
-              <ArrowLeft className="w-4 h-4" />
-              Back to Dashboard
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      <main className="container mx-auto px-4 py-8 md:py-10 flex-1">
+    <GuestShell active={active}>
+      <div className="max-w-4xl animate-fade-up">
         <div className="mb-8">
+          <div className="guest-kicker mb-2">{KICKER_BY_TAB[active]}</div>
           <h1 className="guest-display text-3xl md:text-4xl font-semibold tracking-tight text-[#35532A] mb-2">{title}</h1>
           {description && (
             <p className="text-sm md:text-base text-muted-foreground">{description}</p>
@@ -65,13 +72,7 @@ export function ToolPageLayout({ title, description, isLocked = false, statusInf
             </Button>
           </div>
         )}
-      </main>
-
-      <footer className="border-t border-border/70 py-8 mt-12">
-        <div className="container mx-auto px-4 text-center text-xs text-muted-foreground">
-          <p>Quinta do Amor © {new Date().getFullYear()}</p>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </GuestShell>
   );
 }

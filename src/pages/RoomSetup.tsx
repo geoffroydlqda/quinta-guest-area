@@ -404,7 +404,7 @@ const RoomSetup = () => {
 
   return (
     <ToolPageLayout
-      title="Room Setup"
+      title="Bedrooms"
       description="Choose the bed type for each room"
       isLocked={isLocked}
       statusInfo={guestStatus}
