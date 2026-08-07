@@ -32,6 +32,7 @@ export type Database = {
           reviewed: boolean
           parent_id: string | null
           payer: string | null
+          pnl_month: string | null
           created_at: string
         }
         Insert: {
@@ -51,6 +52,7 @@ export type Database = {
           reviewed?: boolean
           parent_id?: string | null
           payer?: string | null
+          pnl_month?: string | null
           created_at?: string
         }
         Update: {
@@ -70,6 +72,7 @@ export type Database = {
           reviewed?: boolean
           parent_id?: string | null
           payer?: string | null
+          pnl_month?: string | null
           created_at?: string
         }
         Relationships: []

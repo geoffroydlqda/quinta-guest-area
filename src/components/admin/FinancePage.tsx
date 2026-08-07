@@ -57,7 +57,7 @@ type FinTx = {
   description: string | null; amount: number; currency: string; kind: string;
   category: string | null; vat_rate: number | null; amount_net: number | null;
   booking_id: string | null; notes: string | null; reviewed: boolean;
-  parent_id?: string | null; payer?: string | null;
+  parent_id?: string | null; payer?: string | null; pnl_month?: string | null;
 };
 
 type FinRule = { id: string; pattern: string; kind: string; category: string | null; vat_rate: number | null };
@@ -288,6 +288,9 @@ export function FinancePage({ bookings, installments }: {
     }
   };
 
+  // ---- Mois P&L forcé (facture d'un autre mois que le paiement) ------------
+  const [pnlFor, setPnlFor] = useState<string | null>(null);
+
   // ---- Note libre par ligne ------------------------------------------------
   const [noteFor, setNoteFor] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
@@ -418,12 +421,14 @@ export function FinancePage({ bookings, installments }: {
     let otherIncome = Array.from({ length: 12 }, () => 0);
     for (const t of txs) {
       if (t.kind === "other_income") {
-        if (t.date.startsWith(year)) otherIncome[Number(t.date.slice(5, 7)) - 1] += t.amount_net ?? t.amount;
+        const oiMonth = t.pnl_month ?? t.date.slice(0, 7);
+        if (oiMonth.startsWith(year)) otherIncome[Number(oiMonth.slice(5, 7)) - 1] += t.amount_net ?? t.amount;
         continue;
       }
       if (t.kind !== "expense" || !t.category) continue;
+      // Priorité : mois P&L forcé (facture d'un autre mois) > check-in > date
       const b = t.booking_id ? bookingById.get(t.booking_id) : null;
-      const accrual = b?.check_in_date ?? t.date;
+      const accrual = t.pnl_month ? `${t.pnl_month}-01` : (b?.check_in_date ?? t.date);
       if (!accrual.startsWith(year)) continue;
       const m = Number(accrual.slice(5, 7)) - 1;
       const arr = byCat.get(t.category) ?? Array.from({ length: 12 }, () => 0);
@@ -507,13 +512,13 @@ export function FinancePage({ bookings, installments }: {
       const s = v == null ? "" : String(v);
       return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const header = ["date", "description", "note", "payer", "amount", "currency", "vat_rate", "amount_net", "kind", "category", "event", "source"];
+    const header = ["date", "description", "note", "payer", "amount", "currency", "vat_rate", "amount_net", "kind", "category", "event", "pnl_month", "source"];
     const lines = [header.join(",")];
     for (const t of filtered) {
       lines.push([
         t.date, esc(t.description), esc(t.notes), esc(t.payer), t.amount, t.currency,
         t.vat_rate ?? "", t.amount_net ?? "", t.kind, esc(t.category),
-        esc(t.booking_id ? bookingById.get(t.booking_id)?.name ?? "" : ""), t.source,
+        esc(t.booking_id ? bookingById.get(t.booking_id)?.name ?? "" : ""), t.pnl_month ?? "", t.source,
       ].join(","));
     }
     const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -692,7 +697,36 @@ export function FinancePage({ bookings, installments }: {
                   return (
                   <Fragment key={t.id}>
                     <tr className="group border-t border-border/60">
-                      <td className="px-3 py-2 whitespace-nowrap tabular-nums text-xs">{t.date.slice(5)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap tabular-nums text-xs">
+                        {t.date.slice(5)}
+                        {(t.kind === "expense" || t.kind === "other_income") && (
+                          pnlFor === t.id ? (
+                            <input type="month" autoFocus
+                              className="mt-0.5 block h-6 rounded border border-input bg-background px-1 text-[10px]"
+                              defaultValue={t.pnl_month ?? t.date.slice(0, 7)}
+                              onBlur={(e) => {
+                                setPnlFor(null);
+                                const v = e.target.value;
+                                patch(t.id, { pnl_month: v && v !== t.date.slice(0, 7) ? v : null });
+                              }}
+                              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setPnlFor(null); }} />
+                          ) : t.pnl_month ? (
+                            <button type="button"
+                              className="mt-0.5 block rounded-full bg-[#E8F0FB] px-1.5 py-px text-[9px] font-semibold text-[#1C5CAB] hover:brightness-95"
+                              title={`Recognised in the ${t.pnl_month} P&L (bank date stays ${t.date}) — click to change`}
+                              onClick={() => setPnlFor(t.id)}>
+                              P&L {MONTHS[Number(t.pnl_month.slice(5, 7)) - 1]}
+                            </button>
+                          ) : (
+                            <button type="button"
+                              className="mt-0.5 block text-left text-[9px] text-muted-foreground/0 group-hover:text-muted-foreground/60 hover:!text-muted-foreground hover:underline"
+                              title="Recognise this expense in another month's P&L (e.g. March payment for a January invoice)"
+                              onClick={() => setPnlFor(t.id)}>
+                              P&L month
+                            </button>
+                          )
+                        )}
+                      </td>
                       <td className="px-3 py-2 max-w-[240px]"><span className="block truncate font-medium" title={t.description ?? ""}>{t.description}</span>
                         {noteFor === t.id ? (
                           <input autoFocus value={noteDraft} placeholder="Add a note…"
@@ -921,7 +955,7 @@ export function FinancePage({ bookings, installments }: {
       {/* ================= P&L ================= */}
       {tab === "pnl" && (
         <div className="overflow-auto rounded-2xl bg-card shadow-sm border border-border/60 p-4">
-          <div className="font-semibold text-sm mb-1 flex items-center gap-2"><Landmark className="w-4 h-4 text-[#35532A]" /> P&L {year} <span className="text-xs font-normal text-muted-foreground">· net of VAT · accrual (event month = check-in month)</span></div>
+          <div className="font-semibold text-sm mb-1 flex items-center gap-2"><Landmark className="w-4 h-4 text-[#35532A]" /> P&L {year} <span className="text-xs font-normal text-muted-foreground">· net of VAT · accrual (P&L month override → event check-in month → bank date)</span></div>
           <table className="w-full text-xs mt-3">
             <thead>
               <tr className="text-left">
