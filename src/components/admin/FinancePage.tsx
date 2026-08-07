@@ -262,6 +262,9 @@ export function FinancePage({ bookings, installments }: {
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); load(); }
   };
 
+  // ---- Tooltip du graphe cash flow ----------------------------------------
+  const [cashTip, setCashTip] = useState<{ x: number; y: number; m: number } | null>(null);
+
   // ---- Sync Revolut à la demande (l'horaire tourne via cron) ---------------
   const syncRevolut = async () => {
     setSyncing(true);
@@ -992,7 +995,7 @@ export function FinancePage({ bookings, installments }: {
 
       {/* ================= CASH FLOW ================= */}
       {tab === "cash" && (
-        <div className="rounded-2xl bg-card shadow-sm border border-border/60 p-4">
+        <div className="rounded-2xl bg-card shadow-sm border border-border/60 p-4 relative">
           <div className="font-semibold text-sm mb-1 flex items-center gap-2"><Wallet2 className="w-4 h-4 text-[#35532A]" /> Cash flow {year} <span className="text-xs font-normal text-muted-foreground">· bank movements, internal transfers excluded</span></div>
           {(() => {
             const max = Math.max(...cash.cin, ...cash.cout, 1);
@@ -1001,7 +1004,8 @@ export function FinancePage({ bookings, installments }: {
                 <div className="flex items-end gap-2 h-44 mt-4 border-b border-border px-1">
                   {MONTHS.map((m, i) => (
                     <div key={m} className="flex-1 flex items-end justify-center gap-[3px] h-full"
-                      title={`${m}: in ${fmt0(cash.cin[i])} — bank ${fmt0(cash.cin[i] - cash.cashDrawer[i] - cash.capital[i])}${cash.cashDrawer[i] > 0 ? `, espèces ${fmt0(cash.cashDrawer[i])}` : ""}${cash.capital[i] > 0 ? `, owner contribution ${fmt0(cash.capital[i])}` : ""} · out ${fmt0(cash.cout[i])}`}>
+                      onMouseMove={(e) => setCashTip({ x: e.clientX, y: e.clientY, m: i })}
+                      onMouseLeave={() => setCashTip(null)}>
                       <div className="w-[46%] max-w-[26px] flex flex-col justify-end" style={{ height: `${(cash.cin[i] / max) * 100}%` }}>
                         {cash.capital[i] > 0 && (
                           <div className="w-full rounded-t bg-[#B08CF8]" style={{ height: `${(cash.capital[i] / Math.max(cash.cin[i], 0.01)) * 100}%` }} />
@@ -1049,6 +1053,33 @@ export function FinancePage({ bookings, installments }: {
                     ⚠ {fmt0(cash.cashUndated)} of paid cash installments have no payment date in Payments — they are not shown in any month above. Set their "paid on" date to include them.
                   </p>
                 )}
+                {cashTip && (() => {
+                  const i = cashTip.m;
+                  const bank = cash.cin[i] - cash.cashDrawer[i] - cash.capital[i];
+                  const net = cash.cin[i] - cash.cout[i];
+                  if (cash.cin[i] === 0 && cash.cout[i] === 0) return null;
+                  const Row = ({ color, label, value }: { color: string; label: string; value: number }) => (
+                    <div className="flex items-center gap-2 whitespace-nowrap">
+                      <span className="inline-block h-2 w-2 rounded-[2px]" style={{ background: color }} />
+                      <span className="flex-1 pr-3 text-white/75">{label}</span>
+                      <b className="tabular-nums">{fmt2(value)}</b>
+                    </div>
+                  );
+                  return (
+                    <div className="pointer-events-none fixed z-50 rounded-lg bg-[#1F241C] px-3 py-2.5 text-[11.5px] leading-relaxed text-white shadow-lg"
+                      style={{ left: Math.min(cashTip.x + 14, window.innerWidth - 240), top: cashTip.y + 14 }}>
+                      <div className="mb-1 font-bold">{MONTHS[i]} {year}</div>
+                      <Row color="#8FC46A" label="In — bank (card & transfers)" value={bank} />
+                      {cash.cashDrawer[i] > 0 && <Row color="#D9A93F" label="In — cash (espèces)" value={cash.cashDrawer[i]} />}
+                      {cash.capital[i] > 0 && <Row color="#B08CF8" label="Owner contribution" value={cash.capital[i]} />}
+                      <Row color="#EF9455" label="Cash out" value={-cash.cout[i]} />
+                      <div className="mt-1 border-t border-white/20 pt-1 flex items-center justify-between gap-4">
+                        <span className="text-white/75">Net</span>
+                        <b className={`tabular-nums ${net < 0 ? "text-[#FFB4A8]" : "text-[#C8E6A0]"}`}>{fmt2(net)}</b>
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             );
           })()}
