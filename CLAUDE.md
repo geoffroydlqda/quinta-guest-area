@@ -51,6 +51,12 @@ Interface utilisateur en **anglais**. Communication avec le propriétaire en **f
 - Le bouton guest « Submit information » a été renommé « Send summary » (choix produit : pas de verrouillage à la soumission, l'édition reste ouverte jusqu'à J-3).
 - Compte sans réservation : le Dashboard affiche un écran d'explication dédié (plus de champs qui ne sauvegardent rien).
 
+## Onglet Staff (7 août 2026)
+
+- **`staff_profiles`** : annuaire de l'équipe (nom, rôle, team, email, téléphone, `active`). Page `/admin/staff` (`StaffPage`).
+- **Accès admin** : toujours gouverné par `admin_users`, écrit UNIQUEMENT via l'Edge Function `admin-staff-access` (grant/revoke/list, JWT admin ; jamais de revoke du owner hello@quintamor.com ni de soi-même). Grâce au repli DB d'AdminGuard (`check_is_admin_email`), un grant prend effet sans toucher `src/lib/admin.ts`.
+- **`staff_profiles.allowed_tabs`** (null = tous) : filtre les onglets visibles de l'admin (`useAllowedTabs` → AdminLayout + redirection dans Admin.tsx). ⚠️ Contrôle d'INTERFACE seulement — les policies RLS restent au niveau "admin ou pas" ; ne pas vendre ça comme du cloisonnement de données.
+
 ## Base de données (tables principales)
 
 `admin_users`, `app_settings`, `pricing_settings`, `reminder_log`, `bookings`, `guest_profiles`, `room_setups`, `transportation_requests`, `transportation_trips`, `transportation_passengers`, `food_plans`, `payment_installments`, `docs_ack`, `deleted_entries_log`. Fonctions SQL : `is_admin`, `is_admin_email`. Le schéma complet est dans `src/integrations/supabase/types.ts`.

@@ -1,9 +1,10 @@
 import { ReactNode, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAllowedTabs } from "@/hooks/useAllowedTabs";
 import {
   LayoutDashboard, CalendarRange, Users, Wallet, Car,
-  BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X, Landmark,
+  BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X, Landmark, UserCog,
 } from "lucide-react";
 
 /**
@@ -14,37 +15,46 @@ import {
  *   Catering, Guest area, Sign out).
  */
 const NAV = [
-  { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard },
-  { to: "/admin/bookings", label: "Bookings", icon: CalendarRange },
-  { to: "/admin/guests", label: "Guests", icon: Users },
-  { to: "/admin/payments", label: "Payments", icon: Wallet },
-  { to: "/admin/catering", label: "Catering", icon: ChefHat },
-  { to: "/admin/transportation", label: "Transportation", icon: Car },
-  { to: "/admin/rooms", label: "Housekeeping", icon: BedDouble },
-  { to: "/admin/finance", label: "Finance", icon: Landmark },
+  { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard, tab: "dashboard" },
+  { to: "/admin/bookings", label: "Bookings", icon: CalendarRange, tab: "bookings" },
+  { to: "/admin/guests", label: "Guests", icon: Users, tab: "guests" },
+  { to: "/admin/payments", label: "Payments", icon: Wallet, tab: "payments" },
+  { to: "/admin/catering", label: "Catering", icon: ChefHat, tab: "catering" },
+  { to: "/admin/transportation", label: "Transportation", icon: Car, tab: "transportation" },
+  { to: "/admin/rooms", label: "Housekeeping", icon: BedDouble, tab: "rooms" },
+  { to: "/admin/finance", label: "Finance", icon: Landmark, tab: "finance" },
+  { to: "/admin/staff", label: "Staff", icon: UserCog, tab: "staff" },
 ] as const;
 
 /* Onglets principaux de la tab bar mobile (choix Geoffroy, 31 juil. 2026) */
 const MOBILE_MAIN = [
-  { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard },
-  { to: "/admin/bookings", label: "Bookings", icon: CalendarRange },
-  { to: "/admin/transportation", label: "Transport", icon: Car },
-  { to: "/admin/rooms", label: "Housekeep.", icon: BedDouble },
+  { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard, tab: "dashboard" },
+  { to: "/admin/bookings", label: "Bookings", icon: CalendarRange, tab: "bookings" },
+  { to: "/admin/transportation", label: "Transport", icon: Car, tab: "transportation" },
+  { to: "/admin/rooms", label: "Housekeep.", icon: BedDouble, tab: "rooms" },
 ] as const;
 
 const MOBILE_MORE = [
-  { to: "/admin/payments", label: "Payments", icon: Wallet },
-  { to: "/admin/finance", label: "Finance", icon: Landmark },
-  { to: "/admin/guests", label: "Guests", icon: Users },
-  { to: "/admin/catering", label: "Catering", icon: ChefHat },
+  { to: "/admin/payments", label: "Payments", icon: Wallet, tab: "payments" },
+  { to: "/admin/finance", label: "Finance", icon: Landmark, tab: "finance" },
+  { to: "/admin/guests", label: "Guests", icon: Users, tab: "guests" },
+  { to: "/admin/catering", label: "Catering", icon: ChefHat, tab: "catering" },
+  { to: "/admin/staff", label: "Staff", icon: UserCog, tab: "staff" },
 ] as const;
 
 export function AdminLayout({ children }: { children: ReactNode }) {
   const { signOut } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
+  // Onglets visibles pour cet admin (onglet Staff) — null = tous
+  const { allowed } = useAllowedTabs();
+  const visible = <T extends { tab: string }>(items: readonly T[]) =>
+    allowed ? items.filter((i) => allowed.has(i.tab)) : [...items];
+  const nav = visible(NAV);
+  const mobileMain = visible(MOBILE_MAIN);
+  const mobileMore = visible(MOBILE_MORE);
 
-  const moreActive = MOBILE_MORE.some((i) => location.pathname.startsWith(i.to));
+  const moreActive = mobileMore.some((i) => location.pathname.startsWith(i.to));
 
   const itemClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors ${
@@ -70,7 +80,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           <div className="text-xs text-muted-foreground mt-0.5">Management</div>
         </div>
         <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          {NAV.map((item) => (
+          {nav.map((item) => (
             <NavLink key={item.to} to={item.to} end={"end" in item && item.end} className={itemClass}>
               <item.icon className="w-4 h-4 shrink-0" />
               {item.label}
@@ -118,7 +128,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
               </button>
             </div>
             <div className="space-y-1">
-              {MOBILE_MORE.map((item) => (
+              {mobileMore.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -153,7 +163,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
       {/* Tab bar mobile */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-card border-t border-border flex items-stretch px-1 pb-[env(safe-area-inset-bottom)]">
-        {MOBILE_MAIN.map((item) => (
+        {mobileMain.map((item) => (
           <NavLink key={item.to} to={item.to} end={"end" in item && item.end}
             className={({ isActive }) => tabClass(isActive)}>
             {({ isActive }) => (

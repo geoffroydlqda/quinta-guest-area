@@ -104,6 +104,48 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_profiles: {
+        Row: {
+          id: string
+          name: string
+          email: string | null
+          phone: string | null
+          role: string | null
+          team: string | null
+          allowed_tabs: string[] | null
+          active: boolean
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          email?: string | null
+          phone?: string | null
+          role?: string | null
+          team?: string | null
+          allowed_tabs?: string[] | null
+          active?: boolean
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          email?: string | null
+          phone?: string | null
+          role?: string | null
+          team?: string | null
+          allowed_tabs?: string[] | null
+          active?: boolean
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       housekeeping_sessions: {
         Row: {
           id: string

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { todayLisbon, localIsoDay } from "@/lib/dates";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
+import { useAllowedTabs } from "@/hooks/useAllowedTabs";
+import { StaffPage } from "@/components/admin/StaffPage";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Download, RefreshCw, Trash2, FileDown, Mail, ChevronDown, ChevronLeft, ChevronRight, Plus, Copy, Check, ExternalLink, Pencil, Phone, MapPin, Globe2, ReceiptText } from "lucide-react";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
@@ -104,6 +106,7 @@ const SECTION_TITLES: Record<string, string> = {
   transportation: "Transportation",
   rooms: "Housekeeping",
   finance: "Finance",
+  staff: "Staff",
 };
 
 const fmtShort = (d: string | null) =>
@@ -224,6 +227,10 @@ const AdminContent = () => {
   // "users" est l'ancien nom de l'onglet Guests — on garde la redirection.
   const normalizedSection = section === "users" ? "guests" : section;
   const view = normalizedSection && SECTION_TITLES[normalizedSection] ? normalizedSection : "dashboard";
+
+  // Onglets autorisés (onglet Staff) : si l'onglet demandé n'est pas visible
+  // pour cet admin, redirection vers son premier onglet autorisé.
+  const { allowed: allowedTabs, loaded: tabsLoaded } = useAllowedTabs();
 
   const [installments, setInstallments] = useState<Installment[]>([]);
 
@@ -533,6 +540,12 @@ const AdminContent = () => {
 
 
 
+    if (tabsLoaded && allowedTabs && !allowedTabs.has(view)) {
+    const order = ["dashboard", "bookings", "guests", "payments", "catering", "transportation", "rooms", "finance", "staff"];
+    const first = order.find((t) => allowedTabs.has(t)) ?? "dashboard";
+    return <Navigate to={first === "dashboard" ? "/admin" : `/admin/${first}`} replace />;
+  }
+
   if (loading || !data) {
     return (
       <AdminLayout>
@@ -754,6 +767,8 @@ const AdminContent = () => {
         )}
 
         {view === "rooms" && <RoomsView data={data} onOpen={navigateToBooking} />}
+
+        {view === "staff" && <StaffPage />}
 
         {view === "finance" && (
           <FinancePage
