@@ -214,9 +214,8 @@ const AdminGuestDetailContent = () => {
             twinsEnsuiteCount: data.room.twins_ensuite_qty,
           } : null,
           transportation: data.trips.length > 0 ? {
-            totalTrips: transportCost.totalTrips,
-            subtotal: transportCost.subtotal,
-            fixedPriceTotal: transportCost.subtotal,
+            tripCount: transportCost.totalTrips,
+            totalPrice: transportCost.subtotal,
             customOfferCount: transportCost.customOfferCount,
             trips: data.trips,
           } : null,

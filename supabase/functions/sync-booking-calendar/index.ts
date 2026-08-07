@@ -213,7 +213,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const SELECT = "id,retreat_name,first_name,last_name,email,guest_count,check_in_date,check_out_date,check_in_time,check_out_time,event_type,google_calendar_event_id";
+    const SELECT = "id,retreat_name,first_name,last_name,email,guest_count,check_in_date,check_out_date,check_in_time,check_out_time,event_type,google_calendar_event_id,is_test";
 
     if (action === "delete") {
       if (!event_id) return json({ error: "event_id required" }, 400);
@@ -229,7 +229,8 @@ serve(async (req) => {
       const { data, error } = await admin.from("bookings").select(SELECT).not("check_in_date", "is", null);
       if (error) throw error;
       const results = [];
-      for (const b of (data ?? []) as BookingRow[]) {
+      for (const b of (data ?? []) as (BookingRow & { is_test?: boolean | null })[]) {
+        if (b.is_test) continue; // les bookings de test ne vont jamais au calendrier
         try { results.push(await upsertBooking(admin, b)); }
         catch (e) { results.push({ id: b.id, error: String(e).slice(0, 200) }); }
       }
@@ -241,6 +242,7 @@ serve(async (req) => {
     const { data: b, error } = await admin.from("bookings").select(SELECT).eq("id", booking_id).maybeSingle();
     if (error) throw error;
     if (!b) return json({ error: "Booking not found" }, 404);
+    if ((b as { is_test?: boolean | null }).is_test) return json({ skipped: "test_booking" });
     return json(await upsertBooking(admin, b as BookingRow));
   } catch (e) {
     const msg = String(e?.message ?? e);

@@ -311,7 +311,7 @@ export function useFoodPlan(checkInDate: string | null, checkOutDate: string | n
       const updateQuery = supabase.from('food_plans').update(payload);
       const { error } = await (activeBookingId
         ? updateQuery.eq('booking_id', activeBookingId)
-        : updateQuery.eq('user_id', user.id));
+        : updateQuery.eq('user_id', user.id).is('booking_id', null));
 
       if (error) throw error;
       return true;

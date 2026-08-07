@@ -168,7 +168,7 @@ export function useTransportation() {
         .eq('id', tripId);
       updQuery = activeBookingId
         ? updQuery.eq('booking_id', activeBookingId)
-        : updQuery.eq('user_id', user.id);
+        : updQuery.eq('user_id', user.id).is('booking_id', null);
       const { error } = await updQuery;
       
       if (error) throw error;
@@ -198,7 +198,7 @@ export function useTransportation() {
         .eq('id', tripId);
       delQuery = activeBookingId
         ? delQuery.eq('booking_id', activeBookingId)
-        : delQuery.eq('user_id', user.id);
+        : delQuery.eq('user_id', user.id).is('booking_id', null);
       const { data: deletedRows, error } = await delQuery.select('id');
 
       if (error) throw error;
@@ -261,7 +261,7 @@ export function useTransportation() {
         .eq('id', passengerId);
       pDelQuery = activeBookingId
         ? pDelQuery.eq('booking_id', activeBookingId)
-        : pDelQuery.eq('user_id', user.id);
+        : pDelQuery.eq('user_id', user.id).is('booking_id', null);
       const { error } = await pDelQuery;
       
       if (error) throw error;
@@ -296,7 +296,7 @@ export function useTransportation() {
         .update({ notes_transportation: request.notes_transportation || null });
       const { error } = await (activeBookingId
         ? updateQuery.eq('booking_id', activeBookingId)
-        : updateQuery.eq('user_id', user.id));
+        : updateQuery.eq('user_id', user.id).is('booking_id', null));
 
       if (error) throw error;
       return true;

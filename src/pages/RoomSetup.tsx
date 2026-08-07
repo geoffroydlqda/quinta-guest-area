@@ -1,3 +1,4 @@
+import { Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
@@ -384,6 +385,14 @@ const RoomSetup = () => {
     }, 350);
     return () => clearTimeout(t);
   }, [roomBedMap, roomGuestsMap, disabledRooms, isLoadingRecord]);
+
+  // Garde multi-séjours : sans booking actif, les hooks ne peuvent pas scoper
+  // leurs lectures/écritures (maybeSingle multi-lignes = spinner infini,
+  // écritures cross-booking) -> sélecteur de séjour, ou dashboard si aucun.
+  if (!lockCtx.isLoading && !lockCtx.activeBookingId) {
+    if (lockCtx.bookingsPersonal.length > 1) return <Navigate to="/bookings" replace />;
+    if (lockCtx.bookings.length === 0) return <Navigate to="/dashboard" replace />;
+  }
 
   if (authLoading || isLoadingRecord) {
     return (

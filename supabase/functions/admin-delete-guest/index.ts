@@ -130,11 +130,6 @@ serve(async (req) => {
       also_deleted_auth_user: false,
     });
 
-    // g. Sheets sync (fire-and-forget)
-    admin.functions.invoke("sync-google-sheets").catch((e) =>
-      console.warn("Sheets sync after delete failed:", e)
-    );
-
     return json({ ok: true, booking_id });
   } catch (e: any) {
     console.error(e);

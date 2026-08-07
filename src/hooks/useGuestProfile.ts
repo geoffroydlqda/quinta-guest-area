@@ -27,6 +27,8 @@ export function useGuestProfile() {
     impersonatedBooking,
   } = useActiveBooking();
   
+  const [isAdminAccount, setIsAdminAccount] = useState(false);
+  
   const [state, setState] = useState<ProfileLoadState>({
     profile: null,
     toolStatuses: {
@@ -58,13 +60,13 @@ export function useGuestProfile() {
 
       if (response.error) {
         console.error('Error from ensure-guest-profile:', response.error);
-        return null;
+        return { profile: null, isAdmin: false };
       }
 
-      return response.data?.profile || null;
+      return { profile: response.data?.profile || null, isAdmin: response.data?.isAdmin === true };
     } catch (error) {
       console.error('Failed to call ensure-guest-profile:', error);
-      return null;
+      return { profile: null, isAdmin: false };
     }
   }, []);
 
@@ -198,10 +200,18 @@ export function useGuestProfile() {
 
       // Step 1: Ensure profile exists on server (idempotent)
       console.log('Ensuring profile exists for user:', user.id);
-      const serverProfile = await ensureProfileOnServer(user.id, user.user_metadata);
+      const serverResult = await ensureProfileOnServer(user.id, user.user_metadata);
+      if (serverResult.isAdmin) {
+        // Compte admin (source de vérité : table admin_users) — pas de profil
+        // guest à créer. On sort proprement, AdminGuard/redirects font le reste.
+        clearTimeout(timeoutId);
+        setState((prev) => ({ ...prev, isLoading: false, error: null }));
+        setIsAdminAccount(true);
+        return;
+      }
 
       // Step 2: Fetch profile from database (uses user's RLS context)
-      let profileData = serverProfile;
+      let profileData = serverResult.profile;
       if (!profileData) {
         console.log('Server returned no profile, fetching directly...');
         profileData = await fetchProfile(user.id);
@@ -584,6 +594,7 @@ export function useGuestProfile() {
   const hasDatesSet = !!(state.profile?.check_in_date && state.profile?.check_out_date);
 
   return {
+    isAdminAccount,
     profile: state.profile,
     toolStatuses: state.toolStatuses,
     isLoading: state.isLoading,

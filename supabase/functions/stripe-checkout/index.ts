@@ -270,9 +270,11 @@ async function handlePayLink(req: Request): Promise<Response> {
     return allPaid ? redirect(`${PROD_ORIGIN}/payment-success?payment=already`) : invalid();
   }
   const { data: booking } = await admin.from("bookings")
-    .select("id,email,retreat_name,check_in_date,check_out_date,client_id")
+    .select("id,email,retreat_name,check_in_date,check_out_date,client_id,is_test")
     .eq("id", payable[0].booking_id).maybeSingle();
   if (!booking) return invalid();
+  // Stripe est en mode LIVE : jamais de session de paiement sur un booking test.
+  if (booking.is_test) return invalid();
 
   const { session } = await createSession(
     payable, booking,
@@ -323,10 +325,12 @@ serve(async (req) => {
     }
 
     const { data: booking, error: bErr } = await admin.from("bookings")
-      .select("id,user_id,email,retreat_name,first_name,check_in_date,check_out_date,client_id")
+      .select("id,user_id,email,retreat_name,first_name,check_in_date,check_out_date,client_id,is_test")
       .eq("id", insts[0].booking_id).maybeSingle();
     if (bErr) throw bErr;
     if (!booking) return json({ error: "Booking not found" }, 404);
+    // Stripe est en mode LIVE : jamais de session de paiement sur un booking test.
+    if (booking.is_test) return json({ error: "This is a TEST booking — payments are disabled on it." }, 400);
 
     const userEmail = (user.email ?? "").toLowerCase().trim();
     const owns = booking.user_id === user.id

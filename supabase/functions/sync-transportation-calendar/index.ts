@@ -356,6 +356,22 @@ serve(async (req) => {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      // Contrôle de propriété : l'eventId doit appartenir à un trip de
+      // l'appelant (ou l'appelant est admin) — sinon n'importe quel guest
+      // connecté pourrait supprimer des événements du calendrier chauffeur.
+      if (!userIsAdmin) {
+        const { data: ownedTrip } = await admin
+          .from("transportation_trips")
+          .select("id")
+          .eq("google_calendar_event_id", eventId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (!ownedTrip) {
+          return new Response(JSON.stringify({ error: "Forbidden" }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
       await deleteEvent(eventId);
       return new Response(JSON.stringify({ ok: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -378,6 +394,15 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "Forbidden" }), {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+      // Les trips d'un booking de test ne vont jamais au calendrier chauffeur
+      if (trip.booking_id) {
+        const { data: tb } = await admin.from("bookings").select("is_test").eq("id", trip.booking_id).maybeSingle();
+        if (tb?.is_test) {
+          return new Response(JSON.stringify({ skipped: "test_booking" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
       try {
         const newId = await syncOne(admin, trip);
@@ -423,10 +448,15 @@ serve(async (req) => {
         }
       }
 
+      // Les trips des bookings de test ne vont jamais au calendrier chauffeur
+      const { data: testBookings } = await admin.from("bookings").select("id").eq("is_test", true);
+      const testIds = new Set((testBookings ?? []).map((b: { id: string }) => b.id));
+
       let synced = 0, failed = 0;
       const results: Array<{ trip_id: string; trip_date: string; guest: string; ok: boolean; event_id?: string; error?: string }> = [];
 
       for (const trip of (trips || [])) {
+        if (trip.booking_id && testIds.has(trip.booking_id)) continue;
         try {
           const newId = await syncOne(admin, trip);
           synced++;

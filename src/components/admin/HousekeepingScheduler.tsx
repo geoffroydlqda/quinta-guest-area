@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { todayLisbon } from "@/lib/dates";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -397,7 +398,7 @@ export function HousekeepingScheduler({ bookings, planByBooking, onOpenBooking }
       .then(({ data }) => { setSessions((data as Session[] | null) ?? []); setLoading(false); });
   }, []);
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayLisbon();
   const byBooking = useMemo(() => {
     const m = new Map<string, Session[]>();
     for (const s of sessions) {

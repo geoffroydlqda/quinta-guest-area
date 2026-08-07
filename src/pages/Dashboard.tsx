@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { todayLisbon } from '@/lib/dates';
 import { Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,6 +47,7 @@ const DashboardContent = () => {
     submitProfile,
     refreshProfile,
     retryLoad,
+    isAdminAccount,
   } = useGuestProfile();
 
   const [roomSetupData, setRoomSetupData] = useState<any>(null);
@@ -292,7 +294,13 @@ const DashboardContent = () => {
           checkOutDate: bookingCheckOut,
           guestsCount: bookingGuestsCount,
           roomSetup: roomSetupData,
-          transportation: transportationData ? { ...transportationData, trips: transportationTrips } : null,
+          // tripCount/totalPrice : noms exigés par le schéma de send-guest-summary
+          transportation: transportationData ? {
+            tripCount: transportationData.totalTrips,
+            totalPrice: transportationData.subtotal,
+            customOfferCount: transportationData.customOfferCount,
+            trips: transportationTrips,
+          } : null,
           food: foodData ? {
             ...foodData,
             selections: foodData.selections || [],
@@ -326,7 +334,9 @@ const DashboardContent = () => {
 
   // Admins land on their own dashboard: send them to /admin unless they are
   // deliberately impersonating a guest ("Open as guest").
-  if (user && isAdminEmail(user.email) && !isImpersonating) {
+  // isAdminAccount couvre les admins présents en base mais absents de la
+  // liste front (src/lib/admin.ts) — sinon leur compte serait bloqué.
+  if (user && (isAdminEmail(user.email) || isAdminAccount) && !isImpersonating) {
     return <Navigate to="/admin" replace />;
   }
 
@@ -571,7 +581,7 @@ function fmtDate(d: string | null | undefined) {
 }
 
 function installmentBadge(s: PaymentInstallment) {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayLisbon();
   let kind: 'paid' | 'overdue' | 'pending' = 'pending';
   if (s.status === 'paid') kind = 'paid';
   else if (s.due_date && s.due_date < todayIso) kind = 'overdue';
@@ -658,7 +668,7 @@ function InstallmentRow({ inst, onPay, paying }: { inst: PaymentInstallment; onP
 }
 
 function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstallment[]; onPay: (insts: PaymentInstallment[], usd?: boolean) => void; paying: boolean }) {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayLisbon();
   const first = insts[0];
   const overdue = !!first.due_date && first.due_date < todayIso;
   const total = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
@@ -720,7 +730,8 @@ function PaymentOverview({ bookingId }: { bookingId: string | null | undefined }
   const hasAccommodation = rental.length > 0 || (booking?.total_rental_price ?? 0) > 0;
   const hasExtras = extras.length > 0;
 
-  if (!hasAccommodation && !hasExtras) {
+  // catering.length : un booking 100 % catering doit voir sa carte de paiement
+  if (!hasAccommodation && !hasExtras && catering.length === 0) {
     return (
       <div className="bg-card rounded-2xl border border-border p-6 flex items-start gap-3">
         <CreditCard className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />

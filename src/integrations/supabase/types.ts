@@ -969,6 +969,7 @@ export type Database = {
     Functions: {
       is_admin: { Args: never; Returns: boolean }
       is_admin_email: { Args: never; Returns: boolean }
+      check_is_admin_email: { Args: { check_email: string }; Returns: boolean }
     }
     Enums: {
       payment_status: "pending" | "deposit_paid" | "paid_in_full" | "overdue"

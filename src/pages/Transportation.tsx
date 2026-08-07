@@ -210,6 +210,14 @@ const Transportation = () => {
     }
   };
 
+  // Garde multi-séjours : sans booking actif, les hooks ne peuvent pas scoper
+  // leurs lectures/écritures (maybeSingle multi-lignes = spinner infini,
+  // écritures cross-booking) -> sélecteur de séjour, ou dashboard si aucun.
+  if (!lockCtx.isLoading && !lockCtx.activeBookingId) {
+    if (lockCtx.bookingsPersonal.length > 1) return <Navigate to="/bookings" replace />;
+    if (lockCtx.bookings.length === 0) return <Navigate to="/dashboard" replace />;
+  }
+
   if (authLoading || isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">

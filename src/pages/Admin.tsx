@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { todayLisbon, localIsoDay } from "@/lib/dates";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -150,7 +151,7 @@ type ResolvedPaymentStatus = "paid_in_full" | "overdue" | "deposit_paid" | "pend
 function deriveStatusFromInstallments(installments: Installment[]): ResolvedPaymentStatus {
   const rentals = installments.filter((i) => (i.category ?? "rental") === "rental");
   if (rentals.length === 0) return "pending";
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayLisbon();
   const hasOverdue = rentals.some((i) =>
     i.status !== "paid" && i.due_date && i.due_date < todayIso
   );
@@ -212,7 +213,6 @@ const AdminContent = () => {
   const queryClient = useQueryClient();
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted">("all");
   const [categoryFilter, setCategoryFilter] = useState<"all" | "live" | "upcoming" | "past">("all");
@@ -241,6 +241,9 @@ const AdminContent = () => {
     }
     if (!instRes.error && instRes.data) {
       setInstallments(instRes.data as Installment[]);
+    } else if (instRes.error) {
+      // Jamais silencieux : sinon badges Payment et KPI € affichent 0 sans prévenir
+      toast({ title: "Failed to load payments", description: instRes.error.message, variant: "destructive" });
     }
     if (!silent) setLoading(false);
   };
@@ -252,14 +255,6 @@ const AdminContent = () => {
 
   useEffect(() => { load(); }, []);
 
-
-  const sync = async () => {
-    setSyncing(true);
-    const res = await supabase.functions.invoke("sync-google-sheets");
-    setSyncing(false);
-    if (res.error) toast({ title: "Sync failed", description: res.error.message, variant: "destructive" });
-    else toast({ title: "Synced to Google Sheets" });
-  };
 
   const profileById = useMemo(() => new Map((data?.profiles || []).map((p) => [p.user_id, p])), [data]);
   const guestName = (uid: string) => {
@@ -413,12 +408,15 @@ const AdminContent = () => {
   }, [filteredEvents, todayIso]);
 
   const toolStatus = (uid: string | null, bookingId?: string | null) => {
-    const matchRoom = (r: any) =>
-      (bookingId && r.booking_id === bookingId) || (uid && r.user_id === uid);
-    const matchTrip = (t: any) =>
-      (bookingId && t.booking_id === bookingId) || (uid && t.user_id === uid);
-    const matchFood = (f: any) =>
-      (bookingId && f.booking_id === bookingId) || (uid && f.user_id === uid);
+    // booking_id d'abord ; repli user_id UNIQUEMENT pour les lignes legacy sans
+    // booking_id — sinon les statuts fuient entre deux séjours du même guest.
+    const matchScoped = (r: any) =>
+      bookingId
+        ? r.booking_id === bookingId || (!r.booking_id && uid && r.user_id === uid)
+        : !!uid && r.user_id === uid;
+    const matchRoom = matchScoped;
+    const matchTrip = matchScoped;
+    const matchFood = matchScoped;
     const room = data?.rooms.find(matchRoom);
     const trip = data?.trips.find(matchTrip);
     const food = data?.food.find(matchFood);
@@ -576,12 +574,6 @@ const AdminContent = () => {
               <Plus className="w-4 h-4 mr-1" />New booking
             </Button>
             <Button size="sm" variant="outline" onClick={() => load()}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button>
-            {view === "bookings" && (
-              <Button size="sm" variant="outline" onClick={sync} disabled={syncing}>
-                {syncing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                Sync to Google Sheets
-              </Button>
-            )}
           </div>
         </div>
 
@@ -601,7 +593,7 @@ const AdminContent = () => {
         )}
 
         {view === "catering" && (
-          <CateringView bookings={data.bookings || []} food={data.food || []} todayIso={todayIso} onOpen={navigateToBooking} />
+          <CateringView bookings={(data.bookings || []).filter((b) => !b.is_test)} food={data.food || []} todayIso={todayIso} onOpen={navigateToBooking} />
         )}
 
         {view === "bookings" && (
@@ -1015,9 +1007,13 @@ function DashboardView({
         ? Number(i.amount_excl_vat)
         : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23)), 0);
     const collected = thisYear.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
-    const overdue = installments.filter((i) => i.status !== "paid" && i.due_date && i.due_date < todayIso);
+    // Overdue/Outstanding : uniquement les bookings réels de l'année affichée
+    // (bookingById ne contient que les non-tests) — sinon une échéance de test
+    // ou d'une autre année gonfle le KPI rouge.
+    const real = installments.filter((i) => bookingById.has(i.booking_id));
+    const overdue = real.filter((i) => i.status !== "paid" && i.due_date && i.due_date < todayIso);
     const overdueTotal = overdue.reduce((s, i) => s + Number(i.amount_due || 0), 0);
-    const outstanding = installments.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    const outstanding = thisYear.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
 
     return {
       contracted, contractedHt, collected, overdueTotal, outstanding,
@@ -1052,7 +1048,7 @@ function DashboardView({
       const d = new Date(`${b.check_in_date}T12:00:00`);
       const end = new Date(`${b.check_out_date}T12:00:00`);
       while (d < end) {
-        if (d.getFullYear() === yNum) occupied[d.getMonth()].add(d.toISOString().slice(0, 10));
+        if (d.getFullYear() === yNum) occupied[d.getMonth()].add(localIsoDay(d));
         d.setDate(d.getDate() + 1);
         if (d.getFullYear() > yNum) break;
       }
@@ -1082,7 +1078,7 @@ function DashboardView({
       const d = new Date(`${b.check_in_date}T12:00:00`);
       const endB = new Date(`${b.check_out_date}T12:00:00`);
       while (d < endB) {
-        if (d >= s && d < e) occupied.add(d.toISOString().slice(0, 10));
+        if (d >= s && d < e) occupied.add(localIsoDay(d));
         if (d > e) break;
         d.setDate(d.getDate() + 1);
       }
@@ -1094,7 +1090,7 @@ function DashboardView({
     for (const b of bookings) {
       if (!b.check_out_date) continue;
       const d = new Date(`${b.check_out_date}T12:00:00`);
-      const iso = d.toISOString().slice(0, 10);
+      const iso = localIsoDay(d);
       if (d >= s && d < e && !occupied.has(iso)) turnaround.add(iso);
     }
     const inSeasonMonths = Array.from({ length: 12 }, (_, m) => {
