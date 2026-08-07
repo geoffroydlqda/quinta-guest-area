@@ -194,6 +194,11 @@ export function StaffPage() {
                       <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <input className="bg-transparent outline-none border-b border-transparent focus:border-input" placeholder="Role…"
                           defaultValue={s.role ?? ""} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (s.role ?? "")) patch(s.id, { role: v || null }); }} />
+                        <select className="bg-transparent outline-none border-b border-transparent focus:border-input cursor-pointer text-muted-foreground"
+                          value={s.team ?? "other"} onChange={(e) => patch(s.id, { team: e.target.value })}
+                          title="Move this person to another team">
+                          {TEAMS.map((t) => <option key={t} value={t}>{TEAM_LABEL[t]}</option>)}
+                        </select>
                         <input className="bg-transparent outline-none border-b border-transparent focus:border-input" placeholder="Phone…"
                           defaultValue={s.phone ?? ""} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (s.phone ?? "")) patch(s.id, { phone: v || null }); }} />
                         <input className="col-span-2 bg-transparent outline-none border-b border-transparent focus:border-input" placeholder="Email (needed for admin access)…"
