@@ -179,6 +179,9 @@ function eventForDate(date: string, bookings: Booking[]): string | null {
   return pre.length === 1 ? pre[0].id : null;
 }
 
+// Les dépenses pré-classées (règle OU suggestion TVA) restent reviewed=false :
+// le libellé est probablement bon mais l'ÉVÉNEMENT doit être confirmé dans
+// l'admin (bouton Confirm). Les kinds mécaniques restent reviewed=true.
 function autoKind(desc: string, amount: number, rules: Rule[]) {
   const d = desc.toLowerCase();
   for (const r of rules) {
@@ -188,7 +191,7 @@ function autoKind(desc: string, amount: number, rules: Rule[]) {
         amount_net: r.kind === "expense" && r.vat_rate != null
           ? Math.round(Math.abs(amount) / (1 + Number(r.vat_rate) / 100) * 100) / 100
           : null,
-        reviewed: true,
+        reviewed: r.kind !== "expense",
       };
     }
   }
@@ -204,6 +207,28 @@ function autoKind(desc: string, amount: number, rules: Rule[]) {
     return { kind: "expense", category: "Bank & payment fees", vat_rate: 0, amount_net: Math.abs(amount), reviewed: true };
   return { kind: "review", reviewed: false };
 }
+
+// TVA la plus probable d'après le nom du marchand (miroir des SUGGESTIONS du
+// front) — appliquée quand aucune règle apprise ne matche : la ligne arrive
+// pré-remplie (catégorie + TVA + net HT) mais reste à confirmer.
+const SUGGESTIONS: { re: RegExp; category: string; vat: number }[] = [
+  { re: /intermarch|continente|pingo doce|lidl|aldi|auchan|minipre|mercadona|aux fins gourmets|talho|padaria|frutaria|makro|recheio|celeiro|pr[oó]vida/, category: "Retreat — catering / food", vat: 6 },
+  { re: /vinho|garrafeira|adega|wine/, category: "Bar — stock", vat: 13 },
+  { re: /\bedp\b|su eletricidade|endesa|iberdrola/, category: "Electricity", vat: 23 },
+  { re: /aguas|águas|simarsul/, category: "Water", vat: 6 },
+  { re: /galp gas|butano|propano/, category: "Gas", vat: 23 },
+  { re: /nos comunicacoes|\bmeo\b|vodafone|starlink/, category: "Internet", vat: 23 },
+  { re: /repsol|posto bp|\bgalp\b|prio |cepsa|combust/, category: "Fuel", vat: 23 },
+  { re: /leroy merlin|maxmat|bricomarche|\baki\b|brico|ferragens|zimbrafogo/, category: "General maintenance", vat: 23 },
+  { re: /amazon|decathlon|ikea|conforama/, category: "Equipment & furniture", vat: 23 },
+  { re: /notion|sqsp|squarespace|intuit|quickbooks|canva|openai|anthropic|claude|supabase|vercel|resend|moloni/, category: "Software", vat: 23 },
+  { re: /municipio|financas|freguesia|\bimi\b|\bimt\b|selo/, category: "Taxes & duties", vat: 0 },
+  { re: /piscina|pool/, category: "Pool maintenance", vat: 23 },
+  { re: /jardim|jardinagem|garden/, category: "Gardening (seasonal)", vat: 23 },
+  { re: /seguro|fidelidade|tranquilidade|allianz|ageas|generali/, category: "Insurance — property", vat: 0 },
+  { re: /contabil|accounting/, category: "Accounting", vat: 23 },
+  { re: /farmacia|wells|clinica/, category: "Property operations & supplies", vat: 23 },
+];
 
 // ---- Sync ------------------------------------------------------------------
 type RevLeg = {
@@ -273,6 +298,16 @@ async function syncTransactions(token: string) {
       cls = { kind: "bar_payout", reviewed: true };
     } else {
       cls = autoKind(desc, amount, (rules ?? []) as Rule[]);
+      if (cls.kind === "review" && amount < 0) {
+        const s = SUGGESTIONS.find((x) => x.re.test(desc.toLowerCase()));
+        if (s) {
+          cls = {
+            kind: "expense", category: s.category, vat_rate: s.vat,
+            amount_net: Math.round(Math.abs(amount) / (1 + s.vat / 100) * 100) / 100,
+            reviewed: false,
+          };
+        }
+      }
     }
     const booking = "category" in cls && cls.category && VARIABLE_CATS.has(cls.category) && amount < 0
       ? eventForDate(date, (bookings ?? []) as Booking[])

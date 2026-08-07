@@ -145,7 +145,10 @@ function suggestFor(t: { description: string | null; notes: string | null; amoun
   return null;
 }
 
-// Classification automatique anti-double comptage
+// Classification automatique anti-double comptage.
+// Les DÉPENSES classées par une règle restent reviewed=false : la catégorie
+// est probablement bonne mais l'événement doit être confirmé à la main
+// (bouton Confirm). Les kinds mécaniques (payout, internal…) restent OK.
 function autoKind(desc: string, amount: number, rules: FinRule[]): Partial<FinTx> {
   const d = desc.toLowerCase();
   for (const r of rules) {
@@ -155,7 +158,7 @@ function autoKind(desc: string, amount: number, rules: FinRule[]): Partial<FinTx
         amount_net: r.kind === "expense" && r.vat_rate != null
           ? Math.round(Math.abs(amount) / (1 + Number(r.vat_rate) / 100) * 100) / 100
           : null,
-        reviewed: true,
+        reviewed: r.kind !== "expense",
       };
     }
   }
@@ -465,7 +468,7 @@ export function FinancePage({ bookings, installments }: {
     return { cin, cout, cashDrawer, capital, cashUndated };
   }, [txs, installments, bookingById, year]);
 
-  const reviewCount = txs.filter((t) => t.kind === "review").length;
+  const reviewCount = txs.filter((t) => !t.reviewed).length;
 
   // ---- Filtres mois / événement / recherche -------------------------------
   const [monthFilter, setMonthFilter] = useState("");
@@ -481,7 +484,7 @@ export function FinancePage({ bookings, installments }: {
 
   const filtered = useMemo(() => {
     let arr = txs;
-    if (filter === "review") arr = arr.filter((t) => t.kind === "review");
+    if (filter === "review") arr = arr.filter((t) => !t.reviewed);
     if (filter === "in") arr = arr.filter((t) => t.amount > 0);
     if (monthFilter) arr = arr.filter((t) => t.date.startsWith(monthFilter));
     if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
@@ -794,11 +797,20 @@ export function FinancePage({ bookings, installments }: {
                           </>
                         ) : "—"}
                       </td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${t.kind === "review" ? KIND_LABEL.review.cls : "bg-[#E5F5EA] text-[#178A3F]"}`}>
-                          {t.kind === "review" ? "To review" : "OK"}
-                        </span>
-                        {t.kind !== "review" && (
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {t.reviewed ? (
+                          <span className="inline-flex rounded-full bg-[#E5F5EA] px-2 py-0.5 text-[10px] font-semibold text-[#178A3F]">OK</span>
+                        ) : t.kind === "expense" && t.category ? (
+                          <button type="button"
+                            className="inline-flex rounded-full bg-[#35532A] px-2.5 py-0.5 text-[10px] font-semibold text-white hover:bg-[#2A4221]"
+                            title="Auto-classified from your rules — check category, VAT and event, then confirm"
+                            onClick={() => patch(t.id, { reviewed: true })}>
+                            ✓ Confirm
+                          </button>
+                        ) : (
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${KIND_LABEL.review.cls}`}>To review</span>
+                        )}
+                        {t.reviewed && t.kind !== "review" && (
                           <button type="button" className="ml-1.5 text-[10px] text-muted-foreground hover:underline"
                             onClick={() => patch(t.id, { kind: "review", reviewed: false })}>edit</button>
                         )}
@@ -989,12 +1001,15 @@ export function FinancePage({ bookings, installments }: {
                 <div className="flex items-end gap-2 h-44 mt-4 border-b border-border px-1">
                   {MONTHS.map((m, i) => (
                     <div key={m} className="flex-1 flex items-end justify-center gap-[3px] h-full"
-                      title={`${m}: in ${fmt0(cash.cin[i])}${cash.capital[i] > 0 ? ` (incl. owner contribution ${fmt0(cash.capital[i])})` : ""} · out ${fmt0(cash.cout[i])}`}>
+                      title={`${m}: in ${fmt0(cash.cin[i])} — bank ${fmt0(cash.cin[i] - cash.cashDrawer[i] - cash.capital[i])}${cash.cashDrawer[i] > 0 ? `, espèces ${fmt0(cash.cashDrawer[i])}` : ""}${cash.capital[i] > 0 ? `, owner contribution ${fmt0(cash.capital[i])}` : ""} · out ${fmt0(cash.cout[i])}`}>
                       <div className="w-[46%] max-w-[26px] flex flex-col justify-end" style={{ height: `${(cash.cin[i] / max) * 100}%` }}>
                         {cash.capital[i] > 0 && (
                           <div className="w-full rounded-t bg-[#B08CF8]" style={{ height: `${(cash.capital[i] / Math.max(cash.cin[i], 0.01)) * 100}%` }} />
                         )}
                         <div className={`w-full flex-1 bg-[#8FC46A] ${cash.capital[i] > 0 ? "" : "rounded-t"}`} />
+                        {cash.cashDrawer[i] > 0 && (
+                          <div className="w-full bg-[#D9A93F]" style={{ height: `${(cash.cashDrawer[i] / Math.max(cash.cin[i], 0.01)) * 100}%` }} />
+                        )}
                       </div>
                       <div className="w-[46%] max-w-[26px] rounded-t bg-[#EF9455]" style={{ height: `${(cash.cout[i] / max) * 100}%` }} />
                     </div>
@@ -1019,7 +1034,10 @@ export function FinancePage({ bookings, installments }: {
                   })}
                 </div>
                 <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#8FC46A] inline-block" /> Cash in</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#8FC46A] inline-block" /> In — bank</span>
+                  {cash.cashDrawer.some((v) => v > 0) && (
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#D9A93F] inline-block" /> In — espèces</span>
+                  )}
                   {cash.capital.some((v) => v > 0) && (
                     <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px] bg-[#B08CF8] inline-block" /> Owner contribution</span>
                   )}
