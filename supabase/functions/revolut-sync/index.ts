@@ -401,7 +401,7 @@ serve(async (req) => {
     // transactions Revolut brutes des comptes Quinta sur la plage, SANS rien
     // écrire en base — sert à vérifier que le tool colle au relevé bancaire.
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
-    const reconcile = (body as { reconcile?: { from?: string; to?: string } }).reconcile;
+    const reconcile = (body as { reconcile?: { from?: string; to?: string; all?: boolean } }).reconcile;
 
     const token = await accessToken().catch((e) => {
       // Refresh token expiré / révoqué -> il faut recliquer "Enable API access"
@@ -445,6 +445,11 @@ serve(async (req) => {
 
     if (reconcile?.from && reconcile?.to) {
       const acc = await allowedAccounts(token);
+      // Noms de tous les comptes du business (pour l'option all)
+      const ar = await fetch("https://b2b.revolut.com/api/1.0/accounts", { headers: { Authorization: `Bearer ${token}` } });
+      const accountsAll = (ar.ok ? await ar.json() : []) as RevAccount[];
+      const nameById = new Map(accountsAll.map((a) => [a.id, a.name ?? a.id]));
+      const wantAll = !!reconcile.all;
       const url2 = new URL(TX_URL);
       url2.searchParams.set("from", reconcile.from);
       url2.searchParams.set("to", reconcile.to);
@@ -457,12 +462,28 @@ serve(async (req) => {
       for (const t of txs2) {
         if ((t.state ?? "").toLowerCase() !== "completed") continue;
         const legsAll = t.legs ?? [];
-        const legs = acc.ids ? legsAll.filter((l) => l.account_id && acc.ids!.has(l.account_id)) : legsAll;
+        const legs = wantAll ? legsAll : (acc.ids ? legsAll.filter((l) => l.account_id && acc.ids!.has(l.account_id)) : legsAll);
         if (!legs.length) continue;
         const isInternalMove = legsAll.length > 1 && legsAll.every((l) => !l.account_id || scope.has(l.account_id));
+        const cardName = [t.card?.first_name, t.card?.last_name].filter(Boolean).join(" ").trim();
+        if (wantAll) {
+          // Une ligne par leg, avec le nom du compte — vision groupe complète
+          for (const leg of legsAll) {
+            if (leg.amount == null) continue;
+            out.push({
+              id: t.id, leg: leg.leg_id ?? null, type: t.type ?? null,
+              account: nameById.get(leg.account_id ?? "") ?? leg.account_id ?? null,
+              date: lisbonDate(t.completed_at ?? t.created_at ?? new Date().toISOString()),
+              description: (leg.description ?? t.type ?? "").trim(),
+              amount: Number(leg.amount), fee: Math.abs(Number(leg.fee ?? 0)),
+              currency: leg.currency ?? "EUR",
+              internal: isInternalMove, card_holder: cardName || null,
+            });
+          }
+          continue;
+        }
         const leg = legs.find((l) => (l.currency ?? "EUR") === "EUR") ?? legs[0];
         if (!leg || leg.amount == null) continue;
-        const cardName = [t.card?.first_name, t.card?.last_name].filter(Boolean).join(" ").trim();
         out.push({
           id: t.id, type: t.type ?? null,
           date: lisbonDate(t.completed_at ?? t.created_at ?? new Date().toISOString()),
