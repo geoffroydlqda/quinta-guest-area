@@ -43,7 +43,7 @@ const ALL_CATEGORIES = FIN_CATEGORIES.flatMap((g) => g.items);
 const KIND_LABEL: Record<string, { label: string; cls: string }> = {
   expense: { label: "Expense", cls: "bg-[#FBE8DA] text-[#8A4A1B]" },
   guest_payment: { label: "Guest payment — already in P&L", cls: "bg-[#E5F5EA] text-[#178A3F]" },
-  bar_payout: { label: "Bar payout — already in P&L", cls: "bg-[#E5F5EA] text-[#178A3F]" },
+  bar_payout: { label: "Bar payout — P&L revenue (bar)", cls: "bg-[#E5F5EA] text-[#178A3F]" },
   internal: { label: "Internal transfer — excluded", cls: "bg-muted text-muted-foreground" },
   capital: { label: "Owner contribution — cash only", cls: "bg-[#EDE9FE] text-[#5B21B6]" },
   vat_payment: { label: "VAT payment — cash only", cls: "bg-[#E8F0FB] text-[#1C5CAB]" },
@@ -101,14 +101,12 @@ function revenueLine(category: string, eventType: string): string {
   const ev = REV_EVENT_LABEL[eventType] ?? REV_EVENT_LABEL.retreat;
   if (category === "catering") return `Catering — ${ev}`;
   if (category === "extra") return `Extras — ${ev}`;
-  // rental : "venue" pour un mariage, "accommodation" pour le reste
-  return eventType === "wedding" ? "Venue — weddings" : `Accommodation — ${ev}`;
+  return `Venue — ${ev}`; // rental = location du lieu, quel que soit l'événement
 }
 
 // Ordre d'affichage des lignes de revenus
 const REV_LINE_ORDER = [
-  "Accommodation — retreats", "Accommodation — day retreats", "Accommodation — other events",
-  "Venue — weddings",
+  "Venue — retreats", "Venue — weddings", "Venue — day retreats", "Venue — other events",
   "Catering — retreats", "Catering — weddings", "Catering — day retreats", "Catering — other events",
   "Extras — retreats", "Extras — weddings", "Extras — day retreats", "Extras — other events",
   "Discounts", "Bar (merchant)",
@@ -451,6 +449,23 @@ export function FinancePage({ bookings, installments }: {
       const arr = revRows.get(line) ?? Array.from({ length: 12 }, () => 0);
       arr[m] += net;
       revRows.set(line, arr);
+    }
+    // Bar (merchant) : seule source de revenu bar en base = les payouts
+    // quotidiens Revolut Merchant (honesty bar) — ni échéances catégorie
+    // "bar", ni bar_sales à ce jour. Comptés au mois du payout, montant net
+    // des frais Revolut (TVA bar non déduite : montants faibles, mix 13/23 %).
+    // ⚠ Si un jour le bar passe par des échéances ou bar_sales, retirer ce
+    // bloc pour éviter le double comptage.
+    for (const t of txs) {
+      if (t.kind !== "bar_payout" || t.amount <= 0) continue;
+      const bm = t.pnl_month ?? t.date.slice(0, 7);
+      if (!bm.startsWith(year)) continue;
+      const m = Number(bm.slice(5, 7)) - 1;
+      const v = t.amount_net ?? t.amount;
+      revBar[m] += v;
+      const arr = revRows.get("Bar (merchant)") ?? Array.from({ length: 12 }, () => 0);
+      arr[m] += v;
+      revRows.set("Bar (merchant)", arr);
     }
     // Dépenses : booking lié -> mois du check-in ; sinon date de transaction
     const byCat = new Map<string, number[]>();
@@ -985,7 +1000,7 @@ export function FinancePage({ bookings, installments }: {
             </table>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Anti-double counting: guest payments, bar payouts and internal transfers never create P&L lines — revenue lives in the event installments. VAT payments count in cash flow only. Totals above are the raw sum of the listed lines (split parents excluded).
+            Anti-double counting: guest payments and internal transfers never create P&L lines — event revenue lives in the installments. Bar payouts (Merchant) are the P&L's "Bar (merchant)" revenue line. VAT payments count in cash flow only. Totals above are the raw sum of the listed lines (split parents excluded).
           </p>
         </>
       )}
