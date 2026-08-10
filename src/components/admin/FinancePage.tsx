@@ -683,9 +683,10 @@ export function FinancePage({ bookings, installments }: {
     }
   };
 
-  // ---- Filtres mois / événement / recherche -------------------------------
+  // ---- Filtres mois / événement / catégorie / recherche -------------------
   const [monthFilter, setMonthFilter] = useState("");
   const [eventFilter, setEventFilter] = useState("");
+  const [catFilter, setCatFilter] = useState("");
   const [search, setSearch] = useState("");
   const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const monthsAvailable = useMemo(() => {
@@ -701,6 +702,8 @@ export function FinancePage({ bookings, installments }: {
     if (filter === "in") arr = arr.filter((t) => t.amount > 0);
     if (monthFilter) arr = arr.filter((t) => t.date.startsWith(monthFilter));
     if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
+    if (catFilter === "__none__") arr = arr.filter((t) => !t.category && t.kind === "expense");
+    else if (catFilter) arr = arr.filter((t) => t.category === catFilter);
     const q = norm(search.trim());
     if (q) {
       arr = arr.filter((t) =>
@@ -708,7 +711,7 @@ export function FinancePage({ bookings, installments }: {
         || Math.abs(t.amount).toFixed(2).includes(q));
     }
     return arr;
-  }, [txs, filter, monthFilter, eventFilter, search, bookingById]);
+  }, [txs, filter, monthFilter, eventFilter, catFilter, search, bookingById]);
   const visible = useMemo(() => filtered.slice(0, 300), [filtered]);
 
   // ---- Export CSV de la plage affichée (tous les filtres, sans la limite d'affichage)
@@ -731,6 +734,7 @@ export function FinancePage({ bookings, installments }: {
     const a = document.createElement("a");
     const parts = ["transactions", monthFilter || "all-months"];
     if (eventFilter) parts.push((bookingById.get(eventFilter)?.name ?? "event").toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+    if (catFilter) parts.push((catFilter === "__none__" ? "uncategorised" : catFilter).toLowerCase().replace(/[^a-z0-9]+/g, "-"));
     a.href = url; a.download = `${parts.join("_")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
@@ -823,9 +827,19 @@ export function FinancePage({ bookings, installments }: {
               <option value="">All events</option>
               {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
-            {(monthFilter || eventFilter || search) && (
+            <select className="h-7 rounded-full border border-border bg-card px-2.5 text-xs max-w-[210px]"
+              value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
+              <option value="">All categories</option>
+              <option value="__none__">Uncategorised expenses</option>
+              {FIN_CATEGORIES.map((g) => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.items.map((c) => <option key={c} value={c}>{c}</option>)}
+                </optgroup>
+              ))}
+            </select>
+            {(monthFilter || eventFilter || catFilter || search) && (
               <button type="button" className="text-xs text-muted-foreground hover:underline"
-                onClick={() => { setMonthFilter(""); setEventFilter(""); setSearch(""); }}>
+                onClick={() => { setMonthFilter(""); setEventFilter(""); setCatFilter(""); setSearch(""); }}>
                 ✕ Clear
               </button>
             )}
@@ -894,7 +908,7 @@ export function FinancePage({ bookings, installments }: {
                   <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin inline" /></td></tr>
                 ) : visible.length === 0 ? (
                   <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-muted-foreground italic">
-                    {monthFilter || eventFilter || search ? "No transactions match these filters." : filter === "review" ? "Nothing to review — inbox zero 🎉" : "No transactions yet — connect Revolut or import a CSV to start."}
+                    {monthFilter || eventFilter || catFilter || search ? "No transactions match these filters." : filter === "review" ? "Nothing to review — inbox zero 🎉" : "No transactions yet — connect Revolut or import a CSV to start."}
                   </td></tr>
                 ) : visible.map((t) => {
                   const k = KIND_LABEL[t.kind] ?? KIND_LABEL.review;
@@ -1141,7 +1155,7 @@ export function FinancePage({ bookings, installments }: {
                   <tfoot>
                     <tr className="border-t-2 border-border bg-muted/60">
                       <td colSpan={3} className="px-3 py-2 text-xs font-semibold">
-                        Totals — {rows.length} row{rows.length > 1 ? "s" : ""}{monthFilter || eventFilter || filter !== "all" ? " (filtered)" : ""}
+                        Totals — {rows.length} row{rows.length > 1 ? "s" : ""}{monthFilter || eventFilter || catFilter || filter !== "all" ? " (filtered)" : ""}
                       </td>
                       <td className={`px-3 py-2 text-right tabular-nums text-xs font-bold whitespace-nowrap ${tin - tout < 0 ? "text-destructive" : ""}`}>{fmt2(tin - tout)}</td>
                       <td colSpan={4} className="px-3 py-2 text-[11px] text-muted-foreground whitespace-nowrap">
