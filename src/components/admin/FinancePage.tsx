@@ -213,7 +213,7 @@ export function FinancePage({ bookings, installments }: {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [filter, setFilter] = useState<"review" | "in" | "all">("review");
+  const [filter, setFilter] = useState<"review" | "in" | "all">("all");
   const [showManual, setShowManual] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
