@@ -396,6 +396,13 @@ serve(async (req) => {
       if (!user || !(await isAdminEmailDb(user.email))) return json({ error: "Forbidden" }, 403);
     }
 
+    // --- Reconcile (lecture seule) -----------------------------------------
+    // POST {reconcile:{from:"YYYY-MM-DD",to:"YYYY-MM-DD"}} : renvoie les
+    // transactions Revolut brutes des comptes Quinta sur la plage, SANS rien
+    // écrire en base — sert à vérifier que le tool colle au relevé bancaire.
+    const body = await req.json().catch(() => ({} as Record<string, unknown>));
+    const reconcile = (body as { reconcile?: { from?: string; to?: string } }).reconcile;
+
     const token = await accessToken().catch((e) => {
       // Refresh token expiré / révoqué -> il faut recliquer "Enable API access"
       console.error("[revolut-sync] token refresh failed:", String(e));
@@ -435,6 +442,39 @@ serve(async (req) => {
       }, viaCron ? 200 : 400);
     }
     await setInternalValue("revolut_reauth_alerted", ""); // reconnecté -> réarme l'alerte
+
+    if (reconcile?.from && reconcile?.to) {
+      const acc = await allowedAccounts(token);
+      const url2 = new URL(TX_URL);
+      url2.searchParams.set("from", reconcile.from);
+      url2.searchParams.set("to", reconcile.to);
+      url2.searchParams.set("count", "1000");
+      const r2 = await fetch(url2.toString(), { headers: { Authorization: `Bearer ${token}` } });
+      if (!r2.ok) throw new Error(`Revolut transactions ${r2.status}: ${(await r2.text()).slice(0, 300)}`);
+      const txs2 = (await r2.json()) as RevTx[];
+      const scope = acc.ids ?? acc.allIds;
+      const out: Record<string, unknown>[] = [];
+      for (const t of txs2) {
+        if ((t.state ?? "").toLowerCase() !== "completed") continue;
+        const legsAll = t.legs ?? [];
+        const legs = acc.ids ? legsAll.filter((l) => l.account_id && acc.ids!.has(l.account_id)) : legsAll;
+        if (!legs.length) continue;
+        const isInternalMove = legsAll.length > 1 && legsAll.every((l) => !l.account_id || scope.has(l.account_id));
+        const leg = legs.find((l) => (l.currency ?? "EUR") === "EUR") ?? legs[0];
+        if (!leg || leg.amount == null) continue;
+        const cardName = [t.card?.first_name, t.card?.last_name].filter(Boolean).join(" ").trim();
+        out.push({
+          id: t.id, type: t.type ?? null,
+          date: lisbonDate(t.completed_at ?? t.created_at ?? new Date().toISOString()),
+          description: (leg.description ?? t.type ?? "").trim(),
+          amount: Number(leg.amount), fee: Math.abs(Number(leg.fee ?? 0)),
+          currency: leg.currency ?? "EUR",
+          internal: isInternalMove, card_holder: cardName || null,
+        });
+      }
+      return json({ connected: true, from: reconcile.from, to: reconcile.to, count: out.length, transactions: out });
+    }
+
     const result = await syncTransactions(token);
     return json({ connected: true, ...result });
   } catch (e) {
