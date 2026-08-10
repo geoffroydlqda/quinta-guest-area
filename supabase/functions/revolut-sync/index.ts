@@ -238,6 +238,9 @@ type RevLeg = {
 type RevTx = {
   id: string; type?: string; state?: string;
   created_at?: string; completed_at?: string; legs?: RevLeg[];
+  // Paiements par carte : Revolut renvoie le titulaire de la carte — c'est
+  // le "payer" affiché dans l'onglet Finance (qui a payé avec sa carte).
+  card?: { first_name?: string; last_name?: string; card_number?: string };
 };
 
 function lisbonDate(iso: string): string {
@@ -312,10 +315,17 @@ async function syncTransactions(token: string) {
     const booking = "category" in cls && cls.category && VARIABLE_CATS.has(cls.category) && amount < 0
       ? eventForDate(date, (bookings ?? []) as Booking[])
       : null;
+    // Titulaire de la carte (card_payment) = payer. Cartes virtuelles : Revolut
+    // ne renvoie parfois que le numéro masqué -> repli "Card •1234". Les
+    // virements n'ont pas de carte : payer reste vide.
+    const cardName = [t.card?.first_name, t.card?.last_name].filter(Boolean).join(" ").trim();
+    const cardDigits = (t.card?.card_number ?? "").replace(/\D/g, "");
+    const payer = cardName || (cardDigits ? `Card •${cardDigits.slice(-4)}` : null);
     payloads.push({
       source: "revolut", dedup_key: `revapi|${t.id}`,
       date, description: desc, amount, currency: leg.currency ?? "EUR",
       ...cls, ...(booking ? { booking_id: booking } : {}),
+      ...(payer ? { payer } : {}),
     });
   }
 
@@ -325,6 +335,17 @@ async function syncTransactions(token: string) {
       .upsert(payloads, { onConflict: "dedup_key", ignoreDuplicates: true, count: "exact" });
     if (error) throw new Error(`insert failed: ${error.message}`);
     inserted = count ?? payloads.length;
+
+    // Backfill : les lignes déjà importées (dedup ignoré par l'upsert) n'ont
+    // pas de payer — on le complète sans jamais écraser une saisie manuelle.
+    for (const p of payloads) {
+      const payer = (p as { payer?: string }).payer;
+      if (!payer) continue;
+      await admin.from("fin_transactions")
+        .update({ payer })
+        .eq("dedup_key", p.dedup_key)
+        .is("payer", null);
+    }
   }
   await setInternalValue("revolut_b2b_last_sync", new Date().toISOString().slice(0, 10));
   console.log(`[revolut-sync] window from ${fromDate}: ${txs.length} fetched, ${payloads.length} eligible, ${inserted} upserted`);
