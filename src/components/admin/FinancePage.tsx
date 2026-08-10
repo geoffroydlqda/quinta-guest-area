@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText } from "lucide-react";
+import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy } from "lucide-react";
 
 /**
  * Onglet Finance (4 août 2026) — phase 1, alimentée par import CSV Revolut
@@ -207,7 +207,7 @@ export function FinancePage({ bookings, installments }: {
   installments: FinInstallment[];
 }) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"tx" | "pnl" | "cash">("tx");
+  const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "report">("tx");
   const [txs, setTxs] = useState<FinTx[]>([]);
   const [rules, setRules] = useState<FinRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -534,6 +534,155 @@ export function FinancePage({ bookings, installments }: {
 
   const reviewCount = txs.filter((t) => !t.reviewed).length;
 
+  // ---- Investor update (rapport mensuel copiable, ton CEO, en anglais) -----
+  // Mêmes règles que les onglets P&L (HT, accrual) et Cash flow (TTC, date
+  // banque). Brouillon à relire avant envoi — les chiffres sont vivants.
+  const [reportMonth, setReportMonth] = useState(() => {
+    const d = new Date();
+    d.setDate(1); d.setMonth(d.getMonth() - 1); // par défaut : dernier mois complet
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+
+  const reportText = useMemo(() => {
+    const m = reportMonth;
+    const yr = m.slice(0, 4);
+    const mIdx = Number(m.slice(5, 7)) - 1;
+    const monthLong = new Date(`${m}-01T12:00:00`).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    const monthShort = new Date(`${m}-01T12:00:00`).toLocaleDateString("en-GB", { month: "long" });
+    const f = (v: number) => `€${Math.round(Math.abs(v)).toLocaleString("en-GB")}`;
+
+    // P&L accrual — revenus (échéances au mois du check-in, HT)
+    const netOf = (i: FinInstallment) => i.amount_excl_vat != null
+      ? Number(i.amount_excl_vat)
+      : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23);
+    let revVenue = 0, revCatering = 0, revBarInst = 0, revYtd = 0;
+    for (const i of installments) {
+      const b = bookingById.get(i.booking_id);
+      if (!b?.check_in_date || !b.check_in_date.startsWith(yr)) continue;
+      const im = Number(b.check_in_date.slice(5, 7)) - 1;
+      const net = netOf(i);
+      if (im <= mIdx) revYtd += net;
+      if (im !== mIdx) continue;
+      if (i.category === "bar") revBarInst += net;
+      else if (i.category === "catering") revCatering += net;
+      else revVenue += net; // venue + extras − discounts
+    }
+    // Bar (merchant payouts) + other income, coûts HT (accrual)
+    let barMonth = 0, barYtd = 0, oiMonth = 0, oiYtd = 0;
+    let costVar = 0, costFix = 0, costYtd = 0;
+    for (const t of txs) {
+      if (t.kind === "bar_payout" && t.amount > 0) {
+        const bm = t.pnl_month ?? t.date.slice(0, 7);
+        if (!bm.startsWith(yr)) continue;
+        const v = t.amount_net ?? t.amount;
+        if (Number(bm.slice(5, 7)) - 1 <= mIdx) barYtd += v;
+        if (bm === m) barMonth += v;
+        continue;
+      }
+      if (t.kind === "other_income") {
+        const om = t.pnl_month ?? t.date.slice(0, 7);
+        if (!om.startsWith(yr)) continue;
+        const v = t.amount_net ?? t.amount;
+        if (Number(om.slice(5, 7)) - 1 <= mIdx) oiYtd += v;
+        if (om === m) oiMonth += v;
+        continue;
+      }
+      if (t.kind !== "expense" || !t.category) continue;
+      const b = t.booking_id ? bookingById.get(t.booking_id) : null;
+      const accrual = t.pnl_month ? `${t.pnl_month}-01` : (b?.check_in_date ?? t.date);
+      if (!accrual.startsWith(yr)) continue;
+      const am = Number(accrual.slice(5, 7)) - 1;
+      const v = t.amount_net ?? Math.abs(t.amount);
+      if (am <= mIdx) costYtd += v;
+      if (am !== mIdx) continue;
+      if (PNL_VARIABLE_CATS.has(t.category)) costVar += v; else costFix += v;
+    }
+    const revBar = revBarInst + barMonth;
+    const revMonth = revVenue + revCatering + revBar + oiMonth;
+    const costMonth = costVar + costFix;
+    const ebitdaMonth = revMonth - costMonth;
+    const revYtdTotal = revYtd + barYtd + oiYtd;
+    const ebitdaYtd = revYtdTotal - costYtd;
+
+    // Cash (TTC, date banque) : mouvements + espèces encaissées
+    let cin = 0, cout = 0, cinYtd = 0, coutYtd = 0;
+    for (const t of txs) {
+      if (t.kind === "internal" || t.kind === "split" || !t.date.startsWith(yr)) continue;
+      const tm = Number(t.date.slice(5, 7)) - 1;
+      if (tm > mIdx) continue;
+      if (t.amount > 0) { cinYtd += t.amount; if (t.date.startsWith(m)) cin += t.amount; }
+      else { coutYtd += -t.amount; if (t.date.startsWith(m)) cout += -t.amount; }
+    }
+    for (const i of installments) {
+      if (!i.is_cash || i.status !== "paid" || !bookingById.has(i.booking_id)) continue;
+      const d = i.paid_on ?? i.due_date;
+      if (!d || !d.startsWith(yr)) continue;
+      if (Number(d.slice(5, 7)) - 1 > mIdx) continue;
+      cinYtd += Number(i.amount_due || 0);
+      if (d.startsWith(m)) cin += Number(i.amount_due || 0);
+    }
+    const net = cin - cout;
+    const netYtd = cinYtd - coutYtd;
+
+    // Revenus sécurisés (TTC, contractés) pour l'année sélectionnée
+    let secured = 0, collectedAmt = 0;
+    const securedEvents = new Set<string>();
+    for (const i of installments) {
+      const b = bookingById.get(i.booking_id);
+      if (!b?.check_in_date || !b.check_in_date.startsWith(yr) || i.category === "bar") continue;
+      secured += Number(i.amount_due || 0);
+      if (i.status === "paid") collectedAmt += Number(i.amount_due || 0);
+      securedEvents.add(i.booking_id);
+    }
+    const pctCollected = secured > 0 ? Math.round((collectedAmt / secured) * 100) : 0;
+
+    // Pipeline 90 jours + événements du mois
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const in90 = new Date(); in90.setDate(in90.getDate() + 90);
+    const in90Iso = in90.toISOString().slice(0, 10);
+    const upcoming = realBookings.filter((b) => b.check_in_date && b.check_in_date > todayIso && b.check_in_date <= in90Iso);
+    const upcomingIds = new Set(upcoming.map((b) => b.id));
+    let upcomingValue = 0;
+    for (const i of installments) {
+      if (upcomingIds.has(i.booking_id) && i.category !== "bar") upcomingValue += Number(i.amount_due || 0);
+    }
+    const hosted = realBookings.filter((b) => b.check_in_date?.startsWith(m));
+
+    // 3 plus grosses sorties du mois (vue trésorerie)
+    const topOut = txs
+      .filter((t) => t.kind === "expense" && t.amount < 0 && t.date.startsWith(m))
+      .sort((a, b) => a.amount - b.amount)
+      .slice(0, 3)
+      .map((t) => `${t.description} (${f(t.amount)})`);
+
+    const lines = [
+      `QUINTA DO AMOR — INVESTOR UPDATE — ${monthLong.toUpperCase()}`,
+      ``,
+      `1. P&L (net of VAT, accrual) — Revenue recognised in ${monthShort}: ${f(revMonth)}`
+        + (revMonth !== 0 ? ` (venue & extras ${f(revVenue)} · catering ${f(revCatering)} · bar ${f(revBar)})` : "")
+        + `. Operating costs: ${f(costMonth)} (${f(costVar)} event-related, ${f(costFix)} fixed & structural), for an EBITDA of ${ebitdaMonth < 0 ? "−" : ""}${f(ebitdaMonth)}. Year to date: ${f(revYtdTotal)} revenue and ${ebitdaYtd < 0 ? "−" : ""}${f(ebitdaYtd)} EBITDA.`,
+      ``,
+      `2. Cash — ${f(cin)} collected and ${f(cout)} paid out in ${monthShort}, a net ${net < 0 ? "outflow" : "inflow"} of ${f(net)}. Net cash generated since 1 January: ${netYtd < 0 ? "−" : ""}${f(netYtd)}.`,
+      ``,
+      `3. Revenue secured — ${f(secured)} contracted for ${yr} across ${securedEvents.size} events, of which ${f(collectedAmt)} (${pctCollected}%) has already been collected; the balance falls due ahead of each event. ${upcoming.length > 0 ? `${upcoming.length} event${upcoming.length > 1 ? "s" : ""} in the next 90 days represent${upcoming.length > 1 ? "" : "s"} ${f(upcomingValue)} of contracted revenue.` : "No events are scheduled in the next 90 days."}`,
+      ``,
+      `4. Activity — ${hosted.length > 0
+        ? `${hosted.length} event${hosted.length > 1 ? "s" : ""} hosted in ${monthShort} (${hosted.map((b) => b.name).join(", ")}).`
+        : `no events hosted in ${monthShort}.`}`
+        + (topOut.length ? ` Largest outlays of the month: ${topOut.join(", ")}.` : ""),
+    ];
+    return lines.join("\n");
+  }, [reportMonth, txs, installments, bookingById, realBookings]);
+
+  const copyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(reportText);
+      toast({ title: "Copied", description: "The investor update is in your clipboard — paste it into your email." });
+    } catch {
+      toast({ title: "Copy failed", description: "Select the text and copy it manually.", variant: "destructive" });
+    }
+  };
+
   // ---- Filtres mois / événement / recherche -------------------------------
   const [monthFilter, setMonthFilter] = useState("");
   const [eventFilter, setEventFilter] = useState("");
@@ -628,7 +777,7 @@ export function FinancePage({ bookings, installments }: {
     <div className="space-y-4">
       {/* Sous-onglets + année */}
       <div className="flex items-center gap-2 flex-wrap">
-        {([["tx", "Transactions", ReceiptText], ["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2]] as const).map(([k, label, Icon]) => (
+        {([["tx", "Transactions", ReceiptText], ["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["report", "Investor update", Mail]] as const).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm border transition-colors ${
               tab === k ? "bg-primary text-primary-foreground border-primary font-semibold" : "bg-card border-border hover:bg-muted"}`}>
@@ -1192,6 +1341,37 @@ export function FinancePage({ bookings, installments }: {
               </>
             );
           })()}
+        </div>
+      )}
+
+      {/* ================= INVESTOR UPDATE ================= */}
+      {tab === "report" && (
+        <div className="rounded-2xl bg-card shadow-sm border border-border/60 p-4 space-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="font-semibold text-sm flex items-center gap-2">
+              <Mail className="w-4 h-4 text-[#35532A]" /> Investor update
+            </div>
+            <select className="h-8 rounded-full border border-border bg-card px-3 text-xs"
+              value={reportMonth} onChange={(e) => setReportMonth(e.target.value)}>
+              {monthsAvailable.map((mo) => <option key={mo} value={mo}>{monthLabel(mo)}</option>)}
+              {!monthsAvailable.includes(reportMonth) && <option value={reportMonth}>{monthLabel(reportMonth)}</option>}
+            </select>
+            <Button size="sm" onClick={copyReport}>
+              <Copy className="w-4 h-4 mr-1" /> Copy for email
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Draft generated from live data (P&L net of VAT, cash at bank date) — reread, adjust the narrative, then paste into your email.
+            </span>
+          </div>
+          <textarea
+            readOnly
+            value={reportText}
+            rows={14}
+            className="w-full resize-y rounded-xl border border-border bg-background p-4 text-[13px] leading-relaxed"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Tip: the numbers update as you confirm transactions in the To review queue — generate the update once the month's lines are confirmed. Add your own qualitative points (works progress, unexpected items, outlook) on top: investors read the story, the numbers back it up.
+          </p>
         </div>
       )}
     </div>
