@@ -338,7 +338,10 @@ export function FinancePage({ bookings, installments }: {
     const net = Math.round(Math.abs(t.amount) / (1 + vat / 100) * 100) / 100;
     // Dépense variable sans événement -> rattachement auto si un seul séjour colle avec la date
     const autoEvent = !t.booking_id && VARIABLE_CATS.has(category) ? eventForDate(t.date) : null;
-    await patch(t.id, { kind: "expense", category, vat_rate: vat, amount_net: net, reviewed: true, ...(autoEvent ? { booking_id: autoEvent.id } : {}) });
+    // reviewed reste false : catégoriser ≠ valider — la ligne attend le clic
+    // sur ✓ Confirm (demande Geoffroy, 10 août 2026 : vérifier TVA + événement
+    // avant de sortir de "To review").
+    await patch(t.id, { kind: "expense", category, vat_rate: vat, amount_net: net, reviewed: false, ...(autoEvent ? { booking_id: autoEvent.id } : {}) });
     // Règle apprenante : la contrepartie retiendra cette catégorie
     const pattern = (t.description ?? "").trim().slice(0, 24);
     if (pattern.length >= 4 && !rules.some((r) => r.pattern.toLowerCase() === pattern.toLowerCase())) {
@@ -810,13 +813,15 @@ export function FinancePage({ bookings, installments }: {
                         ) : "—"}
                       </td>
                       <td className="px-3 py-2">
-                        {editable && t.amount > 0 ? (
+                        {t.amount > 0 && t.kind !== "split" ? (
+                          // Toujours modifiable, même auto-classée (Merchant payout,
+                          // Stripe…) : le menu remplace le badge figé.
                           <select className="h-7 rounded-md border border-input bg-background px-1 text-xs"
                             value={t.kind === "review" ? "" : t.kind}
                             onChange={(e) => e.target.value && patch(t.id, { kind: e.target.value, category: null, vat_rate: null, amount_net: null, reviewed: true })}>
                             <option value="">Money in — classify…</option>
-                            <option value="guest_payment">Guest payment (real revenue)</option>
-                            <option value="bar_payout">Bar payout</option>
+                            <option value="guest_payment">Guest payment (already in P&L)</option>
+                            <option value="bar_payout">Bar payout — P&L revenue (bar)</option>
                             <option value="capital">Owner contribution (apport)</option>
                             <option value="internal">Internal transfer</option>
                             <option value="other_income">Other income</option>
