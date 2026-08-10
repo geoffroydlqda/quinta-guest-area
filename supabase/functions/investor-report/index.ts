@@ -67,7 +67,12 @@ serve(async (req) => {
     for (const t of txs ?? []) yearsSet.add(String(t.date).slice(0, 4));
     for (const b of real.values()) if (b.check_in_date) yearsSet.add(String(b.check_in_date).slice(0, 4));
     const years = [...yearsSet].sort();
-    const year = years.includes(yearReq) ? yearReq : (years[years.length - 1] ?? String(new Date().getFullYear()));
+    // Défaut : l'année en cours (pas la dernière année ayant des données —
+    // un booking 2027 ne doit pas ouvrir la page en vue 2027).
+    const nowYear = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Lisbon", year: "numeric" }).format(new Date());
+    const year = years.includes(yearReq) ? yearReq
+      : years.includes(nowYear) ? nowYear
+      : (years[years.length - 1] ?? nowYear);
 
     const Z = () => Array.from({ length: 12 }, () => 0);
 

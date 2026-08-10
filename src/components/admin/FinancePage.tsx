@@ -685,17 +685,15 @@ export function FinancePage({ bookings, installments }: {
         : `no events hosted in ${monthShort}.`}`,
     ];
 
-    // Liens investisseurs : libellés courts à l'écran, hyperliens cliquables
-    // dans le presse-papier (HTML), URLs complètes en repli texte brut.
-    const pnlUrl = shareToken ? `https://guest.quintamor.com/investors/${shareToken}#pnl` : null;
-    const cashUrl = shareToken ? `https://guest.quintamor.com/investors/${shareToken}#cash` : null;
-    const display = lines.join("\n") + (pnlUrl ? `\n\n📈 Live P&L · 💳 Cashflow` : "");
-    const plain = lines.join("\n") + (pnlUrl ? `\n\n📈 Live P&L: ${pnlUrl}\n💳 Cashflow: ${cashUrl}` : "");
+    // Lien investisseurs : libellé court à l'écran, hyperlien cliquable dans
+    // le presse-papier (HTML), URL complète en repli texte brut.
+    const liveUrl = shareToken ? `https://guest.quintamor.com/investors/${shareToken}` : null;
+    const linkLabel = "📈 Consult live P&L & cashflow";
+    const display = lines.join("\n") + (liveUrl ? `\n\n${linkLabel}` : "");
+    const plain = lines.join("\n") + (liveUrl ? `\n\n${linkLabel}: ${liveUrl}` : "");
     const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const html = lines.map((l) => l === "" ? "<br>" : `<p style="margin:0 0 2px">${esc(l)}</p>`).join("")
-      + (pnlUrl
-        ? `<br><p style="margin:0">📈 <a href="${pnlUrl}">Live P&L</a> · 💳 <a href="${cashUrl}">Cashflow</a></p>`
-        : "");
+      + (liveUrl ? `<br><p style="margin:0"><a href="${liveUrl}">${linkLabel}</a></p>` : "");
     return { display, plain, html };
   }, [reportMonth, txs, installments, bookingById, realBookings, shareToken]);
 
