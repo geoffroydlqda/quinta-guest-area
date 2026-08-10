@@ -683,20 +683,39 @@ export function FinancePage({ bookings, installments }: {
       `4. Activity — ${hosted.length > 0
         ? `${hosted.length} event${hosted.length > 1 ? "s" : ""} hosted in ${monthShort} (${hosted.map((b) => b.name).join(", ")}).`
         : `no events hosted in ${monthShort}.`}`,
-      ...(shareToken ? [
-        ``,
-        `Live figures (private link): P&L — https://guest.quintamor.com/investors/${shareToken}#pnl · Cash flow — https://guest.quintamor.com/investors/${shareToken}#cash`,
-      ] : []),
     ];
-    return lines.join("\n");
+
+    // Liens investisseurs : libellés courts à l'écran, hyperliens cliquables
+    // dans le presse-papier (HTML), URLs complètes en repli texte brut.
+    const pnlUrl = shareToken ? `https://guest.quintamor.com/investors/${shareToken}#pnl` : null;
+    const cashUrl = shareToken ? `https://guest.quintamor.com/investors/${shareToken}#cash` : null;
+    const display = lines.join("\n") + (pnlUrl ? `\n\n📈 Live P&L · 💳 Cashflow` : "");
+    const plain = lines.join("\n") + (pnlUrl ? `\n\n📈 Live P&L: ${pnlUrl}\n💳 Cashflow: ${cashUrl}` : "");
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const html = lines.map((l) => l === "" ? "<br>" : `<p style="margin:0 0 2px">${esc(l)}</p>`).join("")
+      + (pnlUrl
+        ? `<br><p style="margin:0">📈 <a href="${pnlUrl}">Live P&L</a> · 💳 <a href="${cashUrl}">Cashflow</a></p>`
+        : "");
+    return { display, plain, html };
   }, [reportMonth, txs, installments, bookingById, realBookings, shareToken]);
 
   const copyReport = async () => {
     try {
-      await navigator.clipboard.writeText(reportText);
-      toast({ title: "Copied", description: "The investor update is in your clipboard — paste it into your email." });
+      // HTML (liens cliquables dans Gmail & co) + repli texte brut avec URLs
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([reportText.html], { type: "text/html" }),
+          "text/plain": new Blob([reportText.plain], { type: "text/plain" }),
+        }),
+      ]);
+      toast({ title: "Copied", description: "Paste into your email — the P&L and Cashflow links arrive as clickable hyperlinks." });
     } catch {
-      toast({ title: "Copy failed", description: "Select the text and copy it manually.", variant: "destructive" });
+      try {
+        await navigator.clipboard.writeText(reportText.plain);
+        toast({ title: "Copied (plain text)", description: "Links included as full URLs." });
+      } catch {
+        toast({ title: "Copy failed", description: "Select the text and copy it manually.", variant: "destructive" });
+      }
     }
   };
 
@@ -1396,7 +1415,7 @@ export function FinancePage({ bookings, installments }: {
           </div>
           <textarea
             readOnly
-            value={reportText}
+            value={reportText.display}
             rows={14}
             className="w-full resize-y rounded-xl border border-border bg-background p-4 text-[13px] leading-relaxed"
           />
