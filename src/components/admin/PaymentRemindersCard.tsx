@@ -149,7 +149,7 @@ export function PaymentRemindersCard() {
                   <td className="py-1.5 pr-3">{r.first_name || r.recipient}</td>
                   <td className="py-1.5 pr-3">{r.label}</td>
                   <td className="py-1.5 pr-3">€{Number(r.amount_due).toFixed(2)}</td>
-                  <td className="py-1.5 pr-3 whitespace-nowrap">{r.due_date}</td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap">{r.due_date ? `${r.due_date.slice(8, 10)}/${r.due_date.slice(5, 7)}/${r.due_date.slice(0, 4)}` : "—"}</td>
                 </tr>
               ))}
             </tbody>

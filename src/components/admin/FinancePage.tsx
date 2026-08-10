@@ -121,6 +121,9 @@ const fmt0 = (v: number) =>
 const fmt2 = (v: number) =>
   `${v < 0 ? "−" : ""}€${Math.abs(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// Dates en format européen (JJ-MM / JJ/MM/AAAA) — demande Geoffroy du 11/08/2026
+const fmtDayEU = (iso: string) => `${iso.slice(8, 10)}-${iso.slice(5, 7)}`;
+const fmtFullEU = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
 // ---- Parsing CSV Revolut ---------------------------------------------------
 function parseCsv(text: string): string[][] {
@@ -917,7 +920,7 @@ export function FinancePage({ bookings, installments }: {
                   <Fragment key={t.id}>
                     <tr className="group border-t border-border/60">
                       <td className="px-3 py-2 whitespace-nowrap tabular-nums text-xs">
-                        {t.date.slice(5)}
+                        {fmtDayEU(t.date)}
                         {(t.kind === "expense" || t.kind === "other_income") && (
                           pnlFor === t.id ? (
                             <input type="month" autoFocus
@@ -932,7 +935,7 @@ export function FinancePage({ bookings, installments }: {
                           ) : t.pnl_month ? (
                             <button type="button"
                               className="mt-0.5 block rounded-full bg-[#E8F0FB] px-1.5 py-px text-[9px] font-semibold text-[#1C5CAB] hover:brightness-95"
-                              title={`Recognised in the ${t.pnl_month} P&L (bank date stays ${t.date}) — click to change`}
+                              title={`Recognised in the ${MONTHS[Number(t.pnl_month.slice(5, 7)) - 1]} ${t.pnl_month.slice(0, 4)} P&L (bank date stays ${fmtFullEU(t.date)}) — click to change`}
                               onClick={() => setPnlFor(t.id)}>
                               P&L {MONTHS[Number(t.pnl_month.slice(5, 7)) - 1]}
                             </button>

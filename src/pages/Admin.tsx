@@ -899,7 +899,7 @@ function BookingCalendar({ bookings, todayIso, onOpen }: {
                     key={seg.b.id + wi}
                     type="button"
                     onClick={() => onOpen(seg.b.id)}
-                    title={`${eventName(seg.b)} · ${seg.b.check_in_date} → ${seg.b.check_out_date}`}
+                    title={`${eventName(seg.b)} · ${seg.b.check_in_date?.split("-").reverse().join("/")} → ${seg.b.check_out_date?.split("-").reverse().join("/")}`}
                     className="pointer-events-auto text-left text-[11px] leading-none font-medium px-1.5 h-[20px] flex items-center truncate hover:opacity-85"
                     style={{
                       gridColumn: `${seg.s + 1} / ${seg.e + 2}`,

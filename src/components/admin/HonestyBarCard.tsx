@@ -130,7 +130,7 @@ export function HonestyBarCard() {
   }, [sales]);
 
   const bookingName = (b: BookingOpt) =>
-    `${b.retreat_name || "Booking"} (${b.check_in_date} → ${b.check_out_date})`;
+    `${b.retreat_name || "Booking"} (${b.check_in_date.slice(8, 10)}/${b.check_in_date.slice(5, 7)} → ${b.check_out_date.slice(8, 10)}/${b.check_out_date.slice(5, 7)})`;
 
   return (
     <section className="rounded-2xl bg-card p-4 shadow-sm border border-border/60 space-y-3">
