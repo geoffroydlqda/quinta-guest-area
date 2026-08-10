@@ -546,6 +546,14 @@ export function FinancePage({ bookings, installments }: {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
 
+  // Token du lien public investisseurs (/investors/:token) — page lecture seule
+  // servie par l'edge function investor-report (agrégats uniquement).
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  useEffect(() => {
+    supabase.from("app_settings").select("value").eq("key", "investor_share").maybeSingle()
+      .then(({ data }) => setShareToken((data?.value as { token?: string } | null)?.token ?? null));
+  }, []);
+
   const reportText = useMemo(() => {
     const m = reportMonth;
     const yr = m.slice(0, 4);
@@ -607,14 +615,23 @@ export function FinancePage({ bookings, installments }: {
     const revYtdTotal = revYtd + barYtd + oiYtd;
     const ebitdaYtd = revYtdTotal - costYtd;
 
-    // Cash (TTC, date banque) : mouvements + espèces encaissées
-    let cin = 0, cout = 0, cinYtd = 0, coutYtd = 0;
+    // Cash (TTC, date banque) : mouvements + espèces encaissées.
+    // "Part espèces" : encaissements cash (échéances is_cash) et sorties hors
+    // banque (dépenses manuelles / marquées hors compte Revolut Quinta).
+    let cin = 0, cout = 0, cinYtd = 0, coutYtd = 0, cashIn = 0, cashOut = 0;
     for (const t of txs) {
       if (t.kind === "internal" || t.kind === "split" || !t.date.startsWith(yr)) continue;
       const tm = Number(t.date.slice(5, 7)) - 1;
       if (tm > mIdx) continue;
-      if (t.amount > 0) { cinYtd += t.amount; if (t.date.startsWith(m)) cin += t.amount; }
-      else { coutYtd += -t.amount; if (t.date.startsWith(m)) cout += -t.amount; }
+      const inMonth = t.date.startsWith(m);
+      if (t.amount > 0) { cinYtd += t.amount; if (inMonth) cin += t.amount; }
+      else {
+        coutYtd += -t.amount;
+        if (inMonth) {
+          cout += -t.amount;
+          if (t.source === "manual" || (t.notes ?? "").includes("Hors compte Revolut Quinta")) cashOut += -t.amount;
+        }
+      }
     }
     for (const i of installments) {
       if (!i.is_cash || i.status !== "paid" || !bookingById.has(i.booking_id)) continue;
@@ -622,7 +639,7 @@ export function FinancePage({ bookings, installments }: {
       if (!d || !d.startsWith(yr)) continue;
       if (Number(d.slice(5, 7)) - 1 > mIdx) continue;
       cinYtd += Number(i.amount_due || 0);
-      if (d.startsWith(m)) cin += Number(i.amount_due || 0);
+      if (d.startsWith(m)) { cin += Number(i.amount_due || 0); cashIn += Number(i.amount_due || 0); }
     }
     const net = cin - cout;
     const netYtd = cinYtd - coutYtd;
@@ -651,31 +668,28 @@ export function FinancePage({ bookings, installments }: {
     }
     const hosted = realBookings.filter((b) => b.check_in_date?.startsWith(m));
 
-    // 3 plus grosses sorties du mois (vue trésorerie)
-    const topOut = txs
-      .filter((t) => t.kind === "expense" && t.amount < 0 && t.date.startsWith(m))
-      .sort((a, b) => a.amount - b.amount)
-      .slice(0, 3)
-      .map((t) => `${t.description} (${f(t.amount)})`);
-
     const lines = [
-      `QUINTA DO AMOR — INVESTOR UPDATE — ${monthLong.toUpperCase()}`,
+      `💐 QUINTA DO AMOR OPERATIONS`,
+      `Investor update — ${monthLong}`,
       ``,
       `1. P&L (net of VAT, accrual) — Revenue recognised in ${monthShort}: ${f(revMonth)}`
         + (revMonth !== 0 ? ` (venue & extras ${f(revVenue)} · catering ${f(revCatering)} · bar ${f(revBar)})` : "")
         + `. Operating costs: ${f(costMonth)} (${f(costVar)} event-related, ${f(costFix)} fixed & structural), for an EBITDA of ${ebitdaMonth < 0 ? "−" : ""}${f(ebitdaMonth)}. Year to date: ${f(revYtdTotal)} revenue and ${ebitdaYtd < 0 ? "−" : ""}${f(ebitdaYtd)} EBITDA.`,
       ``,
-      `2. Cash — ${f(cin)} collected and ${f(cout)} paid out in ${monthShort}, a net ${net < 0 ? "outflow" : "inflow"} of ${f(net)}. Net cash generated since 1 January: ${netYtd < 0 ? "−" : ""}${f(netYtd)}.`,
+      `2. Cash — ${f(cin)} collected (${f(cin - cashIn)} bank, ${f(cashIn)} cash) and ${f(cout)} paid out (${f(cout - cashOut)} bank, ${f(cashOut)} cash) in ${monthShort}, a net ${net < 0 ? "outflow" : "inflow"} of ${f(net)}. Net cash generated since 1 January: ${netYtd < 0 ? "−" : ""}${f(netYtd)}.`,
       ``,
       `3. Revenue secured — ${f(secured)} contracted for ${yr} across ${securedEvents.size} events, of which ${f(collectedAmt)} (${pctCollected}%) has already been collected; the balance falls due ahead of each event. ${upcoming.length > 0 ? `${upcoming.length} event${upcoming.length > 1 ? "s" : ""} in the next 90 days represent${upcoming.length > 1 ? "" : "s"} ${f(upcomingValue)} of contracted revenue.` : "No events are scheduled in the next 90 days."}`,
       ``,
       `4. Activity — ${hosted.length > 0
         ? `${hosted.length} event${hosted.length > 1 ? "s" : ""} hosted in ${monthShort} (${hosted.map((b) => b.name).join(", ")}).`
-        : `no events hosted in ${monthShort}.`}`
-        + (topOut.length ? ` Largest outlays of the month: ${topOut.join(", ")}.` : ""),
+        : `no events hosted in ${monthShort}.`}`,
+      ...(shareToken ? [
+        ``,
+        `Live figures (private link): P&L — https://guest.quintamor.com/investors/${shareToken}#pnl · Cash flow — https://guest.quintamor.com/investors/${shareToken}#cash`,
+      ] : []),
     ];
     return lines.join("\n");
-  }, [reportMonth, txs, installments, bookingById, realBookings]);
+  }, [reportMonth, txs, installments, bookingById, realBookings, shareToken]);
 
   const copyReport = async () => {
     try {

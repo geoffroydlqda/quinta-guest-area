@@ -16,6 +16,7 @@ import RoomSetup from "./pages/RoomSetup";
 import Transportation from "./pages/Transportation";
 import Food from "./pages/Food";
 import Payments from "./pages/Payments";
+import InvestorReport from "./pages/InvestorReport";
 import Documentation from "./pages/Documentation";
 import Admin from "./pages/Admin";
 import AdminGuestDetail from "./pages/AdminGuestDetail";
@@ -45,6 +46,7 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/invite/:token" element={<InvitePage />} />
+              <Route path="/investors/:token" element={<InvestorReport />} />
               <Route path="/payment-success" element={<PaymentSuccess />} />
               {/* Protected routes - require authentication */}
               <Route path="/bookings" element={<BookingSelector />} />

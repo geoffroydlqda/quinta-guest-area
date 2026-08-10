@@ -27,3 +27,8 @@ verify_jwt = false
 # Le POST garde son contrôle d'auth manuel (x-cron-key ou JWT admin) dans le code.
 [functions.revolut-sync]
 verify_jwt = false
+
+# Page publique investisseurs : auth par token secret (app_settings.investor_share)
+# vérifié dans le code — lecture seule, agrégats uniquement.
+[functions.investor-report]
+verify_jwt = false
