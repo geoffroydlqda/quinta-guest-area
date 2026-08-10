@@ -88,6 +88,36 @@ export type FinInstallment = {
   due_date?: string | null; paid_on?: string | null;
 };
 
+// ---- Ventilation des revenus du P&L (10 août 2026) -------------------------
+// Chaque échéance est classée par flux : catégorie (rental/catering/extra/
+// discount/bar) × type d'événement du booking (retreat/wedding/…).
+const REV_EVENT_LABEL: Record<string, string> = {
+  retreat: "retreats", wedding: "weddings", day_retreat: "day retreats", other: "other events",
+};
+
+function revenueLine(category: string, eventType: string): string {
+  if (category === "bar") return "Bar (merchant)";
+  if (category === "discount") return "Discounts";
+  const ev = REV_EVENT_LABEL[eventType] ?? REV_EVENT_LABEL.retreat;
+  if (category === "catering") return `Catering — ${ev}`;
+  if (category === "extra") return `Extras — ${ev}`;
+  // rental : "venue" pour un mariage, "accommodation" pour le reste
+  return eventType === "wedding" ? "Venue — weddings" : `Accommodation — ${ev}`;
+}
+
+// Ordre d'affichage des lignes de revenus
+const REV_LINE_ORDER = [
+  "Accommodation — retreats", "Accommodation — day retreats", "Accommodation — other events",
+  "Venue — weddings",
+  "Catering — retreats", "Catering — weddings", "Catering — day retreats", "Catering — other events",
+  "Extras — retreats", "Extras — weddings", "Extras — day retreats", "Extras — other events",
+  "Discounts", "Bar (merchant)",
+];
+const revLineRank = (label: string) => {
+  const i = REV_LINE_ORDER.indexOf(label);
+  return i === -1 ? REV_LINE_ORDER.length : i;
+};
+
 const fmt0 = (v: number) =>
   `${v < 0 ? "−" : ""}€${Math.abs(v).toLocaleString("en-GB", { maximumFractionDigits: 0 })}`;
 const fmt2 = (v: number) =>
@@ -403,9 +433,11 @@ export function FinancePage({ bookings, installments }: {
   const [year, setYear] = useState(String(new Date().getFullYear()));
 
   const pnl = useMemo(() => {
-    // Revenus : échéances HT au mois du check-in (hors test, hors discount négatif déjà net)
+    // Revenus : échéances HT au mois du check-in (hors test), ventilées par
+    // flux (accommodation/venue/catering/extras × retreat/wedding, discounts, bar)
     const revEvents = Array.from({ length: 12 }, () => 0);
     const revBar = Array.from({ length: 12 }, () => 0);
+    const revRows = new Map<string, number[]>();
     for (const i of installments) {
       const b = bookingById.get(i.booking_id);
       if (!b?.check_in_date || !b.check_in_date.startsWith(year)) continue;
@@ -415,6 +447,10 @@ export function FinancePage({ bookings, installments }: {
         : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23);
       if (i.category === "bar") revBar[m] += net;
       else revEvents[m] += net;
+      const line = revenueLine(i.category ?? "rental", b.event_type ?? "retreat");
+      const arr = revRows.get(line) ?? Array.from({ length: 12 }, () => 0);
+      arr[m] += net;
+      revRows.set(line, arr);
     }
     // Dépenses : booking lié -> mois du check-in ; sinon date de transaction
     const byCat = new Map<string, number[]>();
@@ -441,11 +477,13 @@ export function FinancePage({ bookings, installments }: {
     const totalVar = Array.from({ length: 12 }, (_, m) =>
       [...byCat.entries()].filter(([c]) => PNL_VARIABLE_CATS.has(c)).reduce((s, [, a]) => s + a[m], 0));
     const totalFix = Array.from({ length: 12 }, (_, m) => totalExp[m] - totalVar[m]);
+    const totalRev = Array.from({ length: 12 }, (_, m) =>
+      revEvents[m] + revBar[m] + otherIncome[m]);
     const grossMargin = Array.from({ length: 12 }, (_, m) =>
       revEvents[m] + revBar[m] + otherIncome[m] - totalVar[m]);
     const ebitda = Array.from({ length: 12 }, (_, m) =>
       revEvents[m] + revBar[m] + otherIncome[m] - totalExp[m]);
-    return { revEvents, revBar, otherIncome, byCat, totalExp, totalVar, totalFix, grossMargin, ebitda };
+    return { revEvents, revBar, revRows, totalRev, otherIncome, byCat, totalExp, totalVar, totalFix, grossMargin, ebitda };
   }, [txs, installments, bookingById, year]);
 
   const cash = useMemo(() => {
@@ -965,17 +1003,34 @@ export function FinancePage({ bookings, installments }: {
               </tr>
             </thead>
             <tbody>
-              {([
-                ["Revenue — events", pnl.revEvents, false],
-                ["Revenue — bar", pnl.revBar, false],
-                ["Other income", pnl.otherIncome, false],
-              ] as const).filter(([, arr]) => arr.some((v) => v !== 0)).map(([label, arr]) => (
-                <tr key={label as string} className="border-t border-border/50">
-                  <td className="py-1.5 pr-2 font-semibold sticky left-0 bg-card whitespace-nowrap">{label}</td>
-                  {arr.map((v, i) => <td key={i} className="py-1.5 px-2 text-right tabular-nums">{v ? fmt0(v) : "·"}</td>)}
-                  <td className="py-1.5 px-2 text-right tabular-nums font-bold">{fmt0(arr.reduce((s, v) => s + v, 0))}</td>
+              <tr>
+                <td colSpan={14} className="pb-1 pr-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground sticky left-0 bg-card">Revenue</td>
+              </tr>
+              {[...pnl.revRows.entries()]
+                .filter(([, arr]) => arr.some((v) => v !== 0))
+                .sort((a, b) => revLineRank(a[0]) - revLineRank(b[0]))
+                .map(([label, arr]) => (
+                  <tr key={label} className="border-t border-border/40">
+                    <td className="py-1.5 pr-2 pl-3 text-muted-foreground sticky left-0 bg-card whitespace-nowrap">{label}</td>
+                    {arr.map((v, i) => <td key={i} className="py-1.5 px-2 text-right tabular-nums">{v ? fmt0(v) : "·"}</td>)}
+                    <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{fmt0(arr.reduce((s, v) => s + v, 0))}</td>
+                  </tr>
+                ))}
+              {pnl.otherIncome.some((v) => v !== 0) && (
+                <tr className="border-t border-border/40">
+                  <td className="py-1.5 pr-2 pl-3 text-muted-foreground sticky left-0 bg-card whitespace-nowrap">Other income</td>
+                  {pnl.otherIncome.map((v, i) => <td key={i} className="py-1.5 px-2 text-right tabular-nums">{v ? fmt0(v) : "·"}</td>)}
+                  <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{fmt0(pnl.otherIncome.reduce((s, v) => s + v, 0))}</td>
                 </tr>
-              ))}
+              )}
+              <tr className="border-t border-border/60">
+                <td className="py-1.5 pr-2 font-semibold sticky left-0 bg-card whitespace-nowrap">Total revenue</td>
+                {pnl.totalRev.map((v, i) => <td key={i} className="py-1.5 px-2 text-right tabular-nums font-semibold">{v ? fmt0(v) : "·"}</td>)}
+                <td className="py-1.5 px-2 text-right tabular-nums font-bold">{fmt0(pnl.totalRev.reduce((s, v) => s + v, 0))}</td>
+              </tr>
+              <tr>
+                <td colSpan={14} className="pt-3 sticky left-0 bg-card" />
+              </tr>
               {([
                 ["Variable costs — per event", (c: string) => PNL_VARIABLE_CATS.has(c), pnl.totalVar, "Total variable costs"],
                 ["Fixed & other costs", (c: string) => !PNL_VARIABLE_CATS.has(c), pnl.totalFix, "Total fixed & other"],
