@@ -47,6 +47,9 @@ const KIND_LABEL: Record<string, { label: string; cls: string }> = {
   internal: { label: "Internal transfer — excluded", cls: "bg-muted text-muted-foreground" },
   capital: { label: "Owner contribution — cash only", cls: "bg-[#EDE9FE] text-[#5B21B6]" },
   vat_payment: { label: "VAT payment — cash only", cls: "bg-[#E8F0FB] text-[#1C5CAB]" },
+  // Remboursement client : la sortie compte au cash flow, mais l'impact P&L
+  // vit déjà dans l'échéance discount du booking — jamais de ligne P&L.
+  refund: { label: "Guest refund — already in P&L", cls: "bg-[#E8F0FB] text-[#1C5CAB]" },
   other_income: { label: "Other income", cls: "bg-[#E5F5EA] text-[#178A3F]" },
   review: { label: "To review", cls: "bg-[#FDF1E0] text-[#B45309]" },
   split: { label: "Split across events", cls: "bg-[#F3EDFF] text-[#8a63d2]" },
@@ -1050,6 +1053,12 @@ export function FinancePage({ bookings, installments }: {
                                   onClick={() => patch(t.id, { kind: "vat_payment", category: null, vat_rate: null, amount_net: null, reviewed: true })}>
                                   VAT
                                 </button>
+                                {" · "}
+                                <button type="button" className="font-medium text-muted-foreground hover:text-foreground hover:underline"
+                                  title="Refund to a guest — cash flow only; the P&L impact already lives in the booking's discount installment (never double-counted)"
+                                  onClick={() => patch(t.id, { kind: "refund", category: null, vat_rate: null, amount_net: null, reviewed: true })}>
+                                  refund
+                                </button>
                               </span>
                             )}
                           </>
@@ -1202,7 +1211,7 @@ export function FinancePage({ bookings, installments }: {
             </table>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Anti-double counting: guest payments and internal transfers never create P&L lines — event revenue lives in the installments. Bar payouts (Merchant) are the P&L's "Bar (merchant)" revenue line. VAT payments count in cash flow only. Totals above are the raw sum of the listed lines (split parents excluded).
+            Anti-double counting: guest payments, guest refunds and internal transfers never create P&L lines — event revenue (and discounts/refunds) lives in the installments. Bar payouts (Merchant) are the P&L's "Bar (merchant)" revenue line. VAT payments and refunds count in cash flow only. Totals above are the raw sum of the listed lines (split parents excluded).
           </p>
         </>
       )}
