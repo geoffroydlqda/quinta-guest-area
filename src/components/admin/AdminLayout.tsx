@@ -63,15 +63,12 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         : "text-muted-foreground hover:bg-secondary hover:text-secondary-foreground"
     }`;
 
-  // Cibles tactiles ≥ 48px, icônes 24px, remontées au-dessus de la barre home
-  // iPhone (safe-area via viewport-fit=cover dans index.html).
+  // Tab bar flottante façon Revolut : pilule détachée des bords, capsule
+  // sur l'onglet actif, au-dessus de la barre home iPhone (viewport-fit=cover).
   const tabClass = (isActive: boolean) =>
-    `flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1.5 min-h-[56px] text-[11px] font-medium ${
-      isActive ? "text-[#35532A]" : "text-muted-foreground"
+    `flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 min-h-[52px] rounded-[20px] text-[10px] font-medium transition-colors ${
+      isActive ? "bg-secondary text-[#35532A]" : "text-muted-foreground"
     }`;
-
-  const tabPill = (isActive: boolean) =>
-    `flex items-center justify-center px-4 py-1.5 rounded-full ${isActive ? "bg-secondary" : ""}`;
 
   return (
     <div className="admin-ui min-h-screen bg-background md:flex">
@@ -163,25 +160,17 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      {/* Tab bar mobile */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-card border-t border-border flex items-stretch px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
+      {/* Tab bar mobile — pilule flottante (inspiration Revolut, 12 août 2026) */}
+      <nav className="md:hidden fixed z-30 inset-x-3 bottom-[max(env(safe-area-inset-bottom),0.75rem)] rounded-[26px] bg-card/95 backdrop-blur-md border border-border shadow-[0_8px_30px_-6px_rgba(49,53,46,0.25)] flex items-stretch gap-0.5 p-1.5">
         {mobileMain.map((item) => (
           <NavLink key={item.to} to={item.to} end={"end" in item && item.end}
             className={({ isActive }) => tabClass(isActive)}>
-            {({ isActive }) => (
-              <>
-                <span className={tabPill(isActive)}>
-                  <item.icon className="w-6 h-6" />
-                </span>
-                {item.label}
-              </>
-            )}
+            <item.icon className="w-[22px] h-[22px]" />
+            {item.label}
           </NavLink>
         ))}
         <button type="button" onClick={() => setMoreOpen(true)} className={tabClass(moreActive)}>
-          <span className={tabPill(moreActive)}>
-            <MoreHorizontal className="w-6 h-6" />
-          </span>
+          <MoreHorizontal className="w-[22px] h-[22px]" />
           More
         </button>
       </nav>
