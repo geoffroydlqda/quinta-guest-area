@@ -232,6 +232,20 @@ const AdminContent = () => {
   // pour cet admin, redirection vers son premier onglet autorisé.
   const { allowed: allowedTabs, loaded: tabsLoaded } = useAllowedTabs();
 
+  // Prénom de l'admin connecté pour le "Olá" (fiche staff, sinon repli).
+  const { user: authUser } = useAuth();
+  const [adminName, setAdminName] = useState<string | null>(null);
+  useEffect(() => {
+    const email = authUser?.email?.toLowerCase().trim();
+    if (!email) return;
+    if (email === "hello@quintamor.com") { setAdminName("Geo"); return; }
+    supabase.from("staff_profiles").select("name").eq("email", email).maybeSingle()
+      .then(({ data: sp }) => {
+        const first = sp?.name?.trim().split(/\s+/)[0];
+        setAdminName(first || (email.split("@")[0] ?? null));
+      });
+  }, [authUser?.email]);
+
   const [installments, setInstallments] = useState<Installment[]>([]);
 
   const load = async (opts?: { silent?: boolean }) => {
@@ -576,7 +590,7 @@ const AdminContent = () => {
         <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
           {view === "dashboard" ? (
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Olá, Geo 🌿</h1>
+              <h1 className="text-2xl font-bold tracking-tight">Olá{adminName ? `, ${adminName}` : ""} 🌿</h1>
               <div className="text-sm text-muted-foreground mt-0.5">{dashboardSubtitle}</div>
             </div>
           ) : (

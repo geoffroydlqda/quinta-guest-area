@@ -63,13 +63,15 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         : "text-muted-foreground hover:bg-secondary hover:text-secondary-foreground"
     }`;
 
+  // Cibles tactiles ≥ 48px, icônes 24px, remontées au-dessus de la barre home
+  // iPhone (safe-area via viewport-fit=cover dans index.html).
   const tabClass = (isActive: boolean) =>
-    `flex flex-1 flex-col items-center gap-0.5 pt-1.5 pb-1 text-[10px] font-medium ${
+    `flex flex-1 flex-col items-center justify-center gap-1 pt-2 pb-1.5 min-h-[56px] text-[11px] font-medium ${
       isActive ? "text-[#35532A]" : "text-muted-foreground"
     }`;
 
   const tabPill = (isActive: boolean) =>
-    `flex items-center justify-center px-4 py-1 rounded-full ${isActive ? "bg-secondary" : ""}`;
+    `flex items-center justify-center px-4 py-1.5 rounded-full ${isActive ? "bg-secondary" : ""}`;
 
   return (
     <div className="admin-ui min-h-screen bg-background md:flex">
@@ -109,7 +111,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Contenu — padding bas sur mobile pour la tab bar */}
-      <div className="flex-1 min-w-0 pb-20 md:pb-0">
+      <div className="flex-1 min-w-0 pb-24 md:pb-0">
         {children}
       </div>
 
@@ -162,14 +164,14 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       )}
 
       {/* Tab bar mobile */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-card border-t border-border flex items-stretch px-1 pb-[env(safe-area-inset-bottom)]">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-card border-t border-border flex items-stretch px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
         {mobileMain.map((item) => (
           <NavLink key={item.to} to={item.to} end={"end" in item && item.end}
             className={({ isActive }) => tabClass(isActive)}>
             {({ isActive }) => (
               <>
                 <span className={tabPill(isActive)}>
-                  <item.icon className="w-5 h-5" />
+                  <item.icon className="w-6 h-6" />
                 </span>
                 {item.label}
               </>
@@ -178,7 +180,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         ))}
         <button type="button" onClick={() => setMoreOpen(true)} className={tabClass(moreActive)}>
           <span className={tabPill(moreActive)}>
-            <MoreHorizontal className="w-5 h-5" />
+            <MoreHorizontal className="w-6 h-6" />
           </span>
           More
         </button>
