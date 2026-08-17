@@ -1414,6 +1414,8 @@ function DashboardView({
 type StaffRow = {
   id: string; booking_id: string; name: string; role: string | null;
   daily_fee: number; paid_days: number;
+  rate_type: "daily" | "hourly"; method: "bank" | "cash";
+  paid: boolean; paid_on: string | null; fin_tx_id: string | null;
 };
 
 function CateringView({ bookings, food, todayIso, onOpen }: {
@@ -1432,7 +1434,7 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
 
   const loadStaff = async () => {
     const { data, error } = await supabase.from("event_staff")
-      .select("id,booking_id,name,role,daily_fee,paid_days");
+      .select("id,booking_id,name,role,daily_fee,paid_days,rate_type,method,paid,paid_on,fin_tx_id");
     if (!error && data) setStaff(data as StaffRow[]);
   };
   useEffect(() => { loadStaff(); }, []);
@@ -1457,16 +1459,60 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
     .filter((b) => b.check_out_date! < todayIso)
     .sort((a, b) => b.check_in_date!.localeCompare(a.check_in_date!));
 
-  const addStaff = async (bookingId: string, v: { name: string; role: string | null; daily_fee: number; paid_days: number }) => {
+  const addStaff = async (bookingId: string, v: { name: string; role: string | null; daily_fee: number; paid_days: number; rate_type: "daily" | "hourly"; method: "bank" | "cash" }) => {
     const { error } = await supabase.from("event_staff").insert({ booking_id: bookingId, ...v });
     if (error) toast({ title: "Save failed", description: error.message, variant: "destructive" });
     else await loadStaff();
     return !error;
   };
-  const updateStaff = async (id: string, patch: Partial<Pick<StaffRow, "daily_fee" | "paid_days">>) => {
+  const updateStaff = async (id: string, patch: Partial<Pick<StaffRow, "daily_fee" | "paid_days" | "rate_type" | "method">>) => {
     setStaff((rows) => rows.map((r) => r.id === id ? { ...r, ...patch } : r));
     const { error } = await supabase.from("event_staff").update(patch).eq("id", id);
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); await loadStaff(); }
+  };
+
+  // Marquer payé / non payé. Cash -> crée (ou supprime) la transaction
+  // finance liée à l'événement : cash flow + P&L (catégorie staff de
+  // l'event_type). Virement -> flag seulement : la ligne bancaire arrivera
+  // par la synchro Revolut et sera catégorisée dans Finance.
+  const setPaid = async (r: StaffRow, b: BookingRow, paid: boolean) => {
+    const total = Math.round(Number(r.daily_fee) * r.paid_days * 100) / 100;
+    try {
+      if (paid && r.method === "cash") {
+        const category = (b.event_type ?? "retreat") === "wedding"
+          ? "Wedding — catering / staff" : "Retreat — catering / staff";
+        const { data: tx, error: txErr } = await supabase.from("fin_transactions").insert({
+          source: "manual", dedup_key: `eventstaff|${r.id}`,
+          date: todayIso, description: `${r.name} — catering staff (cash)`,
+          amount: -total, currency: "EUR", kind: "expense",
+          category, vat_rate: 0, amount_net: total, reviewed: true,
+          booking_id: b.id, payer: "Cash",
+          notes: `Paiement staff en espèces — créé automatiquement depuis l'onglet Catering (${r.paid_days} ${r.rate_type === "hourly" ? "h" : "j"} × €${r.daily_fee})`,
+        } as never).select("id").single();
+        if (txErr) throw txErr;
+        const { error } = await supabase.from("event_staff")
+          .update({ paid: true, paid_on: todayIso, fin_tx_id: (tx as { id: string }).id }).eq("id", r.id);
+        if (error) throw error;
+        toast({ title: `${r.name} marked paid (cash)`, description: `€${total} added to Finance — cash flow and P&L, linked to the event.` });
+      } else if (paid) {
+        const { error } = await supabase.from("event_staff")
+          .update({ paid: true, paid_on: todayIso }).eq("id", r.id);
+        if (error) throw error;
+        toast({ title: `${r.name} marked paid (bank transfer)`, description: "No Finance entry created — the bank line will arrive via the Revolut sync." });
+      } else {
+        if (r.fin_tx_id) {
+          const { error: delErr } = await supabase.from("fin_transactions").delete().eq("id", r.fin_tx_id);
+          if (delErr) throw delErr;
+        }
+        const { error } = await supabase.from("event_staff")
+          .update({ paid: false, paid_on: null, fin_tx_id: null }).eq("id", r.id);
+        if (error) throw error;
+        toast({ title: `${r.name} marked unpaid`, description: r.fin_tx_id ? "The cash transaction has been removed from Finance." : undefined });
+      }
+      await loadStaff();
+    } catch (e) {
+      toast({ title: "Save failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    }
   };
   const removeStaff = async (id: string, name: string) => {
     if (!window.confirm(`Remove ${name} from this event?`)) return;
@@ -1488,7 +1534,7 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
         <div className="space-y-3">
           {upcoming.map((b) => (
             <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso} foodPlan={foodFor(b)}
-              onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} totalFor={totalFor} />
+              onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} onSetPaid={setPaid} totalFor={totalFor} />
           ))}
           {upcoming.length === 0 && <p className="text-sm text-muted-foreground italic">No upcoming events.</p>}
         </div>
@@ -1504,7 +1550,7 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
           <div className="space-y-3">
             {past.map((b) => (
               <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso} foodPlan={foodFor(b)}
-                onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} totalFor={totalFor} />
+                onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} onSetPaid={setPaid} totalFor={totalFor} />
             ))}
           </div>
         )}
@@ -1513,15 +1559,16 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
   );
 }
 
-function CateringEventCard({ booking: b, rows, todayIso, foodPlan, onOpen, onAdd, onUpdate, onRemove, totalFor }: {
+function CateringEventCard({ booking: b, rows, todayIso, foodPlan, onOpen, onAdd, onUpdate, onRemove, onSetPaid, totalFor }: {
   booking: BookingRow;
   rows: StaffRow[];
   todayIso: string;
   foodPlan: FoodPlan | null;
   onOpen: (id: string) => void;
-  onAdd: (bookingId: string, v: { name: string; role: string | null; daily_fee: number; paid_days: number }) => Promise<boolean>;
-  onUpdate: (id: string, patch: Partial<Pick<StaffRow, "daily_fee" | "paid_days">>) => void;
+  onAdd: (bookingId: string, v: { name: string; role: string | null; daily_fee: number; paid_days: number; rate_type: "daily" | "hourly"; method: "bank" | "cash" }) => Promise<boolean>;
+  onUpdate: (id: string, patch: Partial<Pick<StaffRow, "daily_fee" | "paid_days" | "rate_type" | "method">>) => void;
   onRemove: (id: string, name: string) => void;
+  onSetPaid: (r: StaffRow, b: BookingRow, paid: boolean) => void;
   totalFor: (rows: StaffRow[]) => number;
 }) {
   const nights = Math.max(0, Math.round(
@@ -1533,6 +1580,8 @@ function CateringEventCard({ booking: b, rows, todayIso, foodPlan, onOpen, onAdd
   const [role, setRole] = useState("");
   const [fee, setFee] = useState("");
   const [days, setDays] = useState(String(suggestedDays));
+  const [rateType, setRateType] = useState<"daily" | "hourly">("daily");
+  const [method, setMethod] = useState<"bank" | "cash">("bank");
   const [saving, setSaving] = useState(false);
 
   const isLive = b.check_in_date! <= todayIso && b.check_out_date! >= todayIso;
@@ -1545,10 +1594,12 @@ function CateringEventCard({ booking: b, rows, todayIso, foodPlan, onOpen, onAdd
       name: name.trim(),
       role: role.trim() || null,
       daily_fee: Number(fee),
-      paid_days: Math.max(1, Number(days) || suggestedDays),
+      paid_days: Math.max(1, Number(days) || (rateType === "daily" ? suggestedDays : 1)),
+      rate_type: rateType,
+      method,
     });
     setSaving(false);
-    if (ok) { setName(""); setRole(""); setFee(""); setDays(String(suggestedDays)); setAdding(false); }
+    if (ok) { setName(""); setRole(""); setFee(""); setDays(String(suggestedDays)); setRateType("daily"); setMethod("bank"); setAdding(false); }
   };
 
   return (
@@ -1588,21 +1639,49 @@ function CateringEventCard({ booking: b, rows, todayIso, foodPlan, onOpen, onAdd
       {rows.length > 0 && (
         <div className="divide-y divide-border">
           {rows.map((r) => (
-            <div key={r.id} className="px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <div key={r.id} className="px-4 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <span className="font-medium min-w-[120px]">{r.name}</span>
               {r.role && <span className="text-xs text-muted-foreground">{r.role}</span>}
               <span className="flex items-center gap-1.5 ml-auto">
-                <Input type="number" min="0" step="1" value={String(r.daily_fee)}
+                <Input type="number" min="0" step="1" value={String(r.daily_fee)} disabled={r.paid}
                   onChange={(e) => onUpdate(r.id, { daily_fee: Number(e.target.value) || 0 })}
-                  className="h-7 w-20 text-right px-1.5" aria-label="Daily fee" />
-                <span className="text-xs text-muted-foreground">€/day ×</span>
-                <Input type="number" min="1" step="1" value={String(r.paid_days)}
-                  onChange={(e) => onUpdate(r.id, { paid_days: Math.max(1, Number(e.target.value) || 1) })}
-                  className="h-7 w-14 text-right px-1.5" aria-label="Paid days" />
-                <span className="text-xs text-muted-foreground">days</span>
+                  className="h-7 w-20 text-right px-1.5" aria-label="Rate" />
+                <select className="h-7 rounded-md border border-input bg-background px-1 text-xs" disabled={r.paid}
+                  value={r.rate_type} onChange={(e) => onUpdate(r.id, { rate_type: e.target.value as "daily" | "hourly" })}>
+                  <option value="daily">€/day</option>
+                  <option value="hourly">€/hour</option>
+                </select>
+                <span className="text-xs text-muted-foreground">×</span>
+                <Input type="number" min="1" step={r.rate_type === "hourly" ? "0.5" : "1"} value={String(r.paid_days)} disabled={r.paid}
+                  onChange={(e) => onUpdate(r.id, { paid_days: Math.max(0.5, Number(e.target.value) || 1) })}
+                  className="h-7 w-14 text-right px-1.5" aria-label="Quantity" />
+                <span className="text-xs text-muted-foreground">{r.rate_type === "hourly" ? "hours" : "days"}</span>
               </span>
-              <span className="w-24 text-right font-medium tabular-nums">{fmtMoney(Number(r.daily_fee) * r.paid_days)}</span>
-              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => onRemove(r.id, r.name)} aria-label={`Remove ${r.name}`}>
+              <select className="h-7 rounded-md border border-input bg-background px-1 text-xs" disabled={r.paid}
+                title="Cash: marking paid creates a Finance transaction linked to this event (cash flow + P&L). Bank transfer: no entry — the bank line arrives via the Revolut sync."
+                value={r.method} onChange={(e) => onUpdate(r.id, { method: e.target.value as "bank" | "cash" })}>
+                <option value="bank">Bank transfer</option>
+                <option value="cash">Cash</option>
+              </select>
+              <span className="w-20 text-right font-medium tabular-nums">{fmtMoney(Number(r.daily_fee) * r.paid_days)}</span>
+              {r.paid ? (
+                <button type="button"
+                  className="inline-flex items-center rounded-full bg-[#E5F5EA] px-2 py-0.5 text-[10px] font-semibold text-[#178A3F] hover:brightness-95"
+                  title={`Paid${r.paid_on ? ` on ${r.paid_on.split("-").reverse().join("/")}` : ""}${r.method === "cash" ? " — cash transaction in Finance" : " (bank transfer)"} — click to undo`}
+                  onClick={() => onSetPaid(r, b, false)}>
+                  ✓ Paid
+                </button>
+              ) : (
+                <button type="button"
+                  className="inline-flex items-center rounded-full bg-[#35532A] px-2.5 py-0.5 text-[10px] font-semibold text-white hover:bg-[#2A4221]"
+                  title={r.method === "cash"
+                    ? "Mark paid in cash — creates a Finance transaction linked to this event (cash flow + P&L)"
+                    : "Mark paid by bank transfer — no Finance entry, the bank line arrives via the Revolut sync"}
+                  onClick={() => onSetPaid(r, b, true)}>
+                  Mark paid
+                </button>
+              )}
+              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" disabled={r.paid} onClick={() => onRemove(r.id, r.name)} aria-label={`Remove ${r.name}`}>
                 <Trash2 className="w-3.5 h-3.5" />
               </Button>
             </div>
@@ -1622,12 +1701,28 @@ function CateringEventCard({ booking: b, rows, todayIso, foodPlan, onOpen, onAdd
               <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Chef…" className="h-8 w-28" />
             </label>
             <label className="space-y-0.5">
-              <div className="text-[11px] text-muted-foreground">Daily fee (€) *</div>
+              <div className="text-[11px] text-muted-foreground">Rate (€) *</div>
               <Input type="number" min="0" step="1" value={fee} onChange={(e) => setFee(e.target.value)} placeholder="200" className="h-8 w-24" />
             </label>
             <label className="space-y-0.5">
-              <div className="text-[11px] text-muted-foreground">Paid days</div>
-              <Input type="number" min="1" step="1" value={days} onChange={(e) => setDays(e.target.value)} className="h-8 w-20" />
+              <div className="text-[11px] text-muted-foreground">Per</div>
+              <select className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                value={rateType} onChange={(e) => { const v = e.target.value as "daily" | "hourly"; setRateType(v); setDays(v === "daily" ? String(suggestedDays) : "8"); }}>
+                <option value="daily">Day</option>
+                <option value="hourly">Hour</option>
+              </select>
+            </label>
+            <label className="space-y-0.5">
+              <div className="text-[11px] text-muted-foreground">{rateType === "hourly" ? "Hours" : "Paid days"}</div>
+              <Input type="number" min="0.5" step={rateType === "hourly" ? "0.5" : "1"} value={days} onChange={(e) => setDays(e.target.value)} className="h-8 w-20" />
+            </label>
+            <label className="space-y-0.5">
+              <div className="text-[11px] text-muted-foreground">Payment</div>
+              <select className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                value={method} onChange={(e) => setMethod(e.target.value as "bank" | "cash")}>
+                <option value="bank">Bank transfer</option>
+                <option value="cash">Cash</option>
+              </select>
             </label>
             <Button size="sm" className="h-8" onClick={submit} disabled={saving || !name.trim() || !fee}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add"}

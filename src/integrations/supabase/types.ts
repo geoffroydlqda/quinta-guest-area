@@ -617,10 +617,15 @@ export type Database = {
           booking_id: string
           created_at: string
           daily_fee: number
+          fin_tx_id: string | null
           id: string
+          method: string
           name: string
           notes: string | null
+          paid: boolean
           paid_days: number
+          paid_on: string | null
+          rate_type: string
           role: string | null
           updated_at: string
         }
@@ -628,10 +633,15 @@ export type Database = {
           booking_id: string
           created_at?: string
           daily_fee?: number
+          fin_tx_id?: string | null
           id?: string
+          method?: string
           name: string
           notes?: string | null
+          paid?: boolean
           paid_days?: number
+          paid_on?: string | null
+          rate_type?: string
           role?: string | null
           updated_at?: string
         }
@@ -639,10 +649,15 @@ export type Database = {
           booking_id?: string
           created_at?: string
           daily_fee?: number
+          fin_tx_id?: string | null
           id?: string
+          method?: string
           name?: string
           notes?: string | null
+          paid?: boolean
           paid_days?: number
+          paid_on?: string | null
+          rate_type?: string
           role?: string | null
           updated_at?: string
         }
