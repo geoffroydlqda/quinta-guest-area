@@ -33,6 +33,7 @@ export type Database = {
           parent_id: string | null
           payer: string | null
           pnl_month: string | null
+          is_cash: boolean
           created_at: string
         }
         Insert: {
@@ -53,6 +54,7 @@ export type Database = {
           parent_id?: string | null
           payer?: string | null
           pnl_month?: string | null
+          is_cash?: boolean
           created_at?: string
         }
         Update: {
@@ -73,6 +75,7 @@ export type Database = {
           parent_id?: string | null
           payer?: string | null
           pnl_month?: string | null
+          is_cash?: boolean
           created_at?: string
         }
         Relationships: []

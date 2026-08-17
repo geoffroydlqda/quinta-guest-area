@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy } from "lucide-react";
+import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote } from "lucide-react";
 
 /**
  * Onglet Finance (4 août 2026) — phase 1, alimentée par import CSV Revolut
@@ -61,6 +61,7 @@ type FinTx = {
   category: string | null; vat_rate: number | null; amount_net: number | null;
   booking_id: string | null; notes: string | null; reviewed: boolean;
   parent_id?: string | null; payer?: string | null; pnl_month?: string | null;
+  is_cash?: boolean;
 };
 
 type FinRule = { id: string; pattern: string; kind: string; category: string | null; vat_rate: number | null };
@@ -88,7 +89,7 @@ const PNL_VARIABLE_CATS = new Set([
 export type FinInstallment = {
   booking_id: string; amount_due: number; amount_excl_vat?: number | null;
   category?: string | null; is_cash?: boolean; status?: string;
-  due_date?: string | null; paid_on?: string | null;
+  due_date?: string | null; paid_on?: string | null; label?: string | null;
 };
 
 // ---- Ventilation des revenus du P&L (10 août 2026) -------------------------
@@ -213,7 +214,7 @@ export function FinancePage({ bookings, installments }: {
   installments: FinInstallment[];
 }) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "report">("tx");
+  const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "box" | "report">("tx");
   const [txs, setTxs] = useState<FinTx[]>([]);
   const [rules, setRules] = useState<FinRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -540,6 +541,66 @@ export function FinancePage({ bookings, installments }: {
 
   const reviewCount = txs.filter((t) => !t.reviewed).length;
 
+  // ---- Cash box (caisse espèces) -------------------------------------------
+  // Entrées : échéances is_cash payées (hors tests). Sorties/ajustements :
+  // fin_transactions is_cash (dépenses cash, ajustements kind=internal —
+  // ces derniers ne comptent QUE dans la caisse, jamais ailleurs).
+  const box = useMemo(() => {
+    type Move = { date: string; label: string; sub: string | null; amount: number; kind: "in" | "out" | "adj" };
+    const moves: Move[] = [];
+    let undated = 0;
+    for (const i of installments) {
+      if (!i.is_cash || i.status !== "paid" || !bookingById.has(i.booking_id)) continue;
+      const d = i.paid_on ?? i.due_date;
+      if (!d) { undated += Number(i.amount_due || 0); continue; }
+      moves.push({
+        date: d,
+        label: bookingById.get(i.booking_id)?.name ?? "Booking",
+        sub: i.label ?? null,
+        amount: Number(i.amount_due || 0),
+        kind: "in",
+      });
+    }
+    for (const t of txs) {
+      if (!t.is_cash || t.kind === "split") continue;
+      moves.push({
+        date: t.date,
+        label: t.description ?? "—",
+        sub: t.kind === "internal" ? (t.notes ?? "Adjustment") : (t.category ?? null),
+        amount: Number(t.amount),
+        kind: t.kind === "internal" ? "adj" : t.amount < 0 ? "out" : "in",
+      });
+    }
+    moves.sort((a, b) => a.date.localeCompare(b.date));
+    let bal = 0;
+    const withBal = moves.map((m) => ({ ...m, balance: (bal = Math.round((bal + m.amount) * 100) / 100) }));
+    withBal.reverse();
+    const cashIn = moves.filter((m) => m.kind === "in").reduce((s, m) => s + m.amount, 0);
+    const cashOut = moves.filter((m) => m.kind === "out").reduce((s, m) => s + m.amount, 0);
+    const adj = moves.filter((m) => m.kind === "adj").reduce((s, m) => s + m.amount, 0);
+    return { moves: withBal, balance: bal, cashIn, cashOut, adj, undated };
+  }, [txs, installments, bookingById]);
+
+  // Ajustement caisse (dépôt en banque, correction d'inventaire…)
+  const [adjAmount, setAdjAmount] = useState("");
+  const [adjNote, setAdjNote] = useState("");
+  const [adjDir, setAdjDir] = useState<"out" | "in">("out");
+  const addAdjustment = async () => {
+    const amt = Number(adjAmount);
+    if (!Number.isFinite(amt) || amt <= 0) { toast({ title: "Enter an amount", variant: "destructive" }); return; }
+    const signed = adjDir === "out" ? -Math.abs(amt) : Math.abs(amt);
+    const { error } = await supabase.from("fin_transactions").insert({
+      source: "manual", date: new Date().toISOString().slice(0, 10),
+      description: adjNote.trim() || (adjDir === "out" ? "Cash box — removed" : "Cash box — added"),
+      amount: signed, kind: "internal", is_cash: true, reviewed: true,
+      notes: "Ajustement caisse (compte uniquement dans la Cash box — ni cash flow bancaire, ni P&L)",
+    } as never);
+    if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Cash box adjusted", description: `${signed > 0 ? "+" : ""}${fmt2(signed)}` });
+    setAdjAmount(""); setAdjNote("");
+    load();
+  };
+
   // ---- Investor update (rapport mensuel copiable, ton CEO, en anglais) -----
   // Mêmes règles que les onglets P&L (HT, accrual) et Cash flow (TTC, date
   // banque). Brouillon à relire avant envoi — les chiffres sont vivants.
@@ -784,6 +845,7 @@ export function FinancePage({ bookings, installments }: {
   const [mCat, setMCat] = useState("");
   const [mVat, setMVat] = useState("23");
   const [mBooking, setMBooking] = useState("");
+  const [mCash, setMCash] = useState(true); // dépense manuelle = souvent payée en espèces
   const addManual = async () => {
     const amt = Number(mAmount);
     if (!mDesc.trim() || !Number.isFinite(amt) || amt <= 0 || !mCat) {
@@ -794,7 +856,7 @@ export function FinancePage({ bookings, installments }: {
       source: "manual", date: mDate, description: mDesc.trim(), amount: -Math.abs(amt),
       kind: "expense", category: mCat, vat_rate: vat,
       amount_net: Math.round(Math.abs(amt) / (1 + vat / 100) * 100) / 100,
-      booking_id: mBooking || null, reviewed: true,
+      booking_id: mBooking || null, reviewed: true, is_cash: mCash,
     });
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
     toast({ title: "Expense added" });
@@ -818,7 +880,7 @@ export function FinancePage({ bookings, installments }: {
     <div className="space-y-4">
       {/* Sous-onglets + année */}
       <div className="flex items-center gap-2 flex-wrap">
-        {([["tx", "Transactions", ReceiptText], ["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["report", "Investor update", Mail]] as const).map(([k, label, Icon]) => (
+        {([["tx", "Transactions", ReceiptText], ["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["box", "Cash box", Banknote], ["report", "Investor update", Mail]] as const).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm border transition-colors ${
               tab === k ? "bg-primary text-primary-foreground border-primary font-semibold" : "bg-card border-border hover:bg-muted"}`}>
@@ -924,6 +986,10 @@ export function FinancePage({ bookings, installments }: {
                   <option value="">—</option>
                   {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select></label>
+              <label className="flex items-center gap-2 text-sm pb-2" title="Paid in cash: also deducted from the Cash box tab. Untick if paid another way (personal card…).">
+                <input type="checkbox" checked={mCash} onChange={(e) => setMCash(e.target.checked)} className="h-4 w-4 accent-[#35532A]" />
+                Paid in cash
+              </label>
               <div className="sm:col-span-4 flex justify-end gap-2">
                 <Button size="sm" variant="ghost" onClick={() => setShowManual(false)}>Cancel</Button>
                 <Button size="sm" onClick={addManual}>Save expense</Button>
@@ -1398,6 +1464,95 @@ export function FinancePage({ bookings, installments }: {
               </>
             );
           })()}
+        </div>
+      )}
+
+      {/* ================= CASH BOX (caisse espèces) ================= */}
+      {tab === "box" && (
+        <div className="space-y-4">
+          <div className="grid sm:grid-cols-4 gap-3">
+            <div className="rounded-2xl bg-[#35532A] text-white shadow-sm p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-white/70">Cash on hand</div>
+              <div className="mt-1 text-3xl font-bold tabular-nums">{fmt2(box.balance)}</div>
+            </div>
+            <div className="rounded-2xl bg-card border border-border/60 shadow-sm p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Cash collected</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums text-[#178A3F]">{fmt2(box.cashIn)}</div>
+              <div className="text-[11px] text-muted-foreground">guest payments in cash</div>
+            </div>
+            <div className="rounded-2xl bg-card border border-border/60 shadow-sm p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Cash spent</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums text-[#C0392B]">{fmt2(box.cashOut)}</div>
+              <div className="text-[11px] text-muted-foreground">expenses paid in cash</div>
+            </div>
+            <div className="rounded-2xl bg-card border border-border/60 shadow-sm p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Adjustments</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">{fmt2(box.adj)}</div>
+              <div className="text-[11px] text-muted-foreground">bank deposits, corrections…</div>
+            </div>
+          </div>
+
+          {box.undated > 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              ⚠ {fmt2(box.undated)} of paid cash installments have no payment date (Payments tab) — they are not counted in the box yet. Set their "paid on" date to include them.
+            </p>
+          )}
+
+          {/* Ajustement : dépôt en banque, correction après comptage… */}
+          <div className="rounded-2xl bg-card border border-border/60 shadow-sm p-4 flex flex-wrap items-end gap-2">
+            <label className="space-y-0.5">
+              <div className="text-[11px] text-muted-foreground">Adjustment</div>
+              <select className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                value={adjDir} onChange={(e) => setAdjDir(e.target.value as "out" | "in")}>
+                <option value="out">Remove from box (deposit to bank…)</option>
+                <option value="in">Add to box</option>
+              </select>
+            </label>
+            <label className="space-y-0.5">
+              <div className="text-[11px] text-muted-foreground">Amount (€)</div>
+              <Input type="number" min="0" step="0.01" value={adjAmount} onChange={(e) => setAdjAmount(e.target.value)} className="h-8 w-28" />
+            </label>
+            <label className="space-y-0.5 flex-1 min-w-[180px]">
+              <div className="text-[11px] text-muted-foreground">Note</div>
+              <Input value={adjNote} onChange={(e) => setAdjNote(e.target.value)} placeholder="Deposited at Millennium…" className="h-8 placeholder:italic placeholder:text-muted-foreground/50" />
+            </label>
+            <Button size="sm" className="h-8" onClick={addAdjustment}>Save</Button>
+            <p className="w-full text-[11px] text-muted-foreground">
+              Adjustments only move the Cash box — they never touch the bank cash flow or the P&L. Cash guest payments (Payments tab) add to the box automatically; cash expenses (Manual expense, Catering staff paid in cash) deduct automatically.
+            </p>
+          </div>
+
+          {/* Mouvements */}
+          <div className="overflow-auto rounded-2xl bg-card shadow-sm border border-border/60">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/80">
+                <tr className="text-left">
+                  {["Date", "Movement", "Amount", "Balance"].map((h) => (
+                    <th key={h} className="px-3 py-2.5 text-[11px] uppercase tracking-wider font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {box.moves.length === 0 ? (
+                  <tr><td colSpan={4} className="px-3 py-8 text-center text-sm text-muted-foreground italic">
+                    No cash movements yet — cash guest payments and cash expenses will appear here.
+                  </td></tr>
+                ) : box.moves.map((m, i) => (
+                  <tr key={i} className="border-t border-border/60">
+                    <td className="px-3 py-2 whitespace-nowrap tabular-nums text-xs">{fmtDayEU(m.date)} {m.date.slice(0, 4)}</td>
+                    <td className="px-3 py-2">
+                      <span className="font-medium">{m.label}</span>
+                      {m.sub && <span className="block text-[11px] text-muted-foreground truncate max-w-[380px]">{m.sub}</span>}
+                    </td>
+                    <td className={`px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap ${m.amount > 0 ? "text-[#178A3F]" : "text-[#C0392B]"}`}>
+                      {m.amount > 0 ? "+" : ""}{fmt2(m.amount)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">{fmt2(m.balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
