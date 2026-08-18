@@ -220,7 +220,9 @@ export function PaymentEmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
+      {/* max-h + scroll : le compose peut dépasser l'écran (récap + PJ) —
+          sans ça le haut/bas du dialogue devenait inaccessible. */}
+      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="w-4 h-4" />
@@ -245,11 +247,6 @@ export function PaymentEmailDialog({
                 <span className="inline-block rounded-md bg-primary px-5 py-2 text-primary-foreground font-semibold">
                   Pay {fmtEur(totalDue)}
                 </span>
-                {insts.length > 1 && (
-                  <div className="mt-1.5 text-xs text-muted-foreground">
-                    Covers the {insts.length} payments recapped in the text above — a single invoice will be issued.
-                  </div>
-                )}
                 <div className="mt-1 text-xs text-muted-foreground">Secure bank payment (debit or transfer), powered by Stripe.</div>
                 <div className="mt-1.5 text-[11px] text-muted-foreground">
                   Inserted automatically — opens a fresh Stripe checkout on every click.
