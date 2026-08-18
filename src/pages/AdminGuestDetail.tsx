@@ -1261,6 +1261,25 @@ function PaymentSection({ userId }: { userId: string }) {
   // l'email (un lien Stripe, une fatura-recibo multi-lignes) part quand
   // Geoffroy le décide, depuis le bloc du groupe.
   const [groupSel, setGroupSel] = useState<Set<string>>(new Set());
+  // Dernier email de paiement envoyé par échéance (reminder_log) — affiché
+  // sur la ligne pour savoir d'un coup d'œil si le lien est déjà parti.
+  const [lastEmail, setLastEmail] = useState<Map<string, string>>(new Map());
+  const loadEmailLog = async (instIds: string[]) => {
+    if (instIds.length === 0) { setLastEmail(new Map()); return; }
+    const { data } = await supabase
+      .from("reminder_log")
+      .select("installment_id, created_at")
+      .eq("status", "sent")
+      .in("type", ["payment_upcoming", "payment_overdue", "payment_manual"])
+      .in("installment_id", instIds)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    const m = new Map<string, string>();
+    for (const r of data || []) {
+      if (r.installment_id && !m.has(r.installment_id)) m.set(r.installment_id, r.created_at);
+    }
+    setLastEmail(m);
+  };
 
   const createGroup = async () => {
     const ids = installments.filter((i) => groupSel.has(i.id) && i.status !== "paid" && !i.group_id).map((i) => i.id);
@@ -1320,6 +1339,7 @@ function PaymentSection({ userId }: { userId: string }) {
       .eq("booking_id", b.id)
       .order("due_date", { ascending: true, nullsFirst: false });
     if (!iRes.error) setInstallments((iRes.data || []) as Installment[]);
+    await loadEmailLog(((iRes.data || []) as Installment[]).map((i) => i.id));
     setLoading(false);
   };
 
@@ -1341,6 +1361,13 @@ function PaymentSection({ userId }: { userId: string }) {
     const mismatch = rental > 0 && rentalInst.length > 0 && Math.abs(totalDue - rental) > 0.001;
     return { totalDue, totalPaid, rental, remaining, pct, mismatch };
   }, [rentalInst, booking]);
+
+  // Suivi extras & catering : total contracté = somme des échéances hors rental/bar
+  const extraTotals = useMemo(() => {
+    const due = extraInst.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    const paid = extraInst.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    return { due, paid, remaining: Math.max(0, due - paid), pct: due > 0 ? Math.min(100, (paid / due) * 100) : 0 };
+  }, [extraInst]);
 
   const derivedStatus = useMemo(() => deriveBookingStatus(installments), [installments]);
   const resolvedStatus: BookingStatus = (booking?.payment_status_override as BookingStatus | null) ?? derivedStatus;
@@ -1629,7 +1656,14 @@ function PaymentSection({ userId }: { userId: string }) {
                 title="Select to group with other payments (one link, one invoice)"
               />
             )}
-            <div className="font-semibold truncate">{inst.label}</div>
+            <div className="min-w-0">
+              <div className="font-semibold truncate">{inst.label}</div>
+              {lastEmail.has(inst.id) && (
+                <div className="text-[10px] text-[#1C5CAB] whitespace-nowrap" title="A payment email for this installment has already been sent to the guest">
+                  ✉ Payment email sent {new Date(lastEmail.get(inst.id)!).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                </div>
+              )}
+            </div>
             {inst.group_id && (
               <span className="text-[10px] uppercase px-1.5 py-0.5 rounded border border-[#CAE8BD] bg-primary/15 text-[#35532A] font-semibold whitespace-nowrap">
                 Grouped
@@ -1791,9 +1825,10 @@ function PaymentSection({ userId }: { userId: string }) {
         </div>
       </div>
 
-      {/* Progress bar — accommodation only */}
+      {/* Suivi par ligne : accommodation + extras & catering */}
       {totals.rental > 0 && (
         <div className="space-y-1">
+          <div className="text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">Accommodation</div>
           <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
             <div className="h-full bg-green-500 transition-all" style={{ width: `${totals.pct}%` }} />
           </div>
@@ -1805,6 +1840,17 @@ function PaymentSection({ userId }: { userId: string }) {
               Rental installments (€{totals.totalDue}) do not match rental price (€{totals.rental}).
             </p>
           )}
+        </div>
+      )}
+      {extraTotals.due > 0 && (
+        <div className="space-y-1">
+          <div className="text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">Extras & catering</div>
+          <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
+            <div className="h-full bg-[#79B84B] transition-all" style={{ width: `${extraTotals.pct}%` }} />
+          </div>
+          <div className="text-xs text-muted-foreground">
+            €{extraTotals.paid.toLocaleString("en-GB", { maximumFractionDigits: 2 })} paid of €{extraTotals.due.toLocaleString("en-GB", { maximumFractionDigits: 2 })} · €{extraTotals.remaining.toLocaleString("en-GB", { maximumFractionDigits: 2 })} remaining
+          </div>
         </div>
       )}
 
@@ -1832,6 +1878,14 @@ function PaymentSection({ userId }: { userId: string }) {
                       One email, one payment link — a single multi-line invoice on payment.
                     </div>
                   )}
+                  {(() => {
+                    const sent = members.map((m) => lastEmail.get(m.id)).filter(Boolean).sort().reverse()[0];
+                    return sent ? (
+                      <div className="text-[10px] text-[#1C5CAB] mt-0.5">
+                        ✉ Payment email sent {new Date(sent).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
                 <div className="flex items-center gap-1.5">
                   {pending.length > 0 && booking.email && (
@@ -1865,6 +1919,9 @@ function PaymentSection({ userId }: { userId: string }) {
             <Plus className="w-4 h-4 mr-1" /> Add payment
           </Button>
         )}
+        <p className="w-full text-right text-[11px] text-muted-foreground">
+          Tip: tick the checkbox on 2+ unpaid payments to group them — one email, one link, one invoice.
+        </p>
       </div>
 
       {showAdd && (
@@ -1974,7 +2031,7 @@ function PaymentSection({ userId }: { userId: string }) {
             ordinal={idx >= 0 ? idx + 1 : 1}
             isLast={idx >= 0 && idx === siblings.length - 1}
             allSettled={siblings.every((i) => i.id === emailTarget.inst.id || i.status === "paid")}
-            onSent={() => setGroupSel(new Set())}
+            onSent={() => { setGroupSel(new Set()); loadEmailLog(installments.map((i) => i.id)); }}
           />
         );
       })()}
