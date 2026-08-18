@@ -1652,7 +1652,7 @@ function CateringEventCard({ booking: b, rows, todayIso, foodPlan, onOpen, onAdd
                   <option value="hourly">€/hour</option>
                 </select>
                 <span className="text-xs text-muted-foreground">×</span>
-                <Input type="number" min="1" step={r.rate_type === "hourly" ? "0.5" : "1"} value={String(r.paid_days)} disabled={r.paid}
+                <Input type="number" min="0.5" step={r.rate_type === "hourly" ? "0.5" : "1"} value={String(r.paid_days)} disabled={r.paid}
                   onChange={(e) => onUpdate(r.id, { paid_days: Math.max(0.5, Number(e.target.value) || 1) })}
                   className="h-7 w-14 text-right px-1.5" aria-label="Quantity" />
                 <span className="text-xs text-muted-foreground">{r.rate_type === "hourly" ? "hours" : "days"}</span>
