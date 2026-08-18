@@ -2155,7 +2155,7 @@ function InstallmentForm({
             <div className="text-xs text-muted-foreground">VAT</div>
             {category === "extra" || category === "catering" ? (
               <div className="flex items-center gap-3 h-9">
-                {[6, 13, 23].map((r) => (
+                {[0, 6, 13, 23].map((r) => (
                   <label key={r} className="flex items-center gap-1.5 cursor-pointer select-none text-sm">
                     <input
                       type="radio"
