@@ -28,6 +28,7 @@ export type EmailInstallment = {
   id: string;
   label?: string | null;
   amount_due: number;
+  due_date?: string | null;
   invoice_file_url?: string | null;
   invoice_file_name?: string | null;
 };
@@ -49,14 +50,35 @@ function stayRange(checkIn?: string | null, checkOut?: string | null): string | 
     : `${mA} ${a.getDate()} to ${mB} ${b.getDate()}`;
 }
 
-export function buildRequestTemplate(booking: EmailBooking, inst: EmailInstallment, ordinal: number, isLast: boolean, groupCount = 1) {
+// Date d'échéance côté guest : nom du mois en toutes lettres (lisible US + EU).
+const fmtDue = (d?: string | null): string | null => {
+  if (!d) return null;
+  const dt = new Date(`${d}T12:00:00`);
+  if (isNaN(dt.getTime())) return null;
+  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+};
+
+export function buildRequestTemplate(booking: EmailBooking, inst: EmailInstallment, ordinal: number, isLast: boolean, groupInsts: EmailInstallment[] = []) {
   const first = (booking.first_name ?? "").trim() || "there";
   const stay = stayRange(booking.check_in_date, booking.check_out_date);
   const stayLine = stay
     ? `Your stay at Quinta do Amor from ${stay} is getting close`
     : `Your stay at Quinta do Amor is getting close`;
-  const linkLine = groupCount > 1
-    ? `Here's the link to settle the ${groupCount === 2 ? "two" : groupCount} payments for your stay in one go:`
+  // Demande groupée : récap des échéances (montant + due date) dans le corps
+  // du mail, triées par échéance — remplace l'ancienne phrase "One link, N
+  // payments together" jugée peu claire (Geoffroy, 18 août 2026).
+  const grouped = groupInsts.length > 1;
+  const middle = grouped
+    ? `Here's a quick recap of the payments for your stay:
+
+${[...groupInsts]
+    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"))
+    .map((i) => {
+      const due = fmtDue(i.due_date);
+      return `– ${i.label || "Payment"}: ${fmtEur(Number(i.amount_due))}${due ? ` (due ${due})` : ""}`;
+    }).join("\n")}
+
+You can settle everything in one go with the link below:`
     : `Here's the link for the ${ordinalWord(ordinal)}${isLast ? " and final" : ""} payment for your stay:`;
   return {
     subject: `Your stay at Quinta do Amor — ${isLast ? "final payment" : "payment"}`,
@@ -67,7 +89,7 @@ I hope you're doing well!
 
 ${stayLine}
 
-${linkLine}`,
+${middle}`,
     bodyBottom:
 `Your invoice will arrive in your inbox as soon as the payment comes through.
 
@@ -135,7 +157,7 @@ export function PaymentEmailDialog({
   useEffect(() => {
     if (!open) return;
     if (kind === "request") {
-      const t = buildRequestTemplate(booking, inst, ordinal, isLast, insts.length);
+      const t = buildRequestTemplate(booking, inst, ordinal, isLast, insts);
       setSubject(t.subject); setBodyTop(t.bodyTop); setBodyBottom(t.bodyBottom);
     } else {
       const t = buildConfirmationTemplate(booking, inst, allSettled);
@@ -198,8 +220,7 @@ export function PaymentEmailDialog({
                 </span>
                 {insts.length > 1 && (
                   <div className="mt-1.5 text-xs text-muted-foreground">
-                    One link, {insts.length} payments together: {insts.map((i) => `${i.label || "Installment"} (${fmtEur(Number(i.amount_due))})`).join(" + ")}.
-                    A single invoice with one line per payment will be issued.
+                    Covers the {insts.length} payments recapped in the text above — a single invoice will be issued.
                   </div>
                 )}
                 <div className="mt-1 text-xs text-muted-foreground">Secure bank payment (debit or transfer), powered by Stripe.</div>
