@@ -45,6 +45,11 @@ const CATERING_COST_CATS = [
   "Wedding — catering / food", "Wedding — catering / staff", "Bar — stock",
 ];
 const SEASON_OPS_CATS = ["Gardening (seasonal)", "Pool maintenance", "Property operations & supplies"];
+// Le cleaning des événements vit dans ces catégories (demande Geoffroy,
+// 18 août 2026) — en plus de "Cleaning (in season)". Les lignes RATTACHÉES à
+// un booking comptent en M1 (coût direct réel) ; seules les lignes non
+// rattachées forment le pool réparti aux heures théoriques.
+const CLEANING_CATS = ["Cleaning (in season)", "Retreat — venue / cleaning & fixed", "Wedding — venue / cleaning & fixed"];
 
 const fmt = (n: number) => `€${Math.round(n).toLocaleString("en-GB")}`;
 const pct = (n: number, base: number) => (base > 0 ? `${Math.round((n / base) * 100)}%` : "—");
@@ -124,7 +129,10 @@ export function EventMarginsTab({ year }: { year: string }) {
 
     // ---- Pools (dépenses NON rattachées à un booking — le rattaché est en M1)
     const unlinked = txs.filter((t) => !t.booking_id);
-    const cleaningPool = unlinked.filter((t) => t.category === "Cleaning (in season)").reduce((s, t) => s + ht(t), 0);
+    const cleaningPool = unlinked.filter((t) => CLEANING_CATS.includes(t.category ?? "")).reduce((s, t) => s + ht(t), 0);
+    // Dépense cleaning TOTALE (rattachée + non rattachée) — sert au garde-fou
+    // "heures impliquées par le réel" : total / taux horaire / nb d'événements.
+    const cleaningTotal = txs.filter((t) => CLEANING_CATS.includes(t.category ?? "")).reduce((s, t) => s + ht(t), 0);
     const seasonOpsPool = unlinked.filter((t) => SEASON_OPS_CATS.includes(t.category ?? "") && inSeason(t.date)).reduce((s, t) => s + ht(t), 0);
     const insurancePool = unlinked.filter((t) => t.category === "Insurance — events").reduce((s, t) => s + ht(t), 0);
     const maintPool = unlinked.filter((t) => t.category === "General maintenance" && inSeason(t.date) && ht(t) <= keys.maint_oneoff_threshold).reduce((s, t) => s + ht(t), 0);
@@ -134,14 +142,14 @@ export function EventMarginsTab({ year }: { year: string }) {
     const theoHours = (e: { nights: number }) =>
       keys.cleaning_turnover_hours + (e.nights >= 4 ? keys.cleaning_midweek_hours : 0);
     const totalTheoHours = events.reduce((s, e) => s + theoHours(e), 0);
-    const impliedRate = totalTheoHours > 0 ? cleaningPool / totalTheoHours : 0;
+    const impliedRate = totalTheoHours > 0 ? cleaningTotal / totalTheoHours : 0;
     const impliedTurnoverHours = nEvents > 0 && keys.cleaning_rate > 0
-      ? cleaningPool / keys.cleaning_rate / nEvents
+      ? cleaningTotal / keys.cleaning_rate / nEvents
       : 0;
 
     // ---- Structure (M3, indicatif) : tout le reste des dépenses de l'année,
     // hors coûts rattachés et hors pools déjà alloués en M2.
-    const pooledCats = new Set(["Cleaning (in season)", "Insurance — events", ...SEASON_OPS_CATS]);
+    const pooledCats = new Set([...CLEANING_CATS, "Insurance — events", ...SEASON_OPS_CATS]);
     const structurePool = unlinked.reduce((s, t) => {
       const c = t.category ?? "";
       if (pooledCats.has(c)) return s;
@@ -187,7 +195,7 @@ export function EventMarginsTab({ year }: { year: string }) {
 
     const elecAllocTotal = rows.reduce((s, r) => s + r.elec, 0);
     return {
-      rows, totalDays, nEvents, cleaningPool, seasonOpsPool, insurancePool, maintPool,
+      rows, totalDays, nEvents, cleaningPool, cleaningTotal, seasonOpsPool, insurancePool, maintPool,
       structurePool, structurePerDay, impliedRate, impliedTurnoverHours, elecActualSeason, elecAllocTotal,
       totalTheoHours,
     };
@@ -227,11 +235,14 @@ export function EventMarginsTab({ year }: { year: string }) {
             </p>
             <ul className="list-disc pl-5 space-y-1">
               <li>
-                <span className="text-foreground">Cleaning</span> — the season's unassigned cleaning spend ({fmt(model.cleaningPool)})
+                <span className="text-foreground">Cleaning</span> — cleaning spend lives in
+                "Retreat/Wedding — venue / cleaning &amp; fixed" and "Cleaning (in season)".
+                Lines linked to an event count directly in its M1; the unassigned rest ({fmt(model.cleaningPool)})
                 is split by theoretical hours: <K field="cleaning_turnover_hours" /> h per turnover
                 + <K field="cleaning_midweek_hours" /> h midweek for events of 4+ nights.
-                Reality check: at <K field="cleaning_rate" /> €/h the actual spend implies ≈ {model.impliedTurnoverHours.toFixed(1)} h
-                per event (implied rate on your theoretical hours: €{model.impliedRate.toFixed(1)}/h).
+                Reality check: total cleaning spend {fmt(model.cleaningTotal)} at <K field="cleaning_rate" /> €/h
+                implies ≈ {model.impliedTurnoverHours.toFixed(1)} h per event
+                (implied rate on your theoretical hours: €{model.impliedRate.toFixed(1)}/h).
               </li>
               <li>
                 <span className="text-foreground">Electricity</span> — standard of <K field="elec_per_night" /> €/event-day
