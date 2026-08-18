@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Mail, Paperclip } from "lucide-react";
+import { Loader2, Mail, Paperclip, X } from "lucide-react";
 
 /**
  * Compose éditable des emails de paiement (textes validés par Geoffroy).
@@ -152,6 +152,29 @@ export function PaymentEmailDialog({
   const [bodyBottom, setBodyBottom] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  // Pièces jointes libres (demande Geoffroy, 18 août 2026) — en plus de la
+  // facture auto sur les confirmations. Encodées en base64 dans le payload.
+  const [files, setFiles] = useState<File[]>([]);
+  const attachRef = useRef<HTMLInputElement>(null);
+  const MAX_TOTAL = 10 * 1024 * 1024; // 10 MB au total (limite raisonnable Resend/edge)
+  const totalSize = files.reduce((s, f) => s + f.size, 0);
+
+  const addFiles = (list: FileList | null) => {
+    if (!list) return;
+    const next = [...files, ...Array.from(list)];
+    if (next.reduce((s, f) => s + f.size, 0) > MAX_TOTAL) {
+      toast({ title: "Attachments too large", description: "Keep the total under 10 MB.", variant: "destructive" });
+      return;
+    }
+    setFiles(next);
+  };
+
+  const fileToB64 = (f: File) => new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+    r.onerror = () => reject(new Error(`Could not read ${f.name}`));
+    r.readAsDataURL(f);
+  });
 
   // (Re)charge le template à chaque ouverture
   useEffect(() => {
@@ -163,6 +186,7 @@ export function PaymentEmailDialog({
       const t = buildConfirmationTemplate(booking, inst, allSettled);
       setSubject(t.subject); setBody(t.body);
     }
+    setFiles([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, kind, inst.id]);
 
@@ -171,11 +195,14 @@ export function PaymentEmailDialog({
   const send = async () => {
     setSending(true);
     try {
+      const attachments = files.length
+        ? await Promise.all(files.map(async (f) => ({ filename: f.name, content: await fileToB64(f) })))
+        : undefined;
       const payload = kind === "request"
         ? (insts.length > 1
-          ? { kind, installment_ids: insts.map((i) => i.id), subject, body_top: bodyTop, body_bottom: bodyBottom }
-          : { kind, installment_id: inst.id, subject, body_top: bodyTop, body_bottom: bodyBottom })
-        : { kind, installment_id: inst.id, subject, body };
+          ? { kind, installment_ids: insts.map((i) => i.id), subject, body_top: bodyTop, body_bottom: bodyBottom, attachments }
+          : { kind, installment_id: inst.id, subject, body_top: bodyTop, body_bottom: bodyBottom, attachments })
+        : { kind, installment_id: inst.id, subject, body, attachments };
       const { data, error } = await supabase.functions.invoke("payment-emails", { body: payload });
       if (error || data?.error) throw new Error(data?.error || error?.message);
       toast({
@@ -241,6 +268,30 @@ export function PaymentEmailDialog({
               </div>
             </>
           )}
+          {/* Pièces jointes libres */}
+          <div className="space-y-1.5">
+            {files.map((f, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs rounded-lg border border-border bg-muted/40 px-2.5 py-1.5">
+                <Paperclip className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                <span className="truncate flex-1">{f.name}</span>
+                <span className="text-muted-foreground shrink-0">{(f.size / 1024 / 1024).toFixed(f.size > 1024 * 1024 ? 1 : 2)} MB</span>
+                <button type="button" className="p-0.5 rounded hover:bg-muted shrink-0"
+                  onClick={() => setFiles((arr) => arr.filter((_, j) => j !== i))}>
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => attachRef.current?.click()}>
+                <Paperclip className="w-3.5 h-3.5 mr-1" /> Attach a file
+              </Button>
+              {files.length > 0 && (
+                <span className="text-[11px] text-muted-foreground">{(totalSize / 1024 / 1024).toFixed(1)} / 10 MB</span>
+              )}
+              <input ref={attachRef} type="file" multiple className="hidden"
+                onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+            </div>
+          </div>
         </div>
 
         <div className="text-[11px] text-muted-foreground">

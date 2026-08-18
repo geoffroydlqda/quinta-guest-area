@@ -43,6 +43,12 @@ const BodySchema = z.object({
   body_top: z.string().max(5000).optional(),
   body_bottom: z.string().max(5000).optional(),
   body: z.string().max(5000).optional(),
+  // Pièces jointes libres (base64) — en plus de la facture auto sur les
+  // confirmations. ~10 MB au total (14M chars base64), 5 fichiers max.
+  attachments: z.array(z.object({
+    filename: z.string().min(1).max(200),
+    content: z.string().min(1).max(14_000_000),
+  })).max(5).optional(),
 });
 
 async function isAdminEmailDb(email?: string | null): Promise<boolean> {
@@ -224,6 +230,14 @@ ${paras(parsed.data.body_bottom ?? "")}
         content: btoa(bin),
       });
       html = emailShell(paras(bodyText));
+    }
+
+    // Pièces jointes fournies par l'admin (les deux kinds)
+    const extra = parsed.data.attachments ?? [];
+    const totalB64 = extra.reduce((s, a) => s + a.content.length, 0);
+    if (totalB64 > 14_000_000) return json({ error: "Attachments too large — keep the total under 10 MB" }, 400);
+    for (const a of extra) {
+      attachments.push({ filename: a.filename.replace(/[/\\]/g, "_"), content: a.content });
     }
 
     const sent = await resend.emails.send({
