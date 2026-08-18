@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote } from "lucide-react";
+import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote, Percent as PercentIcon } from "lucide-react";
+import { EventMarginsTab } from "@/components/admin/EventMarginsTab";
 
 /**
  * Onglet Finance (4 août 2026) — phase 1, alimentée par import CSV Revolut
@@ -214,7 +215,7 @@ export function FinancePage({ bookings, installments }: {
   installments: FinInstallment[];
 }) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "box" | "report">("tx");
+  const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "box" | "margins" | "report">("tx");
   const [txs, setTxs] = useState<FinTx[]>([]);
   const [rules, setRules] = useState<FinRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -880,7 +881,7 @@ export function FinancePage({ bookings, installments }: {
     <div className="space-y-4">
       {/* Sous-onglets + année */}
       <div className="flex items-center gap-2 flex-wrap">
-        {([["tx", "Transactions", ReceiptText], ["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["box", "Cash box", Banknote], ["report", "Investor update", Mail]] as const).map(([k, label, Icon]) => (
+        {([["tx", "Transactions", ReceiptText], ["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["box", "Cash box", Banknote], ["margins", "Event margins", PercentIcon], ["report", "Investor update", Mail]] as const).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm border transition-colors ${
               tab === k ? "bg-primary text-primary-foreground border-primary font-semibold" : "bg-card border-border hover:bg-muted"}`}>
@@ -1557,6 +1558,9 @@ export function FinancePage({ bookings, installments }: {
       )}
 
       {/* ================= INVESTOR UPDATE ================= */}
+      {/* ================= EVENT MARGINS ================= */}
+      {tab === "margins" && <EventMarginsTab year={year} />}
+
       {tab === "report" && (
         <div className="rounded-2xl bg-card shadow-sm border border-border/60 p-4 space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
