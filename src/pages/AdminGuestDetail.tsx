@@ -1280,7 +1280,7 @@ function PaymentSection({ userId }: { userId: string }) {
       .from("reminder_log")
       .select("installment_id, created_at")
       .eq("status", "sent")
-      .in("type", ["payment_upcoming", "payment_overdue", "payment_manual"])
+      .in("type", ["payment_upcoming", "payment_overdue", "payment_manual", "payment_request"])
       .in("installment_id", instIds)
       .order("created_at", { ascending: false })
       .limit(500);

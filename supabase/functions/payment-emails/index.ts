@@ -235,19 +235,24 @@ ${paras(parsed.data.body_bottom ?? "")}
       ...(attachments.length ? { attachments } : {}),
     });
     if (sent.error) {
-      await admin.from("reminder_log").insert(insts.map((i) => ({
+      const { error: logErr } = await admin.from("reminder_log").insert(insts.map((i) => ({
         type: kind === "request" ? "payment_request" : "payment_receipt",
         installment_id: i.id, booking_id: booking.id, recipient: to, subject,
         status: "error", error: String(sent.error!.message ?? sent.error),
       })));
+      if (logErr) console.error("reminder_log insert failed:", logErr.message);
       return json({ error: String(sent.error.message ?? sent.error) }, 502);
     }
 
-    await admin.from("reminder_log").insert(insts.map((i) => ({
+    // ⚠️ Ne jamais laisser cet insert échouer en silence : c'est lui qui
+    // alimente la mention "Payment email sent" dans l'admin (cause du bug du
+    // 18 août 2026 — contrainte CHECK qui refusait payment_request).
+    const { error: logErr } = await admin.from("reminder_log").insert(insts.map((i) => ({
       type: kind === "request" ? "payment_request" : "payment_receipt",
       installment_id: i.id, booking_id: booking.id, recipient: to, subject,
       status: "sent", error: null,
     })));
+    if (logErr) console.error("reminder_log insert failed (email WAS sent):", logErr.message);
 
     return json({ sent: true, to, kind, attachment: attachments[0]?.filename ?? null });
   } catch (e) {
