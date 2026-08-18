@@ -14,16 +14,27 @@ import {
  *   + bouton "More" qui ouvre une feuille avec le reste (Payments, Guests,
  *   Catering, Guest area, Sign out).
  */
-const NAV = [
-  { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard, tab: "dashboard" },
-  { to: "/admin/bookings", label: "Bookings", icon: CalendarRange, tab: "bookings" },
-  { to: "/admin/guests", label: "Guests", icon: Users, tab: "guests" },
-  { to: "/admin/payments", label: "Payments", icon: Wallet, tab: "payments" },
-  { to: "/admin/catering", label: "Catering", icon: ChefHat, tab: "catering" },
-  { to: "/admin/transportation", label: "Transportation", icon: Car, tab: "transportation" },
-  { to: "/admin/rooms", label: "Housekeeping", icon: BedDouble, tab: "rooms" },
-  { to: "/admin/finance", label: "Finance", icon: Landmark, tab: "finance" },
-  { to: "/admin/staff", label: "Staff", icon: UserCog, tab: "staff" },
+/* Sidebar groupée (12 août 2026) : Operations (Catering, Transportation,
+   Housekeeping) et Finance (Payments, Accounting — ex-onglet Finance).
+   Les clés `tab` ne changent pas : allowed_tabs et routes restent identiques. */
+const NAV_GROUPS = [
+  { label: null, items: [
+    { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard, tab: "dashboard" },
+    { to: "/admin/bookings", label: "Bookings", icon: CalendarRange, tab: "bookings" },
+    { to: "/admin/guests", label: "Guests", icon: Users, tab: "guests" },
+  ]},
+  { label: "Operations", items: [
+    { to: "/admin/catering", label: "Catering", icon: ChefHat, tab: "catering" },
+    { to: "/admin/transportation", label: "Transportation", icon: Car, tab: "transportation" },
+    { to: "/admin/rooms", label: "Housekeeping", icon: BedDouble, tab: "rooms" },
+  ]},
+  { label: "Finance", items: [
+    { to: "/admin/payments", label: "Payments", icon: Wallet, tab: "payments" },
+    { to: "/admin/finance", label: "Accounting", icon: Landmark, tab: "finance" },
+  ]},
+  { label: null, items: [
+    { to: "/admin/staff", label: "Staff", icon: UserCog, tab: "staff" },
+  ]},
 ] as const;
 
 /* Onglets principaux de la tab bar mobile (choix Geoffroy, 31 juil. 2026) */
@@ -36,7 +47,7 @@ const MOBILE_MAIN = [
 
 const MOBILE_MORE = [
   { to: "/admin/payments", label: "Payments", icon: Wallet, tab: "payments" },
-  { to: "/admin/finance", label: "Finance", icon: Landmark, tab: "finance" },
+  { to: "/admin/finance", label: "Accounting", icon: Landmark, tab: "finance" },
   { to: "/admin/guests", label: "Guests", icon: Users, tab: "guests" },
   { to: "/admin/catering", label: "Catering", icon: ChefHat, tab: "catering" },
   { to: "/admin/staff", label: "Staff", icon: UserCog, tab: "staff" },
@@ -50,7 +61,9 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const { allowed } = useAllowedTabs();
   const visible = <T extends { tab: string }>(items: readonly T[]) =>
     allowed ? items.filter((i) => allowed.has(i.tab)) : [...items];
-  const nav = visible(NAV);
+  const navGroups = NAV_GROUPS
+    .map((g) => ({ label: g.label, items: visible(g.items) }))
+    .filter((g) => g.items.length > 0);
   const mobileMain = visible(MOBILE_MAIN);
   const mobileMore = visible(MOBILE_MORE);
 
@@ -79,11 +92,22 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           <div className="text-xs text-muted-foreground mt-0.5">Management</div>
         </div>
         <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          {nav.map((item) => (
-            <NavLink key={item.to} to={item.to} end={"end" in item && item.end} className={itemClass}>
-              <item.icon className="w-4 h-4 shrink-0" />
-              {item.label}
-            </NavLink>
+          {navGroups.map((group, gi) => (
+            <div key={gi} className={gi > 0 ? "pt-2" : undefined}>
+              {group.label && (
+                <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/70">
+                  {group.label}
+                </div>
+              )}
+              <div className="space-y-0.5">
+                {group.items.map((item) => (
+                  <NavLink key={item.to} to={item.to} end={"end" in item && item.end} className={itemClass}>
+                    <item.icon className="w-4 h-4 shrink-0" />
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
         <div className="p-2 border-t border-border space-y-0.5">

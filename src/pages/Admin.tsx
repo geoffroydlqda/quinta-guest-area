@@ -105,7 +105,7 @@ const SECTION_TITLES: Record<string, string> = {
   catering: "Catering",
   transportation: "Transportation",
   rooms: "Housekeeping",
-  finance: "Finance",
+  finance: "Accounting",
   staff: "Staff",
 };
 
