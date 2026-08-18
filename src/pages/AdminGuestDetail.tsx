@@ -1174,6 +1174,9 @@ function shiftMonthsIso(iso: string, months: number): string {
   return toIsoLocal(d);
 }
 
+// Ligne produit d'une échéance (catalogue Products, 12 août 2026)
+type ProductLine = { product_id: string | null; name: string; qty: number; unit_price: number; vat: number };
+
 type Installment = {
   id: string;
   booking_id: string;
@@ -1189,6 +1192,7 @@ type Installment = {
   is_cash?: boolean;
   vat_rate?: number | null;
   group_id?: string | null;
+  product_lines?: ProductLine[] | null;
 };
 
 const fmtEUR = (v: number | string) => {
@@ -1261,6 +1265,12 @@ function PaymentSection({ userId }: { userId: string }) {
   // l'email (un lien Stripe, une fatura-recibo multi-lignes) part quand
   // Geoffroy le décide, depuis le bloc du groupe.
   const [groupSel, setGroupSel] = useState<Set<string>>(new Set());
+  // Catalogue de produits (onglet Products) pour composer les paiements
+  const [products, setProducts] = useState<{ id: string; name: string; category: string; default_vat: number; default_price: number | null; unit: string | null }[]>([]);
+  useEffect(() => {
+    supabase.from("products").select("id,name,category,default_vat,default_price,unit").eq("active", true).order("category").order("name")
+      .then(({ data }) => setProducts(data || []));
+  }, []);
   // Dernier email de paiement envoyé par échéance (reminder_log) — affiché
   // sur la ligne pour savoir d'un coup d'œil si le lien est déjà parti.
   const [lastEmail, setLastEmail] = useState<Map<string, string>>(new Map());
@@ -1335,7 +1345,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
     const iRes = await supabase
       .from("payment_installments")
-      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash,vat_rate,group_id")
+      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash,vat_rate,group_id,product_lines")
       .eq("booking_id", b.id)
       .order("due_date", { ascending: true, nullsFirst: false });
     if (!iRes.error) setInstallments((iRes.data || []) as Installment[]);
@@ -1446,7 +1456,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const upsertInstallment = async (
     id: string | null,
-    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number },
+    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number; product_lines?: ProductLine[] | null },
     file?: File | null
   ) => {
     if (!booking) return false;
@@ -1461,6 +1471,7 @@ function PaymentSection({ userId }: { userId: string }) {
       notes: values.notes,
       is_cash: values.is_cash,
       vat_rate: values.vat_rate,
+      product_lines: values.product_lines ?? null,
     };
     let installmentId = id;
     if (id) {
@@ -1635,6 +1646,7 @@ function PaymentSection({ userId }: { userId: string }) {
         key={inst.id}
         initial={inst}
         checkInDate={booking.check_in_date}
+        products={products}
         onCancel={() => setEditingId(null)}
         onSave={async (vals, file) => {
           const ok = await upsertInstallment(inst.id, vals, file);
@@ -1714,6 +1726,11 @@ function PaymentSection({ userId }: { userId: string }) {
           }
         />
         <Row label="Due date" value={fmtDate(inst.due_date)} />
+        {inst.product_lines && inst.product_lines.length > 0 && (
+          <div className="text-xs text-muted-foreground">
+            {inst.product_lines.map((l) => `${l.qty} × ${l.name} (€${l.unit_price}${l.vat ? ` · ${l.vat}%` : ""})`).join(" · ")}
+          </div>
+        )}
         {inst.notes && (
           <p className="text-xs italic text-muted-foreground whitespace-pre-wrap">{inst.notes}</p>
         )}
@@ -1927,6 +1944,7 @@ function PaymentSection({ userId }: { userId: string }) {
       {showAdd && (
         <InstallmentForm
           checkInDate={booking.check_in_date}
+          products={products}
           onCancel={() => setShowAdd(false)}
           onSave={async (vals, file) => {
             const ok = await upsertInstallment(null, vals, file);
@@ -2042,14 +2060,16 @@ function PaymentSection({ userId }: { userId: string }) {
 function InstallmentForm({
   initial,
   checkInDate,
+  products,
   onCancel,
   onSave,
 }: {
   initial?: Installment;
   checkInDate?: string | null;
+  products: { id: string; name: string; category: string; default_vat: number; default_price: number | null; unit: string | null }[];
   onCancel: () => void;
   onSave: (
-    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number },
+    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number; product_lines?: ProductLine[] | null },
     file?: File | null
   ) => Promise<void> | void;
 }) {
@@ -2074,6 +2094,33 @@ function InstallmentForm({
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
+  // Lignes produits (catalogue Products, 12 août 2026) — optionnelles.
+  // Chaque ligne = snapshot (nom/prix/TVA copiés du catalogue, modifiables) ;
+  // le montant TTC du paiement est recalculé automatiquement depuis les lignes.
+  const [lines, setLines] = useState<ProductLine[]>(initial?.product_lines ?? []);
+
+  const lineTotal = (l: ProductLine) => (Number(l.qty) || 0) * (Number(l.unit_price) || 0);
+  const linesTotal = lines.reduce((s, l) => s + lineTotal(l), 0);
+  // HT par ligne : chaque ligne a sa propre TVA (0/6/13/23).
+  const linesExcl = lines.reduce((s, l) => s + lineTotal(l) / (1 + (Number(l.vat) || 0) / 100), 0);
+
+  const addLine = (productId: string) => {
+    const p = products.find((x) => x.id === productId);
+    if (!p) return;
+    setLines((arr) => [...arr, {
+      product_id: p.id, name: p.name, qty: 1,
+      unit_price: p.default_price ?? 0, vat: p.default_vat,
+    }]);
+  };
+  const patchLine = (i: number, patch: Partial<ProductLine>) =>
+    setLines((arr) => arr.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const removeLine = (i: number) => setLines((arr) => arr.filter((_, j) => j !== i));
+
+  // Montant auto = somme des lignes dès qu'il y en a (reste modifiable ensuite).
+  useEffect(() => {
+    if (lines.length > 0) setAmountDue(String(Math.round(linesTotal * 100) / 100));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(lines)]);
 
   // Auto-fill due_date when category changes to "extra" (if not touched)
   useEffect(() => {
@@ -2096,7 +2143,13 @@ function InstallmentForm({
   // Cash : pas de TVA (HT = TVAC).
   const vatRate = isCash ? 0 : (category === "extra" || category === "catering" ? chosenVat : (VAT_DEFAULT[category] ?? 23));
   const amountNum = Math.abs(Number(amountDue) || 0);
-  const computedExcl = isCash ? amountNum : exclVatOf(amountNum, vatRate);
+  // Avec des lignes produits, le HT vient des TVA par ligne (au prorata si le
+  // montant a été ajusté à la main) ; sinon TVA unique comme avant.
+  const computedExcl = isCash
+    ? amountNum
+    : lines.length > 0 && linesTotal > 0
+      ? Math.round((amountNum * (linesExcl / linesTotal)) * 100) / 100
+      : exclVatOf(amountNum, vatRate);
 
   const submit = async () => {
     if (!label.trim() || !amountDue) return;
@@ -2116,6 +2169,7 @@ function InstallmentForm({
         notes: notes.trim() || null,
         is_cash: isCash,
         vat_rate: vatRate,
+        product_lines: lines.length > 0 ? lines : null,
       },
       isCash ? null : file
     );
@@ -2141,6 +2195,62 @@ function InstallmentForm({
         </div>
       </div>
 
+      {/* Lignes produits — sélection depuis le catalogue (onglet Products) */}
+      {(products.length > 0 || lines.length > 0) && (
+        <div className="space-y-1.5">
+          <div className="text-xs text-muted-foreground">Products (optional)</div>
+          {lines.map((ln, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-background/60 px-2 py-1.5">
+              <Input value={ln.name} onChange={(e) => patchLine(i, { name: e.target.value })}
+                className="h-8 flex-1 min-w-[140px] text-sm" />
+              <Input type="number" min="0" step="0.5" value={String(ln.qty)} title="Quantity"
+                onChange={(e) => patchLine(i, { qty: Number(e.target.value) || 0 })}
+                className="h-8 w-16 text-right" />
+              <span className="text-xs text-muted-foreground">×</span>
+              <Input type="number" min="0" step="0.01" value={String(ln.unit_price)} title="Unit price (€ incl. VAT)"
+                onChange={(e) => patchLine(i, { unit_price: Number(e.target.value) || 0 })}
+                className="h-8 w-20 text-right" />
+              <span className="text-xs text-muted-foreground">€</span>
+              <select className="h-8 rounded-md border border-input bg-background px-1.5 text-xs" title="VAT"
+                value={String(ln.vat)} onChange={(e) => patchLine(i, { vat: Number(e.target.value) })}>
+                {[0, 6, 13, 23].map((v) => <option key={v} value={v}>{v}%</option>)}
+              </select>
+              <span className="text-xs font-semibold w-[70px] text-right whitespace-nowrap">
+                €{lineTotal(ln).toLocaleString("en-GB", { minimumFractionDigits: 2 })}
+              </span>
+              <button type="button" className="text-muted-foreground/60 hover:text-destructive px-1"
+                title="Remove line" onClick={() => removeLine(i)}>
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+          <select
+            className="h-8 rounded-md border border-dashed border-input bg-background px-2 text-xs text-muted-foreground"
+            value=""
+            onChange={(e) => { if (e.target.value) addLine(e.target.value); e.target.value = ""; }}
+          >
+            <option value="">+ Add product…</option>
+            {(["rental", "catering", "extra"] as const)
+              .map((cat) => ({ cat, items: products.filter((p) => p.category === cat) }))
+              .filter((g) => g.items.length > 0)
+              .map((g) => (
+                <optgroup key={g.cat} label={g.cat[0].toUpperCase() + g.cat.slice(1)}>
+                  {g.items.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.default_price != null ? ` — €${p.default_price}` : ""}{p.unit ? ` (${p.unit})` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+          </select>
+          {lines.length > 0 && (
+            <div className="text-[11px] text-muted-foreground">
+              Amount is set from the lines (still editable) — VAT is applied per line.
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid sm:grid-cols-2 gap-2">
         <label className="space-y-1">
           <div className="text-xs text-muted-foreground">Label *</div>
@@ -2153,7 +2263,9 @@ function InstallmentForm({
         {!isCash && (
           <div className="space-y-1">
             <div className="text-xs text-muted-foreground">VAT</div>
-            {category === "extra" || category === "catering" ? (
+            {lines.length > 0 ? (
+              <div className="h-9 flex items-center text-sm text-muted-foreground">per product line</div>
+            ) : category === "extra" || category === "catering" ? (
               <div className="flex items-center gap-3 h-9">
                 {[0, 6, 13, 23].map((r) => (
                   <label key={r} className="flex items-center gap-1.5 cursor-pointer select-none text-sm">

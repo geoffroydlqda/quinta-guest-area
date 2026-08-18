@@ -80,6 +80,45 @@ export type Database = {
         }
         Relationships: []
       }
+      products: {
+        Row: {
+          id: string
+          name: string
+          category: string
+          default_vat: number
+          default_price: number | null
+          unit: string | null
+          active: boolean
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          category?: string
+          default_vat?: number
+          default_price?: number | null
+          unit?: string | null
+          active?: boolean
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          category?: string
+          default_vat?: number
+          default_price?: number | null
+          unit?: string | null
+          active?: boolean
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       fin_rules: {
         Row: {
           id: string
@@ -719,6 +758,7 @@ export type Database = {
           amount_due: number
           amount_excl_vat: number | null
           payment_link: string | null
+          product_lines: Json | null
           booking_id: string
           category: string
           created_at: string
@@ -744,6 +784,7 @@ export type Database = {
           amount_due: number
           amount_excl_vat?: number | null
           payment_link?: string | null
+          product_lines?: Json | null
           booking_id: string
           category?: string
           created_at?: string
@@ -769,6 +810,7 @@ export type Database = {
           amount_due?: number
           amount_excl_vat?: number | null
           payment_link?: string | null
+          product_lines?: Json | null
           booking_id?: string
           category?: string
           created_at?: string

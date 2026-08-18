@@ -28,6 +28,7 @@ import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { HonestyBarCard } from "@/components/admin/HonestyBarCard";
 import { HousekeepingScheduler } from "@/components/admin/HousekeepingScheduler";
 import { FinancePage } from "@/components/admin/FinancePage";
+import { ProductsPage } from "@/components/admin/ProductsPage";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
 import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass, FlaskConical } from "lucide-react";
@@ -106,6 +107,7 @@ const SECTION_TITLES: Record<string, string> = {
   transportation: "Transportation",
   rooms: "Housekeeping",
   finance: "Accounting",
+  products: "Products",
   staff: "Staff",
 };
 
@@ -783,6 +785,8 @@ const AdminContent = () => {
         {view === "rooms" && <RoomsView data={data} onOpen={navigateToBooking} />}
 
         {view === "staff" && <StaffPage />}
+
+        {view === "products" && <ProductsPage />}
 
         {view === "finance" && (
           <FinancePage
