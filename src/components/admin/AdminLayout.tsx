@@ -1,10 +1,11 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAllowedTabs } from "@/hooks/useAllowedTabs";
 import {
   LayoutDashboard, CalendarRange, Users, Wallet, Car,
   BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X, Landmark, UserCog, Package,
+  Moon, Sun,
 } from "lucide-react";
 
 /**
@@ -58,6 +59,10 @@ const MOBILE_MORE = [
 export function AdminLayout({ children }: { children: ReactNode }) {
   const { signOut } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
+  // Dark mode (18 août 2026) — préférence stockée en local, scope admin
+  // uniquement (la guest area garde son thème). Classe .dark sur .admin-ui.
+  const [dark, setDark] = useState(() => localStorage.getItem("qda-admin-theme") === "dark");
+  useEffect(() => { localStorage.setItem("qda-admin-theme", dark ? "dark" : "light"); }, [dark]);
   const location = useLocation();
   // Onglets visibles pour cet admin (onglet Staff) — null = tous
   const { allowed } = useAllowedTabs();
@@ -86,7 +91,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     }`;
 
   return (
-    <div className="admin-ui min-h-screen bg-background md:flex">
+    <div className={`admin-ui ${dark ? "dark" : ""} min-h-screen bg-background text-foreground md:flex`}>
       {/* Sidebar desktop — blanche, pilule verte active */}
       <aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-border bg-card sticky top-0 h-screen">
         <div className="px-4 py-5 border-b border-border">
@@ -113,6 +118,14 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="p-2 border-t border-border space-y-0.5">
+          <button
+            type="button"
+            onClick={() => setDark((v) => !v)}
+            className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-secondary-foreground"
+          >
+            {dark ? <Sun className="w-4 h-4 shrink-0" /> : <Moon className="w-4 h-4 shrink-0" />}
+            {dark ? "Light mode" : "Dark mode"}
+          </button>
           <a
             href="/dashboard"
             target="_blank"
@@ -164,6 +177,14 @@ export function AdminLayout({ children }: { children: ReactNode }) {
                   {item.label}
                 </NavLink>
               ))}
+              <button
+                type="button"
+                onClick={() => setDark((v) => !v)}
+                className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-muted-foreground hover:bg-secondary"
+              >
+                {dark ? <Sun className="w-4 h-4 shrink-0" /> : <Moon className="w-4 h-4 shrink-0" />}
+                {dark ? "Light mode" : "Dark mode"}
+              </button>
               <a
                 href="/dashboard"
                 target="_blank"

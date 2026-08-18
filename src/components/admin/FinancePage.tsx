@@ -3,8 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote, Percent as PercentIcon } from "lucide-react";
+import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote, Percent as PercentIcon, Paperclip as PaperclipIcon } from "lucide-react";
 import { EventMarginsTab } from "@/components/admin/EventMarginsTab";
+import { ReceiptsTab } from "@/components/admin/ReceiptsTab";
 
 /**
  * Onglet Finance (4 août 2026) — phase 1, alimentée par import CSV Revolut
@@ -215,7 +216,7 @@ export function FinancePage({ bookings, installments }: {
   installments: FinInstallment[];
 }) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "box" | "margins" | "report">("tx");
+  const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "box" | "margins" | "receipts" | "report">("tx");
   const [txs, setTxs] = useState<FinTx[]>([]);
   const [rules, setRules] = useState<FinRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -227,21 +228,51 @@ export function FinancePage({ bookings, installments }: {
   // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
   const [splitFor, setSplitFor] = useState<string | null>(null);
   const [deleteArm, setDeleteArm] = useState<string | null>(null);
+  // Justificatifs d'achat : tx qui ont au moins un doc + rattachement "2 clics"
+  const [docTxIds, setDocTxIds] = useState<Set<string>>(new Set());
+  const [attachTxId, setAttachTxId] = useState<string | null>(null);
+  const [attachBusy, setAttachBusy] = useState<string | null>(null);
+  const attachRef = useRef<HTMLInputElement>(null);
   const [splitLines, setSplitLines] = useState<{ amount: string; category: string; booking_id: string; vat: string }[]>([]);
 
   const realBookings = useMemo(() => bookings.filter((b) => !b.is_test), [bookings]);
   const bookingById = useMemo(() => new Map(realBookings.map((b) => [b.id, b])), [realBookings]);
 
   const load = async () => {
-    const [t, r] = await Promise.all([
+    const [t, r, pd] = await Promise.all([
       supabase.from("fin_transactions").select("*").order("date", { ascending: false }).limit(2000),
       supabase.from("fin_rules").select("*"),
+      supabase.from("purchase_docs").select("tx_id").not("tx_id", "is", null),
     ]);
     setTxs((t.data as FinTx[] | null) ?? []);
     setRules((r.data as FinRule[] | null) ?? []);
+    setDocTxIds(new Set(((pd.data as { tx_id: string }[] | null) ?? []).map((d) => d.tx_id)));
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+
+  // ---- Justificatif "2 clics" : photo/PDF -> doc lié à la transaction ->
+  // extraction Claude (TVA appliquée sur amount_net/vat_rate) ---------------
+  const attachReceipt = async (file: File, txId: string) => {
+    setAttachBusy(txId);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `${new Date().toISOString().slice(0, 7)}/${crypto.randomUUID()}.${ext}`;
+      const up = await supabase.storage.from("purchase-docs").upload(path, file, { contentType: file.type || "image/jpeg" });
+      if (up.error) throw new Error(up.error.message);
+      const { data: row, error: insErr } = await supabase.from("purchase_docs")
+        .insert({ storage_path: path, file_name: file.name, mime_type: file.type || "image/jpeg", tx_id: txId, status: "matched" })
+        .select("id").single();
+      if (insErr) throw new Error(insErr.message);
+      setDocTxIds((s) => new Set(s).add(txId));
+      const { data, error } = await supabase.functions.invoke("receipt-extract", { body: { doc_id: row.id } });
+      if (error || data?.error) throw new Error(data?.error || error?.message);
+      toast({ title: "Receipt attached", description: data?.vat_applied ? "VAT read — net amount updated on the transaction." : "Attached (VAT breakdown not readable)." });
+      load();
+    } catch (e) {
+      toast({ title: "Attach failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    } finally { setAttachBusy(null); }
+  };
 
   // ---- Import CSV Revolut --------------------------------------------------
   const importCsv = async (file: File) => {
@@ -881,7 +912,7 @@ export function FinancePage({ bookings, installments }: {
     <div className="space-y-4">
       {/* Sous-onglets + année */}
       <div className="flex items-center gap-2 flex-wrap">
-        {([["tx", "Transactions", ReceiptText], ["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["box", "Cash box", Banknote], ["margins", "Event margins", PercentIcon], ["report", "Investor update", Mail]] as const).map(([k, label, Icon]) => (
+        {([["tx", "Transactions", ReceiptText], ["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["box", "Cash box", Banknote], ["margins", "Event margins", PercentIcon], ["receipts", "Receipts", PaperclipIcon], ["report", "Investor update", Mail]] as const).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm border transition-colors ${
               tab === k ? "bg-primary text-primary-foreground border-primary font-semibold" : "bg-card border-border hover:bg-muted"}`}>
@@ -953,6 +984,8 @@ export function FinancePage({ bookings, installments }: {
               </Button>
               <input ref={fileRef} type="file" accept=".csv" className="hidden"
                 onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} />
+              <input ref={attachRef} type="file" accept="image/*,application/pdf" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f && attachTxId) attachReceipt(f, attachTxId); }} />
               <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={importing}
                 title="Manual fallback — the Revolut sync normally makes this unnecessary">
                 {importing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
@@ -1181,6 +1214,16 @@ export function FinancePage({ bookings, installments }: {
                         {t.reviewed && t.kind !== "review" && (
                           <button type="button" className="ml-1.5 text-[10px] text-muted-foreground hover:underline"
                             onClick={() => patch(t.id, { kind: "review", reviewed: false })}>edit</button>
+                        )}
+                        {(t.kind === "expense" || t.kind === "review") && t.amount < 0 && (
+                          <button type="button"
+                            className={`ml-1.5 text-[11px] ${docTxIds.has(t.id) ? "text-[#178A3F]" : "text-muted-foreground/60 hover:text-foreground"}`}
+                            title={docTxIds.has(t.id)
+                              ? "Receipt attached — click to add another (see Receipts tab)"
+                              : "Attach the receipt (photo or PDF) — vendor, date and VAT are read automatically"}
+                            onClick={() => { setAttachTxId(t.id); attachRef.current?.click(); }}>
+                            {attachBusy === t.id ? "…" : "📎"}
+                          </button>
                         )}
                         {t.kind !== "split" && (deleteArm === t.id ? (
                           <button type="button" className="ml-1.5 text-[10px] font-semibold text-destructive hover:underline"
@@ -1560,6 +1603,9 @@ export function FinancePage({ bookings, installments }: {
       {/* ================= INVESTOR UPDATE ================= */}
       {/* ================= EVENT MARGINS ================= */}
       {tab === "margins" && <EventMarginsTab year={year} />}
+
+      {/* ================= RECEIPTS ================= */}
+      {tab === "receipts" && <ReceiptsTab />}
 
       {tab === "report" && (
         <div className="rounded-2xl bg-card shadow-sm border border-border/60 p-4 space-y-3">

@@ -119,6 +119,63 @@ export type Database = {
         }
         Relationships: []
       }
+      purchase_docs: {
+        Row: {
+          id: string
+          storage_path: string
+          file_name: string | null
+          mime_type: string | null
+          status: string
+          tx_id: string | null
+          vendor: string | null
+          doc_date: string | null
+          total_ttc: number | null
+          nif: string | null
+          vat_breakdown: Json | null
+          currency: string | null
+          candidates: Json | null
+          error: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          storage_path: string
+          file_name?: string | null
+          mime_type?: string | null
+          status?: string
+          tx_id?: string | null
+          vendor?: string | null
+          doc_date?: string | null
+          total_ttc?: number | null
+          nif?: string | null
+          vat_breakdown?: Json | null
+          currency?: string | null
+          candidates?: Json | null
+          error?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          storage_path?: string
+          file_name?: string | null
+          mime_type?: string | null
+          status?: string
+          tx_id?: string | null
+          vendor?: string | null
+          doc_date?: string | null
+          total_ttc?: number | null
+          nif?: string | null
+          vat_breakdown?: Json | null
+          currency?: string | null
+          candidates?: Json | null
+          error?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       fin_rules: {
         Row: {
           id: string

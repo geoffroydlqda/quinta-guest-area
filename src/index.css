@@ -137,6 +137,34 @@
     --radius: 1rem;
   }
 
+  /* ---- Dark mode admin (18 août 2026, demande Geoffroy) ----
+     Variante sombre de la palette olive, activée par la classe .dark posée
+     sur le conteneur .admin-ui (toggle dans la sidebar / feuille More).
+     Spécificité .admin-ui.dark > .admin-ui : les variables gagnent. */
+  .admin-ui.dark {
+    --background: 94 9% 10%;         /* fond olive très sombre */
+    --foreground: 72 14% 90%;
+    --card: 94 8% 14%;
+    --card-foreground: 72 14% 90%;
+    --popover: 94 8% 14%;
+    --popover-foreground: 72 14% 90%;
+    --primary: 102 32% 60%;          /* vert plus saturé, lisible sur sombre */
+    --primary-foreground: 104 45% 10%;
+    --secondary: 95 12% 21%;
+    --secondary-foreground: 91 38% 78%;
+    --muted: 94 9% 19%;
+    --muted-foreground: 100 7% 62%;
+    --accent: 95 12% 21%;
+    --accent-foreground: 91 38% 78%;
+    --destructive: 5 70% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 146 45% 40%;
+    --success-foreground: 0 0% 100%;
+    --border: 94 9% 24%;
+    --input: 94 9% 24%;
+    --ring: 102 32% 60%;
+  }
+
   /* ---- Refonte guest area (août 2026) ----
      Mêmes valeurs que .admin-ui (palette validée par Geoffroy) : fond olive
      très clair, cartes blanches, vert pastel #CAE8BD + vert profond #35532A.
