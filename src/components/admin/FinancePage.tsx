@@ -225,7 +225,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [filter, setFilter] = useState<"review" | "in" | "all">("all");
+  const [filter, setFilter] = useState<"review" | "in" | "noreceipt" | "all">("all");
   const [showManual, setShowManual] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
@@ -595,6 +595,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   }, [txs, installments, bookingById, year]);
 
   const reviewCount = txs.filter((t) => !t.reviewed).length;
+  const noReceiptCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id)).length;
 
   // ---- Cash box (caisse espèces) -------------------------------------------
   // Entrées : échéances is_cash payées (hors tests). Sorties/ajustements :
@@ -853,6 +854,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     let arr = txs;
     if (filter === "review") arr = arr.filter((t) => !t.reviewed);
     if (filter === "in") arr = arr.filter((t) => t.amount > 0);
+    // Dépenses sans justificatif lié (contrôle compta avant envoi au comptable)
+    if (filter === "noreceipt") arr = arr.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id));
     if (monthFilter) arr = arr.filter((t) => t.date.startsWith(monthFilter));
     if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
     if (catFilter === "__none__") arr = arr.filter((t) => !t.category && t.kind === "expense");
@@ -864,7 +867,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         || Math.abs(t.amount).toFixed(2).includes(q));
     }
     return arr;
-  }, [txs, filter, monthFilter, eventFilter, catFilter, search, bookingById]);
+  }, [txs, filter, monthFilter, eventFilter, catFilter, search, bookingById, docsByTx]);
   const visible = useMemo(() => filtered.slice(0, 300), [filtered]);
 
   // ---- Export CSV de la plage affichée (tous les filtres, sans la limite d'affichage)
@@ -964,10 +967,11 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         <>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex bg-card border border-border rounded-full p-0.5">
-              {(["review", "in", "all"] as const).map((f) => (
+              {(["review", "in", "noreceipt", "all"] as const).map((f) => (
                 <button key={f} type="button" onClick={() => setFilter(f)}
+                  title={f === "noreceipt" ? "Expenses without a linked receipt — clear this list before sending the month to the accountant" : undefined}
                   className={`rounded-full px-3.5 py-1 text-xs font-semibold ${filter === f ? "bg-foreground text-background" : "text-muted-foreground"}`}>
-                  {f === "review" ? `To review (${reviewCount})` : f === "in" ? "Money in" : "All"}
+                  {f === "review" ? `To review (${reviewCount})` : f === "in" ? "Money in" : f === "noreceipt" ? `📎 No receipt (${noReceiptCount})` : "All"}
                 </button>
               ))}
             </div>
