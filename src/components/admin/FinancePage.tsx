@@ -251,6 +251,14 @@ export function FinancePage({ bookings, installments }: {
   };
   useEffect(() => { load(); }, []);
 
+  // Rafraîchit l'état des trombones au retour sur Transactions (un doc a pu
+  // être lié depuis l'onglet Receipts entre-temps).
+  useEffect(() => {
+    if (tab !== "tx") return;
+    supabase.from("purchase_docs").select("tx_id").not("tx_id", "is", null)
+      .then(({ data }) => setDocTxIds(new Set(((data as { tx_id: string }[] | null) ?? []).map((d) => d.tx_id))));
+  }, [tab]);
+
   // ---- Justificatif "2 clics" : photo/PDF -> doc lié à la transaction ->
   // extraction Claude (TVA appliquée sur amount_net/vat_rate) ---------------
   const attachReceipt = async (file: File, txId: string) => {
