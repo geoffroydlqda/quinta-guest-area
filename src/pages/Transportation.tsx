@@ -337,6 +337,7 @@ const Transportation = () => {
                 onRemovePassenger={(passengerId) => removePassenger(passengerId, trip.id)}
                 checkoutDate={checkoutDate}
                 disabled={isLocked}
+                isAdminMode={isAdminMode}
               />
             ))}
           </div>
@@ -640,6 +641,7 @@ function TripCard({
   onRemovePassenger,
   checkoutDate,
   disabled,
+  isAdminMode,
 }: {
   trip: TransportationTrip;
   onDelete: () => void;
@@ -649,6 +651,7 @@ function TripCard({
   onRemovePassenger: (id: string) => void;
   checkoutDate?: string | null;
   disabled?: boolean;
+  isAdminMode?: boolean;
 }) {
   const [showAddPassenger, setShowAddPassenger] = useState(false);
   const [newPassenger, setNewPassenger] = useState({ first_name: '', phone: '', flight_number: '' });
@@ -673,6 +676,7 @@ function TripCard({
     return (
       <EditTripForm
         trip={trip}
+        isAdminMode={isAdminMode}
         checkoutDate={checkoutDate || null}
         onCancel={() => setIsEditing(false)}
         onSave={async (updates) => {
@@ -814,11 +818,13 @@ function EditTripForm({
   checkoutDate,
   onSave,
   onCancel,
+  isAdminMode,
 }: {
   trip: TransportationTrip;
   checkoutDate: string | null;
   onSave: (updates: Partial<TransportationTrip>) => Promise<boolean>;
   onCancel: () => void;
+  isAdminMode?: boolean;
 }) {
   const capacityOf = (size: string) => (size === '8 seats' ? 8 : size === '6 seats' ? 6 : 4);
   const MAX_CHECKOUT_TIME = '11:00';
@@ -839,6 +845,26 @@ function EditTripForm({
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Prix (mode admin) : pré-rempli avec le custom_price existant, sinon le tarif standard
+  const hasCustom = trip.custom_price !== null && trip.custom_price !== undefined;
+  const initialStandard = getFixedTripPriceNumeric(trip.pickup_location, trip.dropoff_location, trip.taxi_size as any);
+  const [price, setPrice] = useState(
+    hasCustom ? String(trip.custom_price) : initialStandard !== null ? String(initialStandard) : ''
+  );
+  const [priceTouched, setPriceTouched] = useState(false);
+  const editedStandard = useMemo(() => {
+    const pickup = form.pickup_location === 'Custom' ? form.pickup_custom : form.pickup_location;
+    const dropoff = form.dropoff_location === 'Custom' ? form.dropoff_custom : form.dropoff_location;
+    if (!pickup || !dropoff) return null;
+    return getFixedTripPriceNumeric(pickup, dropoff, form.taxi_size);
+  }, [form.pickup_location, form.pickup_custom, form.dropoff_location, form.dropoff_custom, form.taxi_size]);
+  // Si pas d'override manuel ni saisie en cours, le prix suit le tarif du trajet édité
+  useEffect(() => {
+    if (!priceTouched && !hasCustom) {
+      setPrice(editedStandard !== null ? String(editedStandard) : '');
+    }
+  }, [editedStandard, priceTouched, hasCustom]);
+
   const handleSave = async () => {
     const pickup = form.pickup_location === 'Custom' ? form.pickup_custom : form.pickup_location;
     const dropoff = form.dropoff_location === 'Custom' ? form.dropoff_custom : form.dropoff_location;
@@ -857,6 +883,21 @@ function EditTripForm({
       errors.push('checkout_time');
     }
 
+    // Prix (mode admin) : vide = retour au tarif standard ; identique au barème = pas d'override
+    let customPrice: number | null | undefined = undefined;
+    if (isAdminMode) {
+      if (price.trim() === '') {
+        customPrice = null;
+      } else {
+        const parsed = Number(price.replace(',', '.'));
+        if (Number.isNaN(parsed) || parsed < 0) {
+          errors.push('price');
+        } else {
+          customPrice = editedStandard !== null && parsed === editedStandard ? null : parsed;
+        }
+      }
+    }
+
     if (errors.length > 0) {
       setValidationErrors(errors);
       return;
@@ -871,6 +912,7 @@ function EditTripForm({
       trip_time: form.trip_time,
       passengers_count: form.passengers_count,
       taxi_size: form.taxi_size,
+      ...(customPrice !== undefined ? { custom_price: customPrice } : {}),
     });
     setSaving(false);
   };
@@ -1012,6 +1054,31 @@ function EditTripForm({
             </Select>
           </div>
         </div>
+
+        {/* Price (admin mode only) */}
+        {isAdminMode && (
+          <div>
+            <Label>Price (€)</Label>
+            <Input
+              type="number"
+              min={0}
+              step="1"
+              inputMode="decimal"
+              placeholder={editedStandard !== null ? String(editedStandard) : 'Agreed price'}
+              value={price}
+              onChange={(e) => { setPriceTouched(true); setPrice(e.target.value); }}
+              className={validationErrors.includes('price') ? 'border-destructive' : ''}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              {editedStandard !== null
+                ? `Standard rate for this route: €${editedStandard}. A different value is saved as a custom price; leave empty to go back to the standard rate.`
+                : 'No standard rate for this route — enter the agreed price (leave empty for "custom offer").'}
+            </p>
+            {validationErrors.includes('price') && (
+              <p className="text-xs text-destructive mt-1">Enter a valid price (number ≥ 0).</p>
+            )}
+          </div>
+        )}
 
         <div className="flex gap-2 pt-4">
           <Button variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
