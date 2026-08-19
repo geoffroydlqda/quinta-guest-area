@@ -5,6 +5,11 @@ import { useActiveBooking } from '@/contexts/BookingContext';
 import { useToast } from '@/hooks/use-toast';
 import type { TransportationTrip, TransportationPassenger, TransportationRequest } from '@/types/guest';
 import { getTripPrice } from '@/lib/transportationPricing';
+import { CUSTOM_OFFER_TEXT } from '@/types/guest';
+
+// Au-delà de 8 passagers, pas de tarif standard : quote demandée aux drivers
+const estimateTripPrice = (pickup: string, dropoff: string, taxiSize: string, passengers: number): string =>
+  passengers > 8 ? CUSTOM_OFFER_TEXT : getTripPrice(pickup, dropoff, taxiSize as any);
 import { syncTripCalendar, deleteTripCalendarEvent } from '@/lib/calendarSync';
 
 export function useTransportation() {
@@ -104,10 +109,11 @@ export function useTransportation() {
     if (!user) return null;
     
     try {
-      const priceEstimate = getTripPrice(
+      const priceEstimate = estimateTripPrice(
         tripData.pickup_location || '',
         tripData.dropoff_location || '',
-        tripData.taxi_size || '4 seats'
+        tripData.taxi_size || '4 seats',
+        tripData.passengers_count || 1
       );
       
       const { data, error } = await supabase
@@ -150,15 +156,16 @@ export function useTransportation() {
     if (!user) return false;
     
     try {
-      // Recalculate price if locations or taxi size changed
+      // Recalculate price if locations, taxi size or passenger count changed
       let priceEstimate = updates.price_estimate;
-      if (updates.pickup_location || updates.dropoff_location || updates.taxi_size) {
+      if (updates.pickup_location || updates.dropoff_location || updates.taxi_size || updates.passengers_count) {
         const trip = trips.find(t => t.id === tripId);
         if (trip) {
-          priceEstimate = getTripPrice(
+          priceEstimate = estimateTripPrice(
             updates.pickup_location || trip.pickup_location,
             updates.dropoff_location || trip.dropoff_location,
-            updates.taxi_size || trip.taxi_size
+            updates.taxi_size || trip.taxi_size,
+            updates.passengers_count || trip.passengers_count
           );
         }
       }

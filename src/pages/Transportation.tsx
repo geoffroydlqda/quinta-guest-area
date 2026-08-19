@@ -41,8 +41,10 @@ import driverImage from '@/assets/driver-luis.jpeg';
 const PICKUP_OPTIONS = ['Lisbon', 'Lisbon Airport', 'Quinta do Amor', 'Custom'];
 const DROPOFF_OPTIONS = ['Quinta do Amor', 'Lisbon', 'Lisbon Airport', 'Custom'];
 
-// Le guest choisit un nombre de passagers ; la taille de taxi est dérivée en interne
-const MAX_TRIP_PASSENGERS = 8;
+// Le guest choisit un nombre de passagers ; la taille de taxi est dérivée en interne.
+// Au-delà de 8, on stocke '8 seats' (plus grand véhicule) et le prix devient une
+// custom offer — on organise plusieurs taxis ou un minibus via les drivers.
+const STANDARD_RATE_MAX_PASSENGERS = 8;
 const taxiSizeForPassengers = (n: number): '4 seats' | '6 seats' | '8 seats' =>
   n <= 4 ? '4 seats' : n <= 6 ? '6 seats' : '8 seats';
 
@@ -120,6 +122,7 @@ const Transportation = () => {
     const pickup = newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location;
     const dropoff = newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location;
     if (!pickup || !dropoff) return null;
+    if (newTrip.passengers_count > STANDARD_RATE_MAX_PASSENGERS) return null;
     return getFixedTripPriceNumeric(pickup, dropoff, taxiSizeForPassengers(newTrip.passengers_count));
   }, [newTrip.pickup_location, newTrip.pickup_custom, newTrip.dropoff_location, newTrip.dropoff_custom, newTrip.passengers_count]);
 
@@ -152,11 +155,6 @@ const Transportation = () => {
     if (!newTrip.trip_time) errors.push('trip_time');
     if (isRound && !newTrip.return_time) errors.push('return_time');
     if (!newTrip.passengers_count || newTrip.passengers_count < 1) errors.push('passengers_count');
-
-    // Capacity validation (au-delà de 8, il faut plusieurs taxis → plusieurs trips)
-    if (newTrip.passengers_count > MAX_TRIP_PASSENGERS) {
-      errors.push('passengers_capacity');
-    }
 
     // Price (admin mode) : si renseigné, doit être un nombre >= 0
     let customPrice: number | undefined = undefined;
@@ -524,23 +522,23 @@ const Transportation = () => {
                     );
                   })()}
 
-                  {/* Passengers — la taille de taxi est choisie par nos soins */}
+                  {/* Passengers — la taille/le nombre de véhicules est choisi par nos soins */}
                   <div>
                     <Label>Number of passengers <span className="text-destructive">*</span></Label>
                     <Input
                       type="number"
                       min={1}
-                      max={MAX_TRIP_PASSENGERS}
                       value={newTrip.passengers_count}
                       onChange={(e) => setNewTrip(prev => ({ ...prev, passengers_count: parseInt(e.target.value) || 1 }))}
-                      className={validationErrors.includes('passengers_count') || validationErrors.includes('passengers_capacity') ? 'border-destructive' : ''}
+                      className={validationErrors.includes('passengers_count') ? 'border-destructive' : ''}
                     />
-                    <p className="text-xs text-muted-foreground mt-1">We'll arrange the right vehicle for your group (up to {MAX_TRIP_PASSENGERS} passengers per taxi).</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {newTrip.passengers_count > STANDARD_RATE_MAX_PASSENGERS
+                        ? 'For groups of 9 or more, we’ll arrange several taxis or a minibus and include it in your custom offer.'
+                        : 'We’ll arrange the right vehicle for your group.'}
+                    </p>
                     {validationErrors.includes('passengers_count') && (
                       <p className="text-xs text-destructive mt-1">Required</p>
-                    )}
-                    {validationErrors.includes('passengers_capacity') && (
-                      <p className="text-xs text-destructive mt-1">Maximum {MAX_TRIP_PASSENGERS} passengers per taxi — please add a second trip for larger groups.</p>
                     )}
                   </div>
 
@@ -830,6 +828,7 @@ function EditTripForm({
     const pickup = form.pickup_location === 'Custom' ? form.pickup_custom : form.pickup_location;
     const dropoff = form.dropoff_location === 'Custom' ? form.dropoff_custom : form.dropoff_location;
     if (!pickup || !dropoff) return null;
+    if (form.passengers_count > STANDARD_RATE_MAX_PASSENGERS) return null;
     return getFixedTripPriceNumeric(pickup, dropoff, taxiSizeForPassengers(form.passengers_count));
   }, [form.pickup_location, form.pickup_custom, form.dropoff_location, form.dropoff_custom, form.passengers_count]);
   // Si pas d'override manuel ni saisie en cours, le prix suit le tarif du trajet édité
@@ -851,7 +850,6 @@ function EditTripForm({
     if (!form.trip_date) errors.push('trip_date');
     if (!form.trip_time) errors.push('trip_time');
     if (!form.passengers_count || form.passengers_count < 1) errors.push('passengers_count');
-    if (form.passengers_count > MAX_TRIP_PASSENGERS) errors.push('passengers_capacity');
     if (checkoutDate && form.trip_date === checkoutDate && form.trip_time && form.trip_time > MAX_CHECKOUT_TIME) {
       errors.push('checkout_time');
     }
@@ -993,15 +991,15 @@ function EditTripForm({
           <Input
             type="number"
             min={1}
-            max={MAX_TRIP_PASSENGERS}
             value={form.passengers_count}
             onChange={(e) => setForm(p => ({ ...p, passengers_count: parseInt(e.target.value) || 1 }))}
-            className={validationErrors.includes('passengers_count') || validationErrors.includes('passengers_capacity') ? 'border-destructive' : ''}
+            className={validationErrors.includes('passengers_count') ? 'border-destructive' : ''}
           />
-          <p className="text-xs text-muted-foreground mt-1">We'll arrange the right vehicle for your group (up to {MAX_TRIP_PASSENGERS} passengers per taxi).</p>
-          {validationErrors.includes('passengers_capacity') && (
-            <p className="text-xs text-destructive mt-1">Maximum {MAX_TRIP_PASSENGERS} passengers per taxi — please split into two trips.</p>
-          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            {form.passengers_count > STANDARD_RATE_MAX_PASSENGERS
+              ? 'For groups of 9 or more, we’ll arrange several taxis or a minibus and include it in your custom offer.'
+              : 'We’ll arrange the right vehicle for your group.'}
+          </p>
         </div>
 
         {/* Price (admin mode only) */}
