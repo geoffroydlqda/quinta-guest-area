@@ -1158,7 +1158,7 @@ const AdminGuestDetailContent = () => {
 
         {/* Feed des emails automatiques envoyés au client */}
         {tab === "emails" && (
-          <EmailLogFeed bookingId={booking?.id ?? null} />
+          <EmailLogFeed bookingId={booking?.id ?? null} email={(email || booking?.email || "").toLowerCase() || null} />
         )}
       </main>
 
@@ -2592,7 +2592,7 @@ const EMAIL_TYPE_META: Record<string, { label: string; cls: string }> = {
   payment_manual: { label: "Manual reminder", cls: "bg-muted text-foreground border-border" },
 };
 
-function EmailLogFeed({ bookingId }: { bookingId: string | null }) {
+function EmailLogFeed({ bookingId, email }: { bookingId: string | null; email: string | null }) {
   const [rows, setRows] = useState<Array<{
     id: string; type: string; recipient: string | null; subject: string | null;
     status: string | null; error: string | null; created_at: string;
@@ -2600,19 +2600,34 @@ function EmailLogFeed({ bookingId }: { bookingId: string | null }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!bookingId) { setRows([]); setLoading(false); return; }
+    if (!bookingId && !email) { setRows([]); setLoading(false); return; }
     (async () => {
       setLoading(true);
-      const { data } = await supabase
-        .from("reminder_log")
-        .select("id,type,recipient,subject,status,error,created_at")
-        .eq("booking_id", bookingId)
-        .order("created_at", { ascending: false })
-        .limit(200);
-      setRows((data as any) ?? []);
+      const cols = "id,type,recipient,subject,status,error,created_at";
+      const [byBooking, byEmail] = await Promise.all([
+        bookingId
+          ? supabase.from("reminder_log").select(cols).eq("booking_id", bookingId)
+              .order("created_at", { ascending: false }).limit(200)
+          : Promise.resolve({ data: [] as any[] }),
+        // Emails sans booking_id (ex : invitations) rattachés par adresse
+        email
+          ? supabase.from("reminder_log").select(cols).is("booking_id", null).eq("recipient", email)
+              .order("created_at", { ascending: false }).limit(50)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const merged = ([...(byBooking.data ?? []), ...(byEmail.data ?? [])] as any[]);
+      // Un envoi groupé écrit une ligne par échéance -> une seule entrée dans le feed
+      const seen = new Set<string>();
+      const deduped = merged.filter((r) => {
+        const k = `${r.type}|${r.recipient}|${r.subject}|${r.created_at}|${r.status}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      setRows(deduped);
       setLoading(false);
     })();
-  }, [bookingId]);
+  }, [bookingId, email]);
 
   return (
     <section className="bg-card rounded-2xl border border-border p-6">
