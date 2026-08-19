@@ -223,8 +223,9 @@ const AdminContent = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted">("all");
-  const [categoryFilter, setCategoryFilter] = useState<"all" | "live" | "upcoming" | "past">("all");
-  const [pastCollapsed, setPastCollapsed] = useState(true);
+  // Pilules de navigation Bookings : année courante, années suivantes avec
+  // bookings, et Past events (demande Geoffroy, 19 août 2026)
+  const [yearPill, setYearPill] = useState<string>(() => String(new Date().getFullYear()));
   const [showTests, setShowTests] = useState(false);
   
   const [createBookingOpen, setCreateBookingOpen] = useState(false);
@@ -387,19 +388,9 @@ const AdminContent = () => {
     return { upcomingEvents: upcoming, pastEvents: past, unscheduledEvents: none };
   }, [filteredEvents, todayIso]);
 
-  const visibleUpcoming = useMemo(() => {
-    if (categoryFilter === "past") return [];
-    if (categoryFilter === "live") return upcomingEvents.filter((e) => categoryOfEvent(e) === "live");
-    if (categoryFilter === "upcoming") return upcomingEvents.filter((e) => categoryOfEvent(e) === "upcoming");
-    return upcomingEvents;
-  }, [upcomingEvents, categoryFilter, todayIso]);
-
-  const visiblePast = useMemo(() => {
-    if (categoryFilter === "upcoming" || categoryFilter === "live") return [];
-    return pastEvents;
-  }, [pastEvents, categoryFilter]);
-
-  const visibleUnscheduled = categoryFilter === "all" ? unscheduledEvents : [];
+  const visibleUpcoming = upcomingEvents;
+  const visiblePast = pastEvents;
+  const visibleUnscheduled = unscheduledEvents;
 
   // Événements à venir groupés par année (demande Geoffroy, 3 août 2026)
   const upcomingByYear = useMemo(() => {
@@ -412,6 +403,23 @@ const AdminContent = () => {
     }
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [visibleUpcoming]);
+
+  // Pilules : année courante toujours, puis chaque année future avec bookings, puis Past
+  const yearPills = useMemo(() => {
+    const current = String(new Date().getFullYear());
+    const years = new Set<string>([current]);
+    for (const [y] of upcomingByYear) {
+      if (/^\d{4}$/.test(y) && y >= current) years.add(y);
+    }
+    return [...years].sort();
+  }, [upcomingByYear]);
+
+  // Si la pilule active n'existe plus (recherche qui vide une année), on retombe sur la 1re
+  const activePill = yearPill === "past" || yearPills.includes(yearPill) ? yearPill : yearPills[0];
+  const pillEvents = useMemo(() => {
+    if (activePill === "past") return [];
+    return upcomingByYear.find(([y]) => y === activePill)?.[1] ?? [];
+  }, [upcomingByYear, activePill]);
 
   // Chevauchements de dates entre séjours à venir / en cours (hors passés) :
   // deux événements se chevauchent si l'un commence avant la fin de l'autre
@@ -637,12 +645,6 @@ const AdminContent = () => {
                 <option value="draft">Draft</option>
                 <option value="submitted">Submitted</option>
               </select>
-              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as any)} className="border border-border rounded-md px-3 py-2 text-sm bg-background">
-                <option value="all">All events</option>
-                <option value="live">Live</option>
-                <option value="upcoming">Upcoming</option>
-                <option value="past">Past</option>
-              </select>
               <Button
                 size="sm"
                 variant={showTests ? "default" : "outline"}
@@ -677,66 +679,82 @@ const AdminContent = () => {
               </div>
             )}
 
-            {(categoryFilter === "all" || categoryFilter === "live" || categoryFilter === "upcoming") && (
-              visibleUpcoming.length === 0 ? (
-                <section className="mb-6">
-                  <h2 className="text-base font-medium mb-2">Upcoming events <span className="text-muted-foreground text-sm font-normal">(0)</span></h2>
-                  <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No upcoming events.</div>
-                </section>
-              ) : (
-                upcomingByYear.map(([yr, evs]) => (
-                  <section key={yr} className="mb-6">
-                    <h2 className="text-base font-medium mb-2">Upcoming events {yr} <span className="text-muted-foreground text-sm font-normal">({evs.length})</span></h2>
-                    <EventTable
-                      events={evs}
-                      toolStatus={toolStatus}
-                      categoryOf={categoryOfEvent}
-                      paymentForEvent={paymentForEvent}
-                      paymentProgress={paymentProgressFor}
-                      natFor={natForEvent}
-                      todayIso={todayIso}
-                      overlapIds={overlaps.ids}
-                      onRowClick={(bookingId) => navigateToBooking(bookingId)}
-                      onOpenGuest={navigateToGuest}
-                      onDeleteBooking={deleteBookingDirect}
-                      onRenameBooking={renameBookingDirect}
-                      onSetEventType={setEventTypeDirect}
-                      showLive
-                    />
-                  </section>
-                ))
-              )
+            {/* Pilules années + Past events */}
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              {yearPills.map((y) => {
+                const count = upcomingByYear.find(([yy]) => yy === y)?.[1].length ?? 0;
+                return (
+                  <button
+                    key={y}
+                    type="button"
+                    onClick={() => setYearPill(y)}
+                    className={`px-3.5 py-1.5 rounded-full text-sm border transition-colors ${
+                      activePill === y
+                        ? "bg-primary text-primary-foreground border-primary font-medium"
+                        : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    {y} <span className="opacity-70">({count})</span>
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setYearPill("past")}
+                className={`px-3.5 py-1.5 rounded-full text-sm border transition-colors ${
+                  activePill === "past"
+                    ? "bg-primary text-primary-foreground border-primary font-medium"
+                    : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/40"
+                }`}
+              >
+                Past events <span className="opacity-70">({visiblePast.length})</span>
+              </button>
+            </div>
+
+            {activePill !== "past" && (
+              <section className="mb-6">
+                {pillEvents.length === 0 ? (
+                  <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No events in {activePill}.</div>
+                ) : (
+                  <EventTable
+                    events={pillEvents}
+                    toolStatus={toolStatus}
+                    categoryOf={categoryOfEvent}
+                    paymentForEvent={paymentForEvent}
+                    paymentProgress={paymentProgressFor}
+                    natFor={natForEvent}
+                    todayIso={todayIso}
+                    overlapIds={overlaps.ids}
+                    onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                    onOpenGuest={navigateToGuest}
+                    onDeleteBooking={deleteBookingDirect}
+                    onRenameBooking={renameBookingDirect}
+                    onSetEventType={setEventTypeDirect}
+                    showLive
+                  />
+                )}
+              </section>
             )}
 
-            {(categoryFilter === "all" || categoryFilter === "past") && (
+            {activePill === "past" && (
               <section className="mb-6">
-                <button
-                  type="button"
-                  onClick={() => setPastCollapsed((v) => !v)}
-                  className="flex items-center gap-1 text-base font-medium mb-2 hover:underline"
-                >
-                  {pastCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  Past events <span className="text-muted-foreground text-sm font-normal">({visiblePast.length})</span>
-                </button>
-                {!pastCollapsed && (
-                  visiblePast.length === 0 ? (
-                    <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No past events.</div>
-                  ) : (
-                    <EventTable
-                      events={visiblePast}
-                      toolStatus={toolStatus}
-                      categoryOf={categoryOfEvent}
-                      paymentForEvent={paymentForEvent}
-                      paymentProgress={paymentProgressFor}
-                      natFor={natForEvent}
-                      todayIso={todayIso}
-                      onRowClick={(bookingId) => navigateToBooking(bookingId)}
-                      onOpenGuest={navigateToGuest}
-                      onDeleteBooking={deleteBookingDirect}
-                      onRenameBooking={renameBookingDirect}
-                      onSetEventType={setEventTypeDirect}
-                    />
-                  )
+                {visiblePast.length === 0 ? (
+                  <div className="border border-border rounded-lg bg-card p-6 text-sm text-muted-foreground text-center">No past events.</div>
+                ) : (
+                  <EventTable
+                    events={visiblePast}
+                    toolStatus={toolStatus}
+                    categoryOf={categoryOfEvent}
+                    paymentForEvent={paymentForEvent}
+                    paymentProgress={paymentProgressFor}
+                    natFor={natForEvent}
+                    todayIso={todayIso}
+                    onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                    onOpenGuest={navigateToGuest}
+                    onDeleteBooking={deleteBookingDirect}
+                    onRenameBooking={renameBookingDirect}
+                    onSetEventType={setEventTypeDirect}
+                  />
                 )}
               </section>
             )}
