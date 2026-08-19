@@ -123,6 +123,7 @@ export function useTransportation() {
           passengers_count: tripData.passengers_count || 1,
           taxi_size: tripData.taxi_size || '4 seats',
           price_estimate: priceEstimate,
+          custom_price: tripData.custom_price ?? null,
         })
         .select()
         .single();

@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, Check, User, Users, BedDouble, BedSingle, AlertTriangle, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, Check, User, Users, BedDouble, BedSingle, AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { FIXED_ROOMS, FLEXIBLE_ROOMS_ORDER } from '@/types/room';
 import { cn } from '@/lib/utils';
 import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
@@ -24,6 +24,15 @@ import { downloadRoomMapPdf, renderRoomMapCanvas, type RoomMapEntry } from '@/li
 import roomKingImage from '@/assets/room-king.jpg';
 import roomQueenImage from '@/assets/room-queen.jpg';
 import roomTwinsImage from '@/assets/room-twins.jpg';
+import roomEnsuiteBedroomImage from '@/assets/room-ensuite-bedroom.jpg';
+import roomEnsuiteBathroomImage from '@/assets/room-ensuite-bathroom.jpg';
+
+// Chambres 9-11 (en-suite) : vraies photos, chambre d'abord puis salle de bain
+const ENSUITE_PHOTO_ROOMS = new Set([9, 10, 11]);
+const ENSUITE_SLIDES: { src: string; label: string }[] = [
+  { src: roomEnsuiteBedroomImage, label: 'Bedroom' },
+  { src: roomEnsuiteBathroomImage, label: 'Bathroom' },
+];
 
 const TOTAL_ROOMS = 11;
 
@@ -78,6 +87,10 @@ function RoomCard({ roomId, bathroomType, note, bedType, isExpanded, onToggle, i
       : bedType === 'king'
         ? roomTwinsImage
         : roomQueenImage;
+  // Carrousel photos réelles pour les chambres en-suite 9-11 (twins comme double)
+  const slides = ENSUITE_PHOTO_ROOMS.has(roomId) ? ENSUITE_SLIDES : [{ src: image, label: '' }];
+  const [slideIdx, setSlideIdx] = useState(0);
+  const slide = slides[Math.min(slideIdx, slides.length - 1)];
   const disabled = isLocked || isFixed;
   const namedGuests = guests.filter((n) => n && n.trim().length > 0);
   const [editingGuestIdx, setEditingGuestIdx] = useState<number | null>(null);
@@ -100,7 +113,7 @@ function RoomCard({ roomId, bathroomType, note, bedType, isExpanded, onToggle, i
         className="w-full bg-card rounded-xl border border-border shadow-sm hover:shadow-md hover:border-primary/40 transition-all scroll-mt-24 text-left"
       >
         <div className="flex items-center gap-3 p-2.5">
-          <img src={image} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+          <img src={slides[0].src} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="font-medium">Room {roomId}</span>
@@ -138,8 +151,36 @@ function RoomCard({ roomId, bathroomType, note, bedType, isExpanded, onToggle, i
 
   return (
     <div id={`room-card-${roomId}`} className="bg-card rounded-2xl shadow-elegant overflow-hidden border-2 border-primary/40 flex flex-col sm:flex-row scroll-mt-24">
-      <div className="relative w-full sm:w-64 h-48 sm:h-auto sm:self-stretch flex-shrink-0 overflow-hidden">
-        <img src={image} alt={`Room ${roomId}`} className="w-full h-full object-cover transition-opacity" />
+      <div className="relative w-full sm:w-64 h-48 sm:h-auto sm:self-stretch flex-shrink-0 overflow-hidden group">
+        <img src={slide.src} alt={slide.label ? `Room ${roomId} — ${slide.label}` : `Room ${roomId}`} className="w-full h-full object-cover transition-opacity" />
+        {slides.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setSlideIdx((i) => (i - 1 + slides.length) % slides.length); }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors"
+              aria-label="Previous photo"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setSlideIdx((i) => (i + 1) % slides.length); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors"
+              aria-label="Next photo"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <div className="absolute bottom-2 left-0 right-0 flex flex-col items-center gap-1 pointer-events-none">
+              <span className="text-[11px] font-medium text-white bg-black/45 rounded-full px-2 py-0.5">{slide.label}</span>
+              <div className="flex items-center gap-1.5">
+                {slides.map((s, i) => (
+                  <span key={s.label} className={cn('inline-block h-1.5 rounded-full transition-all', i === slideIdx ? 'w-4 bg-white' : 'w-1.5 bg-white/60')} />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
         {isFixed && (
           <Badge
             className="absolute top-3 right-3 bg-primary text-primary-foreground gap-1 cursor-help"

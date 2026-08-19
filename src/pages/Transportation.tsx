@@ -6,7 +6,7 @@ import { useActiveBooking } from '@/contexts/BookingContext';
 import { useTransportation } from '@/hooks/useTransportation';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
-import { calculateTransportationCost } from '@/lib/transportationPricing';
+import { calculateTransportationCost, getFixedTripPriceNumeric } from '@/lib/transportationPricing';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 
@@ -90,6 +90,10 @@ const Transportation = () => {
     passengers_count: 1,
     taxi_size: '4 seats' as '4 seats' | '6 seats' | '8 seats',
   });
+  // Prix éditable à la création (admin/impersonation) : défaut = tarif standard du trajet
+  const [tripPrice, setTripPrice] = useState('');
+  const [tripPriceTouched, setTripPriceTouched] = useState(false);
+  const isAdminMode = lockCtx.isImpersonating;
 
   // Note: Auth redirect is handled by ProtectedRoute in App.tsx
 
@@ -106,6 +110,21 @@ const Transportation = () => {
       triggerSave();
     }
   }, [request?.notes_transportation]);
+
+  // Tarif standard du trajet sélectionné (null si trajet custom / hors barème)
+  const standardTripPrice = useMemo(() => {
+    const pickup = newTrip.pickup_location === 'Custom' ? newTrip.pickup_custom : newTrip.pickup_location;
+    const dropoff = newTrip.dropoff_location === 'Custom' ? newTrip.dropoff_custom : newTrip.dropoff_location;
+    if (!pickup || !dropoff) return null;
+    return getFixedTripPriceNumeric(pickup, dropoff, newTrip.taxi_size);
+  }, [newTrip.pickup_location, newTrip.pickup_custom, newTrip.dropoff_location, newTrip.dropoff_custom, newTrip.taxi_size]);
+
+  // Pré-remplit le prix avec le tarif standard tant que l'admin ne l'a pas modifié à la main
+  useEffect(() => {
+    if (!tripPriceTouched) {
+      setTripPrice(standardTripPrice !== null ? String(standardTripPrice) : '');
+    }
+  }, [standardTripPrice, tripPriceTouched]);
 
   const capacityOf = (size: string) => (size === '8 seats' ? 8 : size === '6 seats' ? 6 : 4);
   const checkoutDate = profile?.check_out_date || null;
@@ -137,6 +156,19 @@ const Transportation = () => {
       errors.push('passengers_capacity');
     }
 
+    // Price (admin mode) : si renseigné, doit être un nombre >= 0
+    let customPrice: number | undefined = undefined;
+    if (isAdminMode && tripPrice.trim() !== '') {
+      const parsed = Number(tripPrice.replace(',', '.'));
+      if (Number.isNaN(parsed) || parsed < 0) {
+        errors.push('price');
+      } else if (standardTripPrice === null || parsed !== standardTripPrice) {
+        // On n'enregistre un override que si le prix diffère du tarif standard
+        // (sinon le trip suit automatiquement les évolutions de barème)
+        customPrice = parsed;
+      }
+    }
+
     // Check-out time validation (apply to whichever leg lands on the checkout date)
     if (checkoutDate && newTrip.trip_date === checkoutDate) {
       if (newTrip.trip_time && newTrip.trip_time > MAX_CHECKOUT_TIME) errors.push('checkout_time');
@@ -160,6 +192,7 @@ const Transportation = () => {
         trip_time: newTrip.trip_time,
         passengers_count: newTrip.passengers_count,
         taxi_size: newTrip.taxi_size,
+        custom_price: customPrice,
       });
 
       if (isRound) {
@@ -171,10 +204,13 @@ const Transportation = () => {
           trip_time: newTrip.return_time,
           passengers_count: newTrip.passengers_count,
           taxi_size: newTrip.taxi_size,
+          custom_price: customPrice,
         });
       }
 
       setShowAddTrip(false);
+      setTripPrice('');
+      setTripPriceTouched(false);
       setNewTrip({
         trip_type: 'one_way',
         pickup_location: '',
@@ -529,9 +565,34 @@ const Transportation = () => {
                     </div>
                   </div>
 
+                  {/* Price (admin mode only) — pré-rempli avec le tarif standard, modifiable */}
+                  {isAdminMode && (
+                    <div>
+                      <Label>Price (€)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="1"
+                        inputMode="decimal"
+                        placeholder={standardTripPrice !== null ? String(standardTripPrice) : 'Agreed price'}
+                        value={tripPrice}
+                        onChange={(e) => { setTripPriceTouched(true); setTripPrice(e.target.value); }}
+                        className={validationErrors.includes('price') ? 'border-destructive' : ''}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {standardTripPrice !== null
+                          ? `Standard rate for this route: €${standardTripPrice}${newTrip.trip_type === 'round_trip' ? ' per leg' : ''}. Change it to set a custom price.`
+                          : 'No standard rate for this route — enter the agreed price (leave empty for "custom offer").'}
+                        {newTrip.trip_type === 'round_trip' && ' Applied to both legs.'}
+                      </p>
+                      {validationErrors.includes('price') && (
+                        <p className="text-xs text-destructive mt-1">Enter a valid price (number ≥ 0).</p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex gap-2 pt-4">
-                    <Button variant="outline" onClick={() => { setShowAddTrip(false); setValidationErrors([]); }}>
+                    <Button variant="outline" onClick={() => { setShowAddTrip(false); setValidationErrors([]); setTripPrice(''); setTripPriceTouched(false); }}>
                       Cancel
                     </Button>
                     <Button onClick={handleAddTrip} disabled={submittingTrip}>
