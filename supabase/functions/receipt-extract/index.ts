@@ -8,6 +8,7 @@
 //   { doc_id }                        -> extraction + matching
 //   { link: { doc_id, tx_id } }       -> lien manuel + application TVA
 //   { unlink: { doc_id } }            -> retire le lien (statut review)
+//   { ingest: {...} }                 -> PJ Gmail (auth x-ingest-key)
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://esm.sh/zod@3.23.8";
@@ -19,7 +20,7 @@ const admin = createClient(
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-ingest-key",
 };
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -31,6 +32,13 @@ const BodySchema = z.object({
   doc_id: z.string().uuid().optional(),
   link: z.object({ doc_id: z.string().uuid(), tx_id: z.string().uuid() }).optional(),
   unlink: z.object({ doc_id: z.string().uuid() }).optional(),
+  // Ingestion depuis Gmail (Apps Script de Geoffroy) : PJ en base64.
+  // Auth dédiée : header x-ingest-key = app_settings.internal.ingest_key.
+  ingest: z.object({
+    filename: z.string().min(1).max(200),
+    mime_type: z.string().min(3).max(100),
+    content: z.string().min(100).max(14_000_000),
+  }).optional(),
 });
 
 async function isAdminEmailDb(email?: string | null): Promise<boolean> {
@@ -180,6 +188,39 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   let raw: Record<string, unknown> = {};
   try {
+    raw = await req.json().catch(() => ({}));
+    const parsed = BodySchema.safeParse(raw);
+    if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
+
+    // --- Auth : ingest -> clé dédiée (Apps Script Gmail) ; sinon JWT admin.
+    if (parsed.data.ingest) {
+      const key = req.headers.get("x-ingest-key");
+      const { data: internal } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
+      const expected = (internal?.value as Record<string, string> | null)?.ingest_key;
+      if (!key || !expected || key !== expected) return json({ error: "Unauthorized" }, 401);
+
+      const ing = parsed.data.ingest;
+      const isPdf = ing.mime_type.includes("pdf");
+      if (!isPdf && !/jpeg|jpg|png|webp/.test(ing.mime_type)) return json({ skipped: "unsupported_type" });
+      if (!isPdf && ing.content.length < 30000) return json({ skipped: "too_small_probably_logo" });
+      // Dédup par empreinte du contenu -> même PJ reçue deux fois = un seul doc
+      const hashBuf = await crypto.subtle.digest("SHA-256", Uint8Array.from(atob(ing.content), (c) => c.charCodeAt(0)));
+      const sha = Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+      const ext = isPdf ? "pdf" : ing.mime_type.includes("png") ? "png" : ing.mime_type.includes("webp") ? "webp" : "jpg";
+      const path = `email/${sha}.${ext}`;
+      const { data: existing } = await admin.from("purchase_docs").select("id,status").eq("storage_path", path).maybeSingle();
+      if (existing) return json({ skipped: "already_ingested", doc_id: existing.id, status: existing.status });
+      const bytes = Uint8Array.from(atob(ing.content), (c) => c.charCodeAt(0));
+      const up = await admin.storage.from("purchase-docs").upload(path, bytes, { contentType: ing.mime_type, upsert: true });
+      if (up.error) return json({ error: up.error.message }, 500);
+      const { data: row, error: insErr } = await admin.from("purchase_docs")
+        .insert({ storage_path: path, file_name: ing.filename, mime_type: ing.mime_type })
+        .select("id").single();
+      if (insErr) return json({ error: insErr.message }, 500);
+      raw = { doc_id: row.id }; // pour le marquage d'erreur du catch
+      return json(await extractAndMatch(row.id));
+    }
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
     const userClient = createClient(
@@ -188,10 +229,6 @@ serve(async (req) => {
     );
     const { data: { user } } = await userClient.auth.getUser();
     if (!user || !(await isAdminEmailDb(user.email))) return json({ error: "Forbidden" }, 403);
-
-    raw = await req.json().catch(() => ({}));
-    const parsed = BodySchema.safeParse(raw);
-    if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
 
     if (parsed.data.link) {
       const { doc_id, tx_id } = parsed.data.link;
