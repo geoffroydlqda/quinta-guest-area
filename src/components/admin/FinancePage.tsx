@@ -229,7 +229,19 @@ export function FinancePage({ bookings, installments }: {
   const [splitFor, setSplitFor] = useState<string | null>(null);
   const [deleteArm, setDeleteArm] = useState<string | null>(null);
   // Justificatifs d'achat : tx qui ont au moins un doc + rattachement "2 clics"
-  const [docTxIds, setDocTxIds] = useState<Set<string>>(new Set());
+  // tx_id -> chemins storage des justificatifs liés (icône verte cliquable)
+  const [docsByTx, setDocsByTx] = useState<Map<string, string[]>>(new Map());
+  const buildDocsMap = (rows: { tx_id: string; storage_path: string }[] | null) => {
+    const m = new Map<string, string[]>();
+    for (const r of rows ?? []) m.set(r.tx_id, [...(m.get(r.tx_id) ?? []), r.storage_path]);
+    return m;
+  };
+  const openReceipts = async (txId: string) => {
+    for (const p of docsByTx.get(txId) ?? []) {
+      const { data } = await supabase.storage.from("purchase-docs").createSignedUrl(p, 300);
+      if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+    }
+  };
   const [attachTxId, setAttachTxId] = useState<string | null>(null);
   const [attachBusy, setAttachBusy] = useState<string | null>(null);
   const attachRef = useRef<HTMLInputElement>(null);
@@ -242,11 +254,11 @@ export function FinancePage({ bookings, installments }: {
     const [t, r, pd] = await Promise.all([
       supabase.from("fin_transactions").select("*").order("date", { ascending: false }).limit(2000),
       supabase.from("fin_rules").select("*"),
-      supabase.from("purchase_docs").select("tx_id").not("tx_id", "is", null),
+      supabase.from("purchase_docs").select("tx_id,storage_path").not("tx_id", "is", null),
     ]);
     setTxs((t.data as FinTx[] | null) ?? []);
     setRules((r.data as FinRule[] | null) ?? []);
-    setDocTxIds(new Set(((pd.data as { tx_id: string }[] | null) ?? []).map((d) => d.tx_id)));
+    setDocsByTx(buildDocsMap(pd.data as { tx_id: string; storage_path: string }[] | null));
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -255,8 +267,8 @@ export function FinancePage({ bookings, installments }: {
   // être lié depuis l'onglet Receipts entre-temps).
   useEffect(() => {
     if (tab !== "tx") return;
-    supabase.from("purchase_docs").select("tx_id").not("tx_id", "is", null)
-      .then(({ data }) => setDocTxIds(new Set(((data as { tx_id: string }[] | null) ?? []).map((d) => d.tx_id))));
+    supabase.from("purchase_docs").select("tx_id,storage_path").not("tx_id", "is", null)
+      .then(({ data }) => setDocsByTx(buildDocsMap(data as { tx_id: string; storage_path: string }[] | null)));
   }, [tab]);
 
   // ---- Justificatif "2 clics" : photo/PDF -> doc lié à la transaction ->
@@ -272,7 +284,7 @@ export function FinancePage({ bookings, installments }: {
         .insert({ storage_path: path, file_name: file.name, mime_type: file.type || "image/jpeg", tx_id: txId, status: "matched" })
         .select("id").single();
       if (insErr) throw new Error(insErr.message);
-      setDocTxIds((s) => new Set(s).add(txId));
+      setDocsByTx((m) => { const n = new Map(m); n.set(txId, [...(n.get(txId) ?? []), path]); return n; });
       const { data, error } = await supabase.functions.invoke("receipt-extract", { body: { doc_id: row.id } });
       if (error || data?.error) throw new Error(data?.error || error?.message);
       toast({ title: "Receipt attached", description: data?.vat_applied ? "VAT read — net amount updated on the transaction." : "Attached (VAT breakdown not readable)." });
@@ -1224,14 +1236,31 @@ export function FinancePage({ bookings, installments }: {
                             onClick={() => patch(t.id, { kind: "review", reviewed: false })}>edit</button>
                         )}
                         {(t.kind === "expense" || t.kind === "review") && t.amount < 0 && (
-                          <button type="button"
-                            className={`ml-1.5 text-[11px] ${docTxIds.has(t.id) ? "text-[#178A3F]" : "text-muted-foreground/60 hover:text-foreground"}`}
-                            title={docTxIds.has(t.id)
-                              ? "Receipt attached — click to add another (see Receipts tab)"
-                              : "Attach the receipt (photo or PDF) — vendor, date and VAT are read automatically"}
-                            onClick={() => { setAttachTxId(t.id); attachRef.current?.click(); }}>
-                            {attachBusy === t.id ? "…" : "📎"}
-                          </button>
+                          docsByTx.has(t.id) ? (
+                            <>
+                              {/* Justificatif lié : icône verte -> ouvre le fichier */}
+                              <button type="button"
+                                className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-[#E5F5EA] px-1.5 py-0.5 text-[10px] font-semibold text-[#178A3F] hover:bg-[#D3EDDC] align-middle"
+                                title={`${docsByTx.get(t.id)!.length > 1 ? `${docsByTx.get(t.id)!.length} receipts` : "Receipt"} attached — click to open`}
+                                onClick={() => openReceipts(t.id)}>
+                                <ReceiptText className="w-3 h-3" />
+                                {docsByTx.get(t.id)!.length > 1 ? docsByTx.get(t.id)!.length : ""}
+                              </button>
+                              <button type="button"
+                                className="ml-1 text-[11px] text-muted-foreground/50 hover:text-foreground"
+                                title="Attach another receipt"
+                                onClick={() => { setAttachTxId(t.id); attachRef.current?.click(); }}>
+                                {attachBusy === t.id ? "…" : "📎"}
+                              </button>
+                            </>
+                          ) : (
+                            <button type="button"
+                              className="ml-1.5 text-[11px] text-muted-foreground/60 hover:text-foreground"
+                              title="Attach the receipt (photo or PDF) — vendor, date and VAT are read automatically"
+                              onClick={() => { setAttachTxId(t.id); attachRef.current?.click(); }}>
+                              {attachBusy === t.id ? "…" : "📎"}
+                            </button>
+                          )
                         )}
                         {t.kind !== "split" && (deleteArm === t.id ? (
                           <button type="button" className="ml-1.5 text-[10px] font-semibold text-destructive hover:underline"
