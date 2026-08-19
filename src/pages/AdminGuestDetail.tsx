@@ -1019,7 +1019,6 @@ const AdminGuestDetailContent = () => {
                     <Row label="Date" value={fmtDateLong(t.trip_date)} />
                     <Row label="Pickup" value={t.pickup_location} />
                     <Row label="Drop-off" value={t.dropoff_location} />
-                    <Row label="Vehicle" value={t.taxi_size} />
                     <Row label="Passengers" value={t.passengers_count} />
                     <Row
                       label="Price"

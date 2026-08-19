@@ -26,7 +26,7 @@ async function isAdminEmailDb(email?: string | null): Promise<boolean> {
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-key",
 };
 
 const CALENDAR_ID =
@@ -40,10 +40,41 @@ const FALLBACK_MINUTES = 60;
 
 
 const BodySchema = z.object({
-  action: z.enum(["upsert", "delete", "backfill", "force_resync"]),
+  action: z.enum(["upsert", "delete", "backfill", "force_resync", "probe_duration"]),
   tripId: z.string().uuid().optional(),
   eventId: z.string().min(1).max(1024).optional(),
+  origin: z.string().max(500).optional(),
+  destination: z.string().max(500).optional(),
 });
+
+// ---- Résolution d'adresses pour le calcul d'itinéraire -----------------------
+// Les locations de l'app ("Quinta do Amor", "Lisbon"...) sont trop vagues pour
+// un géocodage fiable. Overrides configurables dans app_settings key
+// 'transport_calendar' -> value.addresses = { "Quinta do Amor": "<adresse ou lat,lng>", ... }
+const DEFAULT_ADDRESSES: Record<string, string> = {
+  "lisbon": "Lisbon, Portugal",
+  "lisbon airport": "Humberto Delgado Airport, Lisbon, Portugal",
+  "quinta do amor": "Quinta do Amor, Portugal",
+};
+let _addrOverrides: Record<string, string> | null = null;
+async function getAddressOverrides(): Promise<Record<string, string>> {
+  if (_addrOverrides) return _addrOverrides;
+  const map: Record<string, string> = {};
+  try {
+    const { data } = await _adminAuthClient
+      .from("app_settings").select("value").eq("key", "transport_calendar").maybeSingle();
+    const src = ((data?.value as any)?.addresses ?? {}) as Record<string, unknown>;
+    for (const k of Object.keys(src)) map[k.toLowerCase().trim()] = String(src[k]);
+  } catch (_e) { /* pas d'overrides */ }
+  _addrOverrides = map;
+  return map;
+}
+async function resolveAddress(loc: string): Promise<string> {
+  const key = String(loc || "").toLowerCase().trim();
+  if (!key) return loc;
+  const overrides = await getAddressOverrides();
+  return overrides[key] || DEFAULT_ADDRESSES[key] || loc;
+}
 
 // ---- OAuth2 service account (JWT RS256 -> access token, mis en cache) ------
 let _gTok: { token: string; exp: number } | null = null;
@@ -107,12 +138,32 @@ async function calendarHeaders() {
   };
 }
 
-async function computeDriveMinutes(origin: string, destination: string): Promise<number> {
-  if (!origin || !destination) return FALLBACK_MINUTES;
+interface DriveDetail {
+  minutes: number;
+  fallback: boolean;
+  mapsKeyConfigured: boolean;
+  resolvedOrigin: string;
+  resolvedDestination: string;
+  error?: string;
+}
+
+async function computeDriveDetail(origin: string, destination: string): Promise<DriveDetail> {
+  const mapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+  const base: DriveDetail = {
+    minutes: FALLBACK_MINUTES,
+    fallback: true,
+    mapsKeyConfigured: !!mapsKey,
+    resolvedOrigin: origin,
+    resolvedDestination: destination,
+  };
+  if (!origin || !destination) return { ...base, error: "missing origin/destination" };
   // Clé API Google Maps classique (Routes API activée). Optionnelle :
   // sans clé, durée par défaut de 60 minutes.
-  const mapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
-  if (!mapsKey) return FALLBACK_MINUTES;
+  if (!mapsKey) return { ...base, error: "GOOGLE_MAPS_API_KEY not set" };
+  const from = await resolveAddress(origin);
+  const to = await resolveAddress(destination);
+  base.resolvedOrigin = from;
+  base.resolvedDestination = to;
   try {
     const r = await fetch(`https://routes.googleapis.com/directions/v2:computeRoutes`, {
       method: "POST",
@@ -122,25 +173,32 @@ async function computeDriveMinutes(origin: string, destination: string): Promise
         "X-Goog-FieldMask": "routes.duration",
       },
       body: JSON.stringify({
-        origin: { address: origin },
-        destination: { address: destination },
+        origin: { address: from },
+        destination: { address: to },
         travelMode: "DRIVE",
       }),
     });
     if (!r.ok) {
-      console.warn("routes failed", r.status, await r.text());
-      return FALLBACK_MINUTES;
+      const txt = await r.text();
+      console.warn("routes failed", r.status, txt);
+      return { ...base, error: `routes ${r.status}: ${String(txt).slice(0, 200)}` };
     }
     const data = await r.json();
     const dur: string | undefined = data?.routes?.[0]?.duration;
-    if (!dur) return FALLBACK_MINUTES;
+    if (!dur) return { ...base, error: "no route in response" };
     const seconds = parseInt(String(dur).replace("s", ""), 10);
-    if (!Number.isFinite(seconds) || seconds <= 0) return FALLBACK_MINUTES;
-    return Math.max(15, Math.round(seconds / 60));
+    if (!Number.isFinite(seconds) || seconds <= 0) return { ...base, error: "bad duration" };
+    // Arrondi aux 5 min supérieures, minimum 15 min
+    const minutes = Math.max(15, Math.ceil(seconds / 60 / 5) * 5);
+    return { ...base, minutes, fallback: false, error: undefined };
   } catch (e) {
     console.warn("routes error", e);
-    return FALLBACK_MINUTES;
+    return { ...base, error: String(e).slice(0, 200) };
   }
+}
+
+async function computeDriveMinutes(origin: string, destination: string): Promise<number> {
+  return (await computeDriveDetail(origin, destination)).minutes;
 }
 
 // Add minutes to a local "YYYY-MM-DDTHH:mm:ss" string without timezone conversion.
@@ -194,7 +252,6 @@ function buildEvent(opts: { guestName: string; trip: any; durationMin: number; p
   const description =
     passengerBlock +
     `🔢 Passengers: ${trip.passengers_count}\n\n` +
-    `🚜 Vehicle: ${trip.taxi_size}\n\n` +
     `📍 Pickup: ${trip.pickup_location}\n${pickupLink}\n\n` +
     `📍 Drop-off: ${trip.dropoff_location}\n${dropoffLink}`;
 
@@ -324,6 +381,44 @@ serve(async (req) => {
       });
     }
 
+    const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: parsed.error.flatten() }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { action, tripId, eventId } = parsed.data;
+
+    // probe_duration : diagnostic du calcul de durée (admin JWT ou x-cron-key interne)
+    if (action === "probe_duration") {
+      let allowed = false;
+      const cronKeyHeader = req.headers.get("x-cron-key");
+      if (cronKeyHeader) {
+        const { data: st } = await _adminAuthClient
+          .from("app_settings").select("value").eq("key", "internal").maybeSingle();
+        const expected = (st?.value as any)?.cron_key;
+        allowed = !!expected && cronKeyHeader === expected;
+      }
+      if (!allowed) {
+        const probeClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_ANON_KEY")!,
+          { global: { headers: { Authorization: authHeader } } },
+        );
+        const { data: { user: probeUser } } = await probeClient.auth.getUser();
+        allowed = !!probeUser && await isAdminEmailDb(probeUser.email);
+      }
+      if (!allowed) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const detail = await computeDriveDetail(parsed.data.origin || "", parsed.data.destination || "");
+      return new Response(JSON.stringify(detail), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const userClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -335,14 +430,6 @@ serve(async (req) => {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
-    if (!parsed.success) {
-      return new Response(JSON.stringify({ error: parsed.error.flatten() }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const { action, tripId, eventId } = parsed.data;
     const userIsAdmin = await isAdminEmailDb(user.email);
 
     const admin = createClient(

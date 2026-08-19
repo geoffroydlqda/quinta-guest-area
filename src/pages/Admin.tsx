@@ -2438,10 +2438,10 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
           Force resync all trips
         </Button>
         <Button size="sm" variant="outline" onClick={() => downloadCSV("transport.csv", [
-          ["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Passengers","Price","Custom price (€)","Custom","Calendar event","Sync status"],
+          ["Date","Time","Guest","Direction","Pickup","Dropoff","Passengers","Price","Custom price (€)","Custom","Calendar event","Sync status"],
           ...allTripsForCSV.map((t) => {
             const isCustom = t.price_estimate?.toLowerCase().includes("custom");
-            return [t.trip_date, t.trip_time, tripNames.get(t.id) || guestName(t.user_id), t.trip_direction, t.pickup_location, t.dropoff_location, t.taxi_size, t.passengers_count, t.price_estimate, t.custom_price ?? "", isCustom ? "yes" : "", t.google_calendar_event_id ?? "", t.sync_status ?? ""];
+            return [t.trip_date, t.trip_time, tripNames.get(t.id) || guestName(t.user_id), t.trip_direction, t.pickup_location, t.dropoff_location, t.passengers_count, t.price_estimate, t.custom_price ?? "", isCustom ? "yes" : "", t.google_calendar_event_id ?? "", t.sync_status ?? ""];
           }),
         ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
       </div>
@@ -2483,7 +2483,7 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/20"><tr className="text-left">
-                      {["Date","Time","Guest","Direction","Pickup","Dropoff","Taxi","Pax","Price","Price (€)","Sign","Notify"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
+                      {["Date","Time","Guest","Direction","Pickup","Dropoff","Pax","Price","Price (€)","Sign","Notify"].map((h) => <th key={h} className="px-3 py-2 font-medium whitespace-nowrap">{h}</th>)}
                     </tr></thead>
                     <tbody>
                       {g.trips.map((t) => {
@@ -2518,7 +2518,6 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
                             <td className="px-3 py-2">{t.trip_direction}</td>
                             <td className="px-3 py-2">{t.pickup_location}</td>
                             <td className="px-3 py-2">{t.dropoff_location}</td>
-                            <td className="px-3 py-2 whitespace-nowrap">{t.taxi_size}</td>
                             <td className="px-3 py-2">{t.passengers_count}</td>
                             <td className="px-3 py-2">
                               <div className="flex items-center gap-2">
