@@ -29,6 +29,7 @@ import { HonestyBarCard } from "@/components/admin/HonestyBarCard";
 import { HousekeepingScheduler } from "@/components/admin/HousekeepingScheduler";
 import { FinancePage } from "@/components/admin/FinancePage";
 import { ProductsPage } from "@/components/admin/ProductsPage";
+import { ReceiptsTab } from "@/components/admin/ReceiptsTab";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
 import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass, FlaskConical } from "lucide-react";
@@ -107,6 +108,8 @@ const SECTION_TITLES: Record<string, string> = {
   transportation: "Transportation",
   rooms: "Housekeeping",
   finance: "Accounting",
+  analytics: "Analytics",
+  receipts: "Receipts",
   products: "Products",
   staff: "Staff",
 };
@@ -788,8 +791,9 @@ const AdminContent = () => {
 
         {view === "products" && <ProductsPage />}
 
-        {view === "finance" && (
+        {(view === "finance" || view === "analytics") && (
           <FinancePage
+            mode={view === "analytics" ? "analytics" : "accounting"}
             bookings={(data.bookings || []).map((b) => ({
               id: b.id,
               name: b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email,
@@ -801,6 +805,8 @@ const AdminContent = () => {
             installments={installments}
           />
         )}
+
+        {view === "receipts" && <ReceiptsTab />}
       </main>
 
       <CreateBookingDialog

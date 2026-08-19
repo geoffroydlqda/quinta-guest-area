@@ -5,7 +5,7 @@ import { useAllowedTabs } from "@/hooks/useAllowedTabs";
 import {
   LayoutDashboard, CalendarRange, Users, Wallet, Car,
   BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X, Landmark, UserCog, Package,
-  Moon, Sun,
+  Moon, Sun, TrendingUp, Paperclip,
 } from "lucide-react";
 
 /**
@@ -32,6 +32,8 @@ const NAV_GROUPS = [
   { label: "Finance", items: [
     { to: "/admin/payments", label: "Payments", icon: Wallet, tab: "payments" },
     { to: "/admin/finance", label: "Accounting", icon: Landmark, tab: "finance" },
+    { to: "/admin/analytics", label: "Analytics", icon: TrendingUp, tab: "analytics" },
+    { to: "/admin/receipts", label: "Receipts", icon: Paperclip, tab: "receipts" },
     { to: "/admin/products", label: "Products", icon: Package, tab: "products" },
   ]},
   { label: null, items: [
@@ -47,14 +49,12 @@ const MOBILE_MAIN = [
   { to: "/admin/rooms", label: "Housekeep.", icon: BedDouble, tab: "rooms" },
 ] as const;
 
-const MOBILE_MORE = [
-  { to: "/admin/payments", label: "Payments", icon: Wallet, tab: "payments" },
-  { to: "/admin/finance", label: "Accounting", icon: Landmark, tab: "finance" },
-  { to: "/admin/guests", label: "Guests", icon: Users, tab: "guests" },
-  { to: "/admin/catering", label: "Catering", icon: ChefHat, tab: "catering" },
-  { to: "/admin/products", label: "Products", icon: Package, tab: "products" },
-  { to: "/admin/staff", label: "Staff", icon: UserCog, tab: "staff" },
-] as const;
+// Feuille "More" mobile : mêmes groupes que la sidebar (demande Geoffroy,
+// 19 août 2026), moins les onglets déjà dans la tab bar principale.
+const MOBILE_MAIN_TABS = new Set(["dashboard", "bookings", "transportation", "rooms"]);
+const MOBILE_MORE_GROUPS = NAV_GROUPS
+  .map((g) => ({ label: g.label, items: g.items.filter((i) => !MOBILE_MAIN_TABS.has(i.tab)) }))
+  .filter((g) => g.items.length > 0);
 
 export function AdminLayout({ children }: { children: ReactNode }) {
   const { signOut } = useAuth();
@@ -72,9 +72,11 @@ export function AdminLayout({ children }: { children: ReactNode }) {
     .map((g) => ({ label: g.label, items: visible(g.items) }))
     .filter((g) => g.items.length > 0);
   const mobileMain = visible(MOBILE_MAIN);
-  const mobileMore = visible(MOBILE_MORE);
+  const mobileMoreGroups = MOBILE_MORE_GROUPS
+    .map((g) => ({ label: g.label, items: visible(g.items) }))
+    .filter((g) => g.items.length > 0);
 
-  const moreActive = mobileMore.some((i) => location.pathname.startsWith(i.to));
+  const moreActive = mobileMoreGroups.some((g) => g.items.some((i) => location.pathname.startsWith(i.to)));
 
   const itemClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors ${
@@ -165,17 +167,26 @@ export function AdminLayout({ children }: { children: ReactNode }) {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="space-y-1">
-              {mobileMore.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setMoreOpen(false)}
-                  className={itemClass}
-                >
-                  <item.icon className="w-4 h-4 shrink-0" />
-                  {item.label}
-                </NavLink>
+            <div className="space-y-1 max-h-[65vh] overflow-y-auto">
+              {mobileMoreGroups.map((group, gi) => (
+                <div key={gi} className={gi > 0 ? "pt-1.5" : undefined}>
+                  {group.label && (
+                    <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/70">
+                      {group.label}
+                    </div>
+                  )}
+                  {group.items.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => setMoreOpen(false)}
+                      className={itemClass}
+                    >
+                      <item.icon className="w-4 h-4 shrink-0" />
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
               ))}
               <button
                 type="button"

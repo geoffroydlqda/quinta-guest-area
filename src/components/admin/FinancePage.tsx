@@ -3,9 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote, Percent as PercentIcon, Paperclip as PaperclipIcon } from "lucide-react";
+import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote, Percent as PercentIcon } from "lucide-react";
 import { EventMarginsTab } from "@/components/admin/EventMarginsTab";
-import { ReceiptsTab } from "@/components/admin/ReceiptsTab";
 
 /**
  * Onglet Finance (4 août 2026) — phase 1, alimentée par import CSV Revolut
@@ -211,12 +210,16 @@ function autoKind(desc: string, amount: number, rules: FinRule[]): Partial<FinTx
   return { kind: "review", reviewed: false };
 }
 
-export function FinancePage({ bookings, installments }: {
+export function FinancePage({ bookings, installments, mode = "accounting" }: {
   bookings: FinBooking[];
   installments: FinInstallment[];
+  mode?: "accounting" | "analytics";
 }) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "box" | "margins" | "receipts" | "report">("tx");
+  // Réorganisation 19 août 2026 (demande Geoffroy) : la page sert deux onglets
+  // sidebar — "Accounting" (Transactions, Cash box, Event margins) et
+  // "Analytics" (P&L, Cash flow, Investor update). Receipts = page à part.
+  const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "box" | "margins" | "report">(mode === "analytics" ? "pnl" : "tx");
   const [txs, setTxs] = useState<FinTx[]>([]);
   const [rules, setRules] = useState<FinRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -932,7 +935,10 @@ export function FinancePage({ bookings, installments }: {
     <div className="space-y-4">
       {/* Sous-onglets + année */}
       <div className="flex items-center gap-2 flex-wrap">
-        {([["tx", "Transactions", ReceiptText], ["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["box", "Cash box", Banknote], ["margins", "Event margins", PercentIcon], ["receipts", "Receipts", PaperclipIcon], ["report", "Investor update", Mail]] as const).map(([k, label, Icon]) => (
+        {(mode === "analytics"
+          ? ([["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["report", "Investor update", Mail]] as const)
+          : ([["tx", "Transactions", ReceiptText], ["box", "Cash box", Banknote], ["margins", "Event margins", PercentIcon]] as const)
+        ).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm border transition-colors ${
               tab === k ? "bg-primary text-primary-foreground border-primary font-semibold" : "bg-card border-border hover:bg-muted"}`}>
@@ -1641,8 +1647,6 @@ export function FinancePage({ bookings, installments }: {
       {/* ================= EVENT MARGINS ================= */}
       {tab === "margins" && <EventMarginsTab year={year} />}
 
-      {/* ================= RECEIPTS ================= */}
-      {tab === "receipts" && <ReceiptsTab />}
 
       {tab === "report" && (
         <div className="rounded-2xl bg-card shadow-sm border border-border/60 p-4 space-y-3">

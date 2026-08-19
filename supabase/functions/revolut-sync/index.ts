@@ -443,6 +443,18 @@ serve(async (req) => {
     }
     await setInternalValue("revolut_reauth_alerted", ""); // reconnecté -> réarme l'alerte
 
+    // --- Probe (lecture seule, debug) --------------------------------------
+    // POST {probe:{path:"/api/1.0/..."}} : GET brut sur l'API Revolut avec le
+    // token courant, renvoie status + body tronqué. Sert à explorer ce que
+    // l'API expose (ex: pièces jointes des transactions) sans rien écrire.
+    const probe = (body as { probe?: { path?: string } }).probe;
+    if (probe?.path) {
+      if (!probe.path.startsWith("/api/")) return json({ error: "path must start with /api/" }, 400);
+      const pr = await fetch(`https://b2b.revolut.com${probe.path}`, { headers: { Authorization: `Bearer ${token}` } });
+      const text = await pr.text();
+      return json({ probe: probe.path, status: pr.status, body: text.slice(0, 8000) });
+    }
+
     if (reconcile?.from && reconcile?.to) {
       const acc = await allowedAccounts(token);
       // Noms de tous les comptes du business (pour l'option all)
