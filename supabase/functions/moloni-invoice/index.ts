@@ -213,6 +213,8 @@ async function generateInvoice(installmentId: string) {
         number: String(number),
         name: invoiceName,
         countryId,
+        // Requis par l'API Moloni : 1 = portugais (clients PT), 2 = anglais (etrangers)
+        languageId: countryId === 1 ? 1 : 2,
         ...(isPtNif ? { vat: vatRaw } : {}),
         ...(email ? { email } : {}),
         ...(profile?.address ? { address: profile.address } : {}),

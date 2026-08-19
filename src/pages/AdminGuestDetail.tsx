@@ -118,6 +118,17 @@ function fmtTimestamp(t?: string | null): string {
   return new Date(t).toLocaleString("en-GB");
 }
 
+// Onglets du résumé de booking — la page devenait trop longue à scroller
+const DETAIL_TABS = [
+  { key: "overview", label: "Overview" },
+  { key: "rooms", label: "Rooms" },
+  { key: "food", label: "Food" },
+  { key: "transport", label: "Transport" },
+  { key: "payments", label: "Payments" },
+  { key: "emails", label: "Emails" },
+] as const;
+type DetailTab = (typeof DETAIL_TABS)[number]["key"];
+
 const AdminGuestDetailContent = () => {
   const { guestId } = useParams<{ guestId: string }>();
   const [searchParams] = useSearchParams();
@@ -133,6 +144,15 @@ const AdminGuestDetailContent = () => {
   const [releasing, setReleasing] = useState(false);
   const [togglingLock, setTogglingLock] = useState(false);
   const [lockOverride, setLockOverride] = useState<boolean | null>(null);
+  const [tab, setTab] = useState<DetailTab>(() => {
+    const h = typeof window !== "undefined" ? window.location.hash.replace("#", "") : "";
+    return (DETAIL_TABS.some((t) => t.key === h) ? h : "overview") as DetailTab;
+  });
+  const switchTab = (t: DetailTab) => {
+    setTab(t);
+    window.history.replaceState(null, "", `#${t}`);
+    window.scrollTo({ top: 0 });
+  };
 
   const load = async () => {
     if (!guestId && !bookingIdParam) return;
@@ -541,6 +561,23 @@ const AdminGuestDetailContent = () => {
             </Button>
           </div>
         </div>
+        {/* Onglets — navigation dans le résumé de booking */}
+        <div className="container mx-auto px-4 flex gap-1 overflow-x-auto">
+          {DETAIL_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => switchTab(t.key)}
+              className={`px-3 py-2 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                tab === t.key
+                  ? "border-primary text-foreground font-medium"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </header>
 
       <main className="container mx-auto px-4 py-6 max-w-3xl space-y-6">
@@ -568,6 +605,7 @@ const AdminGuestDetailContent = () => {
             </div>
           </section>
         )}
+        {tab === "overview" && (<>
         {/* Guest header card */}
         <section className="bg-card rounded-2xl border border-border p-6">
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
@@ -798,7 +836,27 @@ const AdminGuestDetailContent = () => {
           onSaved={(v) => { if (booking) (booking as BookingRow).internal_notes = v; }}
         />
 
+        {/* Grand Total */}
+        {grandTotal > 0 && (
+          <section className="bg-primary/5 rounded-2xl border border-primary/30 p-6 flex justify-between items-center">
+            <span className="font-semibold flex items-center gap-2">
+              <Euro className="w-4 h-4 text-[#35532A]" /> Estimated total (Food + Transportation)
+            </span>
+            <span className="text-xl font-bold text-[#35532A]">€{grandTotal}</span>
+          </section>
+        )}
+
+        {/* Timestamps */}
+        {profile && (
+          <section className="text-xs text-muted-foreground text-center pb-6">
+            <div>Last updated: {fmtTimestamp(profile.updated_at)}</div>
+            {profile.submitted_at && <div>Submitted at: {fmtTimestamp(profile.submitted_at)}</div>}
+          </section>
+        )}
+        </>)}
+
         {/* Room Setup */}
+        {tab === "rooms" && (
         <section className="bg-card rounded-2xl border border-border p-6">
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
             <BedDouble className="w-4 h-4 text-[#35532A]" /> Room Setup
@@ -897,8 +955,10 @@ const AdminGuestDetailContent = () => {
             <p className="text-sm text-muted-foreground italic">Not set</p>
           )}
         </section>
+        )}
 
         {/* Food */}
+        {tab === "food" && (
         <section className="bg-card rounded-2xl border border-border p-6">
           <div className="flex items-center justify-between mb-3 gap-2">
             <h2 className="text-base font-semibold flex items-center gap-2">
@@ -994,8 +1054,10 @@ const AdminGuestDetailContent = () => {
             <p className="text-sm text-muted-foreground italic">Not set</p>
           )}
         </section>
+        )}
 
         {/* Transportation */}
+        {tab === "transport" && (
         <section className="bg-card rounded-2xl border border-border p-6">
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
             <Car className="w-4 h-4 text-[#35532A]" /> Transportation
@@ -1087,27 +1149,16 @@ const AdminGuestDetailContent = () => {
             </div>
           )}
         </section>
-
-        {/* Grand Total */}
-        {grandTotal > 0 && (
-          <section className="bg-primary/5 rounded-2xl border border-primary/30 p-6 flex justify-between items-center">
-            <span className="font-semibold flex items-center gap-2">
-              <Euro className="w-4 h-4 text-[#35532A]" /> Estimated total (Food + Transportation)
-            </span>
-            <span className="text-xl font-bold text-[#35532A]">€{grandTotal}</span>
-          </section>
         )}
 
         {/* Payments */}
-        <PaymentSection userId={profile?.user_id ?? booking?.user_id ?? ""} />
+        {tab === "payments" && (
+          <PaymentSection userId={profile?.user_id ?? booking?.user_id ?? ""} />
+        )}
 
-
-        {/* Timestamps */}
-        {profile && (
-          <section className="text-xs text-muted-foreground text-center pb-6">
-            <div>Last updated: {fmtTimestamp(profile.updated_at)}</div>
-            {profile.submitted_at && <div>Submitted at: {fmtTimestamp(profile.submitted_at)}</div>}
-          </section>
+        {/* Feed des emails automatiques envoyés au client */}
+        {tab === "emails" && (
+          <EmailLogFeed bookingId={booking?.id ?? null} />
         )}
       </main>
 
@@ -2530,6 +2581,85 @@ function WhatsAppLinkEditor({
   );
 }
 
+
+// Feed des emails envoyés au client pour ce booking (reminder_log)
+const EMAIL_TYPE_META: Record<string, { label: string; cls: string }> = {
+  invitation: { label: "Invitation", cls: "bg-sky-100 text-sky-800 border-sky-200" },
+  payment_request: { label: "Payment request", cls: "bg-amber-100 text-amber-800 border-amber-200" },
+  payment_receipt: { label: "Payment confirmation", cls: "bg-green-100 text-green-800 border-green-200" },
+  payment_upcoming: { label: "Auto reminder — upcoming", cls: "bg-muted text-foreground border-border" },
+  payment_overdue: { label: "Auto reminder — overdue", cls: "bg-red-100 text-red-800 border-red-200" },
+  payment_manual: { label: "Manual reminder", cls: "bg-muted text-foreground border-border" },
+};
+
+function EmailLogFeed({ bookingId }: { bookingId: string | null }) {
+  const [rows, setRows] = useState<Array<{
+    id: string; type: string; recipient: string | null; subject: string | null;
+    status: string | null; error: string | null; created_at: string;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!bookingId) { setRows([]); setLoading(false); return; }
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from("reminder_log")
+        .select("id,type,recipient,subject,status,error,created_at")
+        .eq("booking_id", bookingId)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      setRows((data as any) ?? []);
+      setLoading(false);
+    })();
+  }, [bookingId]);
+
+  return (
+    <section className="bg-card rounded-2xl border border-border p-6">
+      <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+        <Mail className="w-4 h-4 text-[#35532A]" /> Emails sent to the client
+      </h2>
+      {loading ? (
+        <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground italic">
+          No emails logged yet. Invitations, payment requests, reminders and payment confirmations will appear here.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((r) => {
+            const meta = EMAIL_TYPE_META[r.type] ?? { label: r.type, cls: "bg-muted text-foreground border-border" };
+            const failed = r.status === "error";
+            return (
+              <div key={r.id} className="rounded-lg border border-border p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-medium ${meta.cls}`}>
+                      {meta.label}
+                    </span>
+                    {failed && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-medium bg-red-100 text-red-800 border-red-200">
+                        Failed
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground tabular-nums">{fmtTimestamp(r.created_at)}</span>
+                </div>
+                <div className="mt-1.5 text-muted-foreground text-xs">
+                  To <span className="font-medium text-foreground">{r.recipient || "—"}</span>
+                </div>
+                {r.subject && <div className="mt-0.5 truncate" title={r.subject}>{r.subject}</div>}
+                {failed && r.error && (
+                  <div className="mt-1 text-xs text-red-700 break-words">{r.error}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function NotesBlock({
   bookingId,
