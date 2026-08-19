@@ -77,6 +77,24 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
     }
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
+
+    // --- Purge : retire les docs importes de Revolut restes sans transaction
+    // (depenses payees depuis Main ou vieux tickets — aucun ancrage dans le
+    // tool, demande Geoffroy 19 aout 2026). Fichiers storage inclus.
+    if (body.purge_no_match) {
+      const { data: docs } = await admin.from("purchase_docs")
+        .select("id,storage_path").eq("status", "no_match").like("storage_path", "revolut/%");
+      const paths = (docs ?? []).map((d: { storage_path: string }) => d.storage_path);
+      for (let i = 0; i < paths.length; i += 50) {
+        await admin.storage.from("purchase-docs").remove(paths.slice(i, i + 50));
+      }
+      const { error } = await admin.from("purchase_docs").delete()
+        .eq("status", "no_match").like("storage_path", "revolut/%");
+      return new Response(JSON.stringify({ purged: paths.length, error: error?.message ?? null }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     const from = String(body.from ?? "");
     const to = String(body.to ?? "");
     const dryRun = !!body.dry_run;
@@ -97,7 +115,7 @@ serve(async (req) => {
     const { data: existing } = await admin.from("purchase_docs").select("storage_path").like("storage_path", "revolut/%");
     const done = new Set((existing ?? []).map((r: { storage_path: string }) => r.storage_path.split("/")[1].split(".")[0]));
 
-    let imported = 0, linked = 0, review = 0, skipped = 0, vatApplied = 0;
+    let imported = 0, linked = 0, review = 0, skipped = 0, vatApplied = 0, skippedNoTx = 0;
     const errors: string[] = [];
     let processed = 0, hasMore = false;
 
@@ -106,28 +124,12 @@ serve(async (req) => {
         if (done.has(rid)) { skipped++; continue; }
         if (processed >= limit) { hasMore = true; break; }
         processed++;
-        if (dryRun) { imported++; continue; }
         try {
-          // 1. Téléchargement du reçu
-          const rr = await fetch(`${API}/api/1.0/expenses/${e.id}/receipts/${rid}/content`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!rr.ok) throw new Error(`receipt ${rr.status}`);
-          const ct = rr.headers.get("content-type") ?? "image/jpeg";
-          const bytes = new Uint8Array(await rr.arrayBuffer());
-          const path = `revolut/${rid}.${extFor(ct)}`;
-          const up = await admin.storage.from("purchase-docs").upload(path, bytes, { contentType: ct, upsert: true });
-          if (up.error) throw new Error(up.error.message);
-
-          // 2. Métadonnées depuis Revolut (pas besoin d'OCR)
+          // 1. Rattachement D'ABORD : revapi|{transaction_id}, sinon montant+date.
+          // Aucune transaction Quinta correspondante (depense payee depuis Main,
+          // vieux ticket...) -> on n'importe PAS (demande Geoffroy 19 aout 2026).
           const amount = Math.abs(Number(e.spent_amount?.amount ?? 0));
           const docDate = (e.expense_date ?? "").slice(0, 10) || null;
-          const taxPct = e.splits?.length === 1 ? e.splits[0].tax_rate?.percentage : undefined;
-          const vatBreakdown = taxPct != null && amount > 0
-            ? [{ rate: taxPct, base: Math.round((amount / (1 + taxPct / 100)) * 100) / 100, vat: Math.round((amount - amount / (1 + taxPct / 100)) * 100) / 100 }]
-            : null;
-
-          // 3. Rattachement : revapi|{transaction_id} d'abord, sinon montant+date
           let txId: string | null = null;
           let candidates: Record<string, unknown>[] = [];
           if (e.transaction_id) {
@@ -146,6 +148,25 @@ serve(async (req) => {
             if (hits.length === 1) txId = hits[0].id;
             else candidates = hits.slice(0, 5).map((t) => ({ tx_id: t.id, date: t.date, description: t.description, amount: t.amount, category: t.category, score: 55 }));
           }
+          if (!txId && !candidates.length) { skippedNoTx++; done.add(rid); continue; }
+          if (dryRun) { imported++; continue; }
+
+          // 2. Téléchargement du reçu
+          const rr = await fetch(`${API}/api/1.0/expenses/${e.id}/receipts/${rid}/content`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!rr.ok) throw new Error(`receipt ${rr.status}`);
+          const ct = rr.headers.get("content-type") ?? "image/jpeg";
+          const bytes = new Uint8Array(await rr.arrayBuffer());
+          const path = `revolut/${rid}.${extFor(ct)}`;
+          const up = await admin.storage.from("purchase-docs").upload(path, bytes, { contentType: ct, upsert: true });
+          if (up.error) throw new Error(up.error.message);
+
+          // 3. Métadonnées depuis Revolut (pas besoin d'OCR)
+          const taxPct = e.splits?.length === 1 ? e.splits[0].tax_rate?.percentage : undefined;
+          const vatBreakdown = taxPct != null && amount > 0
+            ? [{ rate: taxPct, base: Math.round((amount / (1 + taxPct / 100)) * 100) / 100, vat: Math.round((amount - amount / (1 + taxPct / 100)) * 100) / 100 }]
+            : null;
 
           // 4. Doc + TVA sur la transaction liée
           await admin.from("purchase_docs").insert({
@@ -174,7 +195,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       from, to, dry_run: dryRun, expenses_in_window: expenses.length,
       with_receipts: withReceipts.length, imported, linked, review, skipped_already_imported: skipped,
-      vat_applied: vatApplied, has_more: hasMore, errors: errors.slice(0, 10),
+      skipped_no_quinta_tx: skippedNoTx, vat_applied: vatApplied, has_more: hasMore, errors: errors.slice(0, 10),
     }), { headers: { "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ error: String((e as Error)?.message ?? e) }), { status: 500 });

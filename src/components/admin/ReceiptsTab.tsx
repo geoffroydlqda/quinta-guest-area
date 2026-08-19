@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Loader2, Paperclip, Upload, ExternalLink, X, RefreshCw } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, Paperclip, Upload, ExternalLink, X, RefreshCw, Link2 } from "lucide-react";
 
 /**
  * Onglet Receipts (18 août 2026) — boîte de réception des justificatifs
@@ -224,8 +225,85 @@ function DocCard({ d, busy, onView, onLink, onRetry, onDelete, onUnlink }: {
           ))}
         </div>
       )}
-      {d.status === "no_match" && !(d.candidates?.length) && (
-        <p className="text-xs text-muted-foreground">No expense matches this amount/date — link it later from the Transactions tab (📎), or the bank line may not have synced yet.</p>
+      {(d.status === "review" || d.status === "no_match") && (
+        <TxPicker doc={d} busy={busy} onLink={onLink} />
+      )}
+    </div>
+  );
+}
+
+/** Parcours manuel des dépenses pour lier un reçu sans match auto :
+ *  recherche libre + tri par proximité de montant avec le reçu. */
+function TxPicker({ doc, busy, onLink }: {
+  doc: PurchaseDoc; busy: boolean; onLink: (d: PurchaseDoc, txId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [txs, setTxs] = useState<{ id: string; date: string; description: string | null; amount: number; category: string | null; is_cash: boolean | null }[] | null>(null);
+
+  useEffect(() => {
+    if (!open || txs !== null) return;
+    supabase.from("fin_transactions")
+      .select("id,date,description,amount,category,is_cash")
+      .eq("kind", "expense").lt("amount", 0)
+      .order("date", { ascending: false }).limit(600)
+      .then(({ data }) => setTxs((data as typeof txs) ?? []));
+  }, [open, txs]);
+
+  const shown = useMemo(() => {
+    if (!txs) return [];
+    const needle = q.trim().toLowerCase();
+    let list = txs;
+    if (needle) {
+      list = txs.filter((t) =>
+        (t.description ?? "").toLowerCase().includes(needle)
+        || (t.category ?? "").toLowerCase().includes(needle)
+        || String(Math.abs(Number(t.amount))).includes(needle));
+    } else if (doc.total_ttc != null) {
+      // Sans recherche : les montants les plus proches du reçu d'abord
+      list = [...txs].sort((a, b) =>
+        Math.abs(Math.abs(Number(a.amount)) - Number(doc.total_ttc)) - Math.abs(Math.abs(Number(b.amount)) - Number(doc.total_ttc)));
+    }
+    return list.slice(0, 8);
+  }, [txs, q, doc.total_ttc]);
+
+  return (
+    <div className="pt-1 border-t border-border/60">
+      {!open ? (
+        <button type="button" className="text-xs font-medium text-[#1C5CAB] hover:underline inline-flex items-center gap-1"
+          onClick={() => setOpen(true)}>
+          <Link2 className="w-3.5 h-3.5" /> Browse expenses & link manually
+        </button>
+      ) : (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Input value={q} onChange={(e) => setQ(e.target.value)} autoFocus
+              placeholder="Search by description, category or amount…"
+              className="h-8 text-xs placeholder:italic placeholder:text-muted-foreground/50" />
+            <button type="button" className="text-xs text-muted-foreground hover:underline shrink-0" onClick={() => setOpen(false)}>Close</button>
+          </div>
+          {txs === null ? (
+            <div className="py-2 text-center"><Loader2 className="w-4 h-4 animate-spin inline text-muted-foreground" /></div>
+          ) : shown.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No expense matches this search.</p>
+          ) : (
+            <>
+              {!q && doc.total_ttc != null && (
+                <p className="text-[10px] text-muted-foreground">Closest amounts to this receipt ({fmtEUR(Number(doc.total_ttc))}) first:</p>
+              )}
+              {shown.map((t) => (
+                <div key={t.id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="min-w-0 truncate">
+                    {fmtD(t.date)} · {t.description || "—"} · <span className="font-medium">{fmtEUR(Math.abs(Number(t.amount)))}</span>
+                    {t.is_cash ? <span className="text-[#B45309]"> · cash</span> : null}
+                    {t.category ? <span className="text-muted-foreground"> · {t.category}</span> : null}
+                  </span>
+                  <Button size="sm" className="h-6 text-[11px] px-2 shrink-0" onClick={() => onLink(doc, t.id)} disabled={busy}>Link</Button>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
       )}
     </div>
   );
