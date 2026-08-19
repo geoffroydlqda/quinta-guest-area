@@ -82,9 +82,26 @@ Amounts use dot as decimal separator. If a field is unreadable, use null.` },
   const body = await r.json();
   if (!r.ok) throw new Error(`Anthropic API ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);
   const text: string = (body.content ?? []).map((c: { text?: string }) => c.text ?? "").join("");
-  const m = text.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error(`No JSON in model output: ${text.slice(0, 200)}`);
-  const parsed = JSON.parse(m[0]);
+  // Extraction JSON robuste : premier objet équilibré (le modèle ajoute
+  // parfois du texte ou plusieurs blocs après — cause des erreurs de parse
+  // sur les faturas Amazon, 19 août 2026).
+  const start = text.indexOf("{");
+  if (start < 0) throw new Error(`No JSON in model output: ${text.slice(0, 200)}`);
+  let end = -1, depth = 0, inStr = false, escNext = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (escNext) escNext = false;
+      else if (ch === "\\") escNext = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (end < 0) throw new Error(`Unbalanced JSON in model output: ${text.slice(0, 200)}`);
+  const parsed = JSON.parse(text.slice(start, end + 1));
   return {
     vendor: parsed.vendor ?? null,
     doc_date: parsed.doc_date ?? null,
@@ -192,12 +209,19 @@ serve(async (req) => {
     const parsed = BodySchema.safeParse(raw);
     if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
 
-    // --- Auth : ingest -> clé dédiée (Apps Script Gmail) ; sinon JWT admin.
-    if (parsed.data.ingest) {
-      const key = req.headers.get("x-ingest-key");
+    // --- Auth : clé dédiée (Apps Script Gmail / retraitement serveur) ------
+    const ingestKeyHeader = req.headers.get("x-ingest-key");
+    let ingestKeyOk = false;
+    if (ingestKeyHeader) {
       const { data: internal } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
-      const expected = (internal?.value as Record<string, string> | null)?.ingest_key;
-      if (!key || !expected || key !== expected) return json({ error: "Unauthorized" }, 401);
+      ingestKeyOk = ingestKeyHeader === (internal?.value as Record<string, string> | null)?.ingest_key && !!ingestKeyHeader;
+    }
+    // Retraitement d'un doc existant via la clé (bulk retry serveur)
+    if (ingestKeyOk && parsed.data.doc_id && !parsed.data.ingest) {
+      return json(await extractAndMatch(parsed.data.doc_id));
+    }
+    if (parsed.data.ingest) {
+      if (!ingestKeyOk) return json({ error: "Unauthorized" }, 401);
 
       const ing = parsed.data.ingest;
       const isPdf = ing.mime_type.includes("pdf");
