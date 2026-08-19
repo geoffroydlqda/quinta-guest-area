@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Paperclip, Upload, ExternalLink, X, RefreshCw, Link2 } from "lucide-react";
+import { Loader2, Paperclip, Upload, ExternalLink, X, RefreshCw, Link2, Eye, Pencil } from "lucide-react";
 
 /**
  * Onglet Receipts (18 août 2026) — boîte de réception des justificatifs
@@ -41,6 +41,9 @@ export function ReceiptsTab() {
   const [uploading, setUploading] = useState(0); // nb de fichiers en cours
   const [busyDoc, setBusyDoc] = useState<string | null>(null);
   const [missingCount, setMissingCount] = useState<number | null>(null);
+  // Visionneuse latérale : le justificatif s'ouvre à droite, sans recouvrir
+  // la liste — on garde l'outil et la facture sous les yeux en même temps.
+  const [preview, setPreview] = useState<{ doc: PurchaseDoc; url: string } | null>(null);
 
   const load = async () => {
     const [d, t] = await Promise.all([
@@ -112,8 +115,19 @@ export function ReceiptsTab() {
   };
 
   const view = async (doc: PurchaseDoc) => {
-    const { data } = await supabase.storage.from("purchase-docs").createSignedUrl(doc.storage_path, 300);
-    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+    if (preview?.doc.id === doc.id) { setPreview(null); return; }
+    const { data } = await supabase.storage.from("purchase-docs").createSignedUrl(doc.storage_path, 3600);
+    if (data?.signedUrl) setPreview({ doc, url: data.signedUrl });
+  };
+
+  // Correction manuelle des champs mal lus (montant, date, fournisseur) —
+  // le tri "closest amounts" du lien manuel se base ensuite sur ces valeurs.
+  const saveEdit = async (doc: PurchaseDoc, patch: { vendor: string | null; total_ttc: number | null; doc_date: string | null }) => {
+    const { error } = await supabase.from("purchase_docs")
+      .update({ ...patch, updated_at: new Date().toISOString() }).eq("id", doc.id);
+    if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Receipt updated" });
+    load();
   };
 
   const remove = async (doc: PurchaseDoc) => {
@@ -152,36 +166,90 @@ export function ReceiptsTab() {
       {loading ? (
         <div className="py-8 text-center"><Loader2 className="w-5 h-5 animate-spin inline text-muted-foreground" /></div>
       ) : (
-        <>
-          {needsAction.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-xs uppercase font-semibold text-muted-foreground">Needs your attention</div>
-              {needsAction.map((d) => <DocCard key={d.id} d={d} busy={busyDoc === d.id} onView={view} onLink={linkTo} onRetry={retry} onDelete={remove} onUnlink={unlink} />)}
-            </div>
+        <div className="lg:flex lg:items-start lg:gap-4">
+          {/* Liste — se resserre quand la visionneuse est ouverte */}
+          <div className={`space-y-4 min-w-0 ${preview ? "lg:w-[55%]" : "flex-1"}`}>
+            {needsAction.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs uppercase font-semibold text-muted-foreground">Needs your attention</div>
+                {needsAction.map((d) => <DocCard key={d.id} d={d} busy={busyDoc === d.id} viewing={preview?.doc.id === d.id} onView={view} onLink={linkTo} onRetry={retry} onDelete={remove} onUnlink={unlink} onEdit={saveEdit} />)}
+              </div>
+            )}
+            {done.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs uppercase font-semibold text-muted-foreground">Processed</div>
+                {done.map((d) => <DocCard key={d.id} d={d} busy={busyDoc === d.id} viewing={preview?.doc.id === d.id} onView={view} onLink={linkTo} onRetry={retry} onDelete={remove} onUnlink={unlink} onEdit={saveEdit} />)}
+              </div>
+            )}
+            {docs.length === 0 && (
+              <p className="text-sm text-muted-foreground italic text-center py-6">No receipts yet — drop your first batch above.</p>
+            )}
+          </div>
+
+          {/* Visionneuse latérale (à droite sur desktop, plein écran sur mobile) */}
+          {preview && (
+            <aside className="fixed inset-0 z-40 bg-background p-3 overflow-auto lg:static lg:z-auto lg:flex-1 lg:min-w-0 lg:p-0 lg:overflow-visible lg:sticky lg:top-4">
+              <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border">
+                  <div className="min-w-0 text-sm font-medium truncate">
+                    {preview.doc.vendor || preview.doc.file_name || "Receipt"}
+                    {preview.doc.total_ttc != null && <span className="text-muted-foreground font-normal"> · {fmtEUR(Number(preview.doc.total_ttc))}</span>}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <a href={preview.url} target="_blank" rel="noopener noreferrer"
+                      className="p-1.5 rounded-md hover:bg-muted text-muted-foreground" title="Open in a new tab">
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                    <button type="button" className="p-1.5 rounded-md hover:bg-muted text-muted-foreground" title="Close"
+                      onClick={() => setPreview(null)}>
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                {preview.doc.mime_type?.includes("pdf") ? (
+                  <iframe src={preview.url} title="Receipt" className="w-full h-[78vh] bg-white" />
+                ) : (
+                  <div className="max-h-[78vh] overflow-auto bg-muted/30 flex justify-center">
+                    <img src={preview.url} alt="Receipt" className="max-w-full h-auto object-contain" />
+                  </div>
+                )}
+              </div>
+            </aside>
           )}
-          {done.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-xs uppercase font-semibold text-muted-foreground">Processed</div>
-              {done.map((d) => <DocCard key={d.id} d={d} busy={busyDoc === d.id} onView={view} onLink={linkTo} onRetry={retry} onDelete={remove} onUnlink={unlink} />)}
-            </div>
-          )}
-          {docs.length === 0 && (
-            <p className="text-sm text-muted-foreground italic text-center py-6">No receipts yet — drop your first batch above.</p>
-          )}
-        </>
+        </div>
       )}
     </div>
   );
 }
 
-function DocCard({ d, busy, onView, onLink, onRetry, onDelete, onUnlink }: {
-  d: PurchaseDoc; busy: boolean;
+function DocCard({ d, busy, viewing, onView, onLink, onRetry, onDelete, onUnlink, onEdit }: {
+  d: PurchaseDoc; busy: boolean; viewing: boolean;
   onView: (d: PurchaseDoc) => void; onLink: (d: PurchaseDoc, txId: string) => void;
   onRetry: (d: PurchaseDoc) => void; onDelete: (d: PurchaseDoc) => void; onUnlink: (d: PurchaseDoc) => void;
+  onEdit: (d: PurchaseDoc, patch: { vendor: string | null; total_ttc: number | null; doc_date: string | null }) => void;
 }) {
   const badge = STATUS_BADGE[d.status];
+  // Édition manuelle des champs mal lus par l'OCR (montant, date, fournisseur)
+  const [editing, setEditing] = useState(false);
+  const [eVendor, setEVendor] = useState("");
+  const [eAmount, setEAmount] = useState("");
+  const [eDate, setEDate] = useState("");
+  const startEdit = () => {
+    setEVendor(d.vendor ?? "");
+    setEAmount(d.total_ttc != null ? String(d.total_ttc) : "");
+    setEDate(d.doc_date ?? "");
+    setEditing(true);
+  };
+  const saveEdit = () => {
+    onEdit(d, {
+      vendor: eVendor.trim() || null,
+      total_ttc: eAmount.trim() === "" ? null : Number(eAmount),
+      doc_date: eDate || null,
+    });
+    setEditing(false);
+  };
   return (
-    <div className="rounded-xl border border-border bg-card p-3 text-sm space-y-1.5">
+    <div className={`rounded-xl border bg-card p-3 text-sm space-y-1.5 ${viewing ? "border-[#1C5CAB]" : "border-border"}`}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${badge.cls}`}>{busy ? "…" : badge.label}</span>
@@ -195,8 +263,15 @@ function DocCard({ d, busy, onView, onLink, onRetry, onDelete, onUnlink }: {
           ) : null}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Button size="icon" variant="ghost" className="h-7 w-7" title="View file" onClick={() => onView(d)}>
-            <ExternalLink className="w-3.5 h-3.5" />
+          <Button size="icon" variant="ghost"
+            className={`h-7 w-7 ${viewing ? "bg-[#E8F0FB] text-[#1C5CAB]" : ""}`}
+            title={viewing ? "Close the side viewer" : "View the receipt in the side panel"}
+            onClick={() => onView(d)}>
+            <Eye className="w-3.5 h-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7" title="Fix vendor, amount or date (misread by OCR)"
+            onClick={() => (editing ? setEditing(false) : startEdit())}>
+            <Pencil className="w-3.5 h-3.5" />
           </Button>
           {(d.status === "error" || d.status === "inbox" || d.status === "no_match") && (
             <Button size="icon" variant="ghost" className="h-7 w-7" title="Retry extraction" onClick={() => onRetry(d)} disabled={busy}>
@@ -211,6 +286,24 @@ function DocCard({ d, busy, onView, onLink, onRetry, onDelete, onUnlink }: {
           </Button>
         </div>
       </div>
+      {editing && (
+        <div className="flex flex-wrap items-end gap-2 pt-1 border-t border-border/60">
+          <label className="space-y-0.5 flex-1 min-w-[140px]">
+            <div className="text-[10px] text-muted-foreground">Vendor</div>
+            <Input value={eVendor} onChange={(e) => setEVendor(e.target.value)} className="h-8 text-xs" />
+          </label>
+          <label className="space-y-0.5">
+            <div className="text-[10px] text-muted-foreground">Amount (€ incl. VAT)</div>
+            <Input type="number" min="0" step="0.01" value={eAmount} onChange={(e) => setEAmount(e.target.value)} className="h-8 w-28 text-right text-xs" />
+          </label>
+          <label className="space-y-0.5">
+            <div className="text-[10px] text-muted-foreground">Date</div>
+            <Input type="date" value={eDate} onChange={(e) => setEDate(e.target.value)} className="h-8 w-36 text-xs" />
+          </label>
+          <Button size="sm" className="h-8 text-xs" onClick={saveEdit}>Save</Button>
+          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setEditing(false)}>Cancel</Button>
+        </div>
+      )}
       {d.status === "error" && d.error && <p className="text-xs text-[#B3261E]">{d.error}</p>}
       {(d.status === "review" || d.status === "no_match") && (d.candidates?.length ?? 0) > 0 && (
         <div className="space-y-1 pt-1 border-t border-border/60">
