@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Plus, Trash2, UserPlus, X, Car, Info, Copy, AlertCircle, Pencil } from 'lucide-react';
+import { Loader2, Plus, Trash2, UserPlus, X, Car, Copy, AlertCircle, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import type { TransportationTrip } from '@/types/guest';
 import { getTaxiPrices } from '@/lib/pricing';
@@ -291,16 +291,6 @@ const Transportation = () => {
                 They speak perfect English and will ensure you a smooth ride.
               </p>
             </div>
-          </div>
-        </div>
-
-        {/* Luggage Note */}
-        <div className="rounded-2xl bg-[#EAF6DF] border border-[#CAE8BD] p-4">
-          <div className="flex items-start gap-3">
-            <Info className="w-4 h-4 text-[#35532A] flex-shrink-0 mt-0.5" />
-            <p className="text-sm">
-              Please consider the luggage of your guests. If you expect big suitcases, we recommend not filling the taxis.
-            </p>
           </div>
         </div>
 
