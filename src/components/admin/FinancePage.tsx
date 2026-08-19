@@ -602,7 +602,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // fin_transactions is_cash (dépenses cash, ajustements kind=internal —
   // ces derniers ne comptent QUE dans la caisse, jamais ailleurs).
   const box = useMemo(() => {
-    type Move = { date: string; label: string; sub: string | null; amount: number; kind: "in" | "out" | "adj" };
+    type Move = { date: string; label: string; sub: string | null; amount: number; kind: "in" | "out" | "adj"; txId?: string; txKind?: string };
     const moves: Move[] = [];
     let undated = 0;
     for (const i of installments) {
@@ -625,6 +625,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         sub: t.kind === "internal" ? (t.notes ?? "Adjustment") : (t.category ?? null),
         amount: Number(t.amount),
         kind: t.kind === "internal" ? "adj" : t.amount < 0 ? "out" : "in",
+        txId: t.id,
+        txKind: t.kind,
       });
     }
     moves.sort((a, b) => a.date.localeCompare(b.date));
@@ -641,6 +643,32 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   const [adjAmount, setAdjAmount] = useState("");
   const [adjNote, setAdjNote] = useState("");
   const [adjDir, setAdjDir] = useState<"out" | "in">("out");
+  // Édition / suppression d'un mouvement de caisse basé sur une transaction
+  // (dépense cash, ajustement). Les encaissements guests s'éditent depuis la
+  // fiche guest (échéance), pas ici.
+  const [boxEdit, setBoxEdit] = useState<{ txId: string; txKind: string; date: string; label: string; amount: string; note: string } | null>(null);
+  const [boxDeleteArm, setBoxDeleteArm] = useState<string | null>(null);
+  const saveBoxEdit = async () => {
+    if (!boxEdit) return;
+    const amt = Number(boxEdit.amount);
+    if (!Number.isFinite(amt) || amt === 0) { toast({ title: "Enter a non-zero amount", variant: "destructive" }); return; }
+    await patch(boxEdit.txId, {
+      date: boxEdit.date,
+      description: boxEdit.label.trim() || null,
+      amount: amt,
+      // Dépense cash : HT = montant (pas de TVA) ; ajustement : pas de HT
+      ...(boxEdit.txKind === "expense" ? { amount_net: Math.abs(amt) } : {}),
+      ...(boxEdit.txKind === "internal" ? { notes: boxEdit.note.trim() || null } : {}),
+    });
+    setBoxEdit(null);
+  };
+  const deleteBoxMove = async (txId: string) => {
+    setBoxDeleteArm(null);
+    const { error } = await supabase.from("fin_transactions").delete().eq("id", txId);
+    if (error) { toast({ title: "Delete failed", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Movement deleted" });
+    load();
+  };
   const addAdjustment = async () => {
     const amt = Number(adjAmount);
     if (!Number.isFinite(amt) || amt <= 0) { toast({ title: "Enter an amount", variant: "destructive" }); return; }
@@ -1618,17 +1646,42 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
             <table className="w-full text-sm">
               <thead className="bg-muted/80">
                 <tr className="text-left">
-                  {["Date", "Movement", "Amount", "Balance"].map((h) => (
-                    <th key={h} className="px-3 py-2.5 text-[11px] uppercase tracking-wider font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                  {["Date", "Movement", "Amount", "Balance", ""].map((h, hi) => (
+                    <th key={hi} className="px-3 py-2.5 text-[11px] uppercase tracking-wider font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {box.moves.length === 0 ? (
-                  <tr><td colSpan={4} className="px-3 py-8 text-center text-sm text-muted-foreground italic">
+                  <tr><td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground italic">
                     No cash movements yet — cash guest payments and cash expenses will appear here.
                   </td></tr>
                 ) : box.moves.map((m, i) => (
+                  m.txId && boxEdit?.txId === m.txId ? (
+                    <tr key={i} className="border-t border-border/60 bg-primary/5">
+                      <td className="px-3 py-2">
+                        <Input type="date" value={boxEdit.date} onChange={(e) => setBoxEdit((v) => v && { ...v, date: e.target.value })} className="h-8 w-36 text-xs" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <Input value={boxEdit.label} onChange={(e) => setBoxEdit((v) => v && { ...v, label: e.target.value })} className="h-8 text-xs" />
+                        {boxEdit.txKind === "internal" && (
+                          <Input value={boxEdit.note} placeholder="Note"
+                            onChange={(e) => setBoxEdit((v) => v && { ...v, note: e.target.value })}
+                            className="h-8 text-xs mt-1 placeholder:italic placeholder:text-muted-foreground/50" />
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <Input type="number" step="0.01" value={boxEdit.amount}
+                          onChange={(e) => setBoxEdit((v) => v && { ...v, amount: e.target.value })}
+                          className="h-8 w-28 text-right text-xs inline-block" />
+                        <span className="block text-[10px] text-muted-foreground mt-0.5">negative = out of the box</span>
+                      </td>
+                      <td className="px-3 py-2 text-right" colSpan={2}>
+                        <Button size="sm" className="h-7 text-xs" onClick={saveBoxEdit}>Save</Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs ml-1" onClick={() => setBoxEdit(null)}>Cancel</Button>
+                      </td>
+                    </tr>
+                  ) : (
                   <tr key={i} className="border-t border-border/60">
                     <td className="px-3 py-2 whitespace-nowrap tabular-nums text-xs">{fmtDayEU(m.date)} {m.date.slice(0, 4)}</td>
                     <td className="px-3 py-2">
@@ -1639,7 +1692,29 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                       {m.amount > 0 ? "+" : ""}{fmt2(m.amount)}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">{fmt2(m.balance)}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      {m.txId ? (
+                        <>
+                          <button type="button" className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+                            title="Edit this movement (date, description, amount)"
+                            onClick={() => setBoxEdit({ txId: m.txId!, txKind: m.txKind!, date: m.date, label: m.label, amount: String(m.amount), note: m.txKind === "internal" ? (m.sub ?? "") : "" })}>
+                            edit
+                          </button>
+                          {boxDeleteArm === m.txId ? (
+                            <button type="button" className="ml-1.5 text-[11px] font-semibold text-destructive hover:underline"
+                              onClick={() => deleteBoxMove(m.txId!)}>sure?</button>
+                          ) : (
+                            <button type="button" className="ml-1.5 text-[11px] text-muted-foreground/60 hover:text-destructive"
+                              title={m.txKind === "expense" ? "Delete — also removes this cash expense from the P&L and cash flow" : "Delete this adjustment"}
+                              onClick={() => { setBoxDeleteArm(m.txId!); setTimeout(() => setBoxDeleteArm((v) => (v === m.txId ? null : v)), 3000); }}>✕</button>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground/60" title="Cash guest payment — edit it from the guest's file (Payments section)">guest file</span>
+                      )}
+                    </td>
                   </tr>
+                  )
                 ))}
               </tbody>
             </table>
