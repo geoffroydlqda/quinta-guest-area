@@ -7,6 +7,7 @@ import { useRoomPlanner, FlexibleBed } from '@/hooks/useRoomPlanner';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
+import { MarkCompleteCard } from '@/components/guest-area/MarkCompleteCard';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 import { RoomStats } from '@/components/room-planner/RoomStats';
 import { MapLightbox } from '@/components/room-planner/MapLightbox';
@@ -643,6 +644,8 @@ const RoomSetup = () => {
             rows={3}
           />
         </div>
+
+        {!isLocked && <MarkCompleteCard table="room_setups" toolLabel="Bedrooms" />}
       </div>
     </ToolPageLayout>
   );

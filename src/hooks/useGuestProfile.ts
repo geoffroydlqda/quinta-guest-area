@@ -86,22 +86,27 @@ export function useGuestProfile() {
     return data;
   }, []);
 
-  // Load tool statuses
-  const loadToolStatuses = useCallback(async (userId: string, profileStatus: 'draft' | 'submitted') => {
-    const isSubmitted = profileStatus === 'submitted';
+  // Load tool statuses — chaque outil a son propre statut de complétion
+  // (le guest clique "Mark as complete" sur la page de l'outil ; il peut
+  // continuer à éditer ensuite, le statut reste "submitted").
+  const loadToolStatuses = useCallback(async (userId: string, _profileStatus: 'draft' | 'submitted') => {
     const scope = <T extends { eq: any }>(q: T) =>
       activeBookingId ? q.eq('booking_id', activeBookingId) : q.eq('user_id', userId);
 
     const { data: roomData } = await scope(
-      supabase.from('room_setups').select('status')
+      supabase.from('room_setups').select('status_roomsetup')
     ).maybeSingle();
 
     const { data: tripData } = await scope(
       supabase.from('transportation_trips').select('id')
     );
 
+    const { data: transpReq } = await scope(
+      supabase.from('transportation_requests').select('status_transportation')
+    ).maybeSingle();
+
     const { data: foodData } = await scope(
-      supabase.from('food_plans').select('selections')
+      supabase.from('food_plans').select('selections,status_food')
     ).maybeSingle();
 
     const hasFood = foodData?.selections && Array.isArray(foodData.selections) &&
@@ -114,9 +119,11 @@ export function useGuestProfile() {
     ).maybeSingle();
 
     return {
-      roomSetup: roomData ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
-      transportation: tripData && tripData.length > 0 ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
-      food: hasFood ? (isSubmitted ? 'submitted' : 'draft') : 'not_set',
+      roomSetup: roomData ? (roomData.status_roomsetup === 'submitted' ? 'submitted' : 'draft') : 'not_set',
+      transportation: tripData && tripData.length > 0
+        ? (transpReq?.status_transportation === 'submitted' ? 'submitted' : 'draft')
+        : 'not_set',
+      food: hasFood ? (foodData?.status_food === 'submitted' ? 'submitted' : 'draft') : 'not_set',
       documentation: !!docsData,
     } as ToolStatuses;
   }, [activeBookingId]);

@@ -27,8 +27,7 @@ import {
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { isAdminEmail } from '@/lib/admin';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, RefreshCw, LogOut, AlertCircle, ArrowUpRight, MessageCircle, Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, CloudFog } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { Loader2, RefreshCw, LogOut, AlertCircle, ArrowUpRight, Check, Clock3 } from 'lucide-react';
 import type { FoodDaySelection, TransportationTrip, DietConfig, ToolStatus } from '@/types/guest';
 import { dietConfigTotal, EMPTY_DIET_CONFIG } from '@/types/guest';
 import { usePaymentData } from '@/hooks/usePaymentData';
@@ -268,84 +267,6 @@ const DashboardContent = () => {
     };
   }, [user, activeBookingId, queryClient]);
 
-  const handleSubmitInformation = async () => {
-    if (!profile || !hasDatesSet) {
-      toast({
-        title: 'Missing information',
-        description: 'Please set your check-in and check-out dates before submitting.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!bookingGuestsCount || bookingGuestsCount < 1) {
-      toast({
-        title: 'Missing information',
-        description: 'Please specify the number of guests.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (dietExceedsGuests) {
-      toast({
-        title: 'Invalid food preferences',
-        description: 'The total number of meal preferences exceeds the number of guests.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      // Submit the profile
-      await submitProfile();
-
-      // Send summary email via edge function
-      const response = await supabase.functions.invoke('send-guest-summary', {
-        body: {
-          fullName: profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
-          firstName: profile.first_name || null,
-          email: profile.email,
-          checkInDate: bookingCheckIn,
-          checkOutDate: bookingCheckOut,
-          guestsCount: bookingGuestsCount,
-          roomSetup: roomSetupData,
-          // tripCount/totalPrice : noms exigés par le schéma de send-guest-summary
-          transportation: transportationData ? {
-            tripCount: transportationData.totalTrips,
-            totalPrice: transportationData.subtotal,
-            customOfferCount: transportationData.customOfferCount,
-            trips: transportationTrips,
-          } : null,
-          food: foodData ? {
-            ...foodData,
-            selections: foodData.selections || [],
-          } : null,
-        },
-      });
-
-      if (response.error) throw response.error;
-
-      toast({
-        title: 'Summary sent',
-        description: 'A confirmation email has been sent to you. You can keep editing until 3 days before arrival.',
-      });
-
-      refreshProfile();
-    } catch (error: any) {
-      console.error('Error submitting:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to submit. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const handleLogout = async () => {
     await signOut();
   };
@@ -505,21 +426,33 @@ const DashboardContent = () => {
           </p>
         </div>
 
-        {/* ---- Stats row ---- */}
-        <div className="grid grid-cols-3 gap-4 border-y border-border/70 py-5">
-          <div>
+        {/* ---- Stats row — tuiles douces, une pointe de couleur ---- */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-2xl bg-gradient-to-br from-[#EAF6DF] to-[#F6FBEF] border border-[#CAE8BD]/70 px-5 py-4 transition-transform hover:-translate-y-0.5">
             <div className="guest-kicker mb-1.5">Setup</div>
-            <div className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums text-foreground">
-              {doneCount} <span className="text-muted-foreground font-normal">/ {setupRows.length}</span>
+            <div className="flex items-end justify-between gap-3">
+              <div className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums text-[#35532A]">
+                {doneCount} <span className="text-muted-foreground font-normal text-xl">/ {setupRows.length}</span>
+              </div>
+              {/* Mini anneau de progression */}
+              <svg width="40" height="40" viewBox="0 0 40 40" className="-mb-0.5" aria-hidden>
+                <circle cx="20" cy="20" r="16" fill="none" stroke="#D8EBC9" strokeWidth="5" />
+                <circle
+                  cx="20" cy="20" r="16" fill="none" stroke="#79B84B" strokeWidth="5" strokeLinecap="round"
+                  strokeDasharray={`${(doneCount / setupRows.length) * 2 * Math.PI * 16} ${2 * Math.PI * 16}`}
+                  transform="rotate(-90 20 20)"
+                  style={{ transition: 'stroke-dasharray 600ms ease' }}
+                />
+              </svg>
             </div>
           </div>
-          <div>
+          <div className="rounded-2xl bg-card border border-border/70 px-5 py-4 transition-transform hover:-translate-y-0.5">
             <div className="guest-kicker mb-1.5">Next payment</div>
             <div className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums text-foreground">
               {nextDueDate ? fmtDate(nextDueDate) : '—'}
             </div>
           </div>
-          <div>
+          <div className="rounded-2xl bg-card border border-border/70 px-5 py-4 transition-transform hover:-translate-y-0.5">
             <div className="guest-kicker mb-1.5">Balance due</div>
             <div className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums text-foreground">
               {fmtEur(balanceDue)}
@@ -530,40 +463,54 @@ const DashboardContent = () => {
         {/* Status Banner */}
         <EditLockBanner statusInfo={guestStatus} />
 
-        {/* ---- Your setup — tableau façon "En cours" ---- */}
+        {/* ---- Your setup — lignes avec pastilles de statut ---- */}
         <section>
           <div className="flex items-end justify-between mb-2">
             <h2 className="text-lg font-semibold tracking-tight">Your setup</h2>
-            <span className="guest-kicker">{doneCount} of {setupRows.length} done</span>
+            <span className="guest-kicker">{doneCount} of {setupRows.length} completed</span>
           </div>
-          <div className="border-t border-border/70">
+          {/* Barre de progression fine */}
+          <div className="h-1.5 rounded-full bg-border/60 overflow-hidden mb-1">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#79B84B] to-[#35532A] transition-all duration-700"
+              style={{ width: `${(doneCount / setupRows.length) * 100}%` }}
+            />
+          </div>
+          <div>
             {setupRows.map((row, idx) => {
-              const statusCfg: Record<ToolStatus, { label: string; dot: string; text: string }> = {
-                not_set: { label: 'To do', dot: 'bg-card border-2 border-border', text: 'text-muted-foreground' },
-                draft: { label: 'In progress', dot: 'bg-amber-400', text: 'text-amber-700' },
-                submitted: { label: 'Done', dot: 'bg-[#79B84B]', text: 'text-[#35532A]' },
+              const statusCfg: Record<ToolStatus, { label: string; chip: string; icon?: boolean }> = {
+                not_set: { label: 'To do', chip: 'bg-muted text-muted-foreground border-border' },
+                draft: { label: 'In progress', chip: 'bg-amber-50 text-amber-800 border-amber-200' },
+                submitted: { label: 'Completed', chip: 'bg-[#EAF6DF] text-[#35532A] border-[#CAE8BD]', icon: true },
               };
               const cfg = statusCfg[row.status];
               return (
                 <Link
                   key={row.href}
                   to={row.href}
-                  className="grid grid-cols-[1.75rem_1fr_auto_auto] items-center gap-3 sm:gap-4 py-4 border-b border-border/70 group hover:bg-card/60 -mx-2 px-2 rounded-lg transition-colors"
+                  className="grid grid-cols-[1.75rem_1fr_auto_auto] items-center gap-3 sm:gap-4 py-4 border-b border-border/70 group hover:bg-card/70 -mx-2 px-2 rounded-lg transition-colors"
                 >
-                  <span className="text-xs text-muted-foreground tabular-nums">{idx + 1}</span>
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold tabular-nums transition-colors ${
+                    row.status === 'submitted' ? 'bg-[#79B84B] text-white' : 'bg-muted text-muted-foreground'
+                  }`}>
+                    {row.status === 'submitted' ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : idx + 1}
+                  </span>
                   <div className="min-w-0">
                     <div className="text-sm md:text-[15px] font-medium truncate">{row.title}</div>
                     <div className="text-xs text-muted-foreground truncate">{row.detail}</div>
                   </div>
-                  <span className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] ${cfg.text}`}>
-                    <span aria-hidden className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                    <span className="hidden sm:inline">{cfg.label}</span>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold uppercase tracking-[0.06em] ${cfg.chip}`}>
+                    {cfg.label}
                   </span>
-                  <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-[#35532A] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
                 </Link>
               );
             })}
           </div>
+          <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5">
+            <Clock3 className="w-3.5 h-3.5" />
+            Please complete everything at least 7 days before your arrival — you can keep tweaking until then.
+          </p>
         </section>
 
         {/* ---- Payments teaser : prochaine échéance + lien vers l'onglet ---- */}
@@ -594,16 +541,6 @@ const DashboardContent = () => {
             onGuestsCountChange={updateGuestsCount}
           />
 
-          {/* WhatsApp group link (if admin set one) */}
-          <WhatsAppGroupCard url={activeBooking?.whatsapp_group_url ?? null} />
-
-          {/* Weather block (Arrábida) */}
-          <WeatherCard
-            checkIn={bookingCheckIn}
-            checkOut={bookingCheckOut}
-            bookingId={activeBookingId ?? null}
-          />
-
           {/* Global Summary */}
           <GlobalSummary
             profile={profile}
@@ -624,24 +561,18 @@ const DashboardContent = () => {
             </div>
           )}
 
-          {/* Submit Button */}
-          <div className="guest-card p-6">
-            <Button
-              onClick={handleSubmitInformation}
-              disabled={isSubmitting || !hasDatesSet || isLocked || dietExceedsGuests}
-              size="lg"
-              className="w-full sm:w-auto gap-2 rounded-full bg-[#35532A] text-white hover:bg-[#2A4221]"
-            >
-              {isSubmitting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-              Send summary
-            </Button>
-            <p className="text-sm text-muted-foreground mt-3">
-              {guestStatus.message}
-            </p>
+          {/* Note de complétion — remplace l'ancien bouton Send summary */}
+          <div className="rounded-2xl border border-border bg-card p-5 flex items-start gap-3">
+            <span className="w-9 h-9 rounded-full bg-[#EAF6DF] text-[#35532A] flex items-center justify-center flex-shrink-0">
+              <Clock3 className="w-4 h-4" />
+            </span>
+            <div>
+              <p className="text-sm font-medium">Everything ready 7 days before arrival</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Please complete your bedrooms, catering and transportation at least 7 days before
+                your arrival so we can prepare everything for you. Mark each step as complete on its page.
+              </p>
+            </div>
           </div>
       </div>
     </GuestShell>
@@ -656,265 +587,6 @@ const Dashboard = () => {
     </ProtectedRoute>
   );
 };
-
-
-
-// ---------- WhatsApp group card ----------
-function WhatsAppGroupCard({ url }: { url: string | null }) {
-  if (!url) return null;
-  return (
-    <section className="guest-card p-6">
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="rounded-xl bg-[#EAF6DF] p-2.5 text-[#35532A] shrink-0">
-          <MessageCircle className="w-5 h-5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-base font-semibold tracking-tight">Group chat</h2>
-          <p className="text-sm text-muted-foreground">Communicate with the Quinta team before, during and after your stay</p>
-        </div>
-        <a href={url} target="_blank" rel="noopener noreferrer">
-          <Button size="sm" className="rounded-full bg-[#35532A] text-white hover:bg-[#2A4221]">Open WhatsApp group</Button>
-        </a>
-      </div>
-    </section>
-  );
-}
-
-// ---------- Weather card ----------
-const QUINTA_LAT = 38.4847;
-const QUINTA_LON = -8.9942;
-
-function weatherIconFor(code: number) {
-  if (code === 0) return Sun;
-  if (code <= 3) return CloudSun;
-  if (code <= 48) return CloudFog;
-  if (code <= 67) return CloudRain;
-  if (code <= 77) return CloudSnow;
-  if (code <= 82) return CloudRain;
-  if (code <= 86) return CloudSnow;
-  if (code <= 99) return CloudLightning;
-  return Cloud;
-}
-
-function parseLocalDate(iso: string) {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, (m || 1) - 1, d || 1);
-}
-
-function fmtISO(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-function enumerateDates(startISO: string, endISO: string): string[] {
-  const out: string[] = [];
-  const start = parseLocalDate(startISO);
-  const end = parseLocalDate(endISO);
-  const cursor = new Date(start);
-  while (cursor <= end) {
-    out.push(fmtISO(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return out;
-}
-
-type DayWeather = {
-  date: string;
-  weather_code: number;
-  temp_max: number;
-  temp_min: number;
-  source: 'forecast' | 'history';
-};
-
-async function fetchForecast(start: string, end: string) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${QUINTA_LAT}&longitude=${QUINTA_LON}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Lisbon&start_date=${start}&end_date=${end}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const json = await res.json();
-  return json.daily as { time: string[]; weather_code: number[]; temperature_2m_max: number[]; temperature_2m_min: number[] };
-}
-
-async function fetchArchive(start: string, end: string) {
-  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${QUINTA_LAT}&longitude=${QUINTA_LON}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Lisbon&start_date=${start}&end_date=${end}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const json = await res.json();
-  return json.daily as { time: string[]; weather_code: number[]; temperature_2m_max: number[]; temperature_2m_min: number[] };
-}
-
-function modeOf(arr: number[]): number {
-  const counts = new Map<number, number>();
-  let best = arr[0];
-  let bestCount = 0;
-  for (const v of arr) {
-    const c = (counts.get(v) || 0) + 1;
-    counts.set(v, c);
-    if (c > bestCount) { bestCount = c; best = v; }
-  }
-  return best;
-}
-
-async function buildWeather(checkIn: string, checkOut: string): Promise<DayWeather[]> {
-  const allDates = enumerateDates(checkIn, checkOut);
-  const byDate = new Map<string, DayWeather>();
-
-  const forecast = await fetchForecast(checkIn, checkOut).catch(() => null);
-  if (forecast) {
-    forecast.time.forEach((iso, i) => {
-      if (
-        typeof forecast.weather_code[i] === 'number' &&
-        typeof forecast.temperature_2m_max[i] === 'number' &&
-        typeof forecast.temperature_2m_min[i] === 'number'
-      ) {
-        byDate.set(iso, {
-          date: iso,
-          weather_code: forecast.weather_code[i],
-          temp_max: Math.round(forecast.temperature_2m_max[i]),
-          temp_min: Math.round(forecast.temperature_2m_min[i]),
-          source: 'forecast',
-        });
-      }
-    });
-  }
-
-  const missing = allDates.filter((d) => !byDate.has(d));
-  if (missing.length > 0) {
-    const currentYear = new Date().getFullYear();
-    const years = [currentYear - 5, currentYear - 4, currentYear - 3, currentYear - 2, currentYear - 1];
-    const perDayHist = new Map<string, { codes: number[]; maxs: number[]; mins: number[] }>();
-    missing.forEach((d) => perDayHist.set(d, { codes: [], maxs: [], mins: [] }));
-
-    const shiftYear = (iso: string, targetYear: number) => {
-      const d = parseLocalDate(iso);
-      const month = d.getMonth();
-      let day = d.getDate();
-      if (month === 1 && day === 29) day = 28;
-      return fmtISO(new Date(targetYear, month, day));
-    };
-
-    const results = await Promise.all(
-      years.map(async (year) => {
-        const start = shiftYear(checkIn, year);
-        const end = shiftYear(checkOut, year);
-        return { year, data: await fetchArchive(start, end).catch(() => null) };
-      })
-    );
-
-    for (const { data } of results) {
-      if (!data) continue;
-      data.time.forEach((histIso, i) => {
-        const hd = parseLocalDate(histIso);
-        const stayIso = missing.find((m) => {
-          const md = parseLocalDate(m);
-          return md.getMonth() === hd.getMonth() && md.getDate() === hd.getDate();
-        });
-        if (!stayIso) return;
-        const bucket = perDayHist.get(stayIso);
-        if (!bucket) return;
-        if (typeof data.weather_code[i] === 'number') bucket.codes.push(data.weather_code[i]);
-        if (typeof data.temperature_2m_max[i] === 'number') bucket.maxs.push(data.temperature_2m_max[i]);
-        if (typeof data.temperature_2m_min[i] === 'number') bucket.mins.push(data.temperature_2m_min[i]);
-      });
-    }
-
-    for (const date of missing) {
-      const b = perDayHist.get(date);
-      if (!b || b.maxs.length === 0) continue;
-      byDate.set(date, {
-        date,
-        weather_code: b.codes.length ? modeOf(b.codes) : 1,
-        temp_max: Math.round(b.maxs.reduce((s, v) => s + v, 0) / b.maxs.length),
-        temp_min: Math.round(b.mins.reduce((s, v) => s + v, 0) / b.mins.length),
-        source: 'history',
-      });
-    }
-  }
-
-  return allDates.map((d) => byDate.get(d)).filter((x): x is DayWeather => !!x);
-}
-
-function WeatherCard({ checkIn, checkOut, bookingId }: { checkIn: string | null; checkOut: string | null; bookingId: string | null }) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const checkInDate = checkIn ? parseLocalDate(checkIn) : null;
-  const checkOutDate = checkOut ? parseLocalDate(checkOut) : null;
-  const isPast = !!checkOutDate && checkOutDate < today;
-  const hasDates = !!checkInDate && !!checkOutDate;
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['weather-v2', bookingId, checkIn, checkOut],
-    enabled: hasDates && !isPast,
-    staleTime: 1000 * 60 * 60 * 6,
-    gcTime: 1000 * 60 * 60 * 24,
-    retry: 0,
-    queryFn: () => buildWeather(checkIn!, checkOut!),
-  });
-
-  if (!hasDates || isPast) return null;
-
-  if (isLoading) {
-    return (
-      <section className="guest-card p-6">
-        <h2 className="text-base font-semibold tracking-tight mb-3">Weather forecast</h2>
-        <div className="flex gap-3 overflow-x-auto">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="w-24 h-28 rounded-xl bg-muted animate-pulse shrink-0" />
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  if (!data || data.length === 0) return null;
-
-  const forecastCount = data.filter((d) => d.source === 'forecast').length;
-  const historyCount = data.filter((d) => d.source === 'history').length;
-  const mixed = forecastCount > 0 && historyCount > 0;
-  const showBadge = historyCount > 0;
-  const badgeText = mixed ? 'Partial estimate' : 'Seasonal estimate';
-  const monthName = checkInDate!.toLocaleString('en-US', { month: 'long' });
-  const noteText = mixed
-    ? `Forecast available for the first ${forecastCount} day${forecastCount === 1 ? '' : 's'}. Remaining days based on historical averages.`
-    : `Based on historical averages for ${monthName}. Detailed forecast available 14 days before your stay.`;
-
-  return (
-    <section className="guest-card p-6">
-      <div className="flex items-start justify-between mb-4 gap-2">
-        <h2 className="text-base font-semibold tracking-tight">Weather forecast</h2>
-        {showBadge && (
-          <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-0.5 text-[11px] font-medium">
-            {badgeText}
-          </span>
-        )}
-      </div>
-      <div className="flex gap-3 overflow-x-auto pb-1">
-        {data.map((d) => {
-          const dt = parseLocalDate(d.date);
-          const label = dt.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
-          const Icon = weatherIconFor(d.weather_code);
-          return (
-            <div
-              key={d.date}
-              className="shrink-0 w-24 rounded-xl border border-border/70 bg-background p-3 flex flex-col items-center gap-1"
-            >
-              <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
-              <Icon className="w-6 h-6 text-[#679E3F]" />
-              <div className="text-sm tabular-nums">
-                <span className="font-semibold">{d.temp_max}°</span>
-                <span className="text-muted-foreground"> / {d.temp_min}°</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {showBadge && (
-        <p className="mt-3 text-xs text-muted-foreground">{noteText}</p>
-      )}
-    </section>
-  );
-}
 
 
 

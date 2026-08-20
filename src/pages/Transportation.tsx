@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { useGuestProfile } from '@/hooks/useGuestProfile';
 import { useActiveBooking } from '@/contexts/BookingContext';
 import { useTransportation } from '@/hooks/useTransportation';
@@ -8,6 +9,7 @@ import { useAutoSave } from '@/hooks/useAutoSave';
 import { getGuestStatus } from '@/lib/editLock';
 import { calculateTransportationCost, getFixedTripPriceNumeric } from '@/lib/transportationPricing';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
+import { MarkCompleteCard } from '@/components/guest-area/MarkCompleteCard';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 
 import { TransportationCostSummaryCard } from '@/components/guest-area/TransportationCostSummary';
@@ -40,6 +42,14 @@ import driverImage from '@/assets/driver-luis.jpeg';
 
 const PICKUP_OPTIONS = ['Lisbon', 'Lisbon Airport', 'Quinta do Amor', 'Custom'];
 const DROPOFF_OPTIONS = ['Quinta do Amor', 'Lisbon', 'Lisbon Airport', 'Custom'];
+
+// Notifie hello@ qu'un guest a ajouté des trips (fire-and-forget, jamais en
+// mode admin — Geoffroy n'a pas besoin d'être prévenu de ses propres ajouts).
+function notifyTripsAdded(tripIds: string[], isAdminMode: boolean) {
+  if (isAdminMode || tripIds.length === 0) return;
+  supabase.functions.invoke('notify-trip-added', { body: { trip_ids: tripIds } })
+    .catch((e) => console.warn('[notify-trip-added]', e));
+}
 
 // Le guest choisit un nombre de passagers ; la taille de taxi est dérivée en interne.
 // Au-delà de 8, on stocke '8 seats' (plus grand véhicule) et le prix devient une
@@ -184,7 +194,7 @@ const Transportation = () => {
 
     setSubmittingTrip(true);
     try {
-      await addTrip({
+      const created = await addTrip({
         trip_direction: deriveDirection(dropoff),
         pickup_location: pickup,
         dropoff_location: dropoff,
@@ -195,8 +205,9 @@ const Transportation = () => {
         custom_price: customPrice,
       });
 
+      let created2: typeof created = null;
       if (isRound) {
-        await addTrip({
+        created2 = await addTrip({
           trip_direction: deriveDirection(pickup),
           pickup_location: dropoff,
           dropoff_location: pickup,
@@ -207,6 +218,8 @@ const Transportation = () => {
           custom_price: customPrice,
         });
       }
+
+      notifyTripsAdded([created?.id, created2?.id].filter(Boolean) as string[], isAdminMode);
 
       setShowAddTrip(false);
       setTripPrice('');
@@ -231,7 +244,7 @@ const Transportation = () => {
     if (duplicating) return;
     setDuplicating(true);
     try {
-      await addTrip({
+      const created = await addTrip({
         trip_direction: trip.trip_direction,
         pickup_location: trip.pickup_location,
         dropoff_location: trip.dropoff_location,
@@ -240,6 +253,7 @@ const Transportation = () => {
         passengers_count: trip.passengers_count,
         taxi_size: trip.taxi_size,
       });
+      if (created?.id) notifyTripsAdded([created.id], isAdminMode);
     } finally {
       setDuplicating(false);
     }
@@ -592,6 +606,8 @@ const Transportation = () => {
 
         {/* Cost Summary */}
         <TransportationCostSummaryCard summary={costSummary} />
+
+        {!isLocked && <MarkCompleteCard table="transportation_requests" toolLabel="Transportation" />}
       </div>
     </ToolPageLayout>
   );

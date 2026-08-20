@@ -9,6 +9,7 @@ import { getGuestStatus } from '@/lib/editLock';
 import { calculateFoodCostMulti, getDietTypes } from '@/lib/foodPricing';
 import { dietConfigTotal, BREAKFAST_TIME_OPTIONS, LUNCH_TIME_OPTIONS, DINNER_TIME_OPTIONS } from '@/types/guest';
 import { ToolPageLayout } from '@/components/guest-area/ToolPageLayout';
+import { MarkCompleteCard } from '@/components/guest-area/MarkCompleteCard';
 import { AutoSaveIndicator } from '@/components/guest-area/AutoSaveIndicator';
 import { FoodCostSummaryCard } from '@/components/guest-area/FoodCostSummary';
 import { Textarea } from '@/components/ui/textarea';
@@ -339,6 +340,8 @@ const Food = () => {
         </div>
 
         <FoodCostSummaryCard summary={costSummary} />
+
+        {!isLocked && <MarkCompleteCard table="food_plans" toolLabel="Catering" />}
       </div>
     </ToolPageLayout>
   );
