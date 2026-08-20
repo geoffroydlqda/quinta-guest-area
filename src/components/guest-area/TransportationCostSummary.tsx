@@ -15,7 +15,7 @@ export function TransportationCostSummaryCard({ summary }: TransportationCostSum
   return (
     <div className="guest-card p-6">
       <div className="flex items-center gap-2.5 mb-4">
-        <span className="text-[#B25C3D] flex items-center justify-center">
+        <span className="text-[#6D7855] flex items-center justify-center">
           <Euro className="w-4 h-4" />
         </span>
         <h3 className="text-base font-semibold tracking-tight">Cost summary</h3>
@@ -35,9 +35,9 @@ export function TransportationCostSummaryCard({ summary }: TransportationCostSum
         )}
 
         {subtotal > 0 && (
-          <div className="flex justify-between items-center py-3 px-4 mt-2 bg-[#FAEEE3] rounded-xl">
+          <div className="flex justify-between items-center py-3 px-4 mt-2 bg-[#EEF1E4] rounded-xl">
             <span className="font-semibold text-sm">Transportation subtotal</span>
-            <span className="text-lg font-bold text-[#B25C3D] tabular-nums">€{subtotal}</span>
+            <span className="text-lg font-bold text-[#6D7855] tabular-nums">€{subtotal}</span>
           </div>
         )}
       </div>

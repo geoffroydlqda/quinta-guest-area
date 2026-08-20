@@ -43,9 +43,9 @@ export function installmentKind(s: PaymentInstallment): InstallmentKind {
 function installmentBadge(s: PaymentInstallment) {
   const kind = installmentKind(s);
   const map = {
-    paid: { label: 'Paid', cls: 'bg-[#FAEEE3] text-[#B25C3D]' },
-    overdue: { label: 'Overdue', cls: 'bg-destructive/10 text-[#C0392B]' },
-    due_soon: { label: 'Due soon', cls: 'bg-amber-50 text-amber-800' },
+    paid: { label: 'Paid', cls: 'bg-[#EEF1E4] text-[#6D7855]' },
+    overdue: { label: 'Overdue', cls: 'bg-destructive/10 text-[#B25C3D]' },
+    due_soon: { label: 'Due soon', cls: 'bg-amber-50 text-[#8A6C15]' },
     scheduled: { label: 'Scheduled', cls: 'bg-muted text-muted-foreground' },
   } as const;
   const cfg = map[kind];
@@ -59,7 +59,7 @@ function installmentBadge(s: PaymentInstallment) {
 
 // Timeline dot colour follows the same status kinds.
 const TIMELINE_DOT: Record<InstallmentKind, string> = {
-  paid: 'bg-[#E98E3C] border-[#E98E3C]',
+  paid: 'bg-[#8CA05F] border-[#8CA05F]',
   overdue: 'bg-[#F36F63] border-[#F36F63]',
   due_soon: 'bg-card border-amber-400',
   scheduled: 'bg-card border-border',
@@ -130,7 +130,7 @@ function InstallmentRow({ inst, onPay, paying }: { inst: PaymentInstallment; onP
           <span className="text-sm font-semibold tabular-nums">{fmtEur(inst.amount_due)}</span>
           {installmentBadge(inst)}
           {onPay && isPayableOnline(inst) && (
-            <Button size="sm" onClick={() => onPay(inst)} disabled={paying} className="rounded-full bg-[#B25C3D] text-white hover:bg-[#93472C]">
+            <Button size="sm" onClick={() => onPay(inst)} disabled={paying} className="rounded-full bg-[#6D7855] text-white hover:bg-[#57624A]">
               {paying ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <CreditCard className="w-3.5 h-3.5 mr-1" />}
               Pay
             </Button>
@@ -163,12 +163,12 @@ export function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstal
   const total = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
   return (
     <section className="guest-card p-6 sm:p-8">
-      <div className={`guest-kicker ${overdue ? 'text-[#C0392B]' : ''}`}>
+      <div className={`guest-kicker ${overdue ? 'text-[#B25C3D]' : ''}`}>
         {overdue ? 'Payment due' : insts.length > 1 ? 'Left to pay' : 'Next payment'}
       </div>
       <div className="mt-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-5">
         <div className="min-w-0">
-          <div className="text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums text-[#B25C3D]">
+          <div className="text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums text-[#6D7855]">
             {fmtEur(total)}
           </div>
           {insts.length === 1 ? (
@@ -193,7 +193,7 @@ export function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstal
           size="lg"
           onClick={() => onPay(insts)}
           disabled={paying}
-          className="shrink-0 w-full sm:w-auto rounded-full px-7 bg-[#B25C3D] text-white hover:bg-[#93472C]"
+          className="shrink-0 w-full sm:w-auto rounded-full px-7 bg-[#6D7855] text-white hover:bg-[#57624A]"
         >
           {paying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
           Pay {fmtEur(total)}
@@ -270,7 +270,7 @@ export function PaymentOverview({ bookingId }: { bookingId: string | null | unde
       {hasAccommodation && (
         <section className="guest-card p-6">
           <div className="flex items-center gap-2.5 mb-5">
-            <span className="text-[#B25C3D] flex items-center justify-center">
+            <span className="text-[#6D7855] flex items-center justify-center">
               <CreditCard className="w-4 h-4" />
             </span>
             <h2 className="text-base font-semibold tracking-tight">Accommodation</h2>
@@ -279,7 +279,7 @@ export function PaymentOverview({ bookingId }: { bookingId: string | null | unde
           {totalDue > 0 && (
             <div className="mb-5">
               <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div className="h-full rounded-full bg-[#E98E3C] transition-all" style={{ width: `${pct}%` }} />
+                <div className="h-full rounded-full bg-[#8CA05F] transition-all" style={{ width: `${pct}%` }} />
               </div>
               <div className="mt-2 flex justify-between text-xs">
                 <span className="font-medium text-foreground tabular-nums">{fmtEur(totalPaid)} paid</span>
@@ -303,7 +303,7 @@ export function PaymentOverview({ bookingId }: { bookingId: string | null | unde
       {catering.length > 0 && (
         <section className="guest-card p-6">
           <div className="flex items-center gap-2.5 mb-5">
-            <span className="text-[#B25C3D] flex items-center justify-center">
+            <span className="text-[#6D7855] flex items-center justify-center">
               <Utensils className="w-4 h-4" />
             </span>
             <h2 className="text-base font-semibold tracking-tight">Catering</h2>
@@ -315,7 +315,7 @@ export function PaymentOverview({ bookingId }: { bookingId: string | null | unde
       {hasExtras && (
         <section className="guest-card p-6">
           <div className="flex items-center gap-2.5 mb-5">
-            <span className="text-[#B25C3D] flex items-center justify-center">
+            <span className="text-[#6D7855] flex items-center justify-center">
               <FileText className="w-4 h-4" />
             </span>
             <h2 className="text-base font-semibold tracking-tight">Extras</h2>

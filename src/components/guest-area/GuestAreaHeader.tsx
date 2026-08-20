@@ -42,7 +42,7 @@ export function GuestAreaHeader({ showLogout = true }: GuestAreaHeaderProps) {
             size="sm"
             variant="outline"
             onClick={handleExit}
-            className="h-7 border-white bg-transparent text-white hover:bg-white hover:text-amber-700"
+            className="h-7 border-white bg-transparent text-white hover:bg-white hover:text-[#8A6C15]"
           >
             Exit admin mode
           </Button>
@@ -53,7 +53,7 @@ export function GuestAreaHeader({ showLogout = true }: GuestAreaHeaderProps) {
           <div className="flex items-center gap-3 min-w-0">
             <img src={qdaLogo} alt="Quinta do Amor" className="h-10 w-auto" />
             <div className="hidden sm:block min-w-0">
-              <h1 className="guest-display text-base font-semibold leading-tight tracking-tight text-[#B25C3D] truncate">
+              <h1 className="guest-display text-base font-semibold leading-tight tracking-tight text-[#6D7855] truncate">
                 Quinta do Amor
               </h1>
               <p className="guest-kicker">Guest Area</p>

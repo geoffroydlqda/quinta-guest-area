@@ -33,8 +33,8 @@ const docsStatusLabels: Record<ToolStatus, string> = {
 
 const statusColors: Record<ToolStatus, string> = {
   not_set: 'bg-muted text-muted-foreground border-transparent',
-  draft: 'bg-amber-50 text-amber-800 border-transparent',
-  submitted: 'bg-[#FAEEE3] text-[#B25C3D] border-transparent',
+  draft: 'bg-amber-50 text-[#8A6C15] border-transparent',
+  submitted: 'bg-[#EEF1E4] text-[#6D7855] border-transparent',
 };
 
 export function ToolTile({ title, description, icon, status, href, disabled }: ToolTileProps) {
@@ -55,10 +55,10 @@ export function ToolTile({ title, description, icon, status, href, disabled }: T
       to={disabled ? '#' : href}
       className={`block h-full ${disabled ? 'pointer-events-none opacity-60' : ''}`}
     >
-      <div className="guest-card p-5 transition-all hover:shadow-md hover:border-[#F0D3BC] group h-full flex flex-col">
+      <div className="guest-card p-5 transition-all hover:shadow-md hover:border-[#D7DFC3] group h-full flex flex-col">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center justify-center">
-            <Icon className="w-5 h-5 text-[#B25C3D]" />
+            <Icon className="w-5 h-5 text-[#6D7855]" />
           </div>
           <Badge
             variant="outline"
@@ -68,14 +68,14 @@ export function ToolTile({ title, description, icon, status, href, disabled }: T
           </Badge>
         </div>
 
-        <h3 className="text-base font-semibold tracking-tight mb-1 group-hover:text-[#B25C3D] transition-colors">
+        <h3 className="text-base font-semibold tracking-tight mb-1 group-hover:text-[#6D7855] transition-colors">
           {title}
         </h3>
         <p className="text-sm text-muted-foreground mb-4 flex-1">
           {description}
         </p>
 
-        <div className="flex items-center text-sm text-[#B25C3D] font-medium mt-auto">
+        <div className="flex items-center text-sm text-[#6D7855] font-medium mt-auto">
           {displayStatus === 'not_set' ? 'Set up' : 'View / Edit'}
           <ChevronRight className="w-4 h-4 ml-1 transition-transform group-hover:translate-x-0.5" />
         </div>

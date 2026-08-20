@@ -29,7 +29,7 @@ function LateUpdatesBanner({ message }: { message: string }) {
         <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
         <div>
           <p className="text-sm font-semibold text-amber-900">Late updates</p>
-          <p className="text-sm mt-0.5 text-amber-800">{message}</p>
+          <p className="text-sm mt-0.5 text-[#8A6C15]">{message}</p>
         </div>
       </div>
     </div>

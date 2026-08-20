@@ -28,7 +28,7 @@ export function StaySwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2 max-w-[220px] rounded-full border-border/80 text-foreground">
-          <CalendarDays className="h-4 w-4 shrink-0 text-[#B25C3D]" />
+          <CalendarDays className="h-4 w-4 shrink-0 text-[#6D7855]" />
           <span className="truncate font-medium">
             {activeBooking?.retreat_name || shortRange(activeBooking?.check_in_date ?? null, activeBooking?.check_out_date ?? null)}
           </span>

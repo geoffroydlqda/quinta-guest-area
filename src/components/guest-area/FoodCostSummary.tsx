@@ -30,7 +30,7 @@ export function FoodCostSummaryCard({ summary }: FoodCostSummaryProps) {
   return (
     <div className="guest-card p-6">
       <div className="flex items-center gap-2.5 mb-4">
-        <span className="text-[#B25C3D] flex items-center justify-center">
+        <span className="text-[#6D7855] flex items-center justify-center">
           <Euro className="w-4 h-4" />
         </span>
         <h3 className="text-base font-semibold tracking-tight">Cost summary</h3>
@@ -69,9 +69,9 @@ export function FoodCostSummaryCard({ summary }: FoodCostSummaryProps) {
             <span className="tabular-nums">{dietTotal}</span>
           </div>
 
-          <div className="flex justify-between items-center py-3 bg-[#FAEEE3] rounded-xl px-4">
+          <div className="flex justify-between items-center py-3 bg-[#EEF1E4] rounded-xl px-4">
             <span className="font-semibold text-sm">Estimated total food cost</span>
-            <span className="text-lg font-bold text-[#B25C3D] tabular-nums">{fmt(grandTotal)}</span>
+            <span className="text-lg font-bold text-[#6D7855] tabular-nums">{fmt(grandTotal)}</span>
           </div>
 
           <p className="text-xs text-muted-foreground">

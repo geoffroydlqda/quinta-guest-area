@@ -59,7 +59,7 @@ function SummarySection({ icon: Icon, title, children }: { icon: LucideIcon; tit
   return (
     <section className="py-5 first:pt-0 last:pb-0">
       <div className="flex items-center gap-2.5 mb-3">
-        <span className="text-[#B25C3D] flex items-center justify-center flex-shrink-0">
+        <span className="text-[#6D7855] flex items-center justify-center flex-shrink-0">
           <Icon className="w-4 h-4" />
         </span>
         <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
@@ -82,7 +82,7 @@ function SectionTotal({ label, value }: { label: string; value: React.ReactNode 
   return (
     <div className="flex justify-between items-baseline gap-3 mt-2.5 pt-2.5 border-t border-border/70 text-sm">
       <span className="font-medium">{label}</span>
-      <span className="font-bold text-[#B25C3D] tabular-nums">{value}</span>
+      <span className="font-bold text-[#6D7855] tabular-nums">{value}</span>
     </div>
   );
 }

@@ -71,13 +71,13 @@ export function MarkCompleteCard({
 
   if (completed) {
     return (
-      <div className="rounded-2xl border border-[#F0D3BC] bg-gradient-to-br from-[#FAEEE3] to-[#FDF7F0] p-5 flex items-start justify-between gap-4 flex-wrap">
+      <div className="rounded-2xl border border-[#D7DFC3] bg-gradient-to-br from-[#EEF1E4] to-[#F8FAF3] p-5 flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-start gap-3">
-          <span className="w-9 h-9 rounded-full bg-[#E98E3C] text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+          <span className="w-9 h-9 rounded-full bg-[#8CA05F] text-white flex items-center justify-center flex-shrink-0 shadow-sm">
             <Check className="w-5 h-5" strokeWidth={3} />
           </span>
           <div>
-            <p className="font-semibold text-[#B25C3D]">{toolLabel} completed — nice work!</p>
+            <p className="font-semibold text-[#6D7855]">{toolLabel} completed — nice work!</p>
             <p className="text-sm text-muted-foreground mt-0.5">
               You can still make changes until 7 days before your arrival.
             </p>
@@ -100,7 +100,7 @@ export function MarkCompleteCard({
   return (
     <div className="rounded-2xl border border-border bg-card p-5 flex items-center justify-between gap-4 flex-wrap">
       <div className="flex items-start gap-3">
-        <span className="text-[#B25C3D] flex items-center justify-center flex-shrink-0">
+        <span className="text-[#D4AF37] flex items-center justify-center flex-shrink-0">
           <Sparkles className="w-5 h-5" />
         </span>
         <div>
@@ -114,7 +114,7 @@ export function MarkCompleteCard({
       </div>
       <Button
         type="button"
-        className="rounded-full bg-[#B25C3D] text-white hover:bg-[#93472C] gap-2"
+        className="rounded-full bg-[#6D7855] text-white hover:bg-[#57624A] gap-2"
         disabled={saving || noRow}
         onClick={() => setStatus('submitted')}
       >

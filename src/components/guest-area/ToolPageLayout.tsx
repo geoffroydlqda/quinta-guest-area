@@ -48,7 +48,7 @@ export function ToolPageLayout({ title, description, isLocked = false, statusInf
       <div className="max-w-4xl animate-fade-up">
         <div className="mb-8">
           <div className="guest-kicker mb-2">{KICKER_BY_TAB[active]}</div>
-          <h1 className="guest-display text-3xl md:text-4xl font-semibold tracking-tight text-[#B25C3D] mb-2">{title}</h1>
+          <h1 className="guest-display text-3xl md:text-4xl font-semibold tracking-tight text-[#6D7855] mb-2">{title}</h1>
           {description && (
             <p className="text-sm md:text-base text-muted-foreground">{description}</p>
           )}

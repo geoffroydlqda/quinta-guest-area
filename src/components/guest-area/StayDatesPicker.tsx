@@ -180,7 +180,7 @@ export function StayDatesPicker({
             <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
             <p className="text-sm text-muted-foreground">
               Your information is finalized. Please contact{' '}
-              <a href="mailto:hello@quintamor.com" className="text-[#B25C3D] hover:underline">hello@quintamor.com</a>{' '}
+              <a href="mailto:hello@quintamor.com" className="text-[#6D7855] hover:underline">hello@quintamor.com</a>{' '}
               for any changes.
             </p>
           </div>
@@ -231,7 +231,7 @@ export function StayDatesPicker({
       {hasDates ? (
         <p className="text-xs text-muted-foreground">
           Need different dates? Email{' '}
-          <a href="mailto:hello@quintamor.com" className="text-[#B25C3D] hover:underline">hello@quintamor.com</a>{' '}
+          <a href="mailto:hello@quintamor.com" className="text-[#6D7855] hover:underline">hello@quintamor.com</a>{' '}
           and we'll adjust them for you.
         </p>
       ) : (

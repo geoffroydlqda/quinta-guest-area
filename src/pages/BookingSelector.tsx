@@ -70,8 +70,8 @@ function BookingSelectorContent() {
     if (!isUpcoming) return null;
     const s = setupState.get(id);
     if (!s) return null;
-    if (!s.room) return { label: 'Room setup to do', cls: 'bg-amber-50 text-amber-800 border border-amber-200' };
-    if (!s.food) return { label: 'Food plan to do', cls: 'bg-amber-50 text-amber-800 border border-amber-200' };
+    if (!s.room) return { label: 'Room setup to do', cls: 'bg-amber-50 text-[#8A6C15] border border-amber-200' };
+    if (!s.food) return { label: 'Food plan to do', cls: 'bg-amber-50 text-[#8A6C15] border border-amber-200' };
     return { label: 'Up to date', cls: 'bg-primary/10 text-primary border border-primary/20' };
   };
 
