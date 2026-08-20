@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActiveBooking } from '@/contexts/BookingContext';
@@ -25,7 +26,11 @@ export function MarkCompleteCard({
   onChanged?: (completed: boolean) => void;
 }) {
   const { user } = useAuth();
-  const { activeBookingId } = useActiveBooking();
+  const { activeBookingId, isImpersonating, impersonatedBooking } = useActiveBooking();
+  const navigate = useNavigate();
+  const dashboardHref = isImpersonating && impersonatedBooking
+    ? `/dashboard?impersonate=${impersonatedBooking.id}`
+    : '/dashboard';
   const column = STATUS_COLUMN[table];
   const [completed, setCompleted] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
@@ -57,6 +62,8 @@ export function MarkCompleteCard({
     if (data && (data as any[]).length > 0) {
       setCompleted(next === 'submitted');
       onChanged?.(next === 'submitted');
+      // Retour au Stay summary après complétion (remplace l'ancien bouton OK)
+      if (next === 'submitted') navigate(dashboardHref);
     }
   };
 
@@ -64,13 +71,13 @@ export function MarkCompleteCard({
 
   if (completed) {
     return (
-      <div className="rounded-2xl border border-[#CAE8BD] bg-gradient-to-br from-[#EAF6DF] to-[#F6FBEF] p-5 flex items-start justify-between gap-4 flex-wrap">
+      <div className="rounded-2xl border border-[#F0D3BC] bg-gradient-to-br from-[#FAEEE3] to-[#FDF7F0] p-5 flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-start gap-3">
-          <span className="w-9 h-9 rounded-full bg-[#79B84B] text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+          <span className="w-9 h-9 rounded-full bg-[#E98E3C] text-white flex items-center justify-center flex-shrink-0 shadow-sm">
             <Check className="w-5 h-5" strokeWidth={3} />
           </span>
           <div>
-            <p className="font-semibold text-[#35532A]">{toolLabel} completed — nice work!</p>
+            <p className="font-semibold text-[#B25C3D]">{toolLabel} completed — nice work!</p>
             <p className="text-sm text-muted-foreground mt-0.5">
               You can still make changes until 7 days before your arrival.
             </p>
@@ -93,7 +100,7 @@ export function MarkCompleteCard({
   return (
     <div className="rounded-2xl border border-border bg-card p-5 flex items-center justify-between gap-4 flex-wrap">
       <div className="flex items-start gap-3">
-        <span className="w-9 h-9 rounded-full bg-[#EAF6DF] text-[#35532A] flex items-center justify-center flex-shrink-0">
+        <span className="text-[#B25C3D] flex items-center justify-center flex-shrink-0">
           <Sparkles className="w-5 h-5" />
         </span>
         <div>
@@ -107,7 +114,7 @@ export function MarkCompleteCard({
       </div>
       <Button
         type="button"
-        className="rounded-full bg-[#35532A] text-white hover:bg-[#2A4221] gap-2"
+        className="rounded-full bg-[#B25C3D] text-white hover:bg-[#93472C] gap-2"
         disabled={saving || noRow}
         onClick={() => setStatus('submitted')}
       >

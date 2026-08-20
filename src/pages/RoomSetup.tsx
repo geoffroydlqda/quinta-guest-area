@@ -558,13 +558,13 @@ const RoomSetup = () => {
 
         <div className="grid gap-2 md:grid-cols-2">
           <div className="rounded-xl bg-muted/50 border border-border/70 px-3.5 py-2.5 flex items-start gap-2">
-            <Crown className="w-4 h-4 text-[#679E3F] flex-shrink-0 mt-0.5" />
+            <Crown className="w-4 h-4 text-[#D97B2F] flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-snug">
               <span className="font-medium text-foreground">Rooms 1 & 6:</span> fixed King beds, en-suite.
             </p>
           </div>
           <div className="rounded-xl bg-muted/50 border border-border/70 px-3.5 py-2.5 flex items-start gap-2">
-            <Info className="w-4 h-4 text-[#679E3F] flex-shrink-0 mt-0.5" />
+            <Info className="w-4 h-4 text-[#D97B2F] flex-shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-snug">
               <span className="font-medium text-foreground">Rooms 7 & 8:</span> upstairs via kitchen, smaller shared bath, best view — often for facilitators.
             </p>

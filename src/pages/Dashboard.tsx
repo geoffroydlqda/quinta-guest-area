@@ -13,7 +13,6 @@ import { calculateTransportationCost } from '@/lib/transportationPricing';
 import { Link } from 'react-router-dom';
 import { GuestAreaHeader } from '@/components/guest-area/GuestAreaHeader';
 import { GuestShell } from '@/components/guest-area/GuestShell';
-import { StayDatesPicker } from '@/components/guest-area/StayDatesPicker';
 import { GlobalSummary } from '@/components/guest-area/GlobalSummary';
 import { EditLockBanner } from '@/components/guest-area/EditLockBanner';
 import { ProfileCompletionModal } from '@/components/guest-area/ProfileCompletionModal';
@@ -27,7 +26,7 @@ import {
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { isAdminEmail } from '@/lib/admin';
 import { Button } from '@/components/ui/button';
-import { Loader2, RefreshCw, LogOut, AlertCircle, ArrowUpRight, Check, Clock3 } from 'lucide-react';
+import { Loader2, RefreshCw, LogOut, AlertCircle, ArrowUpRight, Check } from 'lucide-react';
 import type { FoodDaySelection, TransportationTrip, DietConfig, ToolStatus } from '@/types/guest';
 import { dietConfigTotal, EMPTY_DIET_CONFIG } from '@/types/guest';
 import { usePaymentData } from '@/hooks/usePaymentData';
@@ -338,7 +337,7 @@ const DashboardContent = () => {
             </p>
             <p className="text-muted-foreground">
               No invitation yet? Write to us at{' '}
-              <a href="mailto:hello@quintamor.com" className="text-[#35532A] underline">
+              <a href="mailto:hello@quintamor.com" className="text-[#B25C3D] underline">
                 hello@quintamor.com
               </a>{' '}
               and we'll connect your stay.
@@ -406,7 +405,7 @@ const DashboardContent = () => {
         {/* ---- Hero (style Substance) ---- */}
         <div>
           <div className="guest-kicker mb-3">Stay summary</div>
-          <h1 className="guest-display text-4xl md:text-6xl font-semibold tracking-tight text-[#35532A]">
+          <h1 className="guest-display text-4xl md:text-6xl font-semibold tracking-tight text-[#B25C3D]">
             {displayName ? `Hello ${displayName}` : 'Welcome'}
           </h1>
           {stayMetaParts.length > 0 && (
@@ -427,18 +426,45 @@ const DashboardContent = () => {
         </div>
 
         {/* ---- Stats row — tuiles douces, une pointe de couleur ---- */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-2xl bg-gradient-to-br from-[#EAF6DF] to-[#F6FBEF] border border-[#CAE8BD]/70 px-5 py-4 transition-transform hover:-translate-y-0.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Guests — sélection bien visible, directement éditable */}
+          <div className="rounded-2xl bg-card border border-border/70 px-5 py-4 transition-transform hover:-translate-y-0.5">
+            <div className="guest-kicker mb-1.5">Guests</div>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                aria-label="Fewer guests"
+                disabled={isLocked || bookingGuestsCount <= 1}
+                onClick={() => updateGuestsCount(bookingGuestsCount - 1)}
+                className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-lg leading-none text-muted-foreground hover:text-foreground hover:border-foreground/40 disabled:opacity-40 transition-colors"
+              >
+                −
+              </button>
+              <span className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums text-foreground min-w-[1.5ch] text-center">
+                {bookingGuestsCount}
+              </span>
+              <button
+                type="button"
+                aria-label="More guests"
+                disabled={isLocked || bookingGuestsCount >= 22}
+                onClick={() => updateGuestsCount(bookingGuestsCount + 1)}
+                className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-lg leading-none text-muted-foreground hover:text-foreground hover:border-foreground/40 disabled:opacity-40 transition-colors"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <div className="rounded-2xl bg-gradient-to-br from-[#FAEEE3] to-[#FDF7F0] border border-[#F0D3BC]/70 px-5 py-4 transition-transform hover:-translate-y-0.5">
             <div className="guest-kicker mb-1.5">Setup</div>
             <div className="flex items-end justify-between gap-3">
-              <div className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums text-[#35532A]">
+              <div className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums text-[#B25C3D]">
                 {doneCount} <span className="text-muted-foreground font-normal text-xl">/ {setupRows.length}</span>
               </div>
               {/* Mini anneau de progression */}
               <svg width="40" height="40" viewBox="0 0 40 40" className="-mb-0.5" aria-hidden>
-                <circle cx="20" cy="20" r="16" fill="none" stroke="#D8EBC9" strokeWidth="5" />
+                <circle cx="20" cy="20" r="16" fill="none" stroke="#F5E0CC" strokeWidth="5" />
                 <circle
-                  cx="20" cy="20" r="16" fill="none" stroke="#79B84B" strokeWidth="5" strokeLinecap="round"
+                  cx="20" cy="20" r="16" fill="none" stroke="#E98E3C" strokeWidth="5" strokeLinecap="round"
                   strokeDasharray={`${(doneCount / setupRows.length) * 2 * Math.PI * 16} ${2 * Math.PI * 16}`}
                   transform="rotate(-90 20 20)"
                   style={{ transition: 'stroke-dasharray 600ms ease' }}
@@ -472,7 +498,7 @@ const DashboardContent = () => {
           {/* Barre de progression fine */}
           <div className="h-1.5 rounded-full bg-border/60 overflow-hidden mb-1">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#79B84B] to-[#35532A] transition-all duration-700"
+              className="h-full rounded-full bg-gradient-to-r from-[#E98E3C] to-[#B25C3D] transition-all duration-700"
               style={{ width: `${(doneCount / setupRows.length) * 100}%` }}
             />
           </div>
@@ -481,7 +507,7 @@ const DashboardContent = () => {
               const statusCfg: Record<ToolStatus, { label: string; chip: string; icon?: boolean }> = {
                 not_set: { label: 'To do', chip: 'bg-muted text-muted-foreground border-border' },
                 draft: { label: 'In progress', chip: 'bg-amber-50 text-amber-800 border-amber-200' },
-                submitted: { label: 'Completed', chip: 'bg-[#EAF6DF] text-[#35532A] border-[#CAE8BD]', icon: true },
+                submitted: { label: 'Completed', chip: 'bg-[#FAEEE3] text-[#B25C3D] border-[#F0D3BC]', icon: true },
               };
               const cfg = statusCfg[row.status];
               return (
@@ -491,7 +517,7 @@ const DashboardContent = () => {
                   className="grid grid-cols-[1.75rem_1fr_auto_auto] items-center gap-3 sm:gap-4 py-4 border-b border-border/70 group hover:bg-card/70 -mx-2 px-2 rounded-lg transition-colors"
                 >
                   <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold tabular-nums transition-colors ${
-                    row.status === 'submitted' ? 'bg-[#79B84B] text-white' : 'bg-muted text-muted-foreground'
+                    row.status === 'submitted' ? 'bg-[#E98E3C] text-white' : 'bg-muted text-muted-foreground'
                   }`}>
                     {row.status === 'submitted' ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : idx + 1}
                   </span>
@@ -502,15 +528,11 @@ const DashboardContent = () => {
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold uppercase tracking-[0.06em] ${cfg.chip}`}>
                     {cfg.label}
                   </span>
-                  <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-[#35532A] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+                  <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-[#B25C3D] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
                 </Link>
               );
             })}
           </div>
-          <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5">
-            <Clock3 className="w-3.5 h-3.5" />
-            Please complete everything at least 7 days before your arrival — you can keep tweaking until then.
-          </p>
         </section>
 
         {/* ---- Payments teaser : prochaine échéance + lien vers l'onglet ---- */}
@@ -529,17 +551,6 @@ const DashboardContent = () => {
             </span>
           </Link>
         )}
-
-        {/* Stay dates & guests — admin-fixed info, kept discreet */}
-          <StayDatesPicker
-            checkInDate={bookingCheckIn}
-            checkOutDate={bookingCheckOut}
-            guestsCount={bookingGuestsCount}
-            statusOverall={profile?.status_overall ?? 'draft'}
-            onCheckInChange={updateCheckInDate}
-            onCheckOutChange={updateCheckOutDate}
-            onGuestsCountChange={updateGuestsCount}
-          />
 
           {/* Global Summary */}
           <GlobalSummary
@@ -561,19 +572,6 @@ const DashboardContent = () => {
             </div>
           )}
 
-          {/* Note de complétion — remplace l'ancien bouton Send summary */}
-          <div className="rounded-2xl border border-border bg-card p-5 flex items-start gap-3">
-            <span className="w-9 h-9 rounded-full bg-[#EAF6DF] text-[#35532A] flex items-center justify-center flex-shrink-0">
-              <Clock3 className="w-4 h-4" />
-            </span>
-            <div>
-              <p className="text-sm font-medium">Everything ready 7 days before arrival</p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Please complete your bedrooms, catering and transportation at least 7 days before
-                your arrival so we can prepare everything for you. Mark each step as complete on its page.
-              </p>
-            </div>
-          </div>
       </div>
     </GuestShell>
   );

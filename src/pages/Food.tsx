@@ -114,7 +114,7 @@ const Food = () => {
         {/* Meal times (global) */}
         <div className="guest-card p-6">
           <div className="flex items-center gap-2.5 mb-1">
-            <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
+            <span className="text-[#B25C3D] flex items-center justify-center">
               <Clock className="w-4 h-4" />
             </span>
             <Label className="text-base font-semibold tracking-tight">Meal times</Label>
@@ -259,12 +259,12 @@ const Food = () => {
                         <span className="text-muted-foreground"> {format(parseISO(day.date), 'dd MMM')}</span>
                       </p>
                       {day.isCheckIn && (
-                        <span className="text-[11px] text-[#679E3F] font-medium block mt-0.5">
+                        <span className="text-[11px] text-[#D97B2F] font-medium block mt-0.5">
                           Check-in — dinner only
                         </span>
                       )}
                       {day.isCheckOut && (
-                        <span className="text-[11px] text-[#679E3F] font-medium block mt-0.5">
+                        <span className="text-[11px] text-[#D97B2F] font-medium block mt-0.5">
                           Check-out — breakfast only
                         </span>
                       )}
@@ -355,8 +355,8 @@ function MealToggle({ selected, disabled, onClick }: { selected: boolean; disabl
       disabled={disabled}
       className={cn(
         "w-9 h-9 rounded-full border transition-all flex items-center justify-center",
-        selected && "bg-[#CAE8BD] border-[#79B84B] text-[#35532A]",
-        !selected && !disabled && "border-border hover:border-[#79B84B]/60 hover:bg-[#EAF6DF]/60",
+        selected && "bg-[#F0D3BC] border-[#E98E3C] text-[#B25C3D]",
+        !selected && !disabled && "border-border hover:border-[#E98E3C]/60 hover:bg-[#FAEEE3]/60",
         disabled && !selected && "opacity-30 cursor-not-allowed border-border bg-muted"
       )}
     >

@@ -13,7 +13,7 @@ export function AutoSaveIndicator({ status, className }: AutoSaveIndicatorProps)
   return (
     <div className={cn("inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1",
       status === 'saving' && "bg-muted text-muted-foreground",
-      status === 'saved' && "bg-[#EAF6DF] text-[#35532A]",
+      status === 'saved' && "bg-[#FAEEE3] text-[#B25C3D]",
       status === 'error' && "bg-destructive/10 text-destructive",
       className)}>
       {status === 'saving' && (

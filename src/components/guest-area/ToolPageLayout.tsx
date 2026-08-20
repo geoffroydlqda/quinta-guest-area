@@ -48,7 +48,7 @@ export function ToolPageLayout({ title, description, isLocked = false, statusInf
       <div className="max-w-4xl animate-fade-up">
         <div className="mb-8">
           <div className="guest-kicker mb-2">{KICKER_BY_TAB[active]}</div>
-          <h1 className="guest-display text-3xl md:text-4xl font-semibold tracking-tight text-[#35532A] mb-2">{title}</h1>
+          <h1 className="guest-display text-3xl md:text-4xl font-semibold tracking-tight text-[#B25C3D] mb-2">{title}</h1>
           {description && (
             <p className="text-sm md:text-base text-muted-foreground">{description}</p>
           )}
@@ -60,18 +60,18 @@ export function ToolPageLayout({ title, description, isLocked = false, statusInf
 
         {children}
 
-        {/* OK Button at bottom of page */}
-        {showOkButton && (
-          <div className="mt-10 flex justify-center">
-            <Button
-              onClick={() => navigate(dashboardHref)}
-              size="lg"
-              className="min-w-32 rounded-full bg-[#35532A] text-white hover:bg-[#2A4221]"
-            >
-              OK
-            </Button>
-          </div>
-        )}
+        {/* L'ancien bouton OK (simple retour au dashboard) a été remplacé par
+            la carte "Mark as complete" de chaque outil, qui ramène au Stay
+            summary après complétion. */}
+        <div className="mt-10 flex justify-center">
+          <Button
+            variant="ghost"
+            onClick={() => navigate(dashboardHref)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            ← Back to stay summary
+          </Button>
+        </div>
       </div>
     </GuestShell>
   );

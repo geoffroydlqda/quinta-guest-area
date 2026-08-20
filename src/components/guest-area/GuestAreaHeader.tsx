@@ -53,7 +53,7 @@ export function GuestAreaHeader({ showLogout = true }: GuestAreaHeaderProps) {
           <div className="flex items-center gap-3 min-w-0">
             <img src={qdaLogo} alt="Quinta do Amor" className="h-10 w-auto" />
             <div className="hidden sm:block min-w-0">
-              <h1 className="guest-display text-base font-semibold leading-tight tracking-tight text-[#35532A] truncate">
+              <h1 className="guest-display text-base font-semibold leading-tight tracking-tight text-[#B25C3D] truncate">
                 Quinta do Amor
               </h1>
               <p className="guest-kicker">Guest Area</p>

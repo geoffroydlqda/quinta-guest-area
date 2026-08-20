@@ -74,18 +74,18 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
               to={withImpersonation(item.href)}
               aria-current={isActive ? 'page' : undefined}
               className={`group flex items-center gap-2.5 py-[7px] text-[15px] leading-snug transition-colors ${
-                isActive ? 'text-white font-medium' : 'text-[#C3CDB9] hover:text-white'
+                isActive ? 'text-white font-medium' : 'text-[#E7C9B8] hover:text-white'
               }`}
             >
               <span
                 aria-hidden
                 className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-                  isActive ? 'bg-[#A6D96A]' : 'bg-transparent group-hover:bg-[#A6D96A]/40'
+                  isActive ? 'bg-[#F2A65A]' : 'bg-transparent group-hover:bg-[#F2A65A]/40'
                 }`}
               />
               <span className="truncate">{item.label}</span>
               {item.key === 'payments' && dueCount > 0 && (
-                <span className="ml-auto rounded-[4px] bg-[#A6D96A] px-1.5 py-px text-[11px] font-semibold text-[#22371B] tabular-nums">
+                <span className="ml-auto rounded-[4px] bg-[#F2A65A] px-1.5 py-px text-[11px] font-semibold text-[#7C351F] tabular-nums">
                   {dueCount}
                 </span>
               )}
@@ -98,17 +98,17 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
             to={withImpersonation(item.href)}
             aria-current={isActive ? 'page' : undefined}
             className={`relative shrink-0 whitespace-nowrap px-1 pb-2.5 pt-1 text-sm transition-colors ${
-              isActive ? 'font-semibold text-[#35532A]' : 'text-muted-foreground hover:text-foreground'
+              isActive ? 'font-semibold text-[#B25C3D]' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             {item.label}
             {item.key === 'payments' && dueCount > 0 && (
-              <span className="ml-1.5 rounded-[4px] bg-[#35532A] px-1.5 py-px text-[10px] font-semibold text-white tabular-nums align-middle">
+              <span className="ml-1.5 rounded-[4px] bg-[#B25C3D] px-1.5 py-px text-[10px] font-semibold text-white tabular-nums align-middle">
                 {dueCount}
               </span>
             )}
             {isActive && (
-              <span aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-[#79B84B]" />
+              <span aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-[#E98E3C]" />
             )}
           </Link>
         );
@@ -135,7 +135,7 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
       )}
 
       {/* ---- Sidebar (desktop) ---- */}
-      <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-60 bg-[#2E4A24] text-[#F6F7F2] px-6 py-7 z-40">
+      <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-60 bg-[#7C351F] text-[#F6F7F2] px-6 py-7 z-40">
         <Link to={withImpersonation('/dashboard')} className="flex items-center gap-2.5">
           <span className="w-9 h-9 rounded-full bg-[#F6F7F2] flex items-center justify-center shrink-0 overflow-hidden">
             <img src={qdaLogo} alt="" className="w-7 h-7 object-contain" />
@@ -146,7 +146,7 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
         </Link>
 
         <nav className="mt-14 flex-1">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8FA184] mb-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#C79E8B] mb-3">
             Your stay
           </div>
           <div className="flex flex-col">
@@ -155,7 +155,7 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
         </nav>
 
         <div className="mt-8 space-y-3">
-          <div className="text-[11px] leading-relaxed text-[#8FA184]">
+          <div className="text-[11px] leading-relaxed text-[#C79E8B]">
             <div className="truncate">{stayLabel}</div>
             {checkIn && checkOut && (
               <div className="tabular-nums">{checkIn} → {checkOut}</div>
@@ -164,7 +164,7 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
           </div>
           <button
             onClick={handleSignOut}
-            className="flex items-center gap-1.5 text-[12px] text-[#C3CDB9] hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-[12px] text-[#E7C9B8] hover:text-white transition-colors"
           >
             <LogOut className="w-3.5 h-3.5" />
             Log out
@@ -185,8 +185,8 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
                 {checkIn} → {checkOut}
               </span>
             )}
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#35532A]">
-              <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-[#79B84B]" />
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#B25C3D]">
+              <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-[#E98E3C]" />
               Guest area
             </span>
             <StaySwitcher />
@@ -198,7 +198,7 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
           <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-1">
             <Link to={withImpersonation('/dashboard')} className="flex items-center gap-2 min-w-0">
               <img src={qdaLogo} alt="Quinta do Amor" className="h-8 w-auto" />
-              <span className="guest-display text-base font-semibold tracking-tight text-[#35532A] truncate">
+              <span className="guest-display text-base font-semibold tracking-tight text-[#B25C3D] truncate">
                 Quinta do Amor
               </span>
             </Link>

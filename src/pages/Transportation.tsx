@@ -292,7 +292,7 @@ const Transportation = () => {
         {/* Driver Intro Card - Bigger image */}
         <div className="guest-card p-6">
           <div className="flex items-start gap-5">
-            <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden flex-shrink-0 bg-muted border-4 border-[#EAF6DF]">
+            <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden flex-shrink-0 bg-muted border-4 border-[#FAEEE3]">
               <img 
                 src={driverImage} 
                 alt="Luis" 
@@ -358,7 +358,7 @@ const Transportation = () => {
               <Card className="guest-card border-border/70 shadow-none">
                 <CardHeader>
                   <CardTitle className="text-base font-semibold tracking-tight flex items-center gap-2.5">
-                    <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
+                    <span className="text-[#B25C3D] flex items-center justify-center">
                       <Car className="w-4 h-4" />
                     </span>
                     New Trip
@@ -584,7 +584,7 @@ const Transportation = () => {
                 </CardContent>
               </Card>
             ) : (
-              <Button onClick={() => setShowAddTrip(true)} variant="outline" className="w-full gap-2 h-12 rounded-2xl border-dashed text-muted-foreground hover:text-[#35532A] hover:border-[#79B84B]/50 hover:bg-[#EAF6DF]/50">
+              <Button onClick={() => setShowAddTrip(true)} variant="outline" className="w-full gap-2 h-12 rounded-2xl border-dashed text-muted-foreground hover:text-[#B25C3D] hover:border-[#E98E3C]/50 hover:bg-[#FAEEE3]/50">
                 <Plus className="w-4 h-4" />
                 Add trip
               </Button>
@@ -712,7 +712,7 @@ function TripCard({
             <span className="block text-[11px] font-medium text-muted-foreground">
               {trip.custom_price !== null && trip.custom_price !== undefined ? 'Price' : 'Price (indicative)'}
             </span>
-            <span className="font-semibold text-[#35532A] tabular-nums">
+            <span className="font-semibold text-[#B25C3D] tabular-nums">
               {trip.custom_price !== null && trip.custom_price !== undefined
                 ? `${Number(trip.custom_price)}€`
                 : trip.price_estimate}
@@ -898,7 +898,7 @@ function EditTripForm({
     <Card className="guest-card border-border/70 shadow-none">
       <CardHeader>
         <CardTitle className="text-base font-semibold tracking-tight flex items-center gap-2.5">
-          <span className="w-8 h-8 rounded-lg bg-[#EAF6DF] text-[#35532A] flex items-center justify-center">
+          <span className="text-[#B25C3D] flex items-center justify-center">
             <Pencil className="w-4 h-4" />
           </span>
           Edit Trip

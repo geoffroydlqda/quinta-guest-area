@@ -57,7 +57,7 @@ function PaymentsContent() {
       <div className="max-w-3xl space-y-6 animate-fade-up">
         <div>
           <div className="guest-kicker mb-2">Payments</div>
-          <h1 className="guest-display text-3xl md:text-4xl font-semibold tracking-tight text-[#35532A]">
+          <h1 className="guest-display text-3xl md:text-4xl font-semibold tracking-tight text-[#B25C3D]">
             Your payments
           </h1>
           <p className="mt-2 text-sm md:text-base text-muted-foreground">

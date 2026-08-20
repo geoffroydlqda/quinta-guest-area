@@ -144,7 +144,7 @@ function getGuestStatusInternal(
       status: 'late_updates',
       label: 'Late updates',
       message:
-        'Your stay is approaching. Please finalize your information as soon as possible. Modifications will no longer be possible 3 days before your arrival.',
+        'Your stay is approaching. Please finalize your information as soon as possible — everything should be completed 7 days before your arrival.',
       isEditingLocked: false,
       isPastFinalLock: false,
       isInLateUpdatesWindow: true,
@@ -157,7 +157,7 @@ function getGuestStatusInternal(
   return {
     status: 'pending',
     label: 'Pending completion',
-    message: 'You may still edit and submit your Guest Area information until 3 days before your arrival.',
+    message: 'Please complete your Guest Area information at least 7 days before your arrival.',
     isEditingLocked: false,
     isPastFinalLock: false,
     isInLateUpdatesWindow: false,
