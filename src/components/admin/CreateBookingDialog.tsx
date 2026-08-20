@@ -75,6 +75,8 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
     setGuestQuery("");
     setGuestListOpen(false);
     setForm((f) => ({ ...f, email: "", first_name: "", last_name: "" }));
+    // Feedback clair : le focus saute sur le prénom du nouveau guest
+    setTimeout(() => document.getElementById("first_name")?.focus(), 0);
   };
 
   const filteredGuests = guests.filter((g) => {
@@ -269,8 +271,9 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
                   type="button"
                   variant="outline"
                   size="icon"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={newGuestMode}
-                  title="Create a new guest"
+                  title="New guest — clears the selection and jumps to the name fields below"
                   className={guestId === "new" ? "border-primary text-[#35532A]" : ""}
                 >
                   <Plus className="w-4 h-4" />

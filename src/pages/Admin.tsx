@@ -226,6 +226,7 @@ const AdminContent = () => {
   // Pilules de navigation Bookings : année courante, années suivantes avec
   // bookings, et Past events (demande Geoffroy, 19 août 2026)
   const [yearPill, setYearPill] = useState<string>(() => String(new Date().getFullYear()));
+  const [cancelledCollapsed, setCancelledCollapsed] = useState(true);
   const [showTests, setShowTests] = useState(false);
   
   const [createBookingOpen, setCreateBookingOpen] = useState(false);
@@ -315,6 +316,7 @@ const AdminContent = () => {
     invitationToken: string | null;
     paymentStatusOverride: string | null;
     eventType: string;
+    isCancelled: boolean;
   };
 
   const events: EventRow[] = useMemo(() => {
@@ -323,9 +325,6 @@ const AdminContent = () => {
     for (const b of data?.bookings || []) {
       if (seen.has(b.id)) continue;
       seen.add(b.id);
-      // Bookings annulés : hors listes, calendrier et stats (restaurables
-      // depuis la fiche booking, accessible via l'onglet Guests).
-      if ((b as any).cancelled_at) continue;
       // Tool status (room/food submission state) still comes from the user's profile,
       // but all displayed booking fields (names, email, dates, guest count) MUST be
       // read directly from the booking row — bookings is the single source of truth.
@@ -336,6 +335,7 @@ const AdminContent = () => {
         retreatName: b.retreat_name || "",
         clientId: b.client_id ?? null,
         isTest: !!b.is_test,
+        isCancelled: !!(b as any).cancelled_at,
         firstName: b.first_name,
         lastName: b.last_name,
         email: b.email,
@@ -376,11 +376,14 @@ const AdminContent = () => {
     });
   }, [events, search, statusFilter, showTests]);
 
-  const { upcomingEvents, pastEvents, unscheduledEvents } = useMemo(() => {
+  const { upcomingEvents, pastEvents, unscheduledEvents, cancelledEvents } = useMemo(() => {
     const upcoming: EventRow[] = [];
     const past: EventRow[] = [];
     const none: EventRow[] = [];
+    const cancelled: EventRow[] = [];
     for (const e of filteredEvents) {
+      // Bookings annulés : section dédiée en bas de page, hors calendrier/années
+      if (e.isCancelled) { cancelled.push(e); continue; }
       const c = categoryOfEvent(e);
       if (c === "past") past.push(e);
       else if (c === "none") none.push(e);
@@ -388,7 +391,8 @@ const AdminContent = () => {
     }
     upcoming.sort((a, b) => (a.checkIn || "").localeCompare(b.checkIn || ""));
     past.sort((a, b) => (b.checkOut || "").localeCompare(a.checkOut || ""));
-    return { upcomingEvents: upcoming, pastEvents: past, unscheduledEvents: none };
+    cancelled.sort((a, b) => (b.checkIn || "").localeCompare(a.checkIn || ""));
+    return { upcomingEvents: upcoming, pastEvents: past, unscheduledEvents: none, cancelledEvents: cancelled };
   }, [filteredEvents, todayIso]);
 
   const visibleUpcoming = upcomingEvents;
@@ -779,6 +783,38 @@ const AdminContent = () => {
                     onRenameBooking={renameBookingDirect}
                     onSetEventType={setEventTypeDirect}
                 />
+              </section>
+            )}
+
+            {/* Bookings annulés — section repliée en bas de page */}
+            {cancelledEvents.length > 0 && (
+              <section className="mb-6">
+                <button
+                  type="button"
+                  onClick={() => setCancelledCollapsed((v) => !v)}
+                  className="flex items-center gap-1 text-base font-medium mb-2 hover:underline text-muted-foreground"
+                >
+                  {cancelledCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  Cancelled bookings <span className="text-sm font-normal">({cancelledEvents.length})</span>
+                </button>
+                {!cancelledCollapsed && (
+                  <div className="opacity-70">
+                    <EventTable
+                      events={cancelledEvents}
+                      toolStatus={toolStatus}
+                      categoryOf={categoryOfEvent}
+                      paymentForEvent={paymentForEvent}
+                      paymentProgress={paymentProgressFor}
+                      natFor={natForEvent}
+                      todayIso={todayIso}
+                      onRowClick={(bookingId) => navigateToBooking(bookingId)}
+                      onOpenGuest={navigateToGuest}
+                      onDeleteBooking={deleteBookingDirect}
+                      onRenameBooking={renameBookingDirect}
+                      onSetEventType={setEventTypeDirect}
+                    />
+                  </div>
+                )}
               </section>
             )}
           </div>
@@ -1896,22 +1932,36 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
         spend: splitFor(sorted.flatMap((b) => instByBooking.get(b.id) || [])),
       });
     }
+    // Profils sans booking (guests créés à la main depuis l'onglet Guests) :
+    // ils doivent apparaître dans la liste même sans séjour rattaché.
+    for (const p of profilesArr) {
+      if (byKey.has(p.id) || byKey.has((p.email || "").toLowerCase())) continue;
+      list.push({
+        key: p.id,
+        profile: p,
+        name: `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || p.email,
+        email: p.email,
+        bookings: [],
+        spend: { rental: 0, catering: 0, extra: 0, total: 0 },
+      });
+    }
     const s = search.toLowerCase().trim();
     return list
       .filter((r) => !s || r.name.toLowerCase().includes(s) || r.email.toLowerCase().includes(s))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [bookings, search, profileById, profileByEmail, instByBooking]);
+  }, [bookings, search, profilesArr, profileById, profileByEmail, instByBooking]);
 
   const current = rows.find((r) => r.key === selected) ?? null;
 
   // Recharge le formulaire quand on change de client sélectionné.
   useEffect(() => {
     if (!current) return;
-    const ref = current.bookings[current.bookings.length - 1];
+    // ref peut être absent : guest créé à la main, sans booking
+    const ref = (current.bookings[current.bookings.length - 1] ?? {}) as Partial<BookingRow>;
     const hydrated: ClientForm = {
       email: current.email,
-      first_name: current.profile?.first_name ?? ref.first_name,
-      last_name: current.profile?.last_name ?? ref.last_name,
+      first_name: current.profile?.first_name ?? ref.first_name ?? null,
+      last_name: current.profile?.last_name ?? ref.last_name ?? null,
       company_name: current.profile?.company_name ?? null,
       phone: current.profile?.phone ?? null,
       tax_number: current.profile?.tax_number ?? null,
@@ -2051,6 +2101,35 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
     }
   };
 
+  // Création d'un guest sans booking (demande Geoffroy, 20 août 2026)
+  const [showNewGuest, setShowNewGuest] = useState(false);
+  const [newGuest, setNewGuest] = useState({ first_name: "", last_name: "", email: "" });
+  const createGuest = async () => {
+    const email = newGuest.email.trim().toLowerCase();
+    if (!email) return;
+    setBusy(true);
+    try {
+      const { data: created, error } = await supabase.from("client_profiles")
+        .upsert({
+          email,
+          first_name: newGuest.first_name.trim() || null,
+          last_name: newGuest.last_name.trim() || null,
+        }, { onConflict: "email" })
+        .select("id")
+        .single();
+      if (error) throw error;
+      await fetchProfiles();
+      setSelected(created.id);
+      setShowNewGuest(false);
+      setNewGuest({ first_name: "", last_name: "", email: "" });
+      toast({ title: "Guest created", description: email });
+    } catch (e: any) {
+      toast({ title: "Could not create guest", description: e.message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deleteGuest = async () => {
     if (!current) return;
     const n = current.bookings.length;
@@ -2111,9 +2190,35 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
     <div className="grid gap-4 lg:grid-cols-[300px,1fr] items-start">
       {/* -------- Liste des guests -------- */}
       <div className="border border-border rounded-xl bg-card overflow-hidden">
-        <div className="p-3 border-b border-border">
-          <Input placeholder="Search name or email" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <p className="mt-1.5 text-xs text-muted-foreground">{rows.length} guest{rows.length === 1 ? "" : "s"}</p>
+        <div className="p-3 border-b border-border space-y-2">
+          <div className="flex gap-2">
+            <Input placeholder="Search name or email" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Button
+              type="button"
+              size="icon"
+              variant={showNewGuest ? "default" : "outline"}
+              title="Create a new guest (no booking needed)"
+              onClick={() => setShowNewGuest((v) => !v)}
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+          {showNewGuest && (
+            <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="First name" value={newGuest.first_name} onChange={(e) => setNewGuest((g) => ({ ...g, first_name: e.target.value }))} />
+                <Input placeholder="Last name" value={newGuest.last_name} onChange={(e) => setNewGuest((g) => ({ ...g, last_name: e.target.value }))} />
+              </div>
+              <Input placeholder="Email *" type="email" value={newGuest.email} onChange={(e) => setNewGuest((g) => ({ ...g, email: e.target.value }))} />
+              <div className="flex gap-2 justify-end">
+                <Button size="sm" variant="ghost" onClick={() => { setShowNewGuest(false); setNewGuest({ first_name: "", last_name: "", email: "" }); }}>Cancel</Button>
+                <Button size="sm" onClick={createGuest} disabled={busy || !newGuest.email.trim()}>
+                  {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Create guest"}
+                </Button>
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">{rows.length} guest{rows.length === 1 ? "" : "s"}</p>
         </div>
         <ul className="divide-y divide-border max-h-[70vh] overflow-y-auto">
           {rows.map((r) => (
