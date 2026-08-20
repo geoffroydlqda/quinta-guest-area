@@ -255,6 +255,23 @@ async function generateInvoice(installmentId: string) {
     if (catalog > 0) discountPct = Math.round((rentalDiscount / catalog) * 10000) / 100;
   }
 
+  // Total location TTC du booking (toutes échéances rental, payées ou non) —
+  // sert à afficher "30% of €4,000" sur chaque ligne rental de la facture.
+  const { data: allRentalInsts } = await admin.from("payment_installments")
+    .select("amount_due,category")
+    .eq("booking_id", inst.booking_id) as { data: { amount_due: number; category: string | null }[] | null };
+  const rentalTotalTtc = (allRentalInsts ?? [])
+    .filter((r) => (r.category ?? "rental") === "rental")
+    .reduce((s, r) => s + Number(r.amount_due || 0), 0);
+  const fmtPct = (part: number) => {
+    if (!(rentalTotalTtc > 0)) return null;
+    const pct = (Math.abs(part) / rentalTotalTtc) * 100;
+    const rounded = Math.round(pct * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  };
+  const fmtEurInt = (n: number) =>
+    `${Number.isInteger(n) ? n.toLocaleString("en-GB") : n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€`;
+
   const products = group.map((g, idx) => {
     const productId = cfg.products[g.category ?? "rental"] ?? cfg.products["rental"];
     if (!productId) throw new Error(`No Moloni product configured for category ${g.category}`);
@@ -264,15 +281,22 @@ async function generateInvoice(installmentId: string) {
     const d = isRental ? discountPct : 0;
     // Moloni calcule net = price × (1 − d/100) : on remonte au prix catalogue HT.
     const price = d > 0 ? net / (1 - d / 100) : net;
+    // Description de ligne :
+    // - rental : "30% of 4,000€" (part de cette échéance dans le prix de
+    //   location total TTC — demande Geoffroy, 20 août 2026), + note éventuelle
+    // - autres catégories : la note prime, sinon le label, sinon la catégorie
+    const pct = isRental ? fmtPct(Number(g.amount_due)) : null;
+    const note = (g.notes ?? "").trim();
+    const desc = isRental && pct !== null
+      ? `${pct}% of ${fmtEurInt(rentalTotalTtc)}${note ? ` · ${note}` : ""}`
+      : (note || g.label || g.category);
     return {
       productId,
       qty: 1,
       ordering: idx + 1,
       price: Math.round(price * 1e6) / 1e6,
       ...(d > 0 ? { discount: d } : {}),
-      // Description de ligne : la note de l'échéance prime (demande Geoffroy,
-      // 31 juil. 2026), sinon le label, sinon la catégorie.
-      summary: `${booking.retreat_name || clientName} — ${(g.notes ?? "").trim() || g.label || g.category}${idx === 0 ? stayLine : ""}`,
+      summary: `${booking.retreat_name || clientName} — ${desc}${idx === 0 ? stayLine : ""}`,
       taxes: [{ taxId: TAX_IDS[rate], ordering: 1, cumulative: false }],
     };
   });
