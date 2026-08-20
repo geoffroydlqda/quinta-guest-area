@@ -63,9 +63,13 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
   const checkIn = shortDate(activeBooking?.check_in_date);
   const checkOut = shortDate(activeBooking?.check_out_date);
 
+  // Catering désactivé par l'admin pour ce booking -> onglet masqué
+  const cateringDisabled = (activeBooking as { catering_disabled?: boolean } | null)?.catering_disabled === true;
+  const visibleNav = NAV.filter((item) => !(item.key === 'catering' && cateringDisabled));
+
   const NavLinks = ({ variant }: { variant: 'sidebar' | 'mobile' }) => (
     <>
-      {NAV.map((item) => {
+      {visibleNav.map((item) => {
         const isActive = item.key === active;
         if (variant === 'sidebar') {
           return (

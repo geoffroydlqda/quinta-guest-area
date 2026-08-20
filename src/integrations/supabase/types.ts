@@ -443,6 +443,7 @@ export type Database = {
           edit_lock_override: boolean
           event_type: string
           catering_expected: boolean
+          catering_disabled: boolean
           client_id: string | null
           check_in_time: string
           check_out_time: string
@@ -481,6 +482,7 @@ export type Database = {
           edit_lock_override?: boolean
           event_type?: string
           catering_expected?: boolean
+          catering_disabled?: boolean
           client_id?: string | null
           check_in_time?: string
           check_out_time?: string
@@ -519,6 +521,7 @@ export type Database = {
           edit_lock_override?: boolean
           event_type?: string
           catering_expected?: boolean
+          catering_disabled?: boolean
           client_id?: string | null
           check_in_time?: string
           check_out_time?: string

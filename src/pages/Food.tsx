@@ -63,6 +63,11 @@ const Food = () => {
     if (foodPlan && !isLocked) triggerSave();
   }, [foodPlan?.selections, foodPlan?.diet_config, foodPlan?.meal_times, foodPlan?.notes_food]);
 
+  // Catering retiré de ce booking par l'admin -> retour au Stay summary
+  if (!lockCtx.isLoading && (lockCtx.activeBooking as { catering_disabled?: boolean } | null)?.catering_disabled === true) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   // Garde multi-séjours : sans booking actif, les hooks ne peuvent pas scoper
   // leurs lectures/écritures (maybeSingle multi-lignes = spinner infini,
   // écritures cross-booking) -> sélecteur de séjour, ou dashboard si aucun.

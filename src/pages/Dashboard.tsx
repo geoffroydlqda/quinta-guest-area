@@ -437,6 +437,9 @@ const DashboardContent = () => {
       : null,
   ].filter(Boolean);
 
+  // Catering retiré de ce booking par l'admin (comme les chambres désactivées)
+  const cateringDisabled = (activeBooking as { catering_disabled?: boolean } | null)?.catering_disabled === true;
+
   // Lignes du tableau "Your setup" (style Substance : n° / zone / statut / lien)
   const setupRows: { title: string; detail: string; status: ToolStatus; href: string }[] = [
     {
@@ -454,14 +457,14 @@ const DashboardContent = () => {
       status: toolStatuses.roomSetup,
       href: '/room-setup',
     },
-    {
+    ...(cateringDisabled ? [] : [{
       title: 'Catering',
       detail: foodData
         ? `${foodData.fullBoardDays > 0 ? `${foodData.fullBoardDays} full-board day${foodData.fullBoardDays === 1 ? '' : 's'}` : 'Meal plan started'}`
         : 'Plan your meals',
       status: toolStatuses.food,
       href: '/food',
-    },
+    }]),
     {
       title: 'Transportation',
       detail: transportationData
@@ -616,6 +619,7 @@ const DashboardContent = () => {
             transportationData={transportationData}
             foodData={foodData}
             disabledRooms={((activeBooking as unknown as { disabled_rooms?: number[] | null })?.disabled_rooms ?? []) as number[]}
+            hideCatering={cateringDisabled}
           />
 
           {/* Diet validation banner */}

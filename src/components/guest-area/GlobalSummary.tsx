@@ -34,6 +34,7 @@ interface GlobalSummaryProps {
     selections?: { date: string; fullBoard: boolean; breakfast: boolean; lunch: boolean; dinner: boolean; guests_count_day?: number }[];
   };
   disabledRooms?: number[];
+  hideCatering?: boolean;
 }
 
 function parseLocalDateLong(dateStr: string): string {
@@ -104,6 +105,7 @@ export function GlobalSummary({
   transportationData,
   foodData,
   disabledRooms,
+  hideCatering = false,
 }: GlobalSummaryProps) {
   const hasDates = !!(profile.check_in_date && profile.check_out_date);
   const hasRoomSetup = toolStatuses.roomSetup !== 'not_set' && roomSetupData;
@@ -184,7 +186,8 @@ export function GlobalSummary({
           )}
         </SummarySection>
 
-        {/* Meals */}
+        {/* Meals — masqué si le catering est retiré de ce booking */}
+        {!hideCatering && (
         <SummarySection icon={Utensils} title="Meals">
           {hasFood ? (
             <div className="space-y-0.5">
@@ -256,6 +259,7 @@ export function GlobalSummary({
             <NotSetLink to={hasDates ? "/food" : "#"} disabled={!hasDates} />
           )}
         </SummarySection>
+        )}
 
         {/* Transfers */}
         <SummarySection icon={Car} title="Transfers">

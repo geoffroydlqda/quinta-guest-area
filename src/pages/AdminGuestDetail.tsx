@@ -853,6 +853,39 @@ const AdminGuestDetailContent = () => {
                 </span>
               </label>
             </div>
+            <div>
+              <div className="text-muted-foreground">Catering for this booking</div>
+              <label className="mt-1.5 flex items-center gap-2 text-sm font-medium cursor-pointer select-none">
+                <Checkbox
+                  checked={(booking as any)?.catering_disabled !== true}
+                  disabled={!booking}
+                  onCheckedChange={async (v) => {
+                    if (!booking) return;
+                    const enabled = v === true;
+                    // Désactiver le catering retire aussi le booking de la
+                    // projection ; le réactiver l'y remet.
+                    const { error } = await supabase.from("bookings")
+                      .update({ catering_disabled: !enabled, catering_expected: enabled } as any)
+                      .eq("id", booking.id);
+                    if (error) toast({ title: "Failed to save", description: error.message, variant: "destructive" });
+                    else {
+                      (booking as any).catering_disabled = !enabled;
+                      (booking as any).catering_expected = enabled;
+                      setData((d) => d ? { ...d } : d);
+                      toast({
+                        title: enabled ? "Catering enabled" : "Catering removed for this booking",
+                        description: enabled
+                          ? "The Catering tab is visible again in the guest area."
+                          : "The Catering tab is hidden in the guest area (like disabled rooms).",
+                      });
+                    }
+                  }}
+                />
+                <span className="text-xs text-muted-foreground font-normal">
+                  Show the Catering tab in the guest area
+                </span>
+              </label>
+            </div>
           </div>
           <div className="mt-4 pt-4 border-t border-border">
             <WhatsAppLinkEditor
