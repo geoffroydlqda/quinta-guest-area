@@ -258,8 +258,8 @@ async function generateInvoice(installmentId: string) {
   // Total location TTC du booking (toutes échéances rental, payées ou non) —
   // sert à afficher "30% of €4,000" sur chaque ligne rental de la facture.
   const { data: allRentalInsts } = await admin.from("payment_installments")
-    .select("amount_due,category")
-    .eq("booking_id", inst.booking_id) as { data: { amount_due: number; category: string | null }[] | null };
+    .select("id,amount_due,category,status,due_date")
+    .eq("booking_id", inst.booking_id) as { data: { id: string; amount_due: number; category: string | null; status: string; due_date: string | null }[] | null };
   const rentalTotalTtc = (allRentalInsts ?? [])
     .filter((r) => (r.category ?? "rental") === "rental")
     .reduce((s, r) => s + Number(r.amount_due || 0), 0);
@@ -301,25 +301,54 @@ async function generateInvoice(installmentId: string) {
     };
   });
 
+  // Note de bas de document (demande Geoffroy, 20 août 2026) :
+  // - facture d'acompte rental -> solde restant + échéance
+  // - facture qui solde le rental -> mention "accommodation settled", en
+  //   précisant que catering/transport/extras sont facturés à part.
+  let docNotes: string | null = null;
+  const groupIds2 = new Set(group.map((g) => g.id));
+  const hasRentalLine = group.some((g) => (g.category ?? "rental") === "rental");
+  if (hasRentalLine && rentalTotalTtc > 0) {
+    const remainingRows = (allRentalInsts ?? []).filter((r) =>
+      (r.category ?? "rental") === "rental" && r.status !== "paid" && !groupIds2.has(r.id) && Number(r.amount_due) > 0
+    );
+    const remaining = remainingRows.reduce((s, r) => s + Number(r.amount_due || 0), 0);
+    if (remaining > 0.005) {
+      const nextDue = remainingRows.map((r) => r.due_date).filter(Boolean).sort()[0] as string | undefined;
+      docNotes = `Remaining accommodation balance: ${fmtEurInt(Math.round(remaining * 100) / 100)}${nextDue ? ` due ${fmtDatePt(nextDue)}` : ""}.`;
+    } else {
+      docNotes = "Accommodation is now fully settled. Please note this does not cover catering, transportation or other extras, which are invoiced separately.";
+    }
+  }
+
   // 4. Crée la fatura-recibo, finalisée, payée (total = somme des échéances).
   const totalTtc = Math.round(group.reduce((s, g) => s + Math.abs(Number(g.amount_due)), 0) * 100) / 100;
-  const created = await gql(`mutation($c: Int!, $d: InvoiceReceiptInsert!) {
+  const docData: Record<string, unknown> = {
+    documentSetId: cfg.document_set_id,
+    customerId,
+    date: new Date().toISOString(),
+    expirationDate: new Date().toISOString().slice(0, 10),
+    status: 1,
+    products,
+    payments: [{ paymentMethodId: cfg.payment_method_id, value: totalTtc }],
+    ...(docNotes ? { notes: docNotes } : {}),
+  };
+  const createMutation = `mutation($c: Int!, $d: InvoiceReceiptInsert!) {
     invoiceReceiptCreate(companyId: $c, data: $d) {
       data { documentId number date totalValue grossValue taxesValue status }
       errors { field msg }
     }
-  }`, {
-    c: cfg.company_id,
-    d: {
-      documentSetId: cfg.document_set_id,
-      customerId,
-      date: new Date().toISOString(),
-      expirationDate: new Date().toISOString().slice(0, 10),
-      status: 1,
-      products,
-      payments: [{ paymentMethodId: cfg.payment_method_id, value: totalTtc }],
-    },
-  });
+  }`;
+  let created = await gql(createMutation, { c: cfg.company_id, d: docData }).catch((e: unknown) => ({ __err: String(e) }));
+  // Filet : si le champ notes n'existe pas dans ce schéma Moloni, on réessaie sans.
+  const firstErr = (created as any)?.__err ?? JSON.stringify((created as any)?.errors ?? "");
+  if (docNotes && /notes/i.test(String(firstErr))) {
+    console.error("[moloni] 'notes' rejected by schema — retrying without document note:", String(firstErr).slice(0, 200));
+    delete docData.notes;
+    created = await gql(createMutation, { c: cfg.company_id, d: docData });
+  } else if ((created as any)?.__err) {
+    throw new Error(String((created as any).__err));
+  }
   const cErrs = created?.data?.invoiceReceiptCreate?.errors;
   if (cErrs?.length) throw new Error(`Moloni invoiceReceiptCreate: ${JSON.stringify(cErrs).slice(0, 400)}`);
   const doc = created?.data?.invoiceReceiptCreate?.data;
