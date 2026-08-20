@@ -1030,8 +1030,21 @@ function DashboardView({
   onOpen: (bookingId: string) => void;
 }) {
   // Mode test : les bookings marqués is_test n'entrent dans AUCUNE stat du dashboard.
+  // Les bookings ANNULÉS sortent de l'occupation/du calendrier, mais leur argent
+  // ENCAISSÉ reste au P&L (non remboursé) — seules leurs échéances impayées disparaissent.
   const bookings = useMemo(() => (data.bookings || []).filter((b) => !b.is_test && !(b as any).cancelled_at), [data]);
   const bookingById = useMemo(() => new Map(bookings.map((b) => [b.id, b])), [bookings]);
+  const finBookingById = useMemo(
+    () => new Map((data.bookings || []).filter((b) => !b.is_test).map((b) => [b.id, b])),
+    [data],
+  );
+  // Une échéance compte dans les chiffres si son booking est actif, ou si elle
+  // est PAYÉE sur un booking annulé (revenu conservé).
+  const countsForMoney = (i: Installment) => {
+    const b = finBookingById.get(i.booking_id);
+    if (!b) return false;
+    return !(b as any).cancelled_at || i.status === "paid";
+  };
   const years = useMemo(() => {
     const ys = new Set<string>();
     for (const b of bookings) if (b.check_in_date) ys.add(b.check_in_date.slice(0, 4));
@@ -1093,7 +1106,7 @@ function DashboardView({
 
   const kpis = useMemo(() => {
     const thisYear = installments.filter((i) =>
-      (bookingById.get(i.booking_id)?.check_in_date || "").startsWith(year)
+      countsForMoney(i) && (finBookingById.get(i.booking_id)?.check_in_date || "").startsWith(year)
     );
     const contracted = thisYear.reduce((s, i) => s + Number(i.amount_due || 0), 0);
     // Même règle que la carte "Revenue vs target" : HT manquant estimé
@@ -1115,7 +1128,7 @@ function DashboardView({
       contracted, contractedHt, collected, overdueTotal, outstanding,
       overdueCount: overdue.length,
     };
-  }, [installments, bookingById, todayIso, year]);
+  }, [installments, bookingById, finBookingById, todayIso, year]);
 
   // Prochains paiements attendus (carte dashboard — refonte juil. 2026)
   const nextPayments = useMemo(() =>
@@ -1128,7 +1141,8 @@ function DashboardView({
   const charts = useMemo(() => {
     const rev = Array.from({ length: 12 }, () => ({ rental: 0, catering: 0, extra: 0, bar: 0, collected: 0 }));
     for (const i of installments) {
-      const ci = bookingById.get(i.booking_id)?.check_in_date || "";
+      if (!countsForMoney(i)) continue;
+      const ci = finBookingById.get(i.booking_id)?.check_in_date || "";
       if (!ci.startsWith(year)) continue;
       const m = Number(ci.slice(5, 7)) - 1;
       if (m < 0 || m > 11) continue;
@@ -1151,7 +1165,7 @@ function DashboardView({
     }
     const occ = occupied.map((s, m) => ({ nights: s.size, days: new Date(yNum, m + 1, 0).getDate() }));
     return { rev, occ };
-  }, [installments, bookings, bookingById, year]);
+  }, [installments, bookings, finBookingById, year]);
 
   // Objectifs P&L + saison d'exploitation (app_settings key='targets')
   type TargetsCfg = Record<string, { net_revenue?: number; rental?: number; catering?: number; extras?: number; season_start?: string; season_end?: string }>;
