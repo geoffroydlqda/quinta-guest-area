@@ -2962,7 +2962,7 @@ function BookingEmailField({
   display,
   onSaved,
 }: {
-  booking: { id: string; email: string; first_name: string | null; last_name: string | null } | null;
+  booking: { id: string; email: string; first_name: string | null; last_name: string | null; client_id?: string | null } | null;
   display: string;
   onSaved: (newEmail: string) => void;
 }) {
@@ -2979,21 +2979,43 @@ function BookingEmailField({
       toast({ title: "Invalid email", variant: "destructive" });
       return;
     }
-    if (newEmail === (booking.email || "").toLowerCase()) { setEditing(false); return; }
-    if (!window.confirm(`Change this booking's email to ${newEmail}?\n\nGuest-area invitations and payment reminders will go there.`)) return;
+    const oldEmail = (booking.email || "").toLowerCase();
+    if (newEmail === oldEmail) { setEditing(false); return; }
+    if (!window.confirm(`Change this booking's email to ${newEmail}?\n\nThe guest profile is updated too — invitations and payment reminders will go there.`)) return;
     setSaving(true);
     try {
-      // Fiche guest du nouvel email : réutilisée si elle existe, créée sinon.
       let clientId: string | null = null;
+      // 1. Une fiche guest existe déjà avec le nouvel email -> on y rattache le booking.
       const { data: existing } = await supabase.from("client_profiles").select("id").eq("email", newEmail).maybeSingle();
       if (existing) {
         clientId = existing.id;
       } else {
-        const { data: created, error: insErr } = await supabase.from("client_profiles")
-          .insert({ email: newEmail, first_name: booking.first_name, last_name: booking.last_name })
-          .select("id").single();
-        if (insErr) throw insErr;
-        clientId = created.id;
+        // 2. Sinon : correction d'email -> on RENOMME la fiche guest actuelle
+        //    (l'email change pour le guest partout, tous ses bookings compris).
+        let profileId = booking.client_id ?? null;
+        if (!profileId && oldEmail) {
+          const { data: byEmail } = await supabase.from("client_profiles").select("id").eq("email", oldEmail).maybeSingle();
+          profileId = byEmail?.id ?? null;
+        }
+        if (profileId) {
+          const { error: upErr } = await supabase.from("client_profiles")
+            .update({ email: newEmail }).eq("id", profileId);
+          if (upErr) throw upErr;
+          // Propage aux autres bookings de ce guest (rattachés par client_id
+          // ou encore regroupés par l'ancien email).
+          await supabase.from("bookings").update({ email: newEmail }).eq("client_id", profileId);
+          if (oldEmail) {
+            await supabase.from("bookings").update({ email: newEmail, client_id: profileId })
+              .eq("email", oldEmail).is("client_id", null);
+          }
+          clientId = profileId;
+        } else {
+          const { data: created, error: insErr } = await supabase.from("client_profiles")
+            .insert({ email: newEmail, first_name: booking.first_name, last_name: booking.last_name })
+            .select("id").single();
+          if (insErr) throw insErr;
+          clientId = created.id;
+        }
       }
       const { error } = await supabase.from("bookings")
         .update({ email: newEmail, client_id: clientId })
@@ -3001,7 +3023,12 @@ function BookingEmailField({
       if (error) throw error;
       onSaved(newEmail);
       setEditing(false);
-      toast({ title: "Email updated" });
+      toast({
+        title: "Email updated",
+        description: existing
+          ? "Booking re-attached to the existing guest profile with that email."
+          : "Guest profile updated too — the new email applies everywhere.",
+      });
     } catch (e: any) {
       toast({ title: "Could not save", description: e.message, variant: "destructive" });
     } finally {
