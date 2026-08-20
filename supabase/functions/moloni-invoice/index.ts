@@ -317,7 +317,12 @@ async function generateInvoice(installmentId: string) {
       const nextDue = remainingRows.map((r) => r.due_date).filter(Boolean).sort()[0] as string | undefined;
       docNotes = `Remaining accommodation balance: ${fmtEurInt(Math.round(remaining * 100) / 100)}${nextDue ? ` due ${fmtDatePt(nextDue)}` : ""}.`;
     } else {
-      docNotes = "Accommodation is now fully settled. Please note this does not cover catering, transportation or other extras, which are invoiced separately.";
+      // Le rental est soldé. Nuance : la facture peut aussi grouper du
+      // catering/des extras — dans ce cas on ne dit pas qu'ils sont "à part".
+      const hasOtherLines = group.some((g) => (g.category ?? "rental") !== "rental");
+      docNotes = hasOtherLines
+        ? "Accommodation is now fully settled. This invoice also covers the additional services listed above; any other services not listed here are invoiced separately."
+        : "Accommodation is now fully settled. Please note this does not cover catering, transportation or other extras, which are invoiced separately.";
     }
   }
 
