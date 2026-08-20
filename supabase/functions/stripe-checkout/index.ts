@@ -221,12 +221,34 @@ async function createSession(
   params.set("success_url", successUrl);
   params.set("cancel_url", cancelUrl);
 
-  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded" },
-    body: params.toString(),
-  });
-  const session = await res.json();
+  // CGV : case a cocher OBLIGATOIRE sur la page Stripe ("I agree to the Terms
+  // of Service", lien vers l'URL configuree dans le dashboard Stripe —
+  // Settings -> Business -> Public details -> Terms of service). Le consent est
+  // enregistre par Stripe sur la session et archive par stripe-webhook dans
+  // public.terms_acceptances (preuve horodatee en cas de litige).
+  params.set("consent_collection[terms_of_service]", "required");
+
+  const createOnce = async () =>
+    fetch("https://api.stripe.com/v1/checkout/sessions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+
+  let res = await createOnce();
+  let session = await res.json();
+  if (!res.ok) {
+    const msg = String(session?.error?.message ?? "");
+    // Filet de securite : si l'URL des CGV n'est pas encore configuree cote
+    // Stripe, on ne bloque PAS les paiements — on retire le consentement et on
+    // logge fort pour que ce soit corrige.
+    if (/terms of service|consent_collection/i.test(msg)) {
+      console.error("[terms] consent_collection refused by Stripe (ToS URL missing in dashboard?) — retrying WITHOUT consent:", msg.slice(0, 300));
+      params.delete("consent_collection[terms_of_service]");
+      res = await createOnce();
+      session = await res.json();
+    }
+  }
   if (!res.ok) {
     console.error("Stripe error:", JSON.stringify(session).slice(0, 500));
     throw new Error(session?.error?.message ?? `Stripe HTTP ${res.status}`);

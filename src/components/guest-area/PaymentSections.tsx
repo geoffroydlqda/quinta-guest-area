@@ -200,7 +200,8 @@ export function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstal
         </Button>
       </div>
       <div className="mt-4 pt-4 border-t border-border/70 text-xs text-muted-foreground">
-        Secure payment — you'll be redirected to our payment partner Stripe.
+        Secure payment — you'll be redirected to our payment partner Stripe, where
+        you'll be asked to accept our Terms &amp; Conditions before paying.
         {' '}
         <button
           type="button"

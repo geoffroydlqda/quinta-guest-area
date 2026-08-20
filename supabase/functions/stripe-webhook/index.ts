@@ -181,6 +181,25 @@ serve(async (req) => {
     const fxRaw = Number(session?.metadata?.fx_rate);
     const fxRate = Number.isFinite(fxRaw) && fxRaw > 0 ? fxRaw : null;
 
+    // Preuve d'acceptation des CGV (clickwrap) : Stripe pose la case obligatoire
+    // et renvoie consent.terms_of_service = "accepted" sur la session. On
+    // archive une trace horodatee, idempotente par session.
+    if (type === "checkout.session.completed" && session?.consent?.terms_of_service === "accepted") {
+      const { error: taErr } = await admin.from("terms_acceptances").upsert({
+        stripe_session_id: session.id,
+        booking_id: session?.metadata?.booking_id ?? null,
+        installment_ids: idsRaw || null,
+        email: session?.customer_details?.email ?? session?.customer_email ?? null,
+        consent: session.consent,
+        amount_total: session?.amount_total != null ? Number(session.amount_total) / 100 : null,
+        currency: session?.currency ?? null,
+        livemode: !!event?.livemode,
+        accepted_at: session?.created ? new Date(Number(session.created) * 1000).toISOString() : new Date().toISOString(),
+      }, { onConflict: "stripe_session_id" });
+      if (taErr) console.error("[terms] terms_acceptances upsert failed:", taErr.message);
+      else console.log(`[terms] ToS acceptance recorded for session ${session.id}`);
+    }
+
     if (type === "checkout.session.completed") {
       if (session?.payment_status === "paid" && installmentIds.length) {
         const newlyPaid = await markPaid(installmentIds, session.id, fxRate);
