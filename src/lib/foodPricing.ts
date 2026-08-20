@@ -13,8 +13,8 @@ export interface DietTypeMeta {
   pricing: DietPricing;
 }
 
-export function getDietTypes(): DietTypeMeta[] {
-  const pricing = getDietPricing();
+export function getDietTypes(stayYear?: number | string | null): DietTypeMeta[] {
+  const pricing = getDietPricing(stayYear);
   return [
     { type: 'vegetarian',        label: 'Vegetarian',                        countKey: 'vegetarian_count',        pricing: pricing.vegetarian },
     { type: 'meat_dinner',       label: 'Meat or fish for dinner',           countKey: 'meat_dinner_count',       pricing: pricing.meat_dinner },
@@ -102,7 +102,9 @@ export function distributeDailyGuests(
 export function calculateFoodCostMulti(
   selections: FoodDaySelection[],
   diet: DietConfig,
-  guestsCount: number
+  guestsCount: number,
+  // Annee du check-in : les sejours 2027+ utilisent le bareme food_2027
+  stayYear?: number | string | null
 ): FoodCostSummary {
   let fullBoardDays = 0, breakfastCount = 0, lunchCount = 0, dinnerCount = 0;
   selections.forEach((sel) => {
@@ -127,7 +129,7 @@ export function calculateFoodCostMulti(
       ? sel.guests_count_day
       : guestsCount;
     const distribution = distributeDailyGuests(dayGuests, diet);
-    getDietTypes().forEach((meta) => {
+    getDietTypes(stayYear).forEach((meta) => {
       const n = distribution[meta.type];
       const dayPricePerPerson = dayCostPerPerson(sel, meta.pricing);
       dietTotals[meta.type] += dayPricePerPerson * n;
@@ -142,7 +144,7 @@ export function calculateFoodCostMulti(
     });
   });
 
-  const dietBreakdown: DietBreakdownItem[] = getDietTypes().map((meta) => {
+  const dietBreakdown: DietBreakdownItem[] = getDietTypes(stayYear).map((meta) => {
     const guests = diet?.[meta.countKey] || 0;
     const perPerson = selections.reduce((sum, sel) => sum + dayCostPerPerson(sel, meta.pricing), 0);
     const u = dietUnits[meta.type];

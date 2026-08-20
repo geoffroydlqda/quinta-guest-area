@@ -1233,7 +1233,7 @@ function DashboardView({
     // Catering ATTENDU (projection) : retraites pas encore commencées, sans
     // catering validé — 14 participants × prix moyen des 3 formules :
     // dîner le jour d'arrivée + full board les jours pleins + petit-déj au départ.
-    const dp = getDietPricing();
+    const dp = getDietPricing(year);
     const avg = {
       fullBoard: (dp.vegetarian.fullBoard + dp.meat_dinner.fullBoard + dp.meat_lunch_dinner.fullBoard) / 3,
       dinner: (dp.vegetarian.dinner + dp.meat_dinner.dinner + dp.meat_lunch_dinner.dinner) / 3,

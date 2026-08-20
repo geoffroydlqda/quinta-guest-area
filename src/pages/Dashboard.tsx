@@ -263,7 +263,7 @@ const DashboardContent = () => {
             }
           : { breakfast_time: null, lunch_time: null, dinner_time: null };
 
-        const costSummary = calculateFoodCostMulti(selections, dietConfig, guestsCount);
+        const costSummary = calculateFoodCostMulti(selections, dietConfig, guestsCount, bookingCheckIn);
 
         setFoodData({
           fullBoardDays: costSummary.fullBoardDays,

@@ -33,13 +33,22 @@ const DEFAULT_DIET_PRICING: Record<DietType, DietPricing> = {
 
 let taxiPrices: TaxiPrices = { ...DEFAULT_TAXI_PRICES };
 let dietPricing: Record<DietType, DietPricing> = structuredClone(DEFAULT_DIET_PRICING);
+// Tarifs catering par millésime : pricing_settings key 'food_2027', 'food_2028'…
+// Un séjour utilise le barème de la plus grande année configurée <= année du
+// check-in ; sans correspondance, le barème de base 'food' (tarifs 2026).
+let dietPricingByYear: Record<string, Record<DietType, DietPricing>> = {};
 let loadPromise: Promise<void> | null = null;
 
 export function getTaxiPrices(): TaxiPrices {
   return taxiPrices;
 }
 
-export function getDietPricing(): Record<DietType, DietPricing> {
+export function getDietPricing(stayYear?: number | string | null): Record<DietType, DietPricing> {
+  const y = Number(String(stayYear ?? '').slice(0, 4));
+  if (Number.isFinite(y) && y > 2000) {
+    const years = Object.keys(dietPricingByYear).map(Number).filter((k) => k <= y).sort((a, b) => b - a);
+    if (years.length > 0) return dietPricingByYear[String(years[0])];
+  }
   return dietPricing;
 }
 
@@ -66,6 +75,15 @@ export function loadPricing(): Promise<void> {
             (Object.keys(DEFAULT_DIET_PRICING) as DietType[]).forEach((diet) => {
               dietPricing[diet] = { ...DEFAULT_DIET_PRICING[diet], ...(v[diet] ?? {}) };
             });
+          }
+          const yearMatch = /^food_(\d{4})$/.exec(row.key);
+          if (yearMatch && row.value && typeof row.value === 'object') {
+            const v = row.value as Partial<Record<DietType, Partial<DietPricing>>>;
+            const table = {} as Record<DietType, DietPricing>;
+            (Object.keys(DEFAULT_DIET_PRICING) as DietType[]).forEach((diet) => {
+              table[diet] = { ...DEFAULT_DIET_PRICING[diet], ...(v[diet] ?? {}) };
+            });
+            dietPricingByYear[yearMatch[1]] = table;
           }
         }
       } catch {

@@ -53,9 +53,9 @@ const Food = () => {
 
   const costSummary = useMemo(() => {
     if (!foodPlan) {
-      return calculateFoodCostMulti([], dietConfig, guestsCount);
+      return calculateFoodCostMulti([], dietConfig, guestsCount, profile?.check_in_date);
     }
-    return calculateFoodCostMulti(foodPlan.selections, foodPlan.diet_config, guestsCount);
+    return calculateFoodCostMulti(foodPlan.selections, foodPlan.diet_config, guestsCount, profile?.check_in_date);
   }, [foodPlan?.selections, foodPlan?.diet_config, guestsCount]);
 
   // Trigger auto-save
@@ -155,7 +155,7 @@ const Food = () => {
           </p>
 
           <div className="space-y-3">
-            {getDietTypes().map((meta) => {
+            {getDietTypes(profile?.check_in_date).map((meta) => {
               const value = dietConfig[meta.countKey] || 0;
               const setValue = (next: number) =>
                 updateDietConfig({ [meta.countKey]: Math.max(0, next) } as any);

@@ -193,7 +193,7 @@ const AdminGuestDetailContent = () => {
         ? s.guests_count_day
         : guestsCount,
     }));
-    return calculateFoodCostMulti(sels as any, dietConfig, guestsCount);
+    return calculateFoodCostMulti(sels as any, dietConfig, guestsCount, data?.booking?.check_in_date);
   }, [data, dietConfig]);
 
   const transportCost = useMemo(() => calculateTransportationCost((data?.trips || []) as any), [data]);
