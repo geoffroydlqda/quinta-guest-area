@@ -6,12 +6,25 @@ import { Loader2, RefreshCw, BellOff, Bell } from 'lucide-react';
 
 interface ReminderPreviewItem {
   type: 'payment_upcoming' | 'payment_overdue';
+  installment_id?: string;
   recipient: string;
   first_name: string;
   label: string;
   amount_due: number;
   due_date: string;
 }
+
+// Historique des emails déjà partis pour une échéance (reminder_log)
+interface SentLogEntry { type: string; status: string | null; created_at: string }
+const SENT_LABEL: Record<string, string> = {
+  payment_request: 'Request',
+  payment_manual: 'Manual reminder',
+  payment_upcoming: 'Auto reminder',
+  payment_overdue: 'Auto follow-up',
+  payment_receipt: 'Confirmation',
+};
+const fmtShortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
 interface PreviewResponse {
   mode: string;
@@ -29,6 +42,7 @@ interface PreviewResponse {
  */
 export function PaymentRemindersCard() {
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
+  const [sentByInst, setSentByInst] = useState<Map<string, SentLogEntry[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,8 +53,31 @@ export function PaymentRemindersCard() {
     const { data, error: fnError } = await supabase.functions.invoke('payment-reminders', {
       body: { preview: true },
     });
-    if (fnError || data?.error) setError(fnError?.message || data?.error || 'Unknown error');
-    else setPreview(data as PreviewResponse);
+    if (fnError || data?.error) {
+      setError(fnError?.message || data?.error || 'Unknown error');
+    } else {
+      const p = data as PreviewResponse;
+      setPreview(p);
+      // Emails déjà envoyés pour ces échéances : permet de voir d'un coup d'œil
+      // si une relance manuelle est encore nécessaire.
+      const ids = [...new Set((p.would_send || []).map((r) => r.installment_id).filter(Boolean))] as string[];
+      if (ids.length) {
+        const { data: logs } = await supabase
+          .from('reminder_log')
+          .select('installment_id,type,status,created_at')
+          .in('installment_id', ids)
+          .order('created_at', { ascending: false });
+        const m = new Map<string, SentLogEntry[]>();
+        for (const l of (logs ?? []) as any[]) {
+          const arr = m.get(l.installment_id) || [];
+          arr.push({ type: l.type, status: l.status, created_at: l.created_at });
+          m.set(l.installment_id, arr);
+        }
+        setSentByInst(m);
+      } else {
+        setSentByInst(new Map());
+      }
+    }
     setLoading(false);
   }, []);
 
@@ -136,22 +173,55 @@ export function PaymentRemindersCard() {
                 <th className="py-1.5 pr-3 font-medium">Installment</th>
                 <th className="py-1.5 pr-3 font-medium">Amount</th>
                 <th className="py-1.5 pr-3 font-medium">Due date</th>
+                <th className="py-1.5 pr-3 font-medium">Emails sent</th>
               </tr>
             </thead>
             <tbody>
-              {preview.would_send.map((r, i) => (
-                <tr key={i} className="border-t border-border">
-                  <td className="py-1.5 pr-3">
-                    <Badge variant={r.type === 'payment_overdue' ? 'destructive' : 'secondary'}>
-                      {r.type === 'payment_overdue' ? 'Overdue' : 'Upcoming'}
-                    </Badge>
-                  </td>
-                  <td className="py-1.5 pr-3">{r.first_name || r.recipient}</td>
-                  <td className="py-1.5 pr-3">{r.label}</td>
-                  <td className="py-1.5 pr-3">€{Number(r.amount_due).toFixed(2)}</td>
-                  <td className="py-1.5 pr-3 whitespace-nowrap">{r.due_date ? `${r.due_date.slice(8, 10)}/${r.due_date.slice(5, 7)}/${r.due_date.slice(0, 4)}` : "—"}</td>
-                </tr>
-              ))}
+              {preview.would_send.map((r, i) => {
+                const logs = r.installment_id ? (sentByInst.get(r.installment_id) ?? []) : [];
+                const sentLogs = logs.filter((l) => l.status !== 'error');
+                // Résumé compact par type d'email : "Request · 17 Aug", "Auto reminder ×2 · 12 Aug"
+                const byType = new Map<string, { count: number; last: string }>();
+                for (const l of sentLogs) {
+                  const cur = byType.get(l.type);
+                  if (cur) cur.count += 1;
+                  else byType.set(l.type, { count: 1, last: l.created_at });
+                }
+                const tooltip = sentLogs
+                  .map((l) => `${SENT_LABEL[l.type] ?? l.type} — ${fmtShortDate(l.created_at)}`)
+                  .join('\n');
+                return (
+                  <tr key={i} className="border-t border-border">
+                    <td className="py-1.5 pr-3">
+                      <Badge variant={r.type === 'payment_overdue' ? 'destructive' : 'secondary'}>
+                        {r.type === 'payment_overdue' ? 'Overdue' : 'Upcoming'}
+                      </Badge>
+                    </td>
+                    <td className="py-1.5 pr-3">{r.first_name || r.recipient}</td>
+                    <td className="py-1.5 pr-3">{r.label}</td>
+                    <td className="py-1.5 pr-3">€{Number(r.amount_due).toFixed(2)}</td>
+                    <td className="py-1.5 pr-3 whitespace-nowrap">{r.due_date ? `${r.due_date.slice(8, 10)}/${r.due_date.slice(5, 7)}/${r.due_date.slice(0, 4)}` : "—"}</td>
+                    <td className="py-1.5 pr-3" title={tooltip || undefined}>
+                      {sentLogs.length === 0 ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-800 text-[11px] font-medium whitespace-nowrap">
+                          No email yet
+                        </span>
+                      ) : (
+                        <span className="flex flex-wrap gap-1">
+                          {[...byType.entries()].map(([type, info]) => (
+                            <span
+                              key={type}
+                              className="inline-flex items-center px-2 py-0.5 rounded-full border border-border bg-muted text-[11px] font-medium whitespace-nowrap text-foreground"
+                            >
+                              ✉ {SENT_LABEL[type] ?? type}{info.count > 1 ? ` ×${info.count}` : ''} · {fmtShortDate(info.last)}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
