@@ -206,7 +206,7 @@ serve(async (req) => {
 
     const { data: installments, error: instErr } = await admin
       .from("payment_installments")
-      .select("id, booking_id, label, amount_due, due_date, status, payment_link, bookings:booking_id (id, email, first_name, retreat_name, invitation_claimed)")
+      .select("id, booking_id, label, amount_due, due_date, status, payment_link, bookings:booking_id (id, email, first_name, retreat_name, invitation_claimed, cancelled_at)")
       .eq("status", "pending")
       .not("due_date", "is", null);
     if (instErr) return json({ error: instErr.message }, 500);
@@ -215,6 +215,8 @@ serve(async (req) => {
     for (const inst of installments ?? []) {
       const b = (inst as any).bookings;
       if (!b?.email) continue;
+      // Bookings annulés : plus aucun rappel automatique
+      if (b.cancelled_at) continue;
       // Bookings gérés en interne (email internal+xxx@quintamor.com) : jamais de
       // rappel automatique — il n'y a pas de vrai client derrière cette adresse.
       if (/^internal\+/i.test(String(b.email))) continue;

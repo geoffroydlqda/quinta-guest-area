@@ -448,6 +448,7 @@ export type Database = {
           check_out_time: string
           google_calendar_event_id: string | null
           calendar_sync_status: string | null
+          cancelled_at: string | null
           calendar_synced_at: string | null
           check_in_date: string | null
           check_out_date: string | null
@@ -485,6 +486,7 @@ export type Database = {
           check_out_time?: string
           google_calendar_event_id?: string | null
           calendar_sync_status?: string | null
+          cancelled_at?: string | null
           calendar_synced_at?: string | null
           check_in_date?: string | null
           check_out_date?: string | null
@@ -522,6 +524,7 @@ export type Database = {
           check_out_time?: string
           google_calendar_event_id?: string | null
           calendar_sync_status?: string | null
+          cancelled_at?: string | null
           calendar_synced_at?: string | null
           check_in_date?: string | null
           check_out_date?: string | null

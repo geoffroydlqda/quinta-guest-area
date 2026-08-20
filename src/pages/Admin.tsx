@@ -323,6 +323,9 @@ const AdminContent = () => {
     for (const b of data?.bookings || []) {
       if (seen.has(b.id)) continue;
       seen.add(b.id);
+      // Bookings annulés : hors listes, calendrier et stats (restaurables
+      // depuis la fiche booking, accessible via l'onglet Guests).
+      if ((b as any).cancelled_at) continue;
       // Tool status (room/food submission state) still comes from the user's profile,
       // but all displayed booking fields (names, email, dates, guest count) MUST be
       // read directly from the booking row — bookings is the single source of truth.
@@ -587,7 +590,7 @@ const AdminContent = () => {
   const dashboardSubtitle = (() => {
     const todayStr = new Date().toLocaleDateString("en-GB", { weekday: "long", month: "long", day: "numeric" });
     const upcoming = (data.bookings || [])
-      .filter((b) => !b.is_test && b.check_in_date && b.check_in_date > todayIso)
+      .filter((b) => !b.is_test && !(b as any).cancelled_at && b.check_in_date && b.check_in_date > todayIso)
       .sort((a, b) => ((a.check_in_date ?? "") < (b.check_in_date ?? "") ? -1 : 1))[0];
     if (!upcoming?.check_in_date) return todayStr;
     const days = Math.round(
@@ -633,7 +636,7 @@ const AdminContent = () => {
         )}
 
         {view === "catering" && (
-          <CateringView bookings={(data.bookings || []).filter((b) => !b.is_test)} food={data.food || []} todayIso={todayIso} onOpen={navigateToBooking} />
+          <CateringView bookings={(data.bookings || []).filter((b) => !b.is_test && !(b as any).cancelled_at)} food={data.food || []} todayIso={todayIso} onOpen={navigateToBooking} />
         )}
 
         {view === "bookings" && (
@@ -991,7 +994,7 @@ function DashboardView({
   onOpen: (bookingId: string) => void;
 }) {
   // Mode test : les bookings marqués is_test n'entrent dans AUCUNE stat du dashboard.
-  const bookings = useMemo(() => (data.bookings || []).filter((b) => !b.is_test), [data]);
+  const bookings = useMemo(() => (data.bookings || []).filter((b) => !b.is_test && !(b as any).cancelled_at), [data]);
   const bookingById = useMemo(() => new Map(bookings.map((b) => [b.id, b])), [bookings]);
   const years = useMemo(() => {
     const ys = new Set<string>();
@@ -2755,7 +2758,7 @@ function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) =
   // Tous les séjours réels (avec ou sans room plan) — une seule liste,
   // tout se déplie au clic (sessions, plan, incidents).
   const hkBookings = useMemo(() => (data.bookings || [])
-    .filter((b) => !b.is_test && b.check_in_date)
+    .filter((b) => !b.is_test && !(b as any).cancelled_at && b.check_in_date)
     .map((b) => ({
       id: b.id,
       name: b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || b.email,

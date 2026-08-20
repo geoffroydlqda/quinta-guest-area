@@ -480,6 +480,11 @@ const AdminGuestDetailContent = () => {
             >
               {fullName}
             </button>
+            {(booking as any)?.cancelled_at && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-semibold uppercase tracking-wide bg-destructive/10 text-destructive border-destructive/30">
+                Cancelled
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -549,6 +554,45 @@ const AdminGuestDetailContent = () => {
               }}
             >
               <FlaskConical className="w-4 h-4 mr-1" /> {(booking as any)?.is_test ? "Test booking" : "Mark as test"}
+            </Button>
+            <Button
+              size="sm"
+              variant={(booking as any)?.cancelled_at ? "secondary" : "ghost"}
+              className={(booking as any)?.cancelled_at ? "border border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20" : "text-destructive hover:bg-destructive/10 hover:text-destructive"}
+              title="Cancelled bookings are removed from the Google calendar, lists and stats — nothing is deleted."
+              onClick={async () => {
+                if (!booking) return;
+                const cancelling = !(booking as any).cancelled_at;
+                if (cancelling && !window.confirm(`Cancel this booking (${fullName})? It will disappear from the calendar, lists and stats. Nothing is deleted — you can restore it later.`)) return;
+                const { error } = await supabase
+                  .from("bookings")
+                  .update({ cancelled_at: cancelling ? new Date().toISOString() : null } as any)
+                  .eq("id", booking.id);
+                if (error) {
+                  toast({ title: "Could not update", description: error.message, variant: "destructive" });
+                  return;
+                }
+                (booking as any).cancelled_at = cancelling ? new Date().toISOString() : null;
+                // Calendrier bookings : la fonction supprime l'événement si annulé, le recrée si restauré
+                supabase.functions.invoke("sync-booking-calendar", { body: { action: "upsert", booking_id: booking.id } }).catch(() => {});
+                // Calendrier chauffeurs : retire (ou resynchronise) les trips du booking
+                for (const t of (data?.trips ?? []) as any[]) {
+                  if (cancelling && t.google_calendar_event_id) {
+                    supabase.functions.invoke("sync-transportation-calendar", { body: { action: "delete", eventId: t.google_calendar_event_id } }).catch(() => {});
+                  } else if (!cancelling) {
+                    supabase.functions.invoke("sync-transportation-calendar", { body: { action: "upsert", tripId: t.id } }).catch(() => {});
+                  }
+                }
+                toast({
+                  title: cancelling ? "Booking cancelled" : "Booking restored",
+                  description: cancelling
+                    ? "Removed from the calendar, lists and stats."
+                    : "Back in the calendar, lists and stats.",
+                });
+                load();
+              }}
+            >
+              {(booking as any)?.cancelled_at ? "Restore booking" : "Cancel booking"}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => window.print()}>Print / PDF</Button>
             <Button

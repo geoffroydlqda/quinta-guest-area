@@ -213,7 +213,25 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const SELECT = "id,retreat_name,first_name,last_name,email,guest_count,check_in_date,check_out_date,check_in_time,check_out_time,event_type,google_calendar_event_id,is_test";
+    const SELECT = "id,retreat_name,first_name,last_name,email,guest_count,check_in_date,check_out_date,check_in_time,check_out_time,event_type,google_calendar_event_id,is_test,cancelled_at";
+
+    // Booking annulé : on supprime son événement calendrier (s'il existe) et on
+    // nettoie la référence — il ne doit plus apparaître au planning.
+    const removeCancelledEvent = async (b: { id: string; google_calendar_event_id?: string | null }) => {
+      if (b.google_calendar_event_id) {
+        const token = await googleAccessToken();
+        const r = await fetch(`${CAL_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(b.google_calendar_event_id)}`, {
+          method: "DELETE", headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!r.ok && r.status !== 404 && r.status !== 410) throw new Error(`DELETE ${r.status}`);
+      }
+      await admin.from("bookings").update({
+        google_calendar_event_id: null,
+        calendar_sync_status: "cancelled",
+        calendar_synced_at: new Date().toISOString(),
+      }).eq("id", b.id);
+      return { id: b.id, skipped: "cancelled", event_removed: !!b.google_calendar_event_id };
+    };
 
     if (action === "delete") {
       if (!event_id) return json({ error: "event_id required" }, 400);
@@ -229,9 +247,12 @@ serve(async (req) => {
       const { data, error } = await admin.from("bookings").select(SELECT).not("check_in_date", "is", null);
       if (error) throw error;
       const results = [];
-      for (const b of (data ?? []) as (BookingRow & { is_test?: boolean | null })[]) {
+      for (const b of (data ?? []) as (BookingRow & { is_test?: boolean | null; cancelled_at?: string | null })[]) {
         if (b.is_test) continue; // les bookings de test ne vont jamais au calendrier
-        try { results.push(await upsertBooking(admin, b)); }
+        try {
+          if (b.cancelled_at) { results.push(await removeCancelledEvent(b)); continue; }
+          results.push(await upsertBooking(admin, b));
+        }
         catch (e) { results.push({ id: b.id, error: String(e).slice(0, 200) }); }
       }
       return json({ results });
@@ -243,6 +264,9 @@ serve(async (req) => {
     if (error) throw error;
     if (!b) return json({ error: "Booking not found" }, 404);
     if ((b as { is_test?: boolean | null }).is_test) return json({ skipped: "test_booking" });
+    if ((b as { cancelled_at?: string | null }).cancelled_at) {
+      return json(await removeCancelledEvent(b as { id: string; google_calendar_event_id?: string | null }));
+    }
     return json(await upsertBooking(admin, b as BookingRow));
   } catch (e) {
     const msg = String(e?.message ?? e);
