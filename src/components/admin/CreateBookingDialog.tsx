@@ -109,6 +109,28 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
       return;
     }
     setSubmitting(true);
+    // Règle : un seul booking actif à la fois sur des dates données
+    // (la fonction create-booking refait la même vérification côté serveur).
+    if (form.check_in_date && form.check_out_date) {
+      const { data: conflicts } = await supabase.from("bookings")
+        .select("id,retreat_name,first_name,last_name,email,check_in_date,check_out_date,is_test,cancelled_at")
+        .not("check_in_date", "is", null)
+        .not("check_out_date", "is", null)
+        .lt("check_in_date", form.check_out_date)
+        .gt("check_out_date", form.check_in_date);
+      const active = (conflicts ?? []).filter((b: any) => !b.is_test && !b.cancelled_at);
+      if (active.length > 0) {
+        const c = active[0] as any;
+        const label = c.retreat_name || `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || c.email;
+        toast({
+          title: "Dates already taken",
+          description: `"${label}" occupies ${c.check_in_date} → ${c.check_out_date}. Adjust the dates or that booking first.`,
+          variant: "destructive",
+        });
+        setSubmitting(false);
+        return;
+      }
+    }
     const payload = {
       retreat_name: form.retreat_name.trim(),
       first_name: form.first_name.trim() || null,

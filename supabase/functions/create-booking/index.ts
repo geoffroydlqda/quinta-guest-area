@@ -86,6 +86,29 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Règle (20 août 2026) : pas de création si un booking actif occupe déjà
+    // ces dates. Chevauchement = in < other.out ET out > other.in (le
+    // back-to-back check-out/check-in le même jour est autorisé). Les bookings
+    // de test et annulés ne bloquent pas.
+    if (body.check_in_date && body.check_out_date) {
+      const { data: conflicts } = await admin
+        .from("bookings")
+        .select("id,retreat_name,first_name,last_name,email,check_in_date,check_out_date,is_test,cancelled_at")
+        .not("check_in_date", "is", null)
+        .not("check_out_date", "is", null)
+        .lt("check_in_date", body.check_out_date)
+        .gt("check_out_date", body.check_in_date);
+      const active = (conflicts ?? []).filter((b: any) => !b.is_test && !b.cancelled_at);
+      if (active.length > 0) {
+        const c = active[0] as any;
+        const label = c.retreat_name || `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || c.email;
+        return json({
+          error: `These dates overlap an existing booking: "${label}" (${c.check_in_date} → ${c.check_out_date}). Adjust the dates or that booking first.`,
+          conflict: { id: c.id, label, check_in_date: c.check_in_date, check_out_date: c.check_out_date },
+        }, 409);
+      }
+    }
+
     const token = genToken();
 
     const insertPayload = {

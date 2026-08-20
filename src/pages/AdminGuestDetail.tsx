@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
-  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink, Printer, Copy, Lock, LockOpen, FlaskConical,
+  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink, Printer, Copy, Lock, LockOpen, FlaskConical, AlertTriangle,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -171,6 +171,30 @@ const AdminGuestDetailContent = () => {
   };
 
   useEffect(() => { load(); }, [guestId, bookingIdParam]);
+
+  // Warning chevauchement : un autre booking actif occupe (en partie) les mêmes dates
+  const [overlapConflicts, setOverlapConflicts] = useState<Array<{ id: string; label: string; check_in_date: string; check_out_date: string }>>([]);
+  useEffect(() => {
+    const b = data?.booking;
+    if (!b?.check_in_date || !b?.check_out_date) { setOverlapConflicts([]); return; }
+    (async () => {
+      const { data: rows } = await supabase.from("bookings")
+        .select("id,retreat_name,first_name,last_name,email,check_in_date,check_out_date,is_test,cancelled_at")
+        .neq("id", b.id)
+        .not("check_in_date", "is", null)
+        .not("check_out_date", "is", null)
+        .lt("check_in_date", b.check_out_date)
+        .gt("check_out_date", b.check_in_date);
+      setOverlapConflicts(((rows ?? []) as any[])
+        .filter((r) => !r.is_test && !r.cancelled_at)
+        .map((r) => ({
+          id: r.id,
+          label: r.retreat_name || `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim() || r.email,
+          check_in_date: r.check_in_date,
+          check_out_date: r.check_out_date,
+        })));
+    })();
+  }, [data?.booking?.id, data?.booking?.check_in_date, data?.booking?.check_out_date]);
 
   const dietConfig: DietConfig = useMemo(() => {
     const dc = data?.food?.diet_config;
@@ -650,6 +674,27 @@ const AdminGuestDetailContent = () => {
           </section>
         )}
         {tab === "overview" && (<>
+        {/* Chevauchement de dates avec un autre booking actif */}
+        {overlapConflicts.length > 0 && !(booking as any)?.cancelled_at && (
+          <section className="rounded-2xl border border-[#F36F63]/50 bg-[#FFEAE7]/70 p-4 text-sm">
+            <div className="font-semibold text-[#A03028] flex items-center gap-1.5 mb-1">
+              <AlertTriangle className="w-4 h-4" /> Overlapping stay
+            </div>
+            {overlapConflicts.map((c) => (
+              <div key={c.id} className="text-[13px] text-[#7a2a23]">
+                These dates overlap{" "}
+                <button
+                  type="button"
+                  className="font-medium hover:underline"
+                  onClick={() => { navigate(`/admin/guest/${c.id}?bookingId=${c.id}`); }}
+                >
+                  {c.label}
+                </button>{" "}
+                ({c.check_in_date} → {c.check_out_date}).
+              </div>
+            ))}
+          </section>
+        )}
         {/* Guest header card */}
         <section className="bg-card rounded-2xl border border-border p-6">
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
