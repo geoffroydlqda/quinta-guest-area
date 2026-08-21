@@ -2014,6 +2014,19 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
           profileId = d2.id;
           await linkBookings(profileId, current.bookings.filter((b) => !b.client_id).map((b) => b.id));
         }
+        // Le prénom/nom change pour le guest -> répercute sur SES bookings
+        // (le tableau Bookings et les emails lisent bookings.first_name).
+        try {
+          const prev = JSON.parse(lastSavedRef.current || "{}");
+          if (prev.first_name !== form.first_name || prev.last_name !== form.last_name) {
+            const namePatch = { first_name: form.first_name ?? null, last_name: form.last_name ?? null };
+            await supabase.from("bookings").update(namePatch).eq("client_id", profileId);
+            await supabase.from("bookings").update(namePatch).eq("email", current.email.toLowerCase()).is("client_id", null);
+            onReload();
+          }
+        } catch (e) {
+          console.warn("[name propagation]", e);
+        }
         lastSavedRef.current = snapshot;
         setAutoSaved("saved");
         setProfilesArr((arr) => {

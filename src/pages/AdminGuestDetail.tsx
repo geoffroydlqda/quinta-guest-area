@@ -733,6 +733,7 @@ const AdminGuestDetailContent = () => {
                 bookingId={booking?.id ?? null}
                 value={firstName}
                 placeholder="First name"
+                propagateToGuest={{ clientId: (booking as any)?.client_id ?? null, email: booking?.email ?? null }}
                 onSaved={(v) => {
                   setData((d) => d ? {
                     ...d,
@@ -748,6 +749,7 @@ const AdminGuestDetailContent = () => {
                 bookingId={booking?.id ?? null}
                 value={lastName}
                 placeholder="Last name"
+                propagateToGuest={{ clientId: (booking as any)?.client_id ?? null, email: booking?.email ?? null }}
                 onSaved={(v) => {
                   setData((d) => d ? {
                     ...d,
@@ -2907,12 +2909,15 @@ function NameField({
   placeholder,
   field,
   onSaved,
+  propagateToGuest,
 }: {
   bookingId: string | null;
   value: string | null;
   placeholder: string;
   field?: "first_name" | "last_name" | "retreat_name";
   onSaved: (next: string | null) => void;
+  /** First/last name : répercute aussi sur la fiche guest et ses autres bookings. */
+  propagateToGuest?: { clientId: string | null; email: string | null };
 }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
@@ -2951,14 +2956,37 @@ function NameField({
         ? { first_name: next }
         : { last_name: next };
     const { error } = await supabase.from("bookings").update(patch as any).eq("id", bookingId);
-    setSaving(false);
     if (error) {
+      setSaving(false);
       toast({ title: "Could not save", description: error.message, variant: "destructive" });
       return;
     }
+    // Le nom change pour le GUEST, pas seulement pour ce booking : on met
+    // aussi à jour sa fiche client_profiles et ses autres bookings.
+    const patchKey = Object.keys(patch)[0];
+    if (propagateToGuest && (patchKey === "first_name" || patchKey === "last_name")) {
+      try {
+        let pid = propagateToGuest.clientId;
+        const em = (propagateToGuest.email || "").toLowerCase();
+        if (!pid && em) {
+          const { data: byEmail } = await supabase.from("client_profiles").select("id").eq("email", em).maybeSingle();
+          pid = byEmail?.id ?? null;
+        }
+        if (pid) {
+          await supabase.from("client_profiles").update(patch as any).eq("id", pid);
+          await supabase.from("bookings").update(patch as any).eq("client_id", pid);
+        }
+        if (em) {
+          await supabase.from("bookings").update(patch as any).eq("email", em).is("client_id", null);
+        }
+      } catch (e) {
+        console.warn("[name propagation]", e);
+      }
+    }
+    setSaving(false);
     onSaved(next);
     setEditing(false);
-    toast({ title: "Saved" });
+    toast({ title: patchKey === "retreat_name" ? "Saved" : "Saved — guest profile updated too" });
   };
 
   if (editing) {
