@@ -77,6 +77,7 @@ export function PaymentsPage({
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Bucket>("all");
+  const [sortDesc, setSortDesc] = useState(false);
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [catFilter, setCatFilter] = useState<"all" | "rental" | "catering" | "extra" | "discount">("all");
   const [lastReminder, setLastReminder] = useState<Map<string, string>>(new Map());
@@ -166,14 +167,16 @@ export function PaymentsPage({
 
   const rows = useMemo(() => {
     const s = search.toLowerCase().trim();
-    return allRows.filter((r) => {
+    const filtered = allRows.filter((r) => {
       if (statusFilter !== "all" && r.bucket !== statusFilter) return false;
       if (yearFilter !== "all" && r.year !== yearFilter) return false;
       if (catFilter !== "all" && (r.inst.category ?? "rental") !== catFilter) return false;
       if (s && !r.name.toLowerCase().includes(s) && !r.booking.email.toLowerCase().includes(s)) return false;
       return true;
     });
-  }, [allRows, search, statusFilter, yearFilter, catFilter]);
+    // Ordre par due date : croissant (défaut) ou plus récent d'abord
+    return sortDesc ? [...filtered].reverse() : filtered;
+  }, [allRows, search, statusFilter, yearFilter, catFilter, sortDesc]);
 
   const totals = useMemo(() => {
     let total = 0, totalHt = 0, paid = 0, paidCash = 0, paidBank = 0, overdue = 0;
@@ -402,7 +405,16 @@ export function PaymentsPage({
             <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
               <th className="px-3 py-2.5 font-medium">Event</th>
               <th className="px-3 py-2.5 font-medium">Payment</th>
-              <th className="px-3 py-2.5 font-medium">Due date</th>
+              <th className="px-3 py-2.5 font-medium">
+                <button
+                  type="button"
+                  onClick={() => setSortDesc((v) => !v)}
+                  className="inline-flex items-center gap-1 hover:text-foreground"
+                  title={sortDesc ? "Most recent first — click for oldest first" : "Oldest first — click for most recent first"}
+                >
+                  Due date <span aria-hidden className="text-xs">{sortDesc ? "↓" : "↑"}</span>
+                </button>
+              </th>
               <th className="px-3 py-2.5 font-medium text-right">Incl. VAT</th>
               <th className="px-3 py-2.5 font-medium text-right">Excl. VAT</th>
               <th className="px-3 py-2.5 font-medium">Status</th>
