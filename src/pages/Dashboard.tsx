@@ -444,16 +444,21 @@ const DashboardContent = () => {
   const setupRows: { title: string; detail: string; status: ToolStatus; href: string }[] = [
     {
       title: 'Bedrooms',
-      detail: roomSetupData
-        ? [
-            roomSetupData.queenSharedCount + roomSetupData.queenEnsuiteCount > 0
-              ? `${roomSetupData.queenSharedCount + roomSetupData.queenEnsuiteCount} queen`
-              : null,
-            roomSetupData.twinsSharedCount + roomSetupData.twinsEnsuiteCount > 0
-              ? `${roomSetupData.twinsSharedCount + roomSetupData.twinsEnsuiteCount} twins`
-              : null,
-          ].filter(Boolean).join(' · ') || 'Choose beds for your group'
-        : 'Choose beds for your group',
+      // Lits king (les colonnes s'appellent encore queen_* en base, héritage) :
+      // on ajoute les 2 chambres king fixes (Rooms 1 & 6) au décompte pour que
+      // le total corresponde aux 11 chambres de la maison.
+      detail: (() => {
+        if (!roomSetupData) return 'Choose beds for your group';
+        const flexKings = roomSetupData.queenSharedCount + roomSetupData.queenEnsuiteCount;
+        const twins = roomSetupData.twinsSharedCount + roomSetupData.twinsEnsuiteCount;
+        if (flexKings + twins === 0) return 'Choose beds for your group';
+        const disabled = ((activeBooking as unknown as { disabled_rooms?: number[] | null })?.disabled_rooms ?? []) as number[];
+        const fixedKings = [1, 6].filter((id) => !disabled.includes(id)).length;
+        return [
+          `${flexKings + fixedKings} king`,
+          twins > 0 ? `${twins} twins` : null,
+        ].filter(Boolean).join(' · ');
+      })(),
       status: toolStatuses.roomSetup,
       href: '/room-setup',
     },
