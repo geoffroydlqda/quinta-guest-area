@@ -667,6 +667,102 @@ export type Database = {
           },
         ]
       }
+      email_rule_log: {
+        Row: {
+          booking_id: string | null
+          created_at: string
+          dedup_key: string
+          error: string | null
+          id: string
+          installment_id: string | null
+          recipient: string | null
+          rule_id: string
+          status: string
+          subject: string | null
+        }
+        Insert: {
+          booking_id?: string | null
+          created_at?: string
+          dedup_key: string
+          error?: string | null
+          id?: string
+          installment_id?: string | null
+          recipient?: string | null
+          rule_id: string
+          status?: string
+          subject?: string | null
+        }
+        Update: {
+          booking_id?: string | null
+          created_at?: string
+          dedup_key?: string
+          error?: string | null
+          id?: string
+          installment_id?: string | null
+          recipient?: string | null
+          rule_id?: string
+          status?: string
+          subject?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_rule_log_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "email_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_rule_log_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_rules: {
+        Row: {
+          body: string
+          created_at: string
+          cta: string
+          enabled: boolean
+          event_type_filter: string | null
+          id: string
+          name: string
+          offset_days: number
+          subject: string
+          trigger: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          cta?: string
+          enabled?: boolean
+          event_type_filter?: string | null
+          id?: string
+          name: string
+          offset_days?: number
+          subject: string
+          trigger: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          cta?: string
+          enabled?: boolean
+          event_type_filter?: string | null
+          id?: string
+          name?: string
+          offset_days?: number
+          subject?: string
+          trigger?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       food_plans: {
         Row: {
           booking_id: string | null

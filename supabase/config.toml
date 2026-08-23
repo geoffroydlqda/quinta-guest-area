@@ -11,6 +11,10 @@ verify_jwt = false
 [functions.payment-reminders]
 verify_jwt = false
 
+# Cron quotidien avec x-cron-key (ou JWT admin vérifié dans le code).
+[functions.email-rules-run]
+verify_jwt = false
+
 # Stripe ne peut pas envoyer de JWT — la sécurité vient de la signature stripe-signature.
 [functions.stripe-webhook]
 verify_jwt = false
