@@ -23,6 +23,7 @@ export const ADMIN_TABS: { key: string; label: string }[] = [
   { key: "dashboard", label: "Dashboard" },
   { key: "bookings", label: "Bookings" },
   { key: "guests", label: "Guests" },
+  { key: "emails", label: "Emails" },
   { key: "payments", label: "Payments" },
   { key: "catering", label: "Catering" },
   { key: "transportation", label: "Transportation" },

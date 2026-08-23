@@ -104,6 +104,7 @@ const SECTION_TITLES: Record<string, string> = {
   dashboard: "Dashboard",
   bookings: "Bookings",
   guests: "Guests",
+  emails: "Emails",
   payments: "Payments",
   catering: "Catering",
   transportation: "Transportation",
@@ -576,7 +577,7 @@ const AdminContent = () => {
 
 
     if (tabsLoaded && allowedTabs && !allowedTabs.has(view)) {
-    const order = ["dashboard", "bookings", "guests", "payments", "catering", "transportation", "rooms", "finance", "staff"];
+    const order = ["dashboard", "bookings", "guests", "emails", "payments", "catering", "transportation", "rooms", "finance", "staff"];
     const first = order.find((t) => allowedTabs.has(t)) ?? "dashboard";
     return <Navigate to={first === "dashboard" ? "/admin" : `/admin/${first}`} replace />;
   }
@@ -825,7 +826,6 @@ const AdminContent = () => {
           <div className="space-y-4">
             <HonestyBarCard />
             <PaymentRemindersCard />
-            <AutomatedEmailsCard />
             <PaymentsPage
               bookings={data.bookings || []}
               installments={installments}
@@ -845,6 +845,12 @@ const AdminContent = () => {
         )}
 
         {view === "rooms" && <RoomsView data={data} onOpen={navigateToBooking} />}
+
+        {view === "emails" && (
+          <div className="space-y-4">
+            <AutomatedEmailsCard />
+          </div>
+        )}
 
         {view === "staff" && <StaffPage />}
 

@@ -5,7 +5,7 @@ import { useAllowedTabs } from "@/hooks/useAllowedTabs";
 import {
   LayoutDashboard, CalendarRange, Users, Wallet, Car,
   BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X, Landmark, UserCog, Package,
-  Moon, Sun, TrendingUp, Paperclip,
+  Moon, Sun, TrendingUp, Paperclip, Mail,
 } from "lucide-react";
 
 /**
@@ -23,6 +23,7 @@ const NAV_GROUPS = [
     { to: "/admin", end: true, label: "Dashboard", icon: LayoutDashboard, tab: "dashboard" },
     { to: "/admin/bookings", label: "Bookings", icon: CalendarRange, tab: "bookings" },
     { to: "/admin/guests", label: "Guests", icon: Users, tab: "guests" },
+    { to: "/admin/emails", label: "Emails", icon: Mail, tab: "emails" },
   ]},
   { label: "Operations", items: [
     { to: "/admin/catering", label: "Catering", icon: ChefHat, tab: "catering" },

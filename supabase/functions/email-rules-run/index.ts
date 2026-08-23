@@ -121,6 +121,7 @@ function addDays(isoDate: string, days: number): string {
 type Rule = {
   id: string; name: string; enabled: boolean; trigger: string; offset_days: number;
   event_type_filter: string | null; subject: string; body: string; cta: string;
+  cta_label: string | null; cta_url: string | null;
 };
 type Booking = {
   id: string; email: string | null; first_name: string | null; last_name: string | null;
@@ -168,6 +169,13 @@ function renderTemplate(tpl: string, m: { booking: Booking; installment: Inst | 
 // Bouton CTA optionnel. Pour "pay" : lien signe vers l'echeance de la regle
 // (trigger due_date) ou, a defaut, la prochaine echeance impayee du booking.
 async function ctaHtml(rule: Rule, booking: Booking, installment: Inst | null): Promise<string> {
+  // Bouton personnalise : feedback form, guide d'arrivee, etc.
+  if (rule.cta === "custom") {
+    const url = (rule.cta_url ?? "").trim();
+    if (!/^https?:\/\//i.test(url)) return "";
+    const label = (rule.cta_label ?? "").trim() || "Open link";
+    return `<p style="margin:18px 0 18px 0;"><a href="${esc(url)}" style="display:inline-block;background:#6d7855;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;">${esc(label)}</a></p>`;
+  }
   if (rule.cta === "guest_area") {
     return `<p style="margin:18px 0 18px 0;"><a href="${GUEST_AREA_URL}" style="display:inline-block;background:#6d7855;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;">Open your Guest Area</a></p>`;
   }

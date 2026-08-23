@@ -726,6 +726,8 @@ export type Database = {
           body: string
           created_at: string
           cta: string
+          cta_label: string | null
+          cta_url: string | null
           enabled: boolean
           event_type_filter: string | null
           id: string
@@ -739,6 +741,8 @@ export type Database = {
           body: string
           created_at?: string
           cta?: string
+          cta_label?: string | null
+          cta_url?: string | null
           enabled?: boolean
           event_type_filter?: string | null
           id?: string
@@ -752,6 +756,8 @@ export type Database = {
           body?: string
           created_at?: string
           cta?: string
+          cta_label?: string | null
+          cta_url?: string | null
           enabled?: boolean
           event_type_filter?: string | null
           id?: string

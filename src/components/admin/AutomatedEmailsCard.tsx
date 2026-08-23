@@ -29,6 +29,8 @@ interface EmailRule {
   subject: string;
   body: string;
   cta: string;
+  cta_label: string | null;
+  cta_url: string | null;
 }
 
 interface PreviewMatch {
@@ -71,11 +73,13 @@ interface EditorState {
   subject: string;
   body: string;
   cta: string;
+  ctaLabel: string;
+  ctaUrl: string;
 }
 
 const EMPTY_EDITOR: EditorState = {
   id: null, name: '', trigger: 'check_in', offsetAbs: '3', direction: 'before',
-  eventType: 'any', subject: '', body: '', cta: 'none',
+  eventType: 'any', subject: '', body: '', cta: 'none', ctaLabel: '', ctaUrl: '',
 };
 
 export function AutomatedEmailsCard() {
@@ -129,12 +133,18 @@ export function AutomatedEmailsCard() {
     subject: r.subject,
     body: r.body,
     cta: r.cta,
+    ctaLabel: r.cta_label ?? '',
+    ctaUrl: r.cta_url ?? '',
   });
 
   const saveEditor = async () => {
     if (!editor) return;
     if (!editor.name.trim() || !editor.subject.trim() || !editor.body.trim()) {
       toast({ title: 'Name, subject and body are required', variant: 'destructive' });
+      return;
+    }
+    if (editor.cta === 'custom' && !/^https?:\/\//i.test(editor.ctaUrl.trim())) {
+      toast({ title: 'The button link must be a full URL (https://…)', variant: 'destructive' });
       return;
     }
     const abs = Math.min(365, Math.max(0, Math.round(Number(editor.offsetAbs) || 0)));
@@ -147,6 +157,8 @@ export function AutomatedEmailsCard() {
       subject: editor.subject.trim(),
       body: editor.body,
       cta: editor.cta,
+      cta_label: editor.cta === 'custom' ? (editor.ctaLabel.trim() || null) : null,
+      cta_url: editor.cta === 'custom' ? editor.ctaUrl.trim() : null,
       updated_at: new Date().toISOString(),
     };
     setSaving(true);
@@ -237,8 +249,8 @@ export function AutomatedEmailsCard() {
 
       {!loading && rules.length === 0 && (
         <p className="text-sm text-muted-foreground mt-3">
-          No rules yet. Create one — for example a payment reminder 3 days before each due date,
-          or a welcome email 7 days before check-in.
+          No rules yet. Create one — for example arrival info 7 days before check-in, a payment
+          reminder 3 days before each due date, or a feedback form 2 days after check-out.
         </p>
       )}
 
@@ -259,7 +271,9 @@ export function AutomatedEmailsCard() {
                   )}
                   {r.cta !== 'none' && (
                     <Badge variant="secondary" className="text-[11px]">
-                      {r.cta === 'pay' ? 'Pay button' : 'Guest Area button'}
+                      {r.cta === 'pay' ? 'Pay button'
+                        : r.cta === 'custom' ? `Button: ${r.cta_label || 'link'}`
+                        : 'Guest Area button'}
                     </Badge>
                   )}
                 </div>
@@ -396,10 +410,34 @@ export function AutomatedEmailsCard() {
                       <SelectItem value="none">No button</SelectItem>
                       <SelectItem value="guest_area">Open Guest Area</SelectItem>
                       <SelectItem value="pay">Pay (Stripe link)</SelectItem>
+                      <SelectItem value="custom">Custom link</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
+
+              {editor.cta === 'custom' && (
+                <div className="grid grid-cols-[1fr_1.6fr] gap-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cta-label">Button text</Label>
+                    <Input
+                      id="cta-label"
+                      placeholder="e.g. Give us feedback"
+                      value={editor.ctaLabel}
+                      onChange={(e) => setEditor({ ...editor, ctaLabel: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cta-url">Button link</Label>
+                    <Input
+                      id="cta-url"
+                      placeholder="https://forms.gle/…"
+                      value={editor.ctaUrl}
+                      onChange={(e) => setEditor({ ...editor, ctaUrl: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label htmlFor="rule-subject">Subject</Label>
