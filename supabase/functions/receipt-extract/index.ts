@@ -9,6 +9,11 @@
 //   { link: { doc_id, tx_id } }       -> lien manuel + application TVA
 //   { unlink: { doc_id } }            -> retire le lien (statut review)
 //   { ingest: {...} }                 -> PJ Gmail (auth x-ingest-key)
+//   { rematch: true }                 -> re-rapprochement des docs no_match/review
+//                                        recents SANS re-extraction (cron quotidien :
+//                                        les transactions carte arrivent souvent 1-2 j
+//                                        apres la facture, le matching a l'ingestion
+//                                        tombait alors dans le vide — 24 aout 2026)
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://esm.sh/zod@3.23.8";
@@ -39,6 +44,9 @@ const BodySchema = z.object({
     mime_type: z.string().min(3).max(100),
     content: z.string().min(100).max(14_000_000),
   }).optional(),
+  // Re-rapprochement en masse (sans re-extraction) — cron ou admin
+  rematch: z.boolean().optional(),
+  days: z.number().int().min(1).max(365).optional(),
 });
 
 async function isAdminEmailDb(email?: string | null): Promise<boolean> {
@@ -152,7 +160,13 @@ async function extractAndMatch(docId: string) {
     return { doc_id: docId, status: "matched", linked_tx: doc.tx_id, vat_applied: vatApplied, ...ex };
   }
 
-  // ---- Matching : dépenses sans justificatif, montant ±0,02 €, date ±5 j
+  return await runMatching(docId, ex);
+}
+
+// ---- Matching : dépenses sans justificatif, montant ±0,02 €, date ±5 j.
+// Séparé de l'extraction pour pouvoir re-rapprocher sans rappeler Claude
+// (les transactions carte arrivent souvent apres la facture).
+async function runMatching(docId: string, ex: Extract) {
   const linkedIds = new Set(
     ((await admin.from("purchase_docs").select("tx_id").not("tx_id", "is", null)).data ?? [])
       .map((r: { tx_id: string }) => r.tx_id)
@@ -201,6 +215,34 @@ async function extractAndMatch(docId: string) {
   return { doc_id: docId, status: cands.length ? "review" : "no_match", candidates: cands, ...ex };
 }
 
+// Re-rapprochement en masse des docs récents restés sans transaction :
+// réutilise l'extraction stockée (vendor/date/montant), zéro appel Claude.
+// `review` inclus : une meilleure transaction arrivée depuis peut débloquer
+// l'auto-lien (le seuil de confiance reste identique).
+async function rematchRecent(days: number) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const { data: docs } = await admin.from("purchase_docs")
+    .select("id,vendor,doc_date,total_ttc,nif,currency,vat_breakdown,status")
+    .is("tx_id", null)
+    .in("status", ["no_match", "review"])
+    .not("total_ttc", "is", null)
+    .gte("created_at", since)
+    .order("created_at", { ascending: true });
+  let matched = 0, review = 0, still = 0;
+  const links: unknown[] = [];
+  for (const d of docs ?? []) {
+    const res = await runMatching(d.id, {
+      vendor: d.vendor, doc_date: d.doc_date, total_ttc: d.total_ttc != null ? Number(d.total_ttc) : null,
+      nif: d.nif, currency: d.currency, vat_breakdown: (d.vat_breakdown as Extract["vat_breakdown"]) ?? null,
+    });
+    if (res.status === "matched") { matched++; links.push({ doc_id: d.id, tx_id: (res as { linked_tx?: string }).linked_tx }); }
+    else if (res.status === "review") review++;
+    else still++;
+  }
+  console.log(`[rematch] ${days}d: ${(docs ?? []).length} docs -> ${matched} matched, ${review} review, ${still} no_match`);
+  return { checked: (docs ?? []).length, matched, review, no_match: still, links };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   let raw: Record<string, unknown> = {};
@@ -219,6 +261,11 @@ serve(async (req) => {
     // Retraitement d'un doc existant via la clé (bulk retry serveur)
     if (ingestKeyOk && parsed.data.doc_id && !parsed.data.ingest) {
       return json(await extractAndMatch(parsed.data.doc_id));
+    }
+    // Re-rapprochement quotidien (cron avec x-ingest-key) — l'admin JWT passe
+    // aussi par le bloc auth plus bas.
+    if (ingestKeyOk && parsed.data.rematch) {
+      return json(await rematchRecent(parsed.data.days ?? 60));
     }
     if (parsed.data.ingest) {
       if (!ingestKeyOk) return json({ error: "Unauthorized" }, 401);
@@ -267,7 +314,8 @@ serve(async (req) => {
       return json({ unlinked: true });
     }
     if (parsed.data.doc_id) return json(await extractAndMatch(parsed.data.doc_id));
-    return json({ error: "doc_id, link or unlink required" }, 400);
+    if (parsed.data.rematch) return json(await rematchRecent(parsed.data.days ?? 60));
+    return json({ error: "doc_id, link, unlink or rematch required" }, 400);
   } catch (e) {
     const msg = String((e as Error)?.message ?? e);
     console.error("receipt-extract error:", msg);
