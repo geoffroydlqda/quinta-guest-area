@@ -24,7 +24,6 @@ import { AddressAutocomplete, NationalityCombobox, PLACEHOLDER_CLS, COUNTRIES, f
 import { renderRoomMapCanvas, downloadRoomMapPdf, type RoomMapEntry } from "@/lib/roomMapPdf";
 import { openKitchenSheet } from "@/lib/kitchenSheet";
 import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
-import { PaymentRemindersCard } from "@/components/admin/PaymentRemindersCard";
 import { AutomatedEmailsCard } from "@/components/admin/AutomatedEmailsCard";
 import { HonestyBarCard } from "@/components/admin/HonestyBarCard";
 import { HousekeepingScheduler } from "@/components/admin/HousekeepingScheduler";
@@ -825,7 +824,8 @@ const AdminContent = () => {
         {view === "payments" && (
           <div className="space-y-4">
             <HonestyBarCard />
-            <PaymentRemindersCard />
+            {/* Les rappels automatiques vivent désormais dans l'onglet Emails
+                (règles "Payment reminder" / "Payment follow-up"). */}
             <PaymentsPage
               bookings={data.bookings || []}
               installments={installments}

@@ -733,6 +733,7 @@ export type Database = {
           id: string
           name: string
           offset_days: number
+          payment_filter: string
           subject: string
           trigger: string
           updated_at: string
@@ -748,6 +749,7 @@ export type Database = {
           id?: string
           name: string
           offset_days?: number
+          payment_filter?: string
           subject: string
           trigger: string
           updated_at?: string
@@ -763,6 +765,7 @@ export type Database = {
           id?: string
           name?: string
           offset_days?: number
+          payment_filter?: string
           subject?: string
           trigger?: string
           updated_at?: string

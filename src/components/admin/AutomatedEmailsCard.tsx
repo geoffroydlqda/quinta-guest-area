@@ -31,19 +31,36 @@ interface EmailRule {
   cta: string;
   cta_label: string | null;
   cta_url: string | null;
+  payment_filter: string;
 }
 
 interface PreviewMatch {
   rule_id: string;
   rule_name: string;
+  rule_enabled: boolean;
   booking_id: string;
   recipient: string | null;
   label: string;
+  installment_id: string | null;
   installment_label: string | null;
   amount: number | null;
   subject: string;
   already_sent: boolean;
 }
+
+// Historique des emails déjà partis pour une échéance (reminder_log) — repris
+// de l'ancienne carte "Automatic payment reminders" pour garder la vue
+// "dois-je encore envoyer quelque chose ?".
+interface SentLogEntry { type: string; status: string | null; created_at: string }
+const SENT_LABEL: Record<string, string> = {
+  payment_request: 'Request',
+  payment_manual: 'Manual reminder',
+  payment_upcoming: 'Auto reminder',
+  payment_overdue: 'Auto follow-up',
+  payment_receipt: 'Confirmation',
+};
+const fmtShortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
 const TRIGGER_LABEL: Record<string, string> = {
   check_in: 'check-in',
@@ -56,7 +73,16 @@ const EVENT_TYPES = ['retreat', 'wedding', 'other', 'day_retreat'];
 const VARIABLES_HINT =
   '{{first_name}} {{name}} {{retreat_name}} {{check_in_date}} {{check_out_date}} {{amount}} {{label}} {{due_date}}';
 
+const PAYMENT_FILTER_LABEL: Record<string, string> = {
+  any: 'any payment',
+  deposit: 'deposit (first rental payment)',
+  final: 'final payment (settles the stay)',
+};
+
 function describeRule(r: EmailRule): string {
+  if (r.trigger === 'payment_received') {
+    return `When a payment is received — ${PAYMENT_FILTER_LABEL[r.payment_filter] ?? r.payment_filter}`;
+  }
   const t = TRIGGER_LABEL[r.trigger] ?? r.trigger;
   if (r.offset_days === 0) return `On the day of ${t}`;
   const n = Math.abs(r.offset_days);
@@ -75,32 +101,53 @@ interface EditorState {
   cta: string;
   ctaLabel: string;
   ctaUrl: string;
+  paymentFilter: string;
 }
 
 const EMPTY_EDITOR: EditorState = {
   id: null, name: '', trigger: 'check_in', offsetAbs: '3', direction: 'before',
   eventType: 'any', subject: '', body: '', cta: 'none', ctaLabel: '', ctaUrl: '',
+  paymentFilter: 'any',
 };
 
 export function AutomatedEmailsCard() {
   const { toast } = useToast();
   const [rules, setRules] = useState<EmailRule[]>([]);
   const [matches, setMatches] = useState<PreviewMatch[]>([]);
+  const [sentByInst, setSentByInst] = useState<Map<string, SentLogEntry[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
 
-  const loadPreview = useCallback(async (hasEnabled: boolean) => {
-    if (!hasEnabled) { setMatches([]); return; }
+  const loadPreview = useCallback(async (hasRules: boolean) => {
+    if (!hasRules) { setMatches([]); setSentByInst(new Map()); return; }
     setPreviewLoading(true);
     const { data, error } = await supabase.functions.invoke('email-rules-run', {
       body: { preview: true },
     });
     setPreviewLoading(false);
-    if (!error && data?.matches) setMatches(data.matches as PreviewMatch[]);
-    else setMatches([]);
+    const list = !error && data?.matches ? (data.matches as PreviewMatch[]) : [];
+    setMatches(list);
+    // Historique des emails de paiement déjà envoyés pour ces échéances
+    const ids = [...new Set(list.map((m) => m.installment_id).filter(Boolean))] as string[];
+    if (ids.length) {
+      const { data: logs } = await supabase
+        .from('reminder_log')
+        .select('installment_id,type,status,created_at')
+        .in('installment_id', ids)
+        .order('created_at', { ascending: false });
+      const map = new Map<string, SentLogEntry[]>();
+      for (const l of (logs ?? []) as any[]) {
+        const arr = map.get(l.installment_id) || [];
+        arr.push({ type: l.type, status: l.status, created_at: l.created_at });
+        map.set(l.installment_id, arr);
+      }
+      setSentByInst(map);
+    } else {
+      setSentByInst(new Map());
+    }
   }, []);
 
   const load = useCallback(async () => {
@@ -117,7 +164,8 @@ export function AutomatedEmailsCard() {
     const list = (data ?? []) as EmailRule[];
     setRules(list);
     setLoading(false);
-    loadPreview(list.some((r) => r.enabled));
+    // L'aperçu couvre TOUTES les règles, y compris désactivées (dry-run).
+    loadPreview(list.length > 0);
   }, [toast, loadPreview]);
 
   useEffect(() => { load(); }, [load]);
@@ -135,6 +183,7 @@ export function AutomatedEmailsCard() {
     cta: r.cta,
     ctaLabel: r.cta_label ?? '',
     ctaUrl: r.cta_url ?? '',
+    paymentFilter: r.payment_filter ?? 'any',
   });
 
   const saveEditor = async () => {
@@ -148,11 +197,14 @@ export function AutomatedEmailsCard() {
       return;
     }
     const abs = Math.min(365, Math.max(0, Math.round(Number(editor.offsetAbs) || 0)));
-    const offset = editor.direction === 'before' ? -abs : abs;
+    const offset = editor.trigger === 'payment_received'
+      ? 0
+      : editor.direction === 'before' ? -abs : abs;
     const payload = {
       name: editor.name.trim(),
       trigger: editor.trigger,
       offset_days: offset,
+      payment_filter: editor.trigger === 'payment_received' ? editor.paymentFilter : 'any',
       event_type_filter: editor.eventType === 'any' ? null : editor.eventType,
       subject: editor.subject.trim(),
       body: editor.body,
@@ -185,7 +237,7 @@ export function AutomatedEmailsCard() {
       setRules((prev) => prev.map((x) => (x.id === r.id ? { ...x, enabled: !next } : x)));
       return;
     }
-    loadPreview(next || rules.some((x) => x.id !== r.id && x.enabled));
+    loadPreview(true);
   };
 
   const deleteRule = async (r: EmailRule) => {
@@ -242,9 +294,10 @@ export function AutomatedEmailsCard() {
       </div>
 
       <p className="text-sm text-muted-foreground mt-1">
-        Your own scheduled emails: pick a trigger (check-in, check-out or a payment due date),
-        an offset in days, write the message with variables, and enable the rule. Emails go out
-        once a day at 08:05 UTC — never twice for the same booking or installment.
+        Your own automated emails: pick a trigger (before/after check-in, check-out or a payment
+        due date — or the moment a payment is received), write the message with variables, and
+        enable the rule. Date-based rules go out once a day at 08:05 UTC, payment confirmations
+        right after the payment — never twice for the same booking or installment.
       </p>
 
       {!loading && rules.length === 0 && (
@@ -298,10 +351,10 @@ export function AutomatedEmailsCard() {
         </div>
       )}
 
-      {rules.some((r) => r.enabled) && (
+      {rules.length > 0 && (
         <div className="mt-3">
           <p className="text-xs font-medium text-muted-foreground mb-1.5">
-            Today{previewLoading ? '…' : matches.length === 0 ? ': nothing to send.' : ':'}
+            Preview — what matches today{previewLoading ? '…' : matches.length === 0 ? ': nothing.' : ' (disabled rules included, they won’t send):'}
           </p>
           {matches.length > 0 && (
             <div className="overflow-auto">
@@ -313,24 +366,60 @@ export function AutomatedEmailsCard() {
                     <th className="py-1.5 pr-3 font-medium">Recipient</th>
                     <th className="py-1.5 pr-3 font-medium">Subject</th>
                     <th className="py-1.5 pr-3 font-medium">Status</th>
+                    <th className="py-1.5 pr-3 font-medium">Emails sent</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {matches.map((m, i) => (
-                    <tr key={i} className="border-t border-border">
-                      <td className="py-1.5 pr-3 whitespace-nowrap">{m.rule_name}</td>
-                      <td className="py-1.5 pr-3">{m.label}{m.installment_label ? ` — ${m.installment_label}` : ''}</td>
-                      <td className="py-1.5 pr-3">{m.recipient}</td>
-                      <td className="py-1.5 pr-3">{m.subject}</td>
-                      <td className="py-1.5 pr-3">
-                        {m.already_sent ? (
-                          <Badge variant="secondary">Sent</Badge>
-                        ) : (
-                          <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Will send at 08:05 UTC</Badge>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {matches.map((m, i) => {
+                    const logs = m.installment_id ? (sentByInst.get(m.installment_id) ?? []) : [];
+                    const sentLogs = logs.filter((l) => l.status !== 'error');
+                    const byType = new Map<string, { count: number; last: string }>();
+                    for (const l of sentLogs) {
+                      const cur = byType.get(l.type);
+                      if (cur) cur.count += 1;
+                      else byType.set(l.type, { count: 1, last: l.created_at });
+                    }
+                    const tooltip = sentLogs
+                      .map((l) => `${SENT_LABEL[l.type] ?? l.type} — ${fmtShortDate(l.created_at)}`)
+                      .join('\n');
+                    return (
+                      <tr key={i} className={`border-t border-border ${m.rule_enabled ? '' : 'opacity-60'}`}>
+                        <td className="py-1.5 pr-3 whitespace-nowrap">{m.rule_name}</td>
+                        <td className="py-1.5 pr-3">{m.label}{m.installment_label ? ` — ${m.installment_label}` : ''}</td>
+                        <td className="py-1.5 pr-3">{m.recipient}</td>
+                        <td className="py-1.5 pr-3">{m.subject}</td>
+                        <td className="py-1.5 pr-3 whitespace-nowrap">
+                          {m.already_sent ? (
+                            <Badge variant="secondary">Sent</Badge>
+                          ) : !m.rule_enabled ? (
+                            <Badge variant="outline">Rule off</Badge>
+                          ) : (
+                            <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Will send at 08:05 UTC</Badge>
+                          )}
+                        </td>
+                        <td className="py-1.5 pr-3" title={tooltip || undefined}>
+                          {!m.installment_id ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : sentLogs.length === 0 ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-800 text-[11px] font-medium whitespace-nowrap">
+                              No email yet
+                            </span>
+                          ) : (
+                            <span className="flex flex-wrap gap-1">
+                              {[...byType.entries()].map(([type, info]) => (
+                                <span
+                                  key={type}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full border border-border bg-muted text-[11px] font-medium whitespace-nowrap text-foreground"
+                                >
+                                  ✉ {SENT_LABEL[type] ?? type}{info.count > 1 ? ` ×${info.count}` : ''} · {fmtShortDate(info.last)}
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -355,39 +444,60 @@ export function AutomatedEmailsCard() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1.5">
-                  <Label>Days</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={365}
-                    value={editor.offsetAbs}
-                    onChange={(e) => setEditor({ ...editor, offsetAbs: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>When</Label>
-                  <Select value={editor.direction} onValueChange={(v) => setEditor({ ...editor, direction: v as 'before' | 'after' })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="before">before</SelectItem>
-                      <SelectItem value="after">after</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Event</Label>
-                  <Select value={editor.trigger} onValueChange={(v) => setEditor({ ...editor, trigger: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="check_in">check-in</SelectItem>
-                      <SelectItem value="check_out">check-out</SelectItem>
-                      <SelectItem value="due_date">payment due date</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-1.5">
+                <Label>Trigger</Label>
+                <Select value={editor.trigger} onValueChange={(v) => setEditor({ ...editor, trigger: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="check_in">Before / after check-in</SelectItem>
+                    <SelectItem value="check_out">Before / after check-out</SelectItem>
+                    <SelectItem value="due_date">Before / after a payment due date</SelectItem>
+                    <SelectItem value="payment_received">When a payment is received (confirmation)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
+              {editor.trigger === 'payment_received' ? (
+                <div className="space-y-1.5">
+                  <Label>Which payment</Label>
+                  <Select value={editor.paymentFilter} onValueChange={(v) => setEditor({ ...editor, paymentFilter: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="deposit">Deposit (first rental payment)</SelectItem>
+                      <SelectItem value="final">Final payment (settles the whole stay)</SelectItem>
+                      <SelectItem value="any">Any payment</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Sent right after the payment, with the invoice attached automatically. One
+                    confirmation per payment — the most specific rule wins; if no rule matches,
+                    the standard confirmation is sent instead.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label>Days</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={365}
+                      value={editor.offsetAbs}
+                      onChange={(e) => setEditor({ ...editor, offsetAbs: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>When</Label>
+                    <Select value={editor.direction} onValueChange={(v) => setEditor({ ...editor, direction: v as 'before' | 'after' })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="before">before</SelectItem>
+                        <SelectItem value="after">after</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">
@@ -459,9 +569,11 @@ export function AutomatedEmailsCard() {
                   onChange={(e) => setEditor({ ...editor, body: e.target.value })}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Variables: <code className="font-mono">{VARIABLES_HINT}</code>. Signature (site,
-                  phone, links) is added automatically. “Pay” button links each due installment;
-                  on check-in/check-out rules it targets the next unpaid installment.
+                  Variables: <code className="font-mono">{VARIABLES_HINT}</code>. Place the button
+                  exactly where you want with <code className="font-mono">{'{{button}}'}</code> —
+                  otherwise it appears after the text. Signature (site, phone, links) is added
+                  automatically. “Pay” button links each due installment; on check-in/check-out
+                  rules it targets the next unpaid installment.
                 </p>
               </div>
             </div>

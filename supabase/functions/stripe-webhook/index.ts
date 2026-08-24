@@ -140,16 +140,39 @@ async function automate(newlyPaid: string[], sessionId: string) {
       }
     }
 
-    // 2. Email de confirmation avec le PDF (template serveur validé)
-    const em = await fetch(`${base}/payment-emails`, {
-      method: "POST", headers,
-      body: JSON.stringify({ kind: "confirmation", installment_id: newlyPaid[0] }),
-    });
-    const emBody = await em.json().catch(() => ({}));
-    if (!em.ok || emBody?.error) {
-      console.error(`[auto-email] failed (manual ✉️ still available): ${JSON.stringify(emBody).slice(0, 300)}`);
-    } else {
-      console.log(`[auto-email] confirmation sent to ${emBody.to} (${emBody.attachment})`);
+    // 2. Email de confirmation avec le PDF.
+    // 2a. D'abord les regles personnalisees (email_rules, trigger
+    //     payment_received : confirmation differente acompte / solde / etc.).
+    //     Si une regle active matche et envoie (ou a deja envoye), on s'arrete la.
+    let customSent = false;
+    try {
+      const er = await fetch(`${base}/email-rules-run`, {
+        method: "POST", headers,
+        body: JSON.stringify({ event: { type: "payment_received", installment_id: newlyPaid[0] } }),
+      });
+      const erBody = await er.json().catch(() => ({}));
+      if (er.ok && (Number(erBody?.sent) > 0 || erBody?.deduped === true)) {
+        customSent = true;
+        console.log(`[auto-email] custom confirmation rule "${erBody.rule_name}" ${erBody.deduped ? "already sent" : "sent"}`);
+      } else if (erBody?.matched > 0) {
+        console.error(`[auto-email] custom rule matched but failed (falling back to default): ${JSON.stringify(erBody).slice(0, 200)}`);
+      }
+    } catch (e) {
+      console.error("[auto-email] email-rules-run call failed (falling back to default):", e);
+    }
+
+    // 2b. Sinon, template de confirmation par defaut (payment-emails).
+    if (!customSent) {
+      const em = await fetch(`${base}/payment-emails`, {
+        method: "POST", headers,
+        body: JSON.stringify({ kind: "confirmation", installment_id: newlyPaid[0] }),
+      });
+      const emBody = await em.json().catch(() => ({}));
+      if (!em.ok || emBody?.error) {
+        console.error(`[auto-email] failed (manual ✉️ still available): ${JSON.stringify(emBody).slice(0, 300)}`);
+      } else {
+        console.log(`[auto-email] confirmation sent to ${emBody.to} (${emBody.attachment})`);
+      }
     }
   } catch (e) {
     console.error("[automation] error:", e);

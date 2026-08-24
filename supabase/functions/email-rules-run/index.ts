@@ -5,8 +5,18 @@
 //   bouton optionnel (guest_area | pay).
 // Appels :
 //   { run: true }                    -> envoie les emails du jour (cron quotidien, x-cron-key)
-//   { preview: true }                -> dry-run : liste les correspondances du jour (admin)
+//   { preview: true }                -> dry-run : correspondances du jour, TOUTES les regles
+//                                       (les desactivees sont marquees rule_enabled=false)
 //   { test: { rule_id, to } }        -> envoie un exemple rendu a `to` (admin)
+//   { event: { type: 'payment_received', installment_id } }
+//                                    -> confirmations personnalisees, appele par
+//                                       stripe-webhook apres marquage paye. UNE seule
+//                                       confirmation par paiement (regle la plus
+//                                       specifique : deposit/final avant any) ; si
+//                                       aucune regle active ne matche, le webhook
+//                                       retombe sur le template par defaut.
+// Placement du bouton : {{button}} dans le corps = position exacte ; sinon
+// le bouton est ajoute apres le texte.
 // Dedoublonnage : email_rule_log.dedup_key unique = `${rule_id}|${booking_id}|${installment_id ?? ""}`
 // -> une regle n'envoie jamais deux fois pour le meme booking / la meme echeance.
 // Exclusions : bookings test, annules, emails internal+…@.
@@ -43,6 +53,10 @@ const BodySchema = z.object({
   test: z.object({
     rule_id: z.string().uuid(),
     to: z.string().email(),
+  }).optional(),
+  event: z.object({
+    type: z.literal("payment_received"),
+    installment_id: z.string().uuid(),
   }).optional(),
 });
 
@@ -121,7 +135,7 @@ function addDays(isoDate: string, days: number): string {
 type Rule = {
   id: string; name: string; enabled: boolean; trigger: string; offset_days: number;
   event_type_filter: string | null; subject: string; body: string; cta: string;
-  cta_label: string | null; cta_url: string | null;
+  cta_label: string | null; cta_url: string | null; payment_filter: string;
 };
 type Booking = {
   id: string; email: string | null; first_name: string | null; last_name: string | null;
@@ -198,6 +212,14 @@ async function ctaHtml(rule: Rule, booking: Booking, installment: Inst | null): 
   return "";
 }
 
+// Corps HTML avec placement du bouton : {{button}} dans le texte = position
+// exacte (le bouton peut etre au milieu du message) ; sinon apres le texte.
+function renderHtmlBody(bodyText: string, cta: string): string {
+  const parts = bodyText.split(/\{\{\s*button\s*\}\}/i);
+  if (parts.length === 1) return cta ? `${paras(bodyText)}\n${cta}` : paras(bodyText);
+  return parts.map((p) => (p.trim() ? paras(p) : "")).join(`\n${cta}\n`);
+}
+
 // Correspondances du jour pour une regle : la date d'envoi = ancre + offset_days,
 // donc on cherche les ancres telles que ancre = aujourd'hui - offset_days.
 async function findMatches(rule: Rule, today: string): Promise<Match[]> {
@@ -218,10 +240,22 @@ async function findMatches(rule: Rule, today: string): Promise<Match[]> {
   }
 
   if (rule.trigger === "due_date") {
-    const { data } = await admin.from("payment_installments")
+    // Fenetre glissante (parite avec l'ancien systeme payment-reminders) :
+    // - offset negatif (avant l'echeance) : echeances dues dans les |offset|
+    //   prochains jours (couvre aussi les echeances creees en retard)
+    // - offset >= 0 (a partir de l'echeance) : echeances en retard d'au moins
+    //   offset jours (rattrapage inclus)
+    // L'anti-doublon garantit un seul envoi par (regle, echeance).
+    let q = admin.from("payment_installments")
       .select("id,booking_id,label,amount_due,due_date,status,is_cash,category")
-      .eq("due_date", anchor)
-      .neq("status", "paid");
+      .neq("status", "paid")
+      .not("due_date", "is", null);
+    if (rule.offset_days < 0) {
+      q = q.gt("due_date", today).lte("due_date", addDays(today, -rule.offset_days));
+    } else {
+      q = q.lte("due_date", addDays(today, -rule.offset_days));
+    }
+    const { data } = await q;
     const insts = ((data ?? []) as Inst[]).filter((i) => !i.is_cash && i.category !== "discount");
     if (!insts.length) return matches;
     const bookingIds = [...new Set(insts.map((i) => i.booking_id))];
@@ -249,15 +283,19 @@ async function alreadySent(dedupKeys: string[]): Promise<Set<string>> {
   return new Set((data ?? []).filter((r: any) => r.status === "sent").map((r: any) => r.dedup_key));
 }
 
-async function sendMatch(m: Match): Promise<{ sent: boolean; error?: string }> {
+async function sendMatch(
+  m: Match,
+  attachments?: { filename: string; content: string }[]
+): Promise<{ sent: boolean; error?: string }> {
   const subject = renderTemplate(m.rule.subject, m);
   const bodyText = renderTemplate(m.rule.body, m);
   const cta = await ctaHtml(m.rule, m.booking, m.installment);
-  const html = emailShell(`${paras(bodyText)}\n${cta}`);
+  const html = emailShell(renderHtmlBody(bodyText, cta));
   const to = m.booking.email!;
 
   const sent = await resend.emails.send({
     from: FROM_EMAIL, to: [to], reply_to: REPLY_TO, subject, html,
+    ...(attachments?.length ? { attachments } : {}),
   });
   const errMsg = sent.error ? String((sent.error as any).message ?? sent.error) : null;
 
@@ -277,6 +315,97 @@ async function sendMatch(m: Match): Promise<{ sent: boolean; error?: string }> {
   if (logErr) console.error("[email-rules] log insert failed:", logErr.message);
 
   return errMsg ? { sent: false, error: errMsg } : { sent: true };
+}
+
+// Confirmation de paiement personnalisee (declencheur payment_received).
+// Appelee par stripe-webhook apres marquage paye + generation de la facture.
+// UNE seule confirmation par paiement : regle la plus specifique d'abord
+// (deposit / final avant any). Si rien n'est envoye (aucune regle active ne
+// matche), le webhook retombe sur le template par defaut de payment-emails.
+async function handlePaymentReceived(installmentId: string): Promise<Response> {
+  const { data: instRow } = await admin.from("payment_installments")
+    .select("id,booking_id,label,amount_due,due_date,status,is_cash,category,stripe_session_id,invoice_file_url,invoice_file_name,invoice_number")
+    .eq("id", installmentId).maybeSingle();
+  if (!instRow) return json({ matched: 0, sent: 0, error: "Installment not found" }, 404);
+  const inst = instRow as Inst & {
+    stripe_session_id: string | null;
+    invoice_file_url: string | null; invoice_file_name: string | null; invoice_number: string | null;
+  };
+
+  const { data: bk } = await admin.from("bookings")
+    .select("id,email,first_name,last_name,retreat_name,check_in_date,check_out_date,event_type,is_test,cancelled_at")
+    .eq("id", inst.booking_id).maybeSingle();
+  const booking = bk as Booking | null;
+  if (!booking || skipBooking(booking)) return json({ matched: 0, sent: 0, skipped: "booking" });
+
+  // Toutes les echeances du booking (pour deposit / final + le montant groupe)
+  const { data: sibsData } = await admin.from("payment_installments")
+    .select("id,amount_due,status,category,is_cash,stripe_session_id")
+    .eq("booking_id", inst.booking_id);
+  const sibs = (sibsData ?? []) as Array<Inst & { stripe_session_id: string | null }>;
+  // deposit = premier paiement rental du booking (aucun autre rental paye avant)
+  const isDeposit = inst.category === "rental" &&
+    !sibs.some((s) => s.id !== inst.id && s.category === "rental" && s.status === "paid");
+  // final = apres ce paiement, tout le sejour est solde (hors lignes discount)
+  const isFinal = sibs.filter((s) => s.category !== "discount").every((s) => s.status === "paid");
+  // Montant affiche : le groupe de la session Stripe (paiement groupe possible)
+  const group = inst.stripe_session_id
+    ? sibs.filter((s) => s.stripe_session_id === inst.stripe_session_id)
+    : [inst];
+  const groupAmount = group.reduce((s, g) => s + Math.abs(Number(g.amount_due || 0)), 0);
+
+  const { data: rulesData } = await admin.from("email_rules")
+    .select("*")
+    .eq("enabled", true)
+    .eq("trigger", "payment_received")
+    .order("created_at", { ascending: true });
+  const candidates = ((rulesData ?? []) as Rule[])
+    .filter((r) => !r.event_type_filter || r.event_type_filter === booking.event_type)
+    .filter((r) =>
+      r.payment_filter === "deposit" ? isDeposit
+      : r.payment_filter === "final" ? isFinal
+      : true)
+    // Specificite : deposit/final avant any
+    .sort((a, b) =>
+      (a.payment_filter === "any" ? 1 : 0) - (b.payment_filter === "any" ? 1 : 0));
+  if (!candidates.length) return json({ matched: 0, sent: 0 });
+
+  const rule = candidates[0];
+  const dedupKey = `${rule.id}|${booking.id}|${inst.id}`;
+  const { data: dup } = await admin.from("email_rule_log")
+    .select("id").eq("dedup_key", dedupKey).eq("status", "sent").maybeSingle();
+  if (dup) return json({ matched: 1, sent: 0, deduped: true, rule_name: rule.name });
+
+  // Facture en piece jointe si disponible (le webhook l'a generee juste avant)
+  const attachments: { filename: string; content: string }[] = [];
+  if (inst.invoice_file_url) {
+    const dl = await admin.storage.from("invoices").download(inst.invoice_file_url);
+    if (!dl.error && dl.data) {
+      const buf = new Uint8Array(await dl.data.arrayBuffer());
+      let bin = "";
+      const chunk = 0x8000;
+      for (let i = 0; i < buf.length; i += chunk) {
+        bin += String.fromCharCode(...buf.subarray(i, i + chunk));
+      }
+      attachments.push({
+        filename: inst.invoice_file_name ?? `${(inst.invoice_number ?? "invoice").replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`,
+        content: btoa(bin),
+      });
+    } else {
+      console.error(`[email-rules] invoice download failed: ${dl.error?.message}`);
+    }
+  }
+
+  // {{amount}} = montant du groupe de paiement (comme l'email par defaut)
+  const m: Match = {
+    rule,
+    booking,
+    installment: { ...inst, amount_due: groupAmount },
+    dedupKey,
+  };
+  const res = await sendMatch(m, attachments);
+  console.log(`[email-rules] payment_received ${inst.id}: rule "${rule.name}" ${res.sent ? "sent" : `error ${res.error}`}`);
+  return json({ matched: 1, sent: res.sent ? 1 : 0, rule_name: rule.name, error: res.error ?? null, attachment: attachments[0]?.filename ?? null });
 }
 
 serve(async (req) => {
@@ -322,7 +451,7 @@ serve(async (req) => {
           .order("check_in_date", { ascending: false })
           .limit(20);
         const b = ((bks ?? []) as Booking[]).find((x) => !x.is_test && x.email) ?? null;
-        if (b && (rule as Rule).trigger === "due_date") {
+        if (b && ((rule as Rule).trigger === "due_date" || (rule as Rule).trigger === "payment_received")) {
           const { data: insts } = await admin.from("payment_installments")
             .select("id,booking_id,label,amount_due,due_date,status,is_cash,category")
             .eq("booking_id", b.id)
@@ -350,7 +479,7 @@ serve(async (req) => {
       const subject = `[TEST] ${renderTemplate(m.rule.subject, m)}`;
       const bodyText = renderTemplate(m.rule.body, m);
       const cta = await ctaHtml(m.rule, m.booking, m.installment);
-      const html = emailShell(`${paras(bodyText)}\n${cta}`);
+      const html = emailShell(renderHtmlBody(bodyText, cta));
       const sent = await resend.emails.send({
         from: FROM_EMAIL, to: [body.test.to], reply_to: REPLY_TO, subject, html,
       });
@@ -358,10 +487,15 @@ serve(async (req) => {
       return json({ sent: true, to: body.test.to, subject, sample_booking: m.booking.retreat_name ?? m.booking.email });
     }
 
-    // ---- PREVIEW / RUN : correspondances du jour pour toutes les regles actives
+    // ---- EVENT payment_received : confirmation personnalisee (webhook Stripe)
+    if (body.event?.type === "payment_received") {
+      return await handlePaymentReceived(body.event.installment_id);
+    }
+
+    // ---- PREVIEW / RUN : correspondances du jour, TOUTES les regles (l'aperçu
+    // montre aussi ce que feraient les regles desactivees ; seul le RUN filtre).
     const { data: rulesData } = await admin.from("email_rules")
       .select("*")
-      .eq("enabled", true)
       .order("created_at", { ascending: true });
     const rules = (rulesData ?? []) as Rule[];
 
@@ -378,22 +512,25 @@ serve(async (req) => {
         matches: allMatches.map((m) => ({
           rule_id: m.rule.id,
           rule_name: m.rule.name,
+          rule_enabled: m.rule.enabled,
           booking_id: m.booking.id,
           recipient: m.booking.email,
           label: m.booking.retreat_name || [m.booking.first_name, m.booking.last_name].filter(Boolean).join(" ") || m.booking.email,
           installment_id: m.installment?.id ?? null,
           installment_label: m.installment?.label ?? null,
           amount: m.installment ? Number(m.installment.amount_due || 0) : null,
+          due_date: m.installment?.due_date ?? null,
           subject: renderTemplate(m.rule.subject, m),
           already_sent: sentKeys.has(m.dedupKey),
         })),
       });
     }
 
-    // ---- RUN
+    // ---- RUN (regles actives uniquement)
     let sentCount = 0, skipped = 0, errors = 0;
     const details: unknown[] = [];
     for (const m of allMatches) {
+      if (!m.rule.enabled) continue;
       if (sentKeys.has(m.dedupKey)) { skipped++; continue; }
       const res = await sendMatch(m);
       if (res.sent) sentCount++; else errors++;
