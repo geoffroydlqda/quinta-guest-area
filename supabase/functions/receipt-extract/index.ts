@@ -176,25 +176,43 @@ async function runMatching(docId: string, ex: Extract) {
     .eq("kind", "expense").lt("amount", 0);
   if (ex.doc_date) {
     const d = new Date(`${ex.doc_date}T12:00:00`);
-    const lo = new Date(d.getTime() - 5 * 86400000).toISOString().slice(0, 10);
-    const hi = new Date(d.getTime() + 5 * 86400000).toISOString().slice(0, 10);
+    const lo = new Date(d.getTime() - 10 * 86400000).toISOString().slice(0, 10);
+    const hi = new Date(d.getTime() + 10 * 86400000).toISOString().slice(0, 10);
     q = q.gte("date", lo).lte("date", hi);
   } else {
     q = q.gte("date", new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10));
   }
   const { data: txs } = await q;
   const vendorTokens = (ex.vendor ?? "").toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
-  const cands = (txs ?? [])
+  const hayOf = (t: { description?: string | null; payer?: string | null }) =>
+    `${t.description ?? ""} ${t.payer ?? ""}`.toLowerCase();
+  let cands = (txs ?? [])
     .filter((t) => ex.total_ttc != null && Math.abs(Math.abs(Number(t.amount)) - ex.total_ttc) <= 0.02)
     .map((t) => {
-      const hay = `${t.description ?? ""} ${t.payer ?? ""}`.toLowerCase();
-      const vendorHit = vendorTokens.some((tok) => hay.includes(tok));
+      const vendorHit = vendorTokens.some((tok) => hayOf(t).includes(tok));
       const dayDiff = ex.doc_date ? Math.abs((new Date(t.date).getTime() - new Date(ex.doc_date).getTime()) / 86400000) : 99;
       const score = 50 + (vendorHit ? 30 : 0) + Math.max(0, 20 - dayDiff * 4) + (linkedIds.has(t.id) ? -40 : 0);
       return { tx_id: t.id, date: t.date, description: t.description, amount: t.amount, category: t.category, score: Math.round(score) };
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
+
+  // Repli fournisseur (24 août 2026) : aucun montant exact (paiement groupé
+  // facture + caution, acompte, virement partiel — cas Alugue Aqui) -> on
+  // propose quand même les transactions du même fournisseur dans la fenêtre,
+  // en 'review'. Score plafonné < 60 : JAMAIS de lien automatique sans
+  // montant exact, c'est l'admin qui confirme d'un clic.
+  if (!cands.length && vendorTokens.length && ex.total_ttc != null) {
+    cands = (txs ?? [])
+      .filter((t) => vendorTokens.some((tok) => hayOf(t).includes(tok)))
+      .map((t) => {
+        const dayDiff = ex.doc_date ? Math.abs((new Date(t.date).getTime() - new Date(ex.doc_date).getTime()) / 86400000) : 99;
+        const score = 40 + Math.max(0, 15 - dayDiff * 1.5) + (linkedIds.has(t.id) ? -15 : 0);
+        return { tx_id: t.id, date: t.date, description: t.description, amount: t.amount, category: t.category, score: Math.round(score) };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+  }
 
   const best = cands[0];
   const autoLink = best && best.score >= 60 && (!cands[1] || cands[1].score <= best.score - 15);
