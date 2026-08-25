@@ -2714,21 +2714,26 @@ const EMAIL_TYPE_META: Record<string, { label: string; cls: string }> = {
   payment_upcoming: { label: "Auto reminder — upcoming", cls: "bg-muted text-foreground border-border" },
   payment_overdue: { label: "Auto reminder — overdue", cls: "bg-red-100 text-red-800 border-red-200" },
   payment_manual: { label: "Manual reminder", cls: "bg-muted text-foreground border-border" },
+  auto_rule: { label: "Automated email", cls: "bg-[#EEF1E4] text-[#57624A] border-[#D7DFC3]" },
+};
+
+type EmailLogRow = {
+  id: string; type: string; recipient: string | null; subject: string | null;
+  status: string | null; error: string | null; created_at: string; body_html: string | null;
 };
 
 function EmailLogFeed({ bookingId, email }: { bookingId: string | null; email: string | null }) {
-  const [rows, setRows] = useState<Array<{
-    id: string; type: string; recipient: string | null; subject: string | null;
-    status: string | null; error: string | null; created_at: string;
-  }>>([]);
+  const [rows, setRows] = useState<EmailLogRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // Email ouvert dans la visionneuse (clic sur une ligne du feed)
+  const [openedEmail, setOpenedEmail] = useState<EmailLogRow | null>(null);
 
   useEffect(() => {
     if (!bookingId && !email) { setRows([]); setLoading(false); return; }
     (async () => {
       setLoading(true);
-      const cols = "id,type,recipient,subject,status,error,created_at";
-      const [byBooking, byEmail] = await Promise.all([
+      const cols = "id,type,recipient,subject,status,error,created_at,body_html";
+      const [byBooking, byEmail, byRules] = await Promise.all([
         bookingId
           ? supabase.from("reminder_log").select(cols).eq("booking_id", bookingId)
               .order("created_at", { ascending: false }).limit(200)
@@ -2738,8 +2743,14 @@ function EmailLogFeed({ bookingId, email }: { bookingId: string | null; email: s
           ? supabase.from("reminder_log").select(cols).is("booking_id", null).eq("recipient", email)
               .order("created_at", { ascending: false }).limit(50)
           : Promise.resolve({ data: [] as any[] }),
+        // Emails automatiques (règles de l'onglet Emails)
+        bookingId
+          ? supabase.from("email_rule_log").select("id,recipient,subject,status,error,created_at,body_html").eq("booking_id", bookingId)
+              .order("created_at", { ascending: false }).limit(100)
+          : Promise.resolve({ data: [] as any[] }),
       ]);
-      const merged = ([...(byBooking.data ?? []), ...(byEmail.data ?? [])] as any[]);
+      const ruleRows = ((byRules.data ?? []) as any[]).map((r) => ({ ...r, type: "auto_rule" }));
+      const merged = ([...(byBooking.data ?? []), ...(byEmail.data ?? []), ...ruleRows] as any[]);
       // Un envoi groupé écrit une ligne par échéance -> une seule entrée dans le feed
       const seen = new Set<string>();
       const deduped = merged.filter((r) => {
@@ -2770,7 +2781,13 @@ function EmailLogFeed({ bookingId, email }: { bookingId: string | null; email: s
             const meta = EMAIL_TYPE_META[r.type] ?? { label: r.type, cls: "bg-muted text-foreground border-border" };
             const failed = r.status === "error";
             return (
-              <div key={r.id} className="rounded-lg border border-border p-3 text-sm">
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => setOpenedEmail(r)}
+                className="w-full text-left rounded-lg border border-border p-3 text-sm hover:bg-muted/50 transition-colors cursor-pointer"
+                title="Open this email"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-medium ${meta.cls}`}>
@@ -2791,9 +2808,50 @@ function EmailLogFeed({ bookingId, email }: { bookingId: string | null; email: s
                 {failed && r.error && (
                   <div className="mt-1 text-xs text-red-700 break-words">{r.error}</div>
                 )}
-              </div>
+              </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Visionneuse d'email : le HTML est rendu dans une iframe sandboxée */}
+      {openedEmail && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setOpenedEmail(null)}
+        >
+          <div
+            className="bg-card rounded-2xl border border-border shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-border flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-semibold truncate">{openedEmail.subject || "(no subject)"}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  To {openedEmail.recipient || "—"} · {fmtTimestamp(openedEmail.created_at)}
+                </div>
+              </div>
+              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={() => setOpenedEmail(null)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-hidden min-h-[340px]">
+              {openedEmail.body_html ? (
+                <iframe
+                  title="Email content"
+                  sandbox=""
+                  srcDoc={openedEmail.body_html}
+                  className="w-full h-[60vh] bg-white"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground p-6">
+                  The content of this email wasn't stored — only emails sent from 25 August 2026
+                  onwards keep a copy of their body. Subject and recipient above are all we have
+                  for this one.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </section>

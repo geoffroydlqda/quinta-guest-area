@@ -37,10 +37,15 @@ const MOLONI_API = "https://api.molonion.pt/v1";
 const MEDIA_BASE = "https://mediaapi.moloni.org";
 
 const BodySchema = z.object({
-  action: z.enum(["gql", "generate", "pdf"]),
+  action: z.enum(["gql", "generate", "pdf", "attach_doc"]),
   query: z.string().max(20000).optional(),
   variables: z.record(z.unknown()).optional(),
   installment_id: z.string().uuid().optional(),
+  // attach_doc : rapatrie le PDF d'un document Moloni (nota de credito,
+  // fatura...) dans purchase_docs, lie a une fin_transaction (25 aout 2026).
+  document_id: z.number().int().positive().optional(),
+  tx_id: z.string().uuid().optional(),
+  file_label: z.string().max(120).optional(),
 });
 
 async function moloniKey(): Promise<string> {
@@ -461,6 +466,61 @@ async function attachPdfFor(installmentId: string) {
   return { document_id: inst.moloni_document_id, pdf_attached: true };
 }
 
+// Token PDF pour n'importe quel type de document (nota de credito, fatura,
+// fatura-recibo) — on essaie les trois familles de requetes.
+async function anyDocPdfToken(documentId: number): Promise<{ token?: string; path?: string; filename?: string } | null> {
+  const queries = [
+    ["creditNoteGetPDF", "creditNoteGetPDFToken"],
+    ["invoiceGetPDF", "invoiceGetPDFToken"],
+    ["invoiceReceiptGetPDF", "invoiceReceiptGetPDFToken"],
+  ];
+  const cfg = await moloniCfg();
+  for (const [genQ] of queries) {
+    try {
+      await gql(`mutation($c: Int!, $d: Int!) { ${genQ}(companyId: $c, documentId: $d) }`, { c: cfg.company_id, d: documentId });
+    } catch (_e) { /* mauvais type de document — normal */ }
+  }
+  for (let i = 0; i < 8; i++) {
+    await new Promise((r) => setTimeout(r, 2500));
+    for (const [, tokQ] of queries) {
+      try {
+        const t = await gql(`query($d: Int!) { ${tokQ}(documentId: $d) { data { token path filename } errors { msg } } }`, { d: documentId });
+        const tok = t?.data?.[tokQ]?.data ?? null;
+        if (tok?.path && tok?.token) return tok;
+      } catch (_e) { /* type suivant */ }
+    }
+  }
+  return null;
+}
+
+// Rapatrie le PDF d'un document Moloni dans purchase_docs, lie a une transaction.
+async function attachDocToTx(documentId: number, txId: string, label?: string) {
+  const admin = _adminAuthClient;
+  const { data: tx } = await admin.from("fin_transactions").select("id").eq("id", txId).maybeSingle();
+  if (!tx) throw new Error("Transaction not found");
+  const storagePath = `moloni/${documentId}.pdf`;
+  const { data: existing } = await admin.from("purchase_docs").select("id,tx_id").eq("storage_path", storagePath).maybeSingle();
+  if (existing) {
+    if (existing.tx_id !== txId) {
+      await admin.from("purchase_docs").update({ tx_id: txId, status: "matched", updated_at: new Date().toISOString() }).eq("id", existing.id);
+    }
+    return { doc_id: existing.id, storage_path: storagePath, already_ingested: true };
+  }
+  const tok = await anyDocPdfToken(documentId);
+  if (!tok?.path || !tok?.token) throw new Error("PDF not ready — retry attach_doc");
+  const pdfRes = await fetch(`${MEDIA_BASE}${tok.path}?jwt=${tok.token}`);
+  if (!pdfRes.ok) throw new Error(`mediaapi HTTP ${pdfRes.status}`);
+  const bytes = new Uint8Array(await pdfRes.arrayBuffer());
+  const niceName = (label || tok.filename || `moloni_${documentId}`).replace(/[^A-Za-z0-9._-]/g, "_").replace(/\.pdf$/i, "") + ".pdf";
+  const up = await admin.storage.from("purchase-docs").upload(storagePath, bytes, { contentType: "application/pdf", upsert: true });
+  if (up.error) throw new Error(up.error.message);
+  const { data: row, error: insErr } = await admin.from("purchase_docs")
+    .insert({ storage_path: storagePath, file_name: niceName, mime_type: "application/pdf", status: "matched", tx_id: txId })
+    .select("id").single();
+  if (insErr) throw new Error(insErr.message);
+  return { doc_id: row.id, storage_path: storagePath, file_name: niceName, linked_tx: txId };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -493,6 +553,11 @@ serve(async (req) => {
       if (internalCall) return json({ error: "gql is admin-only" }, 403);
       if (!query) return json({ error: "query required" }, 400);
       return json(await gql(query, variables as Record<string, unknown> | undefined));
+    }
+
+    if (action === "attach_doc") {
+      if (!parsed.data.document_id || !parsed.data.tx_id) return json({ error: "document_id and tx_id required" }, 400);
+      return json(await attachDocToTx(parsed.data.document_id, parsed.data.tx_id, parsed.data.file_label));
     }
 
     if (!installment_id) return json({ error: "installment_id required" }, 400);

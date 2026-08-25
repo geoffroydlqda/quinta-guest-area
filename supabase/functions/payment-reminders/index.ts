@@ -172,20 +172,21 @@ serve(async (req) => {
         ? `Payment follow-up — ${c.label} — Quinta do Amor`
         : `Payment reminder — ${c.label} — Quinta do Amor`;
       try {
+        const manualHtml = reminderHtml(c);
         const res = await resend.emails.send({
           from: FROM_EMAIL, to: [c.recipient], reply_to: ADMIN_EMAIL,
-          subject, html: reminderHtml(c),
+          subject, html: manualHtml,
         });
         if ((res as any)?.error) throw new Error(JSON.stringify((res as any).error));
         await admin.from("reminder_log").insert({
           type: "payment_manual", installment_id: c.installment_id, booking_id: c.booking_id,
-          recipient: c.recipient, subject, status: "sent",
+          recipient: c.recipient, subject, status: "sent", body_html: manualHtml,
         });
         return json({ mode: "manual", sent: 1, recipient: c.recipient });
       } catch (e) {
         await admin.from("reminder_log").insert({
           type: "payment_manual", installment_id: c.installment_id, booking_id: c.booking_id,
-          recipient: c.recipient, subject, status: "error", error: String(e).slice(0, 500),
+          recipient: c.recipient, subject, status: "error", error: String(e).slice(0, 500), body_html: reminderHtml(c),
         });
         return json({ error: `Send failed: ${String(e).slice(0, 200)}` }, 500);
       }
@@ -269,17 +270,18 @@ serve(async (req) => {
         ? `Payment follow-up — ${c.label} — Quinta do Amor`
         : `Payment reminder — ${c.label} — Quinta do Amor`;
       try {
+        const autoHtml = reminderHtml(c);
         const res = await resend.emails.send({
           from: FROM_EMAIL,
           to: [c.recipient],
           reply_to: ADMIN_EMAIL,
           subject,
-          html: reminderHtml(c),
+          html: autoHtml,
         });
         if ((res as any)?.error) throw new Error(JSON.stringify((res as any).error));
         await admin.from("reminder_log").insert({
           type: c.type, installment_id: c.installment_id, booking_id: c.booking_id,
-          recipient: c.recipient, subject, status: "sent",
+          recipient: c.recipient, subject, status: "sent", body_html: autoHtml,
         });
         sent.push(`${c.type} ${c.recipient} (${c.label})`);
       } catch (e) {

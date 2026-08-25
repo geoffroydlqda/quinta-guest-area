@@ -252,7 +252,7 @@ ${paras(parsed.data.body_bottom ?? "")}
       const { error: logErr } = await admin.from("reminder_log").insert(insts.map((i) => ({
         type: kind === "request" ? "payment_request" : "payment_receipt",
         installment_id: i.id, booking_id: booking.id, recipient: to, subject,
-        status: "error", error: String(sent.error!.message ?? sent.error),
+        status: "error", error: String(sent.error!.message ?? sent.error), body_html: html,
       })));
       if (logErr) console.error("reminder_log insert failed:", logErr.message);
       return json({ error: String(sent.error.message ?? sent.error) }, 502);
@@ -264,7 +264,7 @@ ${paras(parsed.data.body_bottom ?? "")}
     const { error: logErr } = await admin.from("reminder_log").insert(insts.map((i) => ({
       type: kind === "request" ? "payment_request" : "payment_receipt",
       installment_id: i.id, booking_id: booking.id, recipient: to, subject,
-      status: "sent", error: null,
+      status: "sent", error: null, body_html: html,
     })));
     if (logErr) console.error("reminder_log insert failed (email WAS sent):", logErr.message);
 

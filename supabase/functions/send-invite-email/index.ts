@@ -127,13 +127,13 @@ serve(async (req) => {
     if ((res as any)?.error) {
       await admin.from("reminder_log").insert({
         type: "invitation", booking_id, recipient: booking.email, subject,
-        status: "error", error: JSON.stringify((res as any).error).slice(0, 500),
+        status: "error", error: JSON.stringify((res as any).error).slice(0, 500), body_html: html,
       });
       return json({ error: "Email send failed", detail: (res as any).error }, 502);
     }
 
     await admin.from("reminder_log").insert({
-      type: "invitation", booking_id, recipient: booking.email, subject, status: "sent",
+      type: "invitation", booking_id, recipient: booking.email, subject, status: "sent", body_html: html,
     });
 
     return json({ ok: true, sent_to: booking.email });

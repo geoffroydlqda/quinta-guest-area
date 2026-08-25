@@ -385,6 +385,7 @@ export type Database = {
       }
       reminder_log: {
         Row: {
+          body_html: string | null
           booking_id: string | null
           created_at: string
           error: string | null
@@ -396,6 +397,7 @@ export type Database = {
           type: string
         }
         Insert: {
+          body_html?: string | null
           booking_id?: string | null
           created_at?: string
           error?: string | null
@@ -407,6 +409,7 @@ export type Database = {
           type: string
         }
         Update: {
+          body_html?: string | null
           booking_id?: string | null
           created_at?: string
           error?: string | null
@@ -669,6 +672,7 @@ export type Database = {
       }
       email_rule_log: {
         Row: {
+          body_html: string | null
           booking_id: string | null
           created_at: string
           dedup_key: string
@@ -681,6 +685,7 @@ export type Database = {
           subject: string | null
         }
         Insert: {
+          body_html?: string | null
           booking_id?: string | null
           created_at?: string
           dedup_key: string
@@ -693,6 +698,7 @@ export type Database = {
           subject?: string | null
         }
         Update: {
+          body_html?: string | null
           booking_id?: string | null
           created_at?: string
           dedup_key?: string

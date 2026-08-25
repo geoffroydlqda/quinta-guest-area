@@ -310,6 +310,7 @@ async function sendMatch(
     subject,
     status: errMsg ? "error" : "sent",
     error: errMsg,
+    body_html: html,
     dedup_key: errMsg ? `${m.dedupKey}|err:${Date.now()}` : m.dedupKey,
   });
   if (logErr) console.error("[email-rules] log insert failed:", logErr.message);
