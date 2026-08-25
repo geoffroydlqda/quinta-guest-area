@@ -162,7 +162,11 @@ function skipBooking(b: Booking): boolean {
   return false;
 }
 
-function renderTemplate(tpl: string, m: { booking: Booking; installment: Inst | null }): string {
+function renderTemplate(
+  tpl: string,
+  m: { booking: Booking; installment: Inst | null },
+  extra?: Record<string, string>
+): string {
   const b = m.booking;
   const i = m.installment;
   const first = (b.first_name ?? "").trim() || "there";
@@ -176,8 +180,29 @@ function renderTemplate(tpl: string, m: { booking: Booking; installment: Inst | 
     amount: i ? fmtEur(Number(i.amount_due || 0)) : "",
     label: i?.label ?? "",
     due_date: i ? fmtDate(i.due_date) : "",
+    ...(extra ?? {}),
   };
   return tpl.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (_, k: string) => vars[k.toLowerCase()] ?? "");
+}
+
+// Variables calculees au niveau du booking : prochaine echeance impayee
+// ({{next_due_date}}, {{next_amount}}) et solde restant hors remises
+// ({{balance}}). Vides si tout est regle.
+async function bookingPaymentVars(bookingId: string, excludeInstId?: string): Promise<Record<string, string>> {
+  const { data } = await admin.from("payment_installments")
+    .select("id,booking_id,label,amount_due,due_date,status,is_cash,category")
+    .eq("booking_id", bookingId);
+  const rows = ((data ?? []) as Inst[]).filter((r) => r.category !== "discount");
+  const unpaid = rows.filter((r) => r.status !== "paid" && r.id !== excludeInstId);
+  const balance = unpaid.reduce((s, r) => s + Number(r.amount_due || 0), 0);
+  const next = unpaid
+    .filter((r) => !r.is_cash && r.due_date)
+    .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))[0];
+  return {
+    next_due_date: next ? fmtDate(next.due_date) : "",
+    next_amount: next ? fmtEur(Number(next.amount_due || 0)) : "",
+    balance: balance > 0 ? fmtEur(balance) : "",
+  };
 }
 
 // Bouton CTA optionnel. Pour "pay" : lien signe vers l'echeance de la regle
@@ -287,8 +312,9 @@ async function sendMatch(
   m: Match,
   attachments?: { filename: string; content: string }[]
 ): Promise<{ sent: boolean; error?: string }> {
-  const subject = renderTemplate(m.rule.subject, m);
-  const bodyText = renderTemplate(m.rule.body, m);
+  const extra = await bookingPaymentVars(m.booking.id).catch(() => ({}));
+  const subject = renderTemplate(m.rule.subject, m, extra);
+  const bodyText = renderTemplate(m.rule.body, m, extra);
   const cta = await ctaHtml(m.rule, m.booking, m.installment);
   const html = emailShell(renderHtmlBody(bodyText, cta));
   const to = m.booking.email!;
@@ -477,8 +503,11 @@ serve(async (req) => {
         };
       }
       const m: Match = { rule: rule as Rule, ...sample, dedupKey: "" };
-      const subject = `[TEST] ${renderTemplate(m.rule.subject, m)}`;
-      const bodyText = renderTemplate(m.rule.body, m);
+      const extra = m.booking.id.startsWith("0000")
+        ? { next_due_date: fmtDate(addDays(today, 30)), next_amount: fmtEur(4200), balance: fmtEur(4200) }
+        : await bookingPaymentVars(m.booking.id).catch(() => ({}));
+      const subject = `[TEST] ${renderTemplate(m.rule.subject, m, extra)}`;
+      const bodyText = renderTemplate(m.rule.body, m, extra);
       const cta = await ctaHtml(m.rule, m.booking, m.installment);
       const html = emailShell(renderHtmlBody(bodyText, cta));
       const sent = await resend.emails.send({

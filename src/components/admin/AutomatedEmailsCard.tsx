@@ -71,7 +71,7 @@ const TRIGGER_LABEL: Record<string, string> = {
 const EVENT_TYPES = ['retreat', 'wedding', 'other', 'day_retreat'];
 
 const VARIABLES_HINT =
-  '{{first_name}} {{name}} {{retreat_name}} {{check_in_date}} {{check_out_date}} {{amount}} {{label}} {{due_date}}';
+  '{{first_name}} {{name}} {{retreat_name}} {{check_in_date}} {{check_out_date}} {{amount}} {{label}} {{due_date}} {{next_due_date}} {{next_amount}} {{balance}}';
 
 const PAYMENT_FILTER_LABEL: Record<string, string> = {
   any: 'any payment',
