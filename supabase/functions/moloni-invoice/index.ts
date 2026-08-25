@@ -394,11 +394,20 @@ async function attachPdf(
   fallbackName: string,
 ): Promise<{ stored: boolean; error?: string }> {
   const admin = _adminAuthClient;
+  // Le document peut être une fatura-recibo (générée par l'app) OU une fatura
+  // simple (série Invoices, liée a posteriori — 25 août 2026) : on tente les
+  // deux familles de requêtes, la mauvaise échoue silencieusement.
   try {
     await gql(`mutation($c: Int!, $d: Int!) { invoiceReceiptGetPDF(companyId: $c, documentId: $d) }`,
       { c: cfg.company_id, d: documentId });
   } catch (e) {
     console.error("invoiceReceiptGetPDF:", e); // la génération peut déjà être en file
+  }
+  try {
+    await gql(`mutation($c: Int!, $d: Int!) { invoiceGetPDF(companyId: $c, documentId: $d) }`,
+      { c: cfg.company_id, d: documentId });
+  } catch (e) {
+    console.error("invoiceGetPDF:", e);
   }
   let tok: { token?: string; path?: string; filename?: string } | null = null;
   for (let i = 0; i < 10 && !tok?.path; i++) {
@@ -409,6 +418,15 @@ async function attachPdf(
       tok = t?.data?.invoiceReceiptGetPDFToken?.data ?? null;
     } catch (e) {
       console.error("invoiceReceiptGetPDFToken:", e);
+    }
+    if (!tok?.path) {
+      try {
+        const t = await gql(`query($d: Int!) { invoiceGetPDFToken(documentId: $d) { data { token path filename } errors { msg } } }`,
+          { d: documentId });
+        tok = t?.data?.invoiceGetPDFToken?.data ?? null;
+      } catch (e) {
+        console.error("invoiceGetPDFToken:", e);
+      }
     }
   }
   if (!tok?.path || !tok?.token) return { stored: false, error: "PDF not ready after ~25s — retry with action 'pdf'" };
