@@ -58,6 +58,33 @@ function fmtDate(d: string | null): string {
   return new Date(y, m - 1, day).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+// En-tête de colonne triable (Due date / Paid on) : clic sur la colonne active
+// = inverse le sens ; clic sur l'autre colonne = trie dessus (croissant d'abord).
+function SortHeader({
+  label, col, sort, onSort,
+}: {
+  label: string;
+  col: "due" | "paid";
+  sort: { key: "due" | "paid"; desc: boolean };
+  onSort: (s: { key: "due" | "paid"; desc: boolean }) => void;
+}) {
+  const active = sort.key === col;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(active ? { key: col, desc: !sort.desc } : { key: col, desc: false })}
+      className={`inline-flex items-center gap-1 hover:text-foreground ${active ? "text-foreground" : ""}`}
+      title={
+        active
+          ? (sort.desc ? "Most recent first — click for oldest first" : "Oldest first — click for most recent first")
+          : `Sort by ${label.toLowerCase()}`
+      }
+    >
+      {label} <span aria-hidden className="text-xs">{active ? (sort.desc ? "↓" : "↑") : "↕"}</span>
+    </button>
+  );
+}
+
 const STATUS_BADGE: Record<Bucket, string> = {
   paid: "bg-green-100 text-green-800 border-green-300",
   overdue: "bg-red-100 text-red-800 border-red-300",
@@ -78,7 +105,9 @@ export function PaymentsPage({
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Bucket>("all");
-  const [sortDesc, setSortDesc] = useState(false);
+  // Tri du tableau : par due date (défaut, croissant) ou par paid on —
+  // cliquer l'en-tête actif inverse le sens, cliquer l'autre en-tête change de colonne.
+  const [sort, setSort] = useState<{ key: "due" | "paid"; desc: boolean }>({ key: "due", desc: false });
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [catFilter, setCatFilter] = useState<"all" | "rental" | "catering" | "extra" | "discount">("all");
   const [lastReminder, setLastReminder] = useState<Map<string, string>>(new Map());
@@ -179,17 +208,19 @@ export function PaymentsPage({
       if (s && !r.name.toLowerCase().includes(s) && !r.booking.email.toLowerCase().includes(s)) return false;
       return true;
     });
-    // Ordre par due date : croissant (défaut) ou plus récent d'abord —
-    // les échéances sans date restent en bas dans les deux sens.
-    if (!sortDesc) return filtered;
+    // Ordre par due date ou paid on, croissant ou décroissant — les lignes
+    // sans date (échéances non datées / non payées) restent en bas dans les deux sens.
+    if (sort.key === "due" && !sort.desc) return filtered; // ordre de base d'allRows
+    const dateOf = (r: Row) =>
+      sort.key === "due" ? r.inst.due_date : (r.bucket === "paid" ? r.inst.paid_on : null);
     return [...filtered].sort((a, b) => {
-      const da = a.inst.due_date, db = b.inst.due_date;
+      const da = dateOf(a), db = dateOf(b);
       if (!da && !db) return 0;
       if (!da) return 1;
       if (!db) return -1;
-      return db.localeCompare(da);
+      return sort.desc ? db.localeCompare(da) : da.localeCompare(db);
     });
-  }, [allRows, search, statusFilter, yearFilter, catFilter, sortDesc]);
+  }, [allRows, search, statusFilter, yearFilter, catFilter, sort]);
 
   const totals = useMemo(() => {
     let total = 0, totalHt = 0, paid = 0, paidCash = 0, paidBank = 0, overdue = 0;
@@ -423,19 +454,14 @@ export function PaymentsPage({
               <th className="px-3 py-2.5 font-medium">Event</th>
               <th className="px-3 py-2.5 font-medium">Payment</th>
               <th className="px-3 py-2.5 font-medium">
-                <button
-                  type="button"
-                  onClick={() => setSortDesc((v) => !v)}
-                  className="inline-flex items-center gap-1 hover:text-foreground"
-                  title={sortDesc ? "Most recent first — click for oldest first" : "Oldest first — click for most recent first"}
-                >
-                  Due date <span aria-hidden className="text-xs">{sortDesc ? "↓" : "↑"}</span>
-                </button>
+                <SortHeader label="Due date" col="due" sort={sort} onSort={setSort} />
               </th>
               <th className="px-3 py-2.5 font-medium text-right">Incl. VAT</th>
               <th className="px-3 py-2.5 font-medium text-right">Excl. VAT</th>
               <th className="px-3 py-2.5 font-medium">Status</th>
-              <th className="px-3 py-2.5 font-medium">Paid on</th>
+              <th className="px-3 py-2.5 font-medium">
+                <SortHeader label="Paid on" col="paid" sort={sort} onSort={setSort} />
+              </th>
               <th className="px-3 py-2.5 font-medium">Reminder</th>
               <th className="px-3 py-2.5 font-medium">Invoice</th>
               <th className="px-3 py-2.5 font-medium text-center">Paid</th>
