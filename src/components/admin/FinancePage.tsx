@@ -22,7 +22,7 @@ import { EventMarginsTab } from "@/components/admin/EventMarginsTab";
 export const FIN_CATEGORIES: { group: string; items: string[] }[] = [
   { group: "Core team — fixed payroll", items: ["Management - Geo", "Management - Loïs", "Logistics - Luis"] },
   { group: "Property operations & maintenance", items: [
-    "Cleaning (out of season)", "Cleaning (in season)", "Equipment & furniture", "Furniture maintenance",
+    "Car maintenance", "Cleaning (out of season)", "Cleaning (in season)", "Equipment & furniture", "Furniture maintenance",
     "Gardening (contract)", "Gardening (seasonal)", "General maintenance", "Pool maintenance",
     "Property operations & supplies",
   ]},

@@ -104,12 +104,27 @@ serve(async (req) => {
     }
 
     const token = await accessToken();
-    const er = await fetch(`${API}/api/1.0/expenses?from=${from}&to=${to}&count=500`, {
+    // body.qs : filtres additionnels (diagnostic, ex. "&state=awaiting_review")
+    const extraQs = typeof body.qs === "string" ? body.qs.replace(/[^A-Za-z0-9_&=-]/g, "") : "";
+    const er = await fetch(`${API}/api/1.0/expenses?from=${from}&to=${to}&count=500${extraQs ? `&${extraQs.replace(/^&/, "")}` : ""}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!er.ok) throw new Error(`expenses ${er.status}: ${(await er.text()).slice(0, 200)}`);
     const expenses = (await er.json()) as RevExpense[];
     const withReceipts = expenses.filter((e) => (e.receipt_ids?.length ?? 0) > 0);
+
+    // { list_all: true } : inventaire brut des expenses de la fenetre (diagnostic)
+    if (body.list_all) {
+      return new Response(JSON.stringify({
+        from, to, count: expenses.length,
+        expenses: expenses.map((e) => ({
+          merchant: e.merchant ?? e.description ?? null,
+          amount: e.spent_amount?.amount ?? null, currency: e.spent_amount?.currency ?? null,
+          date: (e.expense_date ?? "").slice(0, 10), state: e.state, type: e.transaction_type,
+          receipts: e.receipt_ids?.length ?? 0,
+        })),
+      }), { headers: { "Content-Type": "application/json" } });
+    }
 
     // Dédup : reçus déjà importés (chemin revolut/{receipt_id}.*)
     const { data: existing } = await admin.from("purchase_docs").select("storage_path").like("storage_path", "revolut/%");
@@ -117,13 +132,14 @@ serve(async (req) => {
 
     let imported = 0, linked = 0, review = 0, skipped = 0, vatApplied = 0, skippedNoTx = 0;
     const errors: string[] = [];
+    // { debug: true } : detail des recus sautes faute de transaction (diagnostic)
+    const debug = !!body.debug;
+    const debugSkipped: unknown[] = [];
     let processed = 0, hasMore = false;
 
     for (const e of withReceipts) {
       for (const rid of e.receipt_ids ?? []) {
         if (done.has(rid)) { skipped++; continue; }
-        if (processed >= limit) { hasMore = true; break; }
-        processed++;
         try {
           // 1. Rattachement D'ABORD : revapi|{transaction_id}, sinon montant+date.
           // Aucune transaction Quinta correspondante (depense payee depuis Main,
@@ -141,14 +157,32 @@ serve(async (req) => {
             const d = new Date(`${docDate}T12:00:00`);
             const lo = new Date(d.getTime() - 3 * 86400000).toISOString().slice(0, 10);
             const hi = new Date(d.getTime() + 3 * 86400000).toISOString().slice(0, 10);
+            // 'review' inclus (27 aout 2026) : une depense pas encore classee
+            // dans le tool a quand meme droit a son recu (cas Zachary) — le
+            // kind n'est PAS modifie, Geoffroy classe ensuite comme d'habitude.
             const { data: cands } = await admin.from("fin_transactions")
               .select("id,date,description,amount,category")
-              .eq("kind", "expense").lt("amount", 0).gte("date", lo).lte("date", hi);
+              .in("kind", ["expense", "review"]).lt("amount", 0).gte("date", lo).lte("date", hi);
             const hits = (cands ?? []).filter((t) => Math.abs(Math.abs(Number(t.amount)) - amount) <= 0.02);
             if (hits.length === 1) txId = hits[0].id;
             else candidates = hits.slice(0, 5).map((t) => ({ tx_id: t.id, date: t.date, description: t.description, amount: t.amount, category: t.category, score: 55 }));
           }
-          if (!txId && !candidates.length) { skippedNoTx++; done.add(rid); continue; }
+          if (!txId && !candidates.length) {
+            skippedNoTx++;
+            if (debug && debugSkipped.length < 40) {
+              debugSkipped.push({
+                merchant: e.merchant ?? e.description ?? null, amount, currency: e.spent_amount?.currency ?? null,
+                expense_date: docDate, state: e.state, transaction_type: e.transaction_type,
+                transaction_id: e.transaction_id ?? null,
+              });
+            }
+            done.add(rid); continue;
+          }
+          // Le quota `limit` ne compte que les TELECHARGEMENTS (27 aout 2026) :
+          // avant, les recus sans transaction consommaient le quota a chaque
+          // appel sans jamais etre persistes -> le backfill n'avancait plus.
+          if (processed >= limit) { hasMore = true; break; }
+          processed++;
           if (dryRun) { imported++; continue; }
 
           // 2. Téléchargement du reçu
@@ -196,6 +230,7 @@ serve(async (req) => {
       from, to, dry_run: dryRun, expenses_in_window: expenses.length,
       with_receipts: withReceipts.length, imported, linked, review, skipped_already_imported: skipped,
       skipped_no_quinta_tx: skippedNoTx, vat_applied: vatApplied, has_more: hasMore, errors: errors.slice(0, 10),
+      ...(debug ? { debug_skipped: debugSkipped } : {}),
     }), { headers: { "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ error: String((e as Error)?.message ?? e) }), { status: 500 });
