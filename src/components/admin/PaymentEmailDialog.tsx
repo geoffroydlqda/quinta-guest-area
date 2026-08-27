@@ -152,6 +152,28 @@ export function PaymentEmailDialog({
   const [bodyBottom, setBodyBottom] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+
+  // Ouvre le pro forma PDF (celui qui sera joint à l'email) dans un nouvel
+  // onglet, sans rien envoyer — pour vérifier le contenu avant l'envoi.
+  const previewProforma = async () => {
+    setPreviewing(true);
+    try {
+      const payload = insts.length > 1
+        ? { kind: "request", installment_ids: insts.map((i) => i.id), preview_proforma: true }
+        : { kind: "request", installment_id: inst.id, preview_proforma: true };
+      const { data, error } = await supabase.functions.invoke("payment-emails", { body: payload });
+      if (error || data?.error || !data?.proforma) throw new Error(data?.error || error?.message || "No PDF returned");
+      const bytes = Uint8Array.from(atob(data.proforma), (ch) => ch.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      toast({ title: "Preview failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    } finally {
+      setPreviewing(false);
+    }
+  };
   // Pièces jointes libres (demande Geoffroy, 18 août 2026) — en plus de la
   // facture auto sur les confirmations. Encodées en base64 dans le payload.
   const [files, setFiles] = useState<File[]>([]);
@@ -251,6 +273,15 @@ export function PaymentEmailDialog({
                 <div className="mt-1.5 text-[11px] text-muted-foreground">
                   Inserted automatically — opens a fresh Stripe checkout on every click.
                 </div>
+              </div>
+              <div className="flex items-center gap-2 text-xs rounded-lg border border-border bg-muted/40 px-2.5 py-2 text-muted-foreground">
+                <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                <span className="flex-1">Attached automatically: payment details (pro forma PDF)</span>
+                <Button type="button" size="sm" variant="outline" className="h-6 text-[11px] px-2"
+                  onClick={previewProforma} disabled={previewing}>
+                  {previewing ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
+                  Preview PDF
+                </Button>
               </div>
               <Textarea value={bodyBottom} onChange={(e) => setBodyBottom(e.target.value)} rows={8} />
             </>

@@ -22,7 +22,7 @@ import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSi
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 import { PaymentEmailDialog } from "@/components/admin/PaymentEmailDialog";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { calculateFoodCostMulti } from "@/lib/foodPricing";
+import { calculateFoodCostMulti, distributeDailyGuests, getDietTypes } from "@/lib/foodPricing";
 import { calculateTransportationCost, getFixedTripPriceNumeric, getEffectiveTripPrice } from "@/lib/transportationPricing";
 import { CustomPriceEditor } from "@/pages/Admin";
 import { EMPTY_DIET_CONFIG, type DietConfig } from "@/types/guest";
@@ -1558,25 +1558,55 @@ function PaymentSection({ userId }: { userId: string }) {
       }
       const sels = Array.isArray(fp?.selections) ? (fp!.selections as any[]) : [];
       if (sels.length && fp?.diet_config) {
-        const sum = calculateFoodCostMulti(
-          sels, fp.diet_config as DietConfig, b.guest_count ?? 0, b.check_in_date
-        );
-        const MEAL_LABEL: Record<string, string> = {
-          fullBoard: "full board", breakfast: "breakfast", lunch: "lunch", dinner: "dinner",
+        // Détail JOUR PAR JOUR (demande Geoffroy 27 août 2026) : une ligne par
+        // jour et par repas, régimes fusionnés quand le prix unitaire est le
+        // même, sinon une ligne par prix — lisible pour le client sur le pro forma.
+        const dietConfig = fp.diet_config as DietConfig;
+        const guests = b.guest_count ?? 0;
+        const metas = getDietTypes(b.check_in_date);
+        const DIET_SHORT: Record<string, string> = {
+          vegetarian: "vegetarian", meat_dinner: "meat/fish dinner", meat_lunch_dinner: "meat/fish lunch+dinner",
         };
+        const fmtDay = (iso: string) =>
+          parseLocalDate(iso).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
         const lines: ProductLine[] = [];
-        for (const d of sum.dietBreakdown) {
-          for (const [meal, ml] of Object.entries(d.meals)) {
-            if (ml.units > 0 && ml.price > 0) {
+        const sorted = [...sels].filter((s) => s?.date).sort((a, b2) => String(a.date).localeCompare(String(b2.date)));
+        for (const sel of sorted) {
+          const dayGuests = typeof sel.guests_count_day === "number" && sel.guests_count_day >= 0
+            ? sel.guests_count_day : guests;
+          if (dayGuests <= 0) continue;
+          const dist = distributeDailyGuests(dayGuests, dietConfig);
+          const meals: { label: string; priceOf: (m: (typeof metas)[number]) => number }[] = sel.fullBoard
+            ? [{ label: "Full board", priceOf: (m) => m.pricing.fullBoard }]
+            : [
+                sel.breakfast ? { label: "Breakfast", priceOf: (m: (typeof metas)[number]) => m.pricing.breakfast } : null,
+                sel.lunch ? { label: "Lunch", priceOf: (m: (typeof metas)[number]) => m.pricing.lunch } : null,
+                sel.dinner ? { label: "Dinner", priceOf: (m: (typeof metas)[number]) => m.pricing.dinner } : null,
+              ].filter(Boolean) as { label: string; priceOf: (m: (typeof metas)[number]) => number }[];
+          for (const meal of meals) {
+            // Fusionne les régimes qui partagent le même prix unitaire
+            const byPrice = new Map<number, { n: number; diets: string[] }>();
+            for (const meta of metas) {
+              const n = dist[meta.type];
+              if (!n) continue;
+              const p = meal.priceOf(meta);
+              const e = byPrice.get(p) ?? { n: 0, diets: [] };
+              e.n += n; e.diets.push(DIET_SHORT[meta.type] ?? meta.type);
+              byPrice.set(p, e);
+            }
+            const multi = byPrice.size > 1;
+            for (const [price, e] of [...byPrice.entries()].sort((x, y2) => y2[1].n - x[1].n)) {
+              if (price <= 0) continue;
               lines.push({
                 product_id: null,
-                name: `Catering — ${d.label.toLowerCase()} · ${MEAL_LABEL[meal] ?? meal}`,
-                qty: ml.units, unit_price: ml.price, vat: 13,
+                name: `${fmtDay(String(sel.date))} — ${meal.label}${multi ? ` (${e.diets.join(", ")})` : ""}`,
+                qty: e.n, unit_price: price, vat: 13,
               });
             }
           }
         }
-        setFoodSuggestion(lines.length ? { total: sum.grandTotal, lines } : null);
+        const total = Math.round(lines.reduce((s, l) => s + l.qty * l.unit_price, 0) * 100) / 100;
+        setFoodSuggestion(lines.length ? { total, lines } : null);
       } else setFoodSuggestion(null);
 
       // --- Transport : trips contractés au prix effectif (custom > fixe)

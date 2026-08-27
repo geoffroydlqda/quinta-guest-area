@@ -34,6 +34,9 @@ function json(body: unknown, status = 200) {
 
 const BodySchema = z.object({
   kind: z.enum(["request", "confirmation"]),
+  // Renvoie le PDF pro forma en base64 SANS envoyer d'email (bouton
+  // "Preview PDF" de la fenetre d'envoi, 27 aout 2026).
+  preview_proforma: z.boolean().optional(),
   installment_id: z.string().uuid().optional(),
   // Demande groupée : plusieurs échéances du même booking, un seul lien de
   // paiement (une session Stripe -> une fatura-recibo multi-lignes).
@@ -320,7 +323,9 @@ serve(async (req) => {
     const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
     const { kind } = parsed.data;
-    if (kind === "request" && !parsed.data.subject) return json({ error: "subject required" }, 400);
+    if (kind === "request" && !parsed.data.subject && !parsed.data.preview_proforma) {
+      return json({ error: "subject required" }, 400);
+    }
     const ids = parsed.data.installment_ids?.length
       ? [...new Set(parsed.data.installment_ids)]
       : (parsed.data.installment_id ? [parsed.data.installment_id] : []);
@@ -345,6 +350,22 @@ serve(async (req) => {
       .eq("id", inst.booking_id).maybeSingle();
     if (!booking?.email) return json({ error: "Booking has no email" }, 400);
     const to = booking.email;
+
+    // Prévisualisation du pro forma : on renvoie le PDF, rien n'est envoyé.
+    if (kind === "request" && parsed.data.preview_proforma) {
+      const { data: allInsts } = await admin.from("payment_installments")
+        .select("id,label,amount_due,amount_excl_vat,status,is_cash,category,due_date,paid_on,vat_rate,product_lines")
+        .eq("booking_id", inst.booking_id);
+      const guestName = `${booking.first_name ?? ""} ${booking.last_name ?? ""}`.trim() || booking.email;
+      const pdfB64 = await buildProFormaPdf({
+        guestName,
+        retreatName: booking.retreat_name ?? null,
+        checkIn: booking.check_in_date, checkOut: booking.check_out_date,
+        requested: insts as unknown as PfInst[],
+        all: (allInsts ?? []) as unknown as PfInst[],
+      });
+      return json({ proforma: pdfB64, filename: "Payment details - Quinta do Amor.pdf" });
+    }
 
     // Sujet / corps par défaut (template validé) pour la confirmation —
     // utilisé par l'automatisation du webhook, éditable dans l'admin sinon.
