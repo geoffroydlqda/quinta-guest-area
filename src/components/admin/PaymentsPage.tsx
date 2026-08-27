@@ -42,6 +42,7 @@ export interface PayInstallment {
   is_cash?: boolean;
   moloni_document_id?: number | null;
   invoice_number?: string | null;
+  paid_on?: string | null;
 }
 
 type Bucket = "paid" | "overdue" | "upcoming";
@@ -351,10 +352,10 @@ export function PaymentsPage({
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const lines = [
-      ["Event", "Payment", "Category", "Due date", "Amount incl. VAT", "Amount excl. VAT", "Status", "Last reminder", "Payment link"].join(","),
+      ["Event", "Payment", "Category", "Due date", "Paid on", "Amount incl. VAT", "Amount excl. VAT", "Status", "Last reminder", "Payment link"].join(","),
       ...rows.map((r) => [
         esc(r.name), esc(r.inst.label || "Payment"), esc(r.inst.category ?? "rental"),
-        esc(r.inst.due_date || ""), esc(Number(r.inst.amount_due).toFixed(2)),
+        esc(r.inst.due_date || ""), esc(r.inst.paid_on || ""), esc(Number(r.inst.amount_due).toFixed(2)),
         esc(r.inst.amount_excl_vat != null ? Number(r.inst.amount_excl_vat).toFixed(2) : ""),
         esc(r.bucket), esc(lastReminder.get(r.inst.id)?.slice(0, 10) || ""),
         esc(r.inst.payment_link || ""),
@@ -416,7 +417,7 @@ export function PaymentsPage({
       </div>
 
       <div className="border border-border rounded-xl bg-card overflow-x-auto">
-        <table className="w-full text-sm min-w-[900px]">
+        <table className="w-full text-sm min-w-[980px]">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
               <th className="px-3 py-2.5 font-medium">Event</th>
@@ -434,6 +435,7 @@ export function PaymentsPage({
               <th className="px-3 py-2.5 font-medium text-right">Incl. VAT</th>
               <th className="px-3 py-2.5 font-medium text-right">Excl. VAT</th>
               <th className="px-3 py-2.5 font-medium">Status</th>
+              <th className="px-3 py-2.5 font-medium">Paid on</th>
               <th className="px-3 py-2.5 font-medium">Reminder</th>
               <th className="px-3 py-2.5 font-medium">Invoice</th>
               <th className="px-3 py-2.5 font-medium text-center">Paid</th>
@@ -488,6 +490,17 @@ export function PaymentsPage({
                     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${STATUS_BADGE[r.bucket]}`}>
                       {r.bucket === "upcoming" ? "Pending" : r.bucket}
                     </span>
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
+                    {r.bucket === "paid" && r.inst.paid_on ? (
+                      <span
+                        // Payé en retard : la date ressort en ambre
+                        className={r.inst.due_date && r.inst.paid_on > r.inst.due_date ? "text-amber-700 dark:text-amber-400" : ""}
+                        title={r.inst.due_date && r.inst.paid_on > r.inst.due_date ? "Paid after the due date" : undefined}
+                      >
+                        {fmtDate(r.inst.paid_on)}
+                      </span>
+                    ) : "—"}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     <div className="flex items-center gap-1.5">
