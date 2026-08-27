@@ -36,3 +36,12 @@ verify_jwt = false
 # vérifié dans le code — lecture seule, agrégats uniquement.
 [functions.investor-report]
 verify_jwt = false
+
+# Rapprochement virements bancaires -> echeances (auth x-cron-key ou JWT admin
+# verifies dans le code, appel par cron horaire apres revolut-sync).
+[functions.bank-payment-match]
+verify_jwt = false
+
+# Identification des payouts Stripe (auth x-cron-key ou JWT admin dans le code).
+[functions.stripe-payout-enrich]
+verify_jwt = false

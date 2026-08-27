@@ -103,7 +103,7 @@ type InstRow = {
   paid_usd: number | null; usd_rate: number | null; notes: string | null;
 };
 
-const INST_COLS = "id,booking_id,label,amount_due,amount_excl_vat,category,status,is_cash,moloni_document_id,invoice_number,invoice_file_url,vat_rate,stripe_session_id,paid_usd,usd_rate,notes";
+const INST_COLS = "id,booking_id,label,amount_due,amount_excl_vat,category,status,is_cash,moloni_document_id,invoice_number,invoice_file_url,vat_rate,stripe_session_id,paid_bank_tx_id,paid_usd,usd_rate,notes";
 
 function rateFor(inst: InstRow): number {
   const r = inst.vat_rate ?? DEFAULT_RATE[inst.category ?? "rental"] ?? 23;
@@ -135,13 +135,19 @@ async function generateInvoice(installmentId: string) {
     throw new Error("This payment was made in Stripe TEST mode — no real invoice will be created for it");
   }
 
-  // Échéances payées dans la même session Stripe et pas encore facturées
+  // Échéances payées dans la même session Stripe OU par le même virement
+  // bancaire (paid_bank_tx_id, 27 août 2026) et pas encore facturées
   // -> une seule fatura-recibo à plusieurs lignes.
   let group: InstRow[] = [inst];
-  if (inst.stripe_session_id) {
+  const groupKey: [string, string] | null = inst.stripe_session_id
+    ? ["stripe_session_id", inst.stripe_session_id]
+    : (inst as InstRow & { paid_bank_tx_id?: string | null }).paid_bank_tx_id
+      ? ["paid_bank_tx_id", (inst as InstRow & { paid_bank_tx_id?: string | null }).paid_bank_tx_id as string]
+      : null;
+  if (groupKey) {
     const { data: siblings } = await admin.from("payment_installments")
       .select(INST_COLS)
-      .eq("stripe_session_id", inst.stripe_session_id)
+      .eq(groupKey[0], groupKey[1])
       .eq("booking_id", inst.booking_id) as { data: InstRow[] | null };
     group = (siblings ?? [inst]).filter((s) =>
       !s.moloni_document_id && !s.is_cash && s.category !== "discount" && Number(s.amount_due) > 0
