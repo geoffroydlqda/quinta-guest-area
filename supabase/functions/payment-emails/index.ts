@@ -135,23 +135,6 @@ const pfDate = (iso: string | null | undefined) => {
 const pfEur = (n: number) =>
   `${n < 0 ? "-" : ""}€${Math.abs(n).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-// Logo montagne (fourni par Geoffroy, teinte olive #6D7855). Servi par le
-// site (public/proforma-logo.png, deploye par le push Vercel) et recupere a
-// l'execution : la base64 dans le code rendait le fichier indeployable via
-// MCP. Best-effort — sans logo, le pro forma sort avec le wordmark seul.
-const LOGO_URL = "https://guest.quintamor.com/proforma-logo.png";
-let _logoBytes: Uint8Array | null = null;
-async function fetchLogo(): Promise<Uint8Array | null> {
-  if (_logoBytes) return _logoBytes;
-  try {
-    const r = await fetch(LOGO_URL);
-    if (!r.ok) return null;
-    _logoBytes = new Uint8Array(await r.arrayBuffer());
-  } catch (e) { console.error("[pro-forma] logo fetch failed:", e); return null; }
-  return _logoBytes;
-}
-const LOGO_RATIO = 130 / 380; // hauteur / largeur du PNG
-
 const CAT_LABEL: Record<string, string> = {
   rental: "Accommodation", catering: "Catering", extra: "Extras", discount: "Discounts",
 };
@@ -165,47 +148,125 @@ async function buildProFormaPdf(opts: {
   checkIn: string | null; checkOut: string | null;
   requested: PfInst[]; all: PfInst[];
 }): Promise<string> {
+  // ------------------------------------------------------------------
+  // 1. DONNEES d'abord : lignes par categorie, jours fusionnes, comptage
+  //    — pour choisir la densite AVANT de dessiner (tout sur UNE page).
+  // ------------------------------------------------------------------
+  type Row = { name: string; day: string | null; qty: number | null; unit: number | null; vat: number; total: number };
+  const byCat = new Map<string, Row[]>();
+  let totalIncl = 0, totalExcl = 0;
+  for (const inst of opts.requested) {
+    const cat = inst.category ?? "extra";
+    const rows = byCat.get(cat) ?? [];
+    const amount = Number(inst.amount_due);
+    totalIncl += amount;
+    const lines = (inst.product_lines ?? []).filter((l) => Number(l.qty) && Number(l.unit_price) !== 0);
+    if (lines.length) {
+      const linesSum = lines.reduce((sm, l) => sm + Number(l.qty) * Number(l.unit_price), 0);
+      const ratio = linesSum !== 0 ? amount / linesSum : 1; // montant ajuste a la main
+      for (const l of lines) {
+        const tot = Number(l.qty) * Number(l.unit_price) * ratio;
+        totalExcl += tot / (1 + Number(l.vat || 0) / 100);
+        const m = DAY_RE.exec(l.name);
+        rows.push({ name: m ? m[2] : l.name, day: m ? m[1] : null, qty: Number(l.qty), unit: Number(l.unit_price), vat: Number(l.vat || 0), total: tot });
+      }
+    } else {
+      const vat = inst.is_cash ? 0 : Number(inst.vat_rate ?? 23);
+      totalExcl += inst.amount_excl_vat != null ? Number(inst.amount_excl_vat) : amount / (1 + vat / 100);
+      rows.push({ name: inst.label || "Payment", day: null, qty: null, unit: null, vat, total: amount });
+    }
+    byCat.set(cat, rows);
+  }
+
+  // Jours consecutifs au contenu identique -> une seule section
+  // "Fri 4 Sep – Sun 6 Sep · 3 days" avec les quantites multipliees.
+  type DayGroup = { label: string | null; rows: Row[] };
+  const groupDays = (rows: Row[]): DayGroup[] => {
+    type Block = { day: string | null; rows: Row[] };
+    const blocks: Block[] = [];
+    for (const r of rows) {
+      const last = blocks[blocks.length - 1];
+      if (last && last.day === r.day) last.rows.push(r);
+      else blocks.push({ day: r.day, rows: [r] });
+    }
+    const sig = (b: Block) => JSON.stringify(b.rows.map((r) => [r.name, r.qty, r.unit, r.vat]));
+    const out: DayGroup[] = [];
+    let i = 0;
+    while (i < blocks.length) {
+      const b = blocks[i];
+      if (!b.day) { out.push({ label: null, rows: b.rows }); i++; continue; }
+      let j = i + 1;
+      while (j < blocks.length && blocks[j].day && sig(blocks[j]) === sig(b)) j++;
+      const span = j - i;
+      if (span >= 3) {
+        const first = b.day, last = blocks[j - 1].day as string;
+        out.push({
+          label: `${first} - ${last}  ·  ${span} days`,
+          rows: b.rows.map((r) => ({ ...r, qty: (r.qty ?? 0) * span, total: r.total * span })),
+        });
+        i = j;
+      } else {
+        for (let k = i; k < j; k++) out.push({ label: blocks[k].day, rows: blocks[k].rows });
+        i = j;
+      }
+    }
+    return out;
+  };
+  const cats: [string, DayGroup[]][] = [...byCat.entries()]
+    .sort((a, b) => (CAT_ORDER[a[0]] ?? 9) - (CAT_ORDER[b[0]] ?? 9))
+    .map(([cat, rows]) => [cat, groupDays(rows)]);
+  const multiCat = cats.length > 1;
+
+  const sched = opts.all
+    .filter((i) => i.category !== "bar")
+    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"));
+  const withSched = sched.length > 1;
+
+  // Densite : nombre reel de lignes a dessiner apres fusion des jours
+  let nRows = 0;
+  for (const [, groups] of cats) for (const g of groups) nRows += g.rows.length + (g.label ? 1 : 0);
+  if (withSched) nRows += sched.length;
+  const rowH = nRows > 52 ? 9.6 : nRows > 40 ? 10.8 : 12.5;
+  const fs = nRows > 52 ? 8.2 : nRows > 40 ? 8.6 : 9;
+  const dense = nRows > 40;
+
+  // ------------------------------------------------------------------
+  // 2. DESSIN
+  // ------------------------------------------------------------------
   const doc = await PDFDocument.create();
   const helv = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const logoBytesV = await fetchLogo();
-  const logo = logoBytesV ? await doc.embedPng(logoBytesV) : null;
   const PAGE_W = 595.28, PAGE_H = 841.89, M = 52;
   const W = PAGE_W - 2 * M;
   let page = doc.addPage([PAGE_W, PAGE_H]);
   let y = PAGE_H - 46;
-  const FOOTER_LIMIT = 106; // l'espace reserve au pied de page
+  const FOOTER_LIMIT = 96; // l'espace reserve au pied de page
 
   const ensure = (need: number) => {
     if (y - need < FOOTER_LIMIT) { page = doc.addPage([PAGE_W, PAGE_H]); y = PAGE_H - 56; }
   };
   // Les polices standard (WinAnsi) ne couvrent pas →, ’, etc. — on translittere.
-  const safe = (s: string) => s
+  const safe = (str: string) => str
     .replace(/→/g, "-").replace(/[’‘]/g, "'").replace(/[“”]/g, '"')
     .replace(/…/g, "...").replace(/[−]/g, "-")
     // deno-lint-ignore no-control-regex
     .replace(/[^\x20-\x7E\xA0-\xFF€–—·]/g, "?");
   const text = (raw: string, x: number, size: number, opt: { font?: typeof helv; color?: ReturnType<typeof rgb>; right?: number; center?: boolean; atY?: number } = {}) => {
-    const s = safe(raw);
+    const str = safe(raw);
     const f = opt.font ?? helv;
     let drawX = x;
-    if (opt.center) drawX = (PAGE_W - f.widthOfTextAtSize(s, size)) / 2;
-    else if (opt.right != null) drawX = opt.right - f.widthOfTextAtSize(s, size);
-    page.drawText(s, { x: drawX, y: opt.atY ?? y, size, font: f, color: opt.color ?? INK });
+    if (opt.center) drawX = (PAGE_W - f.widthOfTextAtSize(str, size)) / 2;
+    else if (opt.right != null) drawX = opt.right - f.widthOfTextAtSize(str, size);
+    page.drawText(str, { x: drawX, y: opt.atY ?? y, size, font: f, color: opt.color ?? INK });
   };
   const rule = (color = OLIVE, thickness = 0.6, x1 = M, x2 = M + W, atY?: number) =>
     page.drawLine({ start: { x: x1, y: atY ?? y }, end: { x: x2, y: atY ?? y }, thickness, color });
 
-  // ---- en-tete centre : montagne + wordmark
-  if (logo) {
-    const logoW = 104, logoH = logoW * LOGO_RATIO;
-    page.drawImage(logo, { x: (PAGE_W - logoW) / 2, y: y - logoH, width: logoW, height: logoH });
-    y -= logoH + 12;
-  }
+  // ---- en-tete centre
   text("QUINTA DO AMOR", 0, 16, { font: bold, color: OLIVE, center: true });
   y -= 13;
   text(`Payment details  ·  issued ${pfDate(new Date().toISOString().slice(0, 10))}`, 0, 9, { color: GREY, center: true });
-  y -= 22;
+  y -= 24;
 
   // ---- bloc sejour
   text(opts.retreatName || opts.guestName, M, 13, { font: bold });
@@ -216,109 +277,72 @@ async function buildProFormaPdf(opts: {
   if (opts.retreatName && opts.guestName && opts.retreatName !== opts.guestName) {
     text(opts.guestName, M, 9.5, { color: GREY }); y -= 13;
   }
-  y -= 14;
+  y -= 13;
 
-  // ---- section "This payment", groupee par categorie
+  // ---- section "This payment"
   text("THIS PAYMENT", M, 10, { font: bold, color: OLIVE });
-  y -= 8; rule(OLIVE, 1); y -= 14;
+  y -= 8; rule(OLIVE, 1); y -= (dense ? 12 : 14);
   const c = { desc: M + 2, qty: M + W - 196, unit: M + W - 134, vat: M + W - 84, tot: M + W - 2 };
   text("Description", c.desc, 8, { font: bold, color: GREY });
   text("Qty", 0, 8, { font: bold, color: GREY, right: c.qty + 20 });
   text("Unit", 0, 8, { font: bold, color: GREY, right: c.unit + 28 });
   text("VAT", 0, 8, { font: bold, color: GREY, right: c.vat + 20 });
   text("Total", 0, 8, { font: bold, color: GREY, right: c.tot });
-  y -= 14;
+  y -= (dense ? 12 : 14);
 
-  type Row = { name: string; day: string | null; qty: number | null; unit: number | null; vat: number; total: number; excl: number };
-  const byCat = new Map<string, Row[]>();
-  let totalIncl = 0, totalExcl = 0;
-  for (const inst of opts.requested) {
-    const cat = inst.category ?? "extra";
-    const rows = byCat.get(cat) ?? [];
-    const amount = Number(inst.amount_due);
-    totalIncl += amount;
-    const lines = (inst.product_lines ?? []).filter((l) => Number(l.qty) && Number(l.unit_price) !== 0);
-    if (lines.length) {
-      const linesSum = lines.reduce((s, l) => s + Number(l.qty) * Number(l.unit_price), 0);
-      const ratio = linesSum !== 0 ? amount / linesSum : 1; // montant ajuste a la main
-      for (const l of lines) {
-        const tot = Number(l.qty) * Number(l.unit_price) * ratio;
-        const excl = tot / (1 + Number(l.vat || 0) / 100);
-        totalExcl += excl;
-        const m = DAY_RE.exec(l.name);
-        rows.push({
-          name: m ? m[2] : l.name, day: m ? m[1] : null,
-          qty: Number(l.qty), unit: Number(l.unit_price), vat: Number(l.vat || 0), total: tot, excl,
-        });
-      }
-    } else {
-      const vat = inst.is_cash ? 0 : Number(inst.vat_rate ?? 23);
-      const excl = inst.amount_excl_vat != null ? Number(inst.amount_excl_vat) : amount / (1 + vat / 100);
-      totalExcl += excl;
-      rows.push({ name: inst.label || "Payment", day: null, qty: null, unit: null, vat, total: amount, excl });
-    }
-    byCat.set(cat, rows);
-  }
-
-  const cats = [...byCat.entries()].sort((a, b) => (CAT_ORDER[a[0]] ?? 9) - (CAT_ORDER[b[0]] ?? 9));
-  const multiCat = cats.length > 1;
-  for (const [cat, rows] of cats) {
+  for (const [cat, groups] of cats) {
     ensure(44);
-    y -= 2;
-    const catTotal = rows.reduce((s, r) => s + r.total, 0);
-    // titre de categorie (+ sous-total quand il y a plusieurs categories)
+    if (!dense) y -= 2;
+    const catTotal = groups.reduce((sm, g) => sm + g.rows.reduce((s2, r) => s2 + r.total, 0), 0);
     text(CAT_LABEL[cat] ?? cat, M, 10.5, { font: bold });
-    if (multiCat) text(pfEur(Math.round(catTotal * 100) / 100), 0, 9, { color: GREY, right: c.tot });
-    y -= 6; rule(rgb(0.85, 0.85, 0.8), 0.5); y -= 13;
-    let lastDay: string | null = null;
-    for (const r of rows) {
-      if (r.day && r.day !== lastDay) {
+    if (multiCat) text(pfEur(Math.round(catTotal * 100) / 100), 0, fs, { color: GREY, right: c.tot });
+    y -= 5; rule(rgb(0.85, 0.85, 0.8), 0.5); y -= (dense ? 11 : 13);
+    for (const g of groups) {
+      if (g.label) {
         ensure(26);
-        text(r.day, M + 6, 9, { font: bold, color: rgb(0.3, 0.33, 0.24) });
-        y -= 12.5;
-        lastDay = r.day;
+        text(g.label, M + 6, fs, { font: bold, color: rgb(0.3, 0.33, 0.24) });
+        y -= rowH;
       }
-      ensure(14);
-      const indent = r.day ? 16 : 6;
-      text(r.name.slice(0, 58), M + indent, 9, { color: r.total < 0 ? OLIVE : INK });
-      if (r.qty != null) {
-        text(String(r.qty), 0, 9, { right: c.qty + 20 });
-        text(pfEur(r.unit as number), 0, 9, { right: c.unit + 28 });
+      for (const r of g.rows) {
+        ensure(14);
+        const indent = g.label ? 16 : 6;
+        text(r.name.slice(0, 58), M + indent, fs, { color: r.total < 0 ? OLIVE : INK });
+        if (r.qty != null) {
+          text(String(r.qty), 0, fs, { right: c.qty + 20 });
+          text(pfEur(r.unit as number), 0, fs, { right: c.unit + 28 });
+        }
+        text(`${r.vat}%`, 0, fs, { right: c.vat + 20 });
+        text(pfEur(r.total), 0, fs, { right: c.tot });
+        y -= rowH;
       }
-      text(`${r.vat}%`, 0, 9, { right: c.vat + 20 });
-      text(pfEur(r.total), 0, 9, { right: c.tot });
-      y -= 12.5;
     }
-    y -= 6;
+    y -= (dense ? 3 : 6);
   }
 
   // ---- totaux
   ensure(64);
-  rule(OLIVE, 0.8); y -= 15;
-  text("Subtotal excl. VAT", 0, 9, { color: GREY, right: c.vat + 20 });
-  text(pfEur(Math.round(totalExcl * 100) / 100), 0, 9, { right: c.tot });
-  y -= 13;
-  text("VAT", 0, 9, { color: GREY, right: c.vat + 20 });
-  text(pfEur(Math.round((totalIncl - totalExcl) * 100) / 100), 0, 9, { right: c.tot });
-  y -= 19;
+  rule(OLIVE, 0.8); y -= (dense ? 13 : 15);
+  text("Subtotal excl. VAT", 0, fs, { color: GREY, right: c.vat + 20 });
+  text(pfEur(Math.round(totalExcl * 100) / 100), 0, fs, { right: c.tot });
+  y -= rowH;
+  text("VAT", 0, fs, { color: GREY, right: c.vat + 20 });
+  text(pfEur(Math.round((totalIncl - totalExcl) * 100) / 100), 0, fs, { right: c.tot });
+  y -= (dense ? 15 : 19);
   page.drawRectangle({ x: M, y: y - 6, width: W, height: 22, color: LIGHT });
   text("Total due", M + 8, 11, { font: bold });
   text(pfEur(totalIncl), 0, 11, { font: bold, color: OLIVE, right: c.tot });
-  y -= 24;
+  y -= (dense ? 18 : 24);
 
   // ---- echeancier complet du sejour
-  const sched = opts.all
-    .filter((i) => i.category !== "bar")
-    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"));
-  if (sched.length > 1) {
+  if (withSched) {
     ensure(70);
     text("YOUR PAYMENT SCHEDULE", M, 10, { font: bold, color: OLIVE });
-    y -= 8; rule(OLIVE, 1); y -= 14;
+    y -= 8; rule(OLIVE, 1); y -= (dense ? 12 : 14);
     text("Payment", c.desc, 8, { font: bold, color: GREY });
     text("Due date", M + W - 216, 8, { font: bold, color: GREY });
     text("Status", M + W - 128, 8, { font: bold, color: GREY });
     text("Amount", 0, 8, { font: bold, color: GREY, right: c.tot });
-    y -= 14;
+    y -= (dense ? 12 : 14);
     const requestedIds = new Set(opts.requested.map((r) => r.id));
     let paidSum = 0, totalSum = 0;
     for (const i of sched) {
@@ -331,37 +355,34 @@ async function buildProFormaPdf(opts: {
         : i.status === "paid" ? `Paid${i.paid_on ? ` ${pfDate(i.paid_on)}` : ""}`
         : isReq ? "This request" : "Upcoming";
       const f = isReq ? bold : helv;
-      text((i.label || "Payment").slice(0, 40), c.desc + 4, 9, { font: f, color: i.status === "paid" && !isReq ? GREY : INK });
-      text(i.category === "discount" ? "—" : pfDate(i.due_date), M + W - 216, 9, { font: f, color: i.status === "paid" ? GREY : INK });
-      text(status, M + W - 128, 9, { font: f, color: i.status === "paid" ? GREY : isReq ? OLIVE : INK });
-      text(pfEur(amount), 0, 9, { font: f, right: c.tot });
-      y -= 12.5;
+      text((i.label || "Payment").slice(0, 40), c.desc + 4, fs, { font: f, color: i.status === "paid" && !isReq ? GREY : INK });
+      text(i.category === "discount" ? "—" : pfDate(i.due_date), M + W - 216, fs, { font: f, color: i.status === "paid" ? GREY : INK });
+      text(status, M + W - 128, fs, { font: f, color: i.status === "paid" ? GREY : isReq ? OLIVE : INK });
+      text(pfEur(amount), 0, fs, { font: f, right: c.tot });
+      y -= rowH;
     }
-    y -= 5;
-    ensure(74); // le bloc de totaux ne doit jamais mordre sur le pied de page
-    rule(OLIVE, 0.8); y -= 15;
+    y -= 4;
+    ensure(64); // le bloc de totaux ne doit jamais mordre sur le pied de page
+    rule(OLIVE, 0.8); y -= (dense ? 13 : 15);
     const remaining = totalSum - paidSum - totalIncl;
-    text("Total for your stay", 0, 9, { color: GREY, right: M + W - 136 });
-    text(pfEur(totalSum), 0, 9, { right: c.tot });
-    y -= 13;
-    text("Already paid", 0, 9, { color: GREY, right: M + W - 136 });
-    text(pfEur(paidSum), 0, 9, { right: c.tot });
-    y -= 13;
-    text("This payment", 0, 9, { font: bold, right: M + W - 136 });
-    text(pfEur(totalIncl), 0, 9, { font: bold, color: OLIVE, right: c.tot });
-    y -= 13;
-    text("Remaining after this payment", 0, 9, { color: GREY, right: M + W - 136 });
-    text(pfEur(Math.max(0, Math.round(remaining * 100) / 100)), 0, 9, { right: c.tot });
+    text("Total for your stay", 0, fs, { color: GREY, right: M + W - 136 });
+    text(pfEur(totalSum), 0, fs, { right: c.tot });
+    y -= rowH;
+    text("Already paid", 0, fs, { color: GREY, right: M + W - 136 });
+    text(pfEur(paidSum), 0, fs, { right: c.tot });
+    y -= rowH;
+    text("This payment", 0, fs, { font: bold, right: M + W - 136 });
+    text(pfEur(totalIncl), 0, fs, { font: bold, color: OLIVE, right: c.tot });
+    y -= rowH;
+    text("Remaining after this payment", 0, fs, { color: GREY, right: M + W - 136 });
+    text(pfEur(Math.max(0, Math.round(remaining * 100) / 100)), 0, fs, { right: c.tot });
   }
 
   // ---- pied de page centre, fixe en bas de la derniere page
-  if (logo) {
-    const fLogoW = 46, fLogoH = fLogoW * LOGO_RATIO;
-    page.drawImage(logo, { x: (PAGE_W - fLogoW) / 2, y: 86, width: fLogoW, height: fLogoH });
-  }
-  text("This document is not an invoice. Your official invoice-receipt (fatura-recibo)", 0, 8, { color: GREY, center: true, atY: 70 });
-  text("will be issued and emailed to you as soon as your payment is received.", 0, 8, { color: GREY, center: true, atY: 59 });
-  text("Quinta do Amor  ·  www.quintamor.com  ·  hello@quintamor.com  ·  +351 931 377 682", 0, 8, { color: GREY, center: true, atY: 40 });
+  rule(rgb(0.85, 0.85, 0.8), 0.5, M + 150, M + W - 150, 82);
+  text("This document is not an invoice. Your official invoice-receipt (fatura-recibo)", 0, 8, { color: GREY, center: true, atY: 66 });
+  text("will be issued and emailed to you as soon as your payment is received.", 0, 8, { color: GREY, center: true, atY: 55 });
+  text("Quinta do Amor  ·  www.quintamor.com  ·  hello@quintamor.com  ·  +351 931 377 682", 0, 8, { color: GREY, center: true, atY: 37 });
 
   return await doc.saveAsBase64();
 }
