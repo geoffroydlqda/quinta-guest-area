@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Mail, Paperclip, X } from "lucide-react";
+import { DEFAULT_TEMPLATES, renderTemplate, type ManualTemplateKey } from "@/lib/emailTemplates";
 
 /**
  * Compose éditable des emails de paiement (textes validés par Geoffroy).
@@ -58,17 +59,14 @@ const fmtDue = (d?: string | null): string | null => {
   return dt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 };
 
-export function buildRequestTemplate(booking: EmailBooking, inst: EmailInstallment, ordinal: number, isLast: boolean, groupInsts: EmailInstallment[] = []) {
-  const first = (booking.first_name ?? "").trim() || "there";
+// Valeurs des variables {{...}} du template "payment_request" — la logique
+// conditionnelle (groupé, dernier paiement…) vit ici, le texte dans la table
+// email_templates (éditable depuis l'onglet Emails).
+export function requestTemplateVars(booking: EmailBooking, inst: EmailInstallment, ordinal: number, isLast: boolean, groupInsts: EmailInstallment[] = []): Record<string, string> {
   const stay = stayRange(booking.check_in_date, booking.check_out_date);
-  const stayLine = stay
-    ? `Your stay at Quinta do Amor from ${stay} is getting close`
-    : `Your stay at Quinta do Amor is getting close`;
-  // Demande groupée : récap des échéances (montant + due date) dans le corps
-  // du mail, triées par échéance — remplace l'ancienne phrase "One link, N
-  // payments together" jugée peu claire (Geoffroy, 18 août 2026).
   const grouped = groupInsts.length > 1;
-  const middle = grouped
+  const total = (grouped ? groupInsts : [inst]).reduce((s, i) => s + Number(i.amount_due || 0), 0);
+  const paymentIntro = grouped
     ? `Here's a quick recap of the payments for your stay:
 
 ${[...groupInsts]
@@ -81,42 +79,25 @@ ${[...groupInsts]
 You can settle everything in one go with the link below:`
     : `Here's the link for the ${ordinalWord(ordinal)}${isLast ? " and final" : ""} payment for your stay:`;
   return {
-    subject: `Your stay at Quinta do Amor — ${isLast ? "final payment" : "payment"}`,
-    bodyTop:
-`Hi ${first},
-
-I hope you're doing well!
-
-${stayLine}
-
-${middle}`,
-    bodyBottom:
-`Your invoice will arrive in your inbox as soon as the payment comes through.
-
-If anything feels unclear, just reply to this email, I'm happy to help.
-
-Looking forward to welcoming you soon.
-
-Warmly,
-Geo`,
+    first_name: (booking.first_name ?? "").trim() || "there",
+    stay_line: stay
+      ? `Your stay at Quinta do Amor from ${stay} is getting close`
+      : `Your stay at Quinta do Amor is getting close`,
+    payment_intro: paymentIntro,
+    amount: fmtEur(total),
+    payment_or_final: isLast ? "final payment" : "payment",
+    retreat_name: booking.retreat_name ?? "",
+    check_in_date: booking.check_in_date ?? "",
+    check_out_date: booking.check_out_date ?? "",
   };
 }
 
-export function buildConfirmationTemplate(booking: EmailBooking, inst: EmailInstallment, allSettled: boolean) {
-  const first = (booking.first_name ?? "").trim() || "there";
+export function confirmationTemplateVars(booking: EmailBooking, inst: EmailInstallment, allSettled: boolean): Record<string, string> {
   return {
-    subject: "Payment received — you're all set",
-    body:
-`Hi ${first},
-
-Good news, your payment of ${fmtEur(Number(inst.amount_due))} has arrived safely.${allSettled ? " Your stay is now fully settled." : ""}
-
-If you have any questions at all, I'm always happy to help. Just reply here.
-
-See you very soon at the Quinta.
-
-Warmly,
-Geo`,
+    first_name: (booking.first_name ?? "").trim() || "there",
+    amount: fmtEur(Number(inst.amount_due)),
+    settled_note: allSettled ? " Your stay is now fully settled." : "",
+    retreat_name: booking.retreat_name ?? "",
   };
 }
 
@@ -198,17 +179,30 @@ export function PaymentEmailDialog({
     r.readAsDataURL(f);
   });
 
-  // (Re)charge le template à chaque ouverture
+  // (Re)charge le template à chaque ouverture : version éditée en base
+  // (onglet Emails) si elle existe, défauts du code sinon.
   useEffect(() => {
     if (!open) return;
-    if (kind === "request") {
-      const t = buildRequestTemplate(booking, inst, ordinal, isLast, insts);
-      setSubject(t.subject); setBodyTop(t.bodyTop); setBodyBottom(t.bodyBottom);
-    } else {
-      const t = buildConfirmationTemplate(booking, inst, allSettled);
-      setSubject(t.subject); setBody(t.body);
-    }
+    let cancelled = false;
+    (async () => {
+      const key: ManualTemplateKey = kind === "request" ? "payment_request" : "payment_confirmation";
+      const { data } = await supabase.from("email_templates")
+        .select("subject,body_top,body_bottom,body").eq("key", key).maybeSingle();
+      if (cancelled) return;
+      const tpl = data ?? DEFAULT_TEMPLATES[key];
+      if (kind === "request") {
+        const vars = requestTemplateVars(booking, inst, ordinal, isLast, insts);
+        setSubject(renderTemplate(tpl.subject, vars));
+        setBodyTop(renderTemplate(tpl.body_top ?? DEFAULT_TEMPLATES.payment_request.body_top ?? "", vars));
+        setBodyBottom(renderTemplate(tpl.body_bottom ?? DEFAULT_TEMPLATES.payment_request.body_bottom ?? "", vars));
+      } else {
+        const vars = confirmationTemplateVars(booking, inst, allSettled);
+        setSubject(renderTemplate(tpl.subject, vars));
+        setBody(renderTemplate(tpl.body ?? DEFAULT_TEMPLATES.payment_confirmation.body ?? "", vars));
+      }
+    })();
     setFiles([]);
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, kind, inst.id]);
 

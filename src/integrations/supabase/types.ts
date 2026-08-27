@@ -727,6 +727,33 @@ export type Database = {
           },
         ]
       }
+      email_templates: {
+        Row: {
+          body: string | null
+          body_bottom: string | null
+          body_top: string | null
+          key: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string | null
+          body_bottom?: string | null
+          body_top?: string | null
+          key: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string | null
+          body_bottom?: string | null
+          body_top?: string | null
+          key?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_rules: {
         Row: {
           body: string

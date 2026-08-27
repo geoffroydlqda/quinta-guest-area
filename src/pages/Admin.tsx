@@ -25,6 +25,7 @@ import { renderRoomMapCanvas, downloadRoomMapPdf, type RoomMapEntry } from "@/li
 import { openKitchenSheet } from "@/lib/kitchenSheet";
 import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { AutomatedEmailsCard } from "@/components/admin/AutomatedEmailsCard";
+import { ManualEmailTemplatesCard } from "@/components/admin/ManualEmailTemplatesCard";
 import { HonestyBarCard } from "@/components/admin/HonestyBarCard";
 import { HousekeepingScheduler } from "@/components/admin/HousekeepingScheduler";
 import { FinancePage } from "@/components/admin/FinancePage";
@@ -851,6 +852,7 @@ const AdminContent = () => {
         {view === "emails" && (
           <div className="space-y-4">
             <AutomatedEmailsCard />
+            <ManualEmailTemplatesCard />
           </div>
         )}
 
