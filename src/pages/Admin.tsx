@@ -433,7 +433,9 @@ const AdminContent = () => {
   // deux événements se chevauchent si l'un commence avant la fin de l'autre
   // (les back-to-back check-out/check-in le même jour ne comptent pas).
   const overlaps = useMemo(() => {
-    const evs = filteredEvents.filter((e) => e.checkIn && e.checkOut && e.checkOut >= todayIso);
+    // Les bookings annules ne bloquent plus les dates : pas de faux warning
+    // entre un annule et son remplacant (25 aout 2026).
+    const evs = filteredEvents.filter((e) => !e.isCancelled && e.checkIn && e.checkOut && e.checkOut >= todayIso);
     const pairs: { a: EventRow; b: EventRow }[] = [];
     const ids = new Set<string>();
     for (let i = 0; i < evs.length; i++) {
@@ -1124,9 +1126,9 @@ function DashboardView({
         ? Number(i.amount_excl_vat)
         : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23)), 0);
     const collected = thisYear.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
-    // Overdue/Outstanding : uniquement les bookings réels de l'année affichée
-    // (bookingById ne contient que les non-tests) — sinon une échéance de test
-    // ou d'une autre année gonfle le KPI rouge.
+    // Overdue : bookings réels (non-test, non annulés), TOUTES années — une
+    // échéance en retard reste due quelle que soit l'année affichée.
+    // Outstanding : scoped à l'année affichée (thisYear).
     const real = installments.filter((i) => bookingById.has(i.booking_id));
     const overdue = real.filter((i) => i.status !== "paid" && i.due_date && i.due_date < todayIso);
     const overdueTotal = overdue.reduce((s, i) => s + Number(i.amount_due || 0), 0);
@@ -1232,7 +1234,10 @@ function DashboardView({
     // HT manquant : estimation à TVA 23 % (13 % pour le catering — taux food PT).
     const actual = { rental: 0, catering: 0, extra: 0, bar: 0 };
     for (const i of installments) {
-      const ci = bookingById.get(i.booking_id)?.check_in_date || "";
+      // Meme regle d'argent que les KPI : les paiements encaisses d'un booking
+      // annule comptent, les impayes d'un annule non (25 aout 2026).
+      if (!countsForMoney(i)) continue;
+      const ci = finBookingById.get(i.booking_id)?.check_in_date || "";
       if (!ci.startsWith(year)) continue;
       const cat = i.category === "catering" ? "catering" : i.category === "extra" ? "extra" : i.category === "bar" ? "bar" : "rental";
       const vat = cat === "catering" ? 1.13 : 1.23;
@@ -1254,6 +1259,7 @@ function DashboardView({
     for (const b of bookings) {
       if ((b.event_type ?? "retreat") !== "retreat") continue;
       if (b.catering_expected === false) continue; // organisateur sans catering
+      if ((b as { cancelled_at?: string | null }).cancelled_at) continue; // annule : plus de catering attendu
       if (!b.check_in_date || !b.check_out_date) continue;
       if (!b.check_in_date.startsWith(year)) continue;
       if (b.check_in_date <= todayIso) continue; // déjà commencé / passé
@@ -1263,7 +1269,8 @@ function DashboardView({
       );
       if (nights <= 0) continue;
       const perPax = avg.dinner + Math.max(0, nights - 1) * avg.fullBoard + avg.breakfast;
-      expectedCateringTvac += 14 * perPax;
+      // guest_count reel du booking (14 = repli historique si non renseigne)
+      expectedCateringTvac += (Number(b.guest_count) > 0 ? Number(b.guest_count) : 14) * perPax;
     }
     const expectedCatering = expectedCateringTvac / 1.13; // HT (TVA food 13 %)
 
@@ -1280,7 +1287,7 @@ function DashboardView({
       pct: ((total + expectedCatering) / cfg.net_revenue) * 100,
       rows,
     };
-  }, [installments, bookings, bookingById, targets, year, todayIso]);
+  }, [installments, bookings, finBookingById, targets, year, todayIso]);
 
   // Cartes KPI "héro" — icône sur pastille pastel (palette Geoffroy, juil. 2026)
   const Tile = ({ label, value, sub, tone, icon, chip }: {
@@ -2144,12 +2151,24 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
     if (!email) return;
     setBusy(true);
     try {
+      // Si une fiche existe deja pour cet email, on l'ouvre au lieu d'ecraser
+      // ses noms avec ce qui vient d'etre tape (25 aout 2026).
+      const { data: existing } = await supabase.from("client_profiles")
+        .select("id").eq("email", email).maybeSingle();
+      if (existing?.id) {
+        await fetchProfiles();
+        setSelected(existing.id);
+        setShowNewGuest(false);
+        setNewGuest({ first_name: "", last_name: "", email: "" });
+        toast({ title: "Guest already exists", description: `${email} — opened the existing profile` });
+        return;
+      }
       const { data: created, error } = await supabase.from("client_profiles")
-        .upsert({
+        .insert({
           email,
           first_name: newGuest.first_name.trim() || null,
           last_name: newGuest.last_name.trim() || null,
-        }, { onConflict: "email" })
+        })
         .select("id")
         .single();
       if (error) throw error;
@@ -2500,6 +2519,9 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
 
     for (const t of data.trips) {
       const b = (t.booking_id && bookingsById.get(t.booking_id)) || bookingsByUser.get(t.user_id);
+      // Bookings de test ou annules : leurs trajets ne polluent pas l'onglet
+      // Transportation (25 aout 2026)
+      if (b && ((b as { is_test?: boolean }).is_test || (b as { cancelled_at?: string | null }).cancelled_at)) continue;
 
       const paxNames = ((t as any).passengers || [])
         .map((p: any) => (p.first_name || "").trim())
@@ -2699,7 +2721,7 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
                               </Button>
                             </td>
                             <td className="px-3 py-2">
-                              <NotifyGuestButton userId={t.user_id} guestName={gName} />
+                              <NotifyGuestButton userId={t.user_id} bookingId={t.booking_id ?? null} guestName={gName} />
                             </td>
                           </tr>
                         );
@@ -2843,13 +2865,14 @@ function TripDateEditor({ trip, onSaved, onPatch }: { trip: { id: string; trip_d
 }
 
 
-function NotifyGuestButton({ userId, guestName }: { userId: string; guestName: string }) {
+function NotifyGuestButton({ userId, bookingId, guestName }: { userId: string; bookingId?: string | null; guestName: string }) {
   const [sending, setSending] = useState(false);
   const { toast } = useToast();
   const send = async () => {
     if (!confirm(`Send updated transportation pricing email to ${guestName}?`)) return;
     setSending(true);
-    const { error } = await supabase.functions.invoke("notify-transport-pricing", { body: { user_id: userId } });
+    // booking_id : l'email ne liste que les trips de CE sejour (25 aout 2026)
+    const { error } = await supabase.functions.invoke("notify-transport-pricing", { body: { user_id: userId, ...(bookingId ? { booking_id: bookingId } : {}) } });
     setSending(false);
     if (error) toast({ title: "Notify failed", description: error.message, variant: "destructive" });
     else toast({ title: `Notification sent to ${guestName}` });

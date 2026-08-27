@@ -118,12 +118,18 @@ export function useGuestProfile() {
       supabase.from('docs_ack').select('last_viewed_at')
     ).maybeSingle();
 
+    // "Mark as complete" prime TOUJOURS : un guest sans trajet (pas de
+    // transfert nécessaire) ou sans repas cochés peut quand même marquer
+    // l'outil comme terminé — avant, le Dashboard restait bloqué sur "To do"
+    // (bug 25 août 2026).
     return {
       roomSetup: roomData ? (roomData.status_roomsetup === 'submitted' ? 'submitted' : 'draft') : 'not_set',
-      transportation: tripData && tripData.length > 0
-        ? (transpReq?.status_transportation === 'submitted' ? 'submitted' : 'draft')
-        : 'not_set',
-      food: hasFood ? (foodData?.status_food === 'submitted' ? 'submitted' : 'draft') : 'not_set',
+      transportation: transpReq?.status_transportation === 'submitted'
+        ? 'submitted'
+        : (tripData && tripData.length > 0 ? 'draft' : 'not_set'),
+      food: foodData?.status_food === 'submitted'
+        ? 'submitted'
+        : (hasFood ? 'draft' : 'not_set'),
       documentation: !!docsData,
     } as ToolStatuses;
   }, [activeBookingId]);

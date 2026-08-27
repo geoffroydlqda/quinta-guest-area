@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { isAdminEmail } from '@/lib/admin';
+import { loadPricing } from '@/lib/pricing';
 
 interface AuthContextType {
   user: User | null;
@@ -27,6 +28,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (event !== 'INITIAL_SESSION' || hasResolvedInitialSession.current) {
           setIsLoading(false);
+        }
+
+        // Tarifs : pricing_settings est réservé aux connectés — si le premier
+        // chargement (avant login) n'a rien ramené, on recharge maintenant.
+        if (event === 'SIGNED_IN') {
+          loadPricing();
         }
 
         // On sign-in (including OAuth callback), ensure profile exists — skip for admins

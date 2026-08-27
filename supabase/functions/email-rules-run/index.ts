@@ -180,6 +180,11 @@ function renderTemplate(
     amount: i ? fmtEur(Number(i.amount_due || 0)) : "",
     label: i?.label ?? "",
     due_date: i ? fmtDate(i.due_date) : "",
+    // {{button}} n'est PAS une variable : c'est le marqueur de position du
+    // bouton, consomme plus tard par renderHtmlBody. On le laisse intact
+    // (avant il etait remplace par "" et le placement ne marchait jamais —
+    // corrige le 25 aout 2026).
+    button: "{{button}}",
     ...(extra ?? {}),
   };
   return tpl.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (_, k: string) => vars[k.toLowerCase()] ?? "");
@@ -373,8 +378,12 @@ async function handlePaymentReceived(installmentId: string): Promise<Response> {
   // deposit = premier paiement rental du booking (aucun autre rental paye avant)
   const isDeposit = inst.category === "rental" &&
     !sibs.some((s) => s.id !== inst.id && s.category === "rental" && s.status === "paid");
-  // final = apres ce paiement, tout le sejour est solde (hors lignes discount)
-  const isFinal = sibs.filter((s) => s.category !== "discount").every((s) => s.status === "paid");
+  // final = apres ce paiement, tout le sejour est solde. On ignore les lignes
+  // discount, cash (payees sur place) et bar — sinon une ligne "cash on
+  // arrival" empechait la regle "final payment" de matcher (25 aout 2026).
+  const isFinal = sibs
+    .filter((s) => s.category !== "discount" && s.category !== "bar" && !s.is_cash)
+    .every((s) => s.status === "paid");
   // Montant affiche : le groupe de la session Stripe (paiement groupe possible)
   const group = inst.stripe_session_id
     ? sibs.filter((s) => s.stripe_session_id === inst.stripe_session_id)
@@ -539,7 +548,7 @@ serve(async (req) => {
       return json({
         today,
         rules: rules.length,
-        matches: allMatches.map((m) => ({
+        matches: await Promise.all(allMatches.map(async (m) => ({
           rule_id: m.rule.id,
           rule_name: m.rule.name,
           rule_enabled: m.rule.enabled,
@@ -550,9 +559,10 @@ serve(async (req) => {
           installment_label: m.installment?.label ?? null,
           amount: m.installment ? Number(m.installment.amount_due || 0) : null,
           due_date: m.installment?.due_date ?? null,
-          subject: renderTemplate(m.rule.subject, m),
+          // Sujet rendu avec les memes variables que l'envoi reel
+          subject: renderTemplate(m.rule.subject, m, await bookingPaymentVars(m.booking.id).catch(() => ({}))),
           already_sent: sentKeys.has(m.dedupKey),
-        })),
+        }))),
       });
     }
 

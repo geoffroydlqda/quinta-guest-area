@@ -256,10 +256,15 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
                     onFocus={() => setGuestListOpen(true)}
                     onBlur={() => setTimeout(() => setGuestListOpen(false), 150)}
                     onChange={(e) => {
+                      // Taper dans la recherche déselectionne le guest SANS
+                      // voler le focus (le saut vers #first_name est réservé
+                      // au bouton + explicite — corrigé le 25 août 2026).
+                      if (guestId !== "new") {
+                        setGuestId("new");
+                        setForm((f) => ({ ...f, email: "", first_name: "", last_name: "" }));
+                      }
                       setGuestQuery(e.target.value);
                       setGuestListOpen(true);
-                      if (guestId !== "new") newGuestMode();
-                      setGuestQuery(e.target.value);
                     }}
                   />
                   {guestId !== "new" && (

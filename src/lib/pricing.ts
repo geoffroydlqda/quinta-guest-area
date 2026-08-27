@@ -52,7 +52,14 @@ export function getDietPricing(stayYear?: number | string | null): Record<DietTy
   return dietPricing;
 }
 
-/** Fetches pricing from the DB once; safe to call multiple times. */
+/**
+ * Fetches pricing from the DB once; safe to call multiple times.
+ * ⚠️ pricing_settings est en RLS `authenticated` : un chargement fait AVANT le
+ * login renvoie 0 ligne sans erreur. Dans ce cas on ne met PAS le résultat en
+ * cache, pour que l'appel suivant (après connexion — AuthContext relance
+ * loadPricing au SIGNED_IN) recharge les vrais tarifs (bug tarifs 2027 restés
+ * aux défauts, 25 août 2026).
+ */
 export function loadPricing(): Promise<void> {
   if (!loadPromise) {
     loadPromise = (async () => {
@@ -61,6 +68,11 @@ export function loadPricing(): Promise<void> {
           .from('pricing_settings')
           .select('key, value');
         if (error || !data) return;
+        if (data.length === 0) {
+          // Probablement non authentifié : réessayable au prochain appel.
+          loadPromise = null;
+          return;
+        }
         for (const row of data) {
           if (row.key === 'taxi' && row.value && typeof row.value === 'object') {
             const v = row.value as Partial<TaxiPrices>;

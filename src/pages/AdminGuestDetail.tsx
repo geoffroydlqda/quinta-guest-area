@@ -599,10 +599,13 @@ const AdminGuestDetailContent = () => {
                 (booking as any).cancelled_at = cancelling ? new Date().toISOString() : null;
                 // Calendrier bookings : la fonction supprime l'événement si annulé, le recrée si restauré
                 supabase.functions.invoke("sync-booking-calendar", { body: { action: "upsert", booking_id: booking.id } }).catch(() => {});
-                // Calendrier chauffeurs : retire (ou resynchronise) les trips du booking
+                // Calendrier chauffeurs : retire (ou resynchronise) les trips du booking.
+                // A l'annulation on efface aussi l'event id stocke — sinon un
+                // futur resync PATCHerait un event supprime et le recreerait.
                 for (const t of (data?.trips ?? []) as any[]) {
                   if (cancelling && t.google_calendar_event_id) {
                     supabase.functions.invoke("sync-transportation-calendar", { body: { action: "delete", eventId: t.google_calendar_event_id } }).catch(() => {});
+                    supabase.from("transportation_trips").update({ google_calendar_event_id: null, sync_status: "cancelled" } as any).eq("id", t.id).then(() => {}, () => {});
                   } else if (!cancelling) {
                     supabase.functions.invoke("sync-transportation-calendar", { body: { action: "upsert", tripId: t.id } }).catch(() => {});
                   }

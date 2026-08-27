@@ -137,6 +137,10 @@ export function PaymentsPage({
     for (const inst of installments) {
       const booking = bookingById.get(inst.booking_id);
       if (!booking) continue;
+      // Booking annulé : les impayés ne sont plus dus (ni Overdue ni
+      // Outstanding) — on ne garde que l'argent déjà encaissé, comme sur le
+      // Dashboard (25 août 2026).
+      if ((booking as { cancelled_at?: string | null }).cancelled_at && inst.status !== "paid") continue;
       const name = booking.retreat_name
         || `${booking.first_name ?? ""} ${booking.last_name ?? ""}`.trim()
         || booking.email;
@@ -174,8 +178,16 @@ export function PaymentsPage({
       if (s && !r.name.toLowerCase().includes(s) && !r.booking.email.toLowerCase().includes(s)) return false;
       return true;
     });
-    // Ordre par due date : croissant (défaut) ou plus récent d'abord
-    return sortDesc ? [...filtered].reverse() : filtered;
+    // Ordre par due date : croissant (défaut) ou plus récent d'abord —
+    // les échéances sans date restent en bas dans les deux sens.
+    if (!sortDesc) return filtered;
+    return [...filtered].sort((a, b) => {
+      const da = a.inst.due_date, db = b.inst.due_date;
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return db.localeCompare(da);
+    });
   }, [allRows, search, statusFilter, yearFilter, catFilter, sortDesc]);
 
   const totals = useMemo(() => {
@@ -184,7 +196,11 @@ export function PaymentsPage({
       if (r.booking.is_test) continue; // bookings de test : hors totaux
       const a = Number(r.inst.amount_due || 0);
       total += a;
-      totalHt += Number(r.inst.amount_excl_vat ?? 0);
+      // HT manquant : même estimation que le Dashboard (13 % catering, 23 %
+      // ailleurs) pour que les deux totaux HT concordent (25 août 2026).
+      totalHt += r.inst.amount_excl_vat != null
+        ? Number(r.inst.amount_excl_vat)
+        : a / ((r.inst.category ?? "rental") === "catering" ? 1.13 : 1.23);
       if (r.bucket === "paid") {
         paid += a;
         if (r.inst.is_cash) paidCash += a; else paidBank += a;

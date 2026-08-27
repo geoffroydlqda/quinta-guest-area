@@ -43,12 +43,13 @@ function hexEqual(a: string, b: string): boolean {
 
 async function verifySignature(payload: string, header: string | null): Promise<boolean> {
   if (!header) return false;
-  const parts = Object.fromEntries(
-    header.split(",").map((p) => p.split("=", 2) as [string, string])
-  );
-  const t = parts["t"];
-  const v1 = parts["v1"];
-  if (!t || !v1) return false;
+  // Pendant une rotation de secret, Stripe envoie PLUSIEURS signatures v1 —
+  // il faut toutes les tester (avant, seule la derniere etait comparee et les
+  // events valides pouvaient etre rejetes pendant la transition — 25 aout 2026).
+  const pairs = header.split(",").map((p) => p.split("=", 2) as [string, string]);
+  const t = pairs.find(([k]) => k.trim() === "t")?.[1];
+  const v1s = pairs.filter(([k]) => k.trim() === "v1").map(([, v]) => v).filter(Boolean);
+  if (!t || v1s.length === 0) return false;
   // Tolérance 10 min contre le rejeu
   const age = Math.abs(Date.now() / 1000 - Number(t));
   if (!Number.isFinite(age) || age > 600) return false;
@@ -59,7 +60,7 @@ async function verifySignature(payload: string, header: string | null): Promise<
     );
     const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${payload}`));
     const hex = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
-    if (hexEqual(hex, v1)) return true;
+    if (v1s.some((v1) => hexEqual(hex, v1))) return true;
   }
   return false;
 }

@@ -82,10 +82,12 @@ interface RoomCardProps {
 }
 
 function RoomCard({ roomId, bathroomType, note, bedType, isExpanded, onToggle, isFixed = false, isLocked, onChange, guests, onAddGuest, onUpdateGuest, onRemoveGuest }: RoomCardProps) {
+  // Photo selon le lit choisi : twin -> photo lits jumeaux, sinon photo lit
+  // double (les images etaient inversees — corrige le 25 aout 2026).
   const image =
     roomId === 1 || roomId === 6
       ? roomKingImage
-      : bedType === 'king'
+      : bedType === 'twin'
         ? roomTwinsImage
         : roomQueenImage;
   // Carrousel photos réelles pour les chambres en-suite 9-11 (twins comme double)

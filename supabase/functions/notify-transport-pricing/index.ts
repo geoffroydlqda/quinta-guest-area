@@ -34,7 +34,9 @@ const FROM_EMAIL = "Quinta do Amor <hello@quintamor.com>";
 const GUEST_AREA_URL = "https://guest.quintamor.com/dashboard";
 const ADMIN_BCC = "hello@quintamor.com";
 
-const BodySchema = z.object({ user_id: z.string().uuid() });
+// booking_id optionnel : quand il est fourni, l'email ne couvre QUE les trips
+// de ce sejour (avant, un guest a 2 sejours recevait le melange — 25 aout 2026).
+const BodySchema = z.object({ user_id: z.string().uuid(), booking_id: z.string().uuid().optional() });
 
 function escapeHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -87,12 +89,14 @@ serve(async (req) => {
     if (!parsed.success) {
       return new Response(JSON.stringify({ error: "Invalid body" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const { user_id } = parsed.data;
+    const { user_id, booking_id } = parsed.data;
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    let tripsQuery = admin.from("transportation_trips").select("*").eq("user_id", user_id);
+    if (booking_id) tripsQuery = tripsQuery.eq("booking_id", booking_id);
     const [{ data: profile }, { data: trips }] = await Promise.all([
       admin.from("guest_profiles").select("full_name, first_name, email").eq("user_id", user_id).maybeSingle(),
-      admin.from("transportation_trips").select("*").eq("user_id", user_id),
+      tripsQuery,
     ]);
     if (!profile?.email) {
       return new Response(JSON.stringify({ error: "Guest not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });

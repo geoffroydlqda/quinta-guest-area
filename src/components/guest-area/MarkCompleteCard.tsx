@@ -36,8 +36,11 @@ export function MarkCompleteCard({
   const [saving, setSaving] = useState(false);
   const [noRow, setNoRow] = useState(false);
 
-  const scope = <T extends { eq: any }>(q: T): T =>
-    activeBookingId ? q.eq('booking_id', activeBookingId) : q.eq('user_id', user?.id ?? '');
+  // Meme garde que useFoodPlan/useTransportation : sans booking actif, on ne
+  // touche que les lignes historiques sans booking_id (jamais celles d'un
+  // autre sejour du meme guest).
+  const scope = <T extends { eq: any; is: any }>(q: T): T =>
+    activeBookingId ? q.eq('booking_id', activeBookingId) : q.eq('user_id', user?.id ?? '').is('booking_id', null);
 
   useEffect(() => {
     let cancelled = false;

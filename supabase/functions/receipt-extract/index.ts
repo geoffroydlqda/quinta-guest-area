@@ -215,7 +215,10 @@ async function runMatching(docId: string, ex: Extract) {
   }
 
   const best = cands[0];
-  const autoLink = best && best.score >= 60 && (!cands[1] || cands[1].score <= best.score - 15);
+  // Jamais d'auto-lien vers une transaction qui a DEJA un justificatif —
+  // un doublon (photo + PDF du meme recu) part en review, pas en matched.
+  const autoLink = best && best.score >= 60 && !linkedIds.has(best.tx_id)
+    && (!cands[1] || cands[1].score <= best.score - 15);
 
   if (autoLink) {
     const vatApplied = await applyVat(best.tx_id, ex);

@@ -54,16 +54,23 @@ export function getTripPrice(
   return p !== null ? `€${p}` : CUSTOM_OFFER_TEXT;
 }
 
+/** Au-delà de 8 passagers, pas de tarif standard : offre custom obligatoire. */
+const STANDARD_RATE_MAX_PASSENGERS = 8;
+
 /**
  * Returns the effective price for a trip. Manual override ALWAYS wins:
  * - admin-defined custom_price (if set) — manual override, OR
- * - fixed-route price (automatic rule), OR
+ * - fixed-route price (automatic rule, seulement si ≤ 8 passagers), OR
  * - null when it is a custom-offer trip without a price yet.
+ * (25 août 2026 : un trajet > 8 passagers sans custom_price est bien compté
+ * en "custom offer" partout — avant il était facturé au tarif 8 places.)
  */
-export function getEffectiveTripPrice(trip: Pick<TransportationTrip, 'pickup_location' | 'dropoff_location' | 'taxi_size' | 'custom_price'>): number | null {
+export function getEffectiveTripPrice(trip: Pick<TransportationTrip, 'pickup_location' | 'dropoff_location' | 'taxi_size' | 'custom_price'> & { passengers_count?: number | null }): number | null {
   if (trip.custom_price !== null && trip.custom_price !== undefined && !Number.isNaN(Number(trip.custom_price))) {
     return Number(trip.custom_price);
   }
+  const pax = Number(trip.passengers_count ?? 0);
+  if (Number.isFinite(pax) && pax > STANDARD_RATE_MAX_PASSENGERS) return null;
   const fixed = getFixedTripPriceNumeric(trip.pickup_location, trip.dropoff_location, trip.taxi_size);
   if (fixed !== null) return fixed;
   return null;

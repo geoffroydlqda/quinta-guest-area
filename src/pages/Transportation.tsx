@@ -252,6 +252,8 @@ const Transportation = () => {
         trip_time: trip.trip_time,
         passengers_count: trip.passengers_count,
         taxi_size: trip.taxi_size,
+        // Conserver le prix negocie par l'admin sur la copie (25 aout 2026)
+        custom_price: trip.custom_price ?? undefined,
       });
       if (created?.id) notifyTripsAdded([created.id], isAdminMode);
     } finally {

@@ -505,7 +505,10 @@ const DashboardContent = () => {
           <p className="mt-5 max-w-2xl text-base md:text-lg leading-relaxed text-muted-foreground">
             Setup <strong className="text-foreground font-semibold">{doneCount} of {setupRows.length}</strong> complete.
             {nextGroup.length > 0 ? (
-              <> Next payment <strong className="text-foreground font-semibold tabular-nums">{fmtEur(nextGroup.reduce((s, i) => s + Number(i.amount_due || 0), 0))}</strong>{nextDueDate ? <> due <strong className="text-foreground font-semibold">{fmtDate(nextDueDate)}</strong></> : null}.</>
+              // Plusieurs echeances payables -> "Left to pay" (le total), pas
+              // "Next payment" qui laissait croire que tout etait du a la
+              // premiere date (corrige le 25 aout 2026).
+              <> {nextGroup.length > 1 ? 'Left to pay' : 'Next payment'} <strong className="text-foreground font-semibold tabular-nums">{fmtEur(nextGroup.reduce((s, i) => s + Number(i.amount_due || 0), 0))}</strong>{nextDueDate ? <> {nextGroup.length > 1 ? ', next installment due' : 'due'} <strong className="text-foreground font-semibold">{fmtDate(nextDueDate)}</strong></> : null}.</>
             ) : balanceDue > 0 ? (
               <> Balance due <strong className="text-foreground font-semibold tabular-nums">{fmtEur(balanceDue)}</strong>.</>
             ) : (

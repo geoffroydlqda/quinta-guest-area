@@ -91,13 +91,14 @@ serve(async (req) => {
     // (e.g. by an admin via impersonation) so the guest can read it under RLS.
     const newUserId = user.id;
     const bookingId = booking.id;
+    // payment_installments retire de la liste : la table n'a pas de colonne
+    // user_id (l'update echouait — en silence — a chaque claim, 25 aout 2026).
     const tablesToReassign = [
       "room_setups",
       "food_plans",
       "transportation_trips",
       "transportation_passengers",
       "docs_ack",
-      "payment_installments",
     ];
     for (const table of tablesToReassign) {
       try {

@@ -482,11 +482,13 @@ serve(async (req) => {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      // Les trips d'un booking de test ne vont jamais au calendrier chauffeur
+      // Les trips d'un booking de test OU annule ne vont jamais au calendrier
+      // chauffeur (annule : sinon un resync recreait les pickups d'un sejour
+      // annule — corrige le 25 aout 2026).
       if (trip.booking_id) {
-        const { data: tb } = await admin.from("bookings").select("is_test").eq("id", trip.booking_id).maybeSingle();
-        if (tb?.is_test) {
-          return new Response(JSON.stringify({ skipped: "test_booking" }), {
+        const { data: tb } = await admin.from("bookings").select("is_test,cancelled_at").eq("id", trip.booking_id).maybeSingle();
+        if (tb?.is_test || tb?.cancelled_at) {
+          return new Response(JSON.stringify({ skipped: tb?.is_test ? "test_booking" : "cancelled_booking" }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
@@ -535,9 +537,10 @@ serve(async (req) => {
         }
       }
 
-      // Les trips des bookings de test ne vont jamais au calendrier chauffeur
-      const { data: testBookings } = await admin.from("bookings").select("id").eq("is_test", true);
-      const testIds = new Set((testBookings ?? []).map((b: { id: string }) => b.id));
+      // Les trips des bookings de test ou annules ne vont jamais au calendrier
+      const { data: skippedBookings } = await admin.from("bookings").select("id,is_test,cancelled_at")
+        .or("is_test.eq.true,cancelled_at.not.is.null");
+      const testIds = new Set((skippedBookings ?? []).map((b: { id: string }) => b.id));
 
       let synced = 0, failed = 0;
       const results: Array<{ trip_id: string; trip_date: string; guest: string; ok: boolean; event_id?: string; error?: string }> = [];

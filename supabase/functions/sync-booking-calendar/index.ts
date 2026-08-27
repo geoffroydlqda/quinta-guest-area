@@ -160,7 +160,12 @@ async function upsertBooking(admin: ReturnType<typeof createClient>, b: BookingR
       const ev = await getR.json();
       const ownDescription = !ev.description || String(ev.description).includes("guest.quintamor.com/admin/guest/");
       const patch: Record<string, unknown> = { ...dates };
-      if (ownDescription) patch.description = bookingDescription(b);
+      // Evenement gere par la fonction : le titre suit les renommages du
+      // booking (avant, seul le POST initial posait summary — corrige 25 aout 2026)
+      if (ownDescription) {
+        patch.description = bookingDescription(b);
+        patch.summary = bookingTitle(b);
+      }
       const r = await fetch(`${CAL_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`, {
         method: "PATCH", headers, body: JSON.stringify(patch),
       });
