@@ -1315,6 +1315,8 @@ function Row({ label, value }: { label: string; value: any }) {
 
 type Booking = {
   id: string;
+  user_id: string | null;
+  guest_count: number | null;
   total_rental_price: number | null;
   rental_discount: number | null;
   payment_status: "pending" | "deposit_paid" | "paid_in_full" | "overdue";
@@ -1325,6 +1327,11 @@ type Booking = {
   first_name: string | null;
   retreat_name: string | null;
 };
+
+// Suggestion de montant pour un nouveau paiement, construite depuis les
+// onglets Food / Transport de la fiche (27 août 2026) : total + lignes
+// produits prêtes à l'emploi (détail repris dans le pro forma du mail).
+type PaymentSuggestion = { total: number; lines: ProductLine[]; note?: string };
 
 // TVA par catégorie : rental 23 %, catering 13 %, extra au choix (6/13/23).
 const VAT_DEFAULT: Record<string, number> = { rental: 23, catering: 13, extra: 23, discount: 23 };
@@ -1442,6 +1449,9 @@ function PaymentSection({ userId }: { userId: string }) {
   // l'email (un lien Stripe, une fatura-recibo multi-lignes) part quand
   // Geoffroy le décide, depuis le bloc du groupe.
   const [groupSel, setGroupSel] = useState<Set<string>>(new Set());
+  // Suggestions de montant depuis les onglets Food / Transport (27 août 2026)
+  const [foodSuggestion, setFoodSuggestion] = useState<PaymentSuggestion | null>(null);
+  const [transportSuggestion, setTransportSuggestion] = useState<PaymentSuggestion | null>(null);
   // Catalogue de produits (onglet Products) pour composer les paiements
   const [products, setProducts] = useState<{ id: string; name: string; category: string; default_vat: number; default_price: number | null; unit: string | null }[]>([]);
   useEffect(() => {
@@ -1501,7 +1511,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const loadAll = async () => {
     setLoading(true);
-    let q = supabase.from("bookings").select("id,total_rental_price,rental_discount,payment_status,payment_status_override,check_in_date,check_out_date,email,first_name,retreat_name");
+    let q = supabase.from("bookings").select("id,user_id,guest_count,total_rental_price,rental_discount,payment_status,payment_status_override,check_in_date,check_out_date,email,first_name,retreat_name");
     if (bookingIdParam) {
       q = q.eq("id", bookingIdParam);
     } else {
@@ -1527,7 +1537,75 @@ function PaymentSection({ userId }: { userId: string }) {
       .order("due_date", { ascending: true, nullsFirst: false });
     if (!iRes.error) setInstallments((iRes.data || []) as Installment[]);
     await loadEmailLog(((iRes.data || []) as Installment[]).map((i) => i.id));
+    await loadSuggestions(b);
     setLoading(false);
+  };
+
+  // Construit les suggestions de paiement depuis le plan catering et les
+  // trips contractés — le détail devient des lignes produits (et se retrouve
+  // dans le pro forma joint à l'email de demande de paiement).
+  const loadSuggestions = async (b: Booking) => {
+    try {
+      // --- Catering : plan repas x régimes (mêmes règles que l'onglet Food)
+      let fp: { selections: unknown; diet_config: unknown } | null = null;
+      const byBooking = await supabase.from("food_plans")
+        .select("selections,diet_config").eq("booking_id", b.id).maybeSingle();
+      fp = byBooking.data ?? null;
+      if (!fp && b.user_id) {
+        const byUser = await supabase.from("food_plans")
+          .select("selections,diet_config").eq("user_id", b.user_id).maybeSingle();
+        fp = byUser.data ?? null;
+      }
+      const sels = Array.isArray(fp?.selections) ? (fp!.selections as any[]) : [];
+      if (sels.length && fp?.diet_config) {
+        const sum = calculateFoodCostMulti(
+          sels, fp.diet_config as DietConfig, b.guest_count ?? 0, b.check_in_date
+        );
+        const MEAL_LABEL: Record<string, string> = {
+          fullBoard: "full board", breakfast: "breakfast", lunch: "lunch", dinner: "dinner",
+        };
+        const lines: ProductLine[] = [];
+        for (const d of sum.dietBreakdown) {
+          for (const [meal, ml] of Object.entries(d.meals)) {
+            if (ml.units > 0 && ml.price > 0) {
+              lines.push({
+                product_id: null,
+                name: `Catering — ${d.label.toLowerCase()} · ${MEAL_LABEL[meal] ?? meal}`,
+                qty: ml.units, unit_price: ml.price, vat: 13,
+              });
+            }
+          }
+        }
+        setFoodSuggestion(lines.length ? { total: sum.grandTotal, lines } : null);
+      } else setFoodSuggestion(null);
+
+      // --- Transport : trips contractés au prix effectif (custom > fixe)
+      const tRes = await supabase.from("transportation_trips")
+        .select("pickup_location,dropoff_location,trip_date,taxi_size,passengers_count,custom_price")
+        .eq("booking_id", b.id)
+        .order("trip_date", { ascending: true });
+      const trips = tRes.data ?? [];
+      if (trips.length) {
+        const lines: ProductLine[] = [];
+        let pending = 0;
+        for (const t of trips) {
+          const price = getEffectiveTripPrice(t as any);
+          if (price === null) { pending++; continue; }
+          lines.push({
+            product_id: null,
+            name: `Taxi ${t.pickup_location} → ${t.dropoff_location} (${t.trip_date})`,
+            qty: 1, unit_price: price, vat: 23,
+          });
+        }
+        setTransportSuggestion(lines.length ? {
+          total: lines.reduce((s, l) => s + l.qty * l.unit_price, 0),
+          lines,
+          note: pending > 0 ? `${pending} trip${pending > 1 ? "s" : ""} still waiting for a custom price (not included)` : undefined,
+        } : null);
+      } else setTransportSuggestion(null);
+    } catch {
+      // suggestions best-effort : ne bloque jamais l'onglet Payments
+    }
   };
 
   useEffect(() => { loadAll(); }, [userId, bookingIdParam]);
@@ -1824,6 +1902,8 @@ function PaymentSection({ userId }: { userId: string }) {
         initial={inst}
         checkInDate={booking.check_in_date}
         products={products}
+        foodSuggestion={foodSuggestion}
+        transportSuggestion={transportSuggestion}
         onCancel={() => setEditingId(null)}
         onSave={async (vals, file) => {
           const ok = await upsertInstallment(inst.id, vals, file);
@@ -2122,6 +2202,8 @@ function PaymentSection({ userId }: { userId: string }) {
         <InstallmentForm
           checkInDate={booking.check_in_date}
           products={products}
+          foodSuggestion={foodSuggestion}
+          transportSuggestion={transportSuggestion}
           onCancel={() => setShowAdd(false)}
           onSave={async (vals, file) => {
             const ok = await upsertInstallment(null, vals, file);
@@ -2238,12 +2320,16 @@ function InstallmentForm({
   initial,
   checkInDate,
   products,
+  foodSuggestion,
+  transportSuggestion,
   onCancel,
   onSave,
 }: {
   initial?: Installment;
   checkInDate?: string | null;
   products: { id: string; name: string; category: string; default_vat: number; default_price: number | null; unit: string | null }[];
+  foodSuggestion?: PaymentSuggestion | null;
+  transportSuggestion?: PaymentSuggestion | null;
   onCancel: () => void;
   onSave: (
     v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number; product_lines?: ProductLine[] | null },
@@ -2292,6 +2378,24 @@ function InstallmentForm({
   const patchLine = (i: number, patch: Partial<ProductLine>) =>
     setLines((arr) => arr.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const removeLine = (i: number) => setLines((arr) => arr.filter((_, j) => j !== i));
+
+  // Remise à l'intérieur du paiement : une ligne à prix négatif, déduite du
+  // total (et affichée telle quelle dans le pro forma joint à l'email).
+  const addDiscountLine = () =>
+    setLines((arr) => [...arr, {
+      product_id: null, name: "Discount", qty: 1, unit_price: 0,
+      vat: category === "catering" ? chosenVat : (category === "extra" ? chosenVat : 23),
+    }]);
+
+  // Remplit les lignes depuis l'onglet Food ou Transport de la fiche.
+  const applySuggestion = (s: PaymentSuggestion, defaultLabel: string) => {
+    setLines(s.lines.map((l) => ({ ...l })));
+    if (!label.trim()) setLabel(defaultLabel);
+  };
+  const activeSuggestion =
+    category === "catering" && foodSuggestion ? { s: foodSuggestion, label: "Catering", source: "Food tab" }
+    : category === "extra" && transportSuggestion ? { s: transportSuggestion, label: "Transportation", source: "Transport tab" }
+    : null;
 
   // Montant auto = somme des lignes dès qu'il y en a (reste modifiable ensuite).
   useEffect(() => {
@@ -2372,6 +2476,21 @@ function InstallmentForm({
         </div>
       </div>
 
+      {/* Suggestion depuis les onglets Food / Transport de la fiche */}
+      {activeSuggestion && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#D7DFC3] bg-[#EEF1E4] px-2.5 py-2">
+          <span className="text-xs text-[#57624A]">
+            {activeSuggestion.source}: <strong>€{activeSuggestion.s.total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}</strong>
+            {" "}({activeSuggestion.s.lines.length} line{activeSuggestion.s.lines.length > 1 ? "s" : ""})
+            {activeSuggestion.s.note ? ` — ${activeSuggestion.s.note}` : ""}
+          </span>
+          <Button type="button" size="sm" variant="outline" className="h-7 text-xs"
+            onClick={() => applySuggestion(activeSuggestion.s, activeSuggestion.label)}>
+            Use this detail
+          </Button>
+        </div>
+      )}
+
       {/* Lignes produits — sélection depuis le catalogue (onglet Products) */}
       {(products.length > 0 || lines.length > 0) && (
         <div className="space-y-1.5">
@@ -2384,9 +2503,9 @@ function InstallmentForm({
                 onChange={(e) => patchLine(i, { qty: Number(e.target.value) || 0 })}
                 className="h-8 w-16 text-right" />
               <span className="text-xs text-muted-foreground">×</span>
-              <Input type="number" min="0" step="0.01" value={String(ln.unit_price)} title="Unit price (€ incl. VAT)"
+              <Input type="number" step="0.01" value={String(ln.unit_price)} title="Unit price (€ incl. VAT) — negative for a discount"
                 onChange={(e) => patchLine(i, { unit_price: Number(e.target.value) || 0 })}
-                className="h-8 w-20 text-right" />
+                className={`h-8 w-20 text-right ${ln.unit_price < 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`} />
               <span className="text-xs text-muted-foreground">€</span>
               <select className="h-8 rounded-md border border-input bg-background px-1.5 text-xs" title="VAT"
                 value={String(ln.vat)} onChange={(e) => patchLine(i, { vat: Number(e.target.value) })}>
@@ -2401,6 +2520,7 @@ function InstallmentForm({
               </button>
             </div>
           ))}
+          <div className="flex items-center gap-1.5">
           <select
             className="h-8 rounded-md border border-dashed border-input bg-background px-2 text-xs text-muted-foreground"
             value=""
@@ -2420,9 +2540,17 @@ function InstallmentForm({
                 </optgroup>
               ))}
           </select>
+          {lines.length > 0 && category !== "discount" && (
+            <button type="button" onClick={addDiscountLine}
+              className="h-8 rounded-md border border-dashed border-input bg-background px-2 text-xs text-muted-foreground hover:text-foreground"
+              title="Add a negative line deducted from this payment (shown on the pro forma)">
+              − Add discount line
+            </button>
+          )}
+          </div>
           {lines.length > 0 && (
             <div className="text-[11px] text-muted-foreground">
-              Amount is set from the lines (still editable) — VAT is applied per line.
+              Amount is set from the lines (still editable) — VAT is applied per line. Use a negative unit price for a discount.
             </div>
           )}
         </div>

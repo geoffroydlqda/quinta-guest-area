@@ -9,6 +9,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "npm:resend@2.0.0";
 import { z } from "https://esm.sh/zod@3.23.8";
+import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -105,6 +106,194 @@ ${SIGNATURE}
 
 const fmtEur = (n: number) => `€${Number(n).toLocaleString("en-GB", { maximumFractionDigits: 2 })}`;
 
+// ---------------------------------------------------------------------------
+// Pro forma PDF (27 aout 2026) — joint a chaque email de demande de paiement.
+// Detaille ce que le guest paie (lignes produits quand elles existent) et,
+// pour tout le sejour, l'echeancier : deja paye / cette demande / a venir.
+// Ce n'est PAS un document fiscal — la fatura-recibo Moloni arrive au paiement.
+// ---------------------------------------------------------------------------
+type PfInst = {
+  id: string; label: string | null; amount_due: number; amount_excl_vat: number | null;
+  status: string; category: string | null; due_date: string | null; paid_on: string | null;
+  is_cash: boolean | null; vat_rate: number | null;
+  product_lines: { name: string; qty: number; unit_price: number; vat: number }[] | null;
+};
+
+const OLIVE = rgb(0.427, 0.471, 0.333);
+const INK = rgb(0.13, 0.13, 0.13);
+const GREY = rgb(0.45, 0.45, 0.45);
+const LIGHT = rgb(0.955, 0.945, 0.92);
+
+const pfDate = (iso: string | null | undefined) => {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+};
+const pfEur = (n: number) =>
+  `${n < 0 ? "-" : ""}€${Math.abs(n).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+async function buildProFormaPdf(opts: {
+  guestName: string; retreatName: string | null;
+  checkIn: string | null; checkOut: string | null;
+  requested: PfInst[]; all: PfInst[];
+}): Promise<string> {
+  const doc = await PDFDocument.create();
+  const helv = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  let page = doc.addPage([595.28, 841.89]);
+  const M = 48, W = 595.28 - 2 * M;
+  let y = 841.89 - 56;
+
+  const ensure = (need: number) => {
+    if (y - need < 60) { page = doc.addPage([595.28, 841.89]); y = 841.89 - 56; }
+  };
+  // Les polices standard (WinAnsi) ne couvrent pas →, ’, etc. — on translittère.
+  const safe = (s: string) => s
+    .replace(/→/g, "-").replace(/[’‘]/g, "'").replace(/[“”]/g, '"')
+    .replace(/…/g, "...").replace(/[−]/g, "-")
+    // deno-lint-ignore no-control-regex
+    .replace(/[^\x20-\x7E\xA0-\xFF€–—·]/g, "?");
+  const text = (raw: string, x: number, size: number, opt: { font?: typeof helv; color?: ReturnType<typeof rgb>; right?: number } = {}) => {
+    const s = safe(raw);
+    const f = opt.font ?? helv;
+    let drawX = x;
+    if (opt.right != null) drawX = opt.right - f.widthOfTextAtSize(s, size);
+    page.drawText(s, { x: drawX, y, size, font: f, color: opt.color ?? INK });
+  };
+
+  // ---- entete
+  text("QUINTA DO AMOR", M, 19, { font: bold, color: OLIVE });
+  text(`Issued ${pfDate(new Date().toISOString().slice(0, 10))}`, 0, 9, { color: GREY, right: M + W });
+  y -= 16;
+  text("Payment details — pro forma", M, 11, { color: GREY });
+  y -= 26;
+  text(opts.retreatName || opts.guestName, M, 13, { font: bold });
+  y -= 15;
+  if (opts.retreatName && opts.guestName && opts.retreatName !== opts.guestName) {
+    text(opts.guestName, M, 10, { color: GREY }); y -= 13;
+  }
+  if (opts.checkIn || opts.checkOut) {
+    text(`Stay: ${pfDate(opts.checkIn)} → ${pfDate(opts.checkOut)}`, M, 10, { color: GREY });
+    y -= 13;
+  }
+  y -= 12;
+
+  // ---- tableau 1 : cette demande, ligne a ligne
+  text("THIS PAYMENT", M, 10, { font: bold, color: OLIVE });
+  y -= 16;
+  const c = { desc: M + 6, qty: M + W - 210, unit: M + W - 140, vat: M + W - 92, tot: M + W - 6 };
+  page.drawRectangle({ x: M, y: y - 4, width: W, height: 16, color: LIGHT });
+  text("Description", c.desc, 8.5, { font: bold, color: GREY });
+  text("Qty", 0, 8.5, { font: bold, color: GREY, right: c.qty + 24 });
+  text("Unit", 0, 8.5, { font: bold, color: GREY, right: c.unit + 30 });
+  text("VAT", 0, 8.5, { font: bold, color: GREY, right: c.vat + 22 });
+  text("Total", 0, 8.5, { font: bold, color: GREY, right: c.tot });
+  y -= 17;
+
+  let totalIncl = 0, totalExcl = 0;
+  for (const inst of opts.requested) {
+    const amount = Number(inst.amount_due);
+    totalIncl += amount;
+    const lines = (inst.product_lines ?? []).filter((l) => Number(l.qty) && Number(l.unit_price) !== 0);
+    if (lines.length) {
+      const linesSum = lines.reduce((s, l) => s + Number(l.qty) * Number(l.unit_price), 0);
+      // HT au prorata si le montant de l'echeance a ete ajuste a la main
+      const ratio = linesSum !== 0 ? amount / linesSum : 1;
+      for (const l of lines) {
+        ensure(14);
+        const lineTot = Number(l.qty) * Number(l.unit_price) * ratio;
+        totalExcl += lineTot / (1 + Number(l.vat || 0) / 100);
+        text(l.name.slice(0, 62), c.desc, 9);
+        text(String(l.qty), 0, 9, { right: c.qty + 24 });
+        text(pfEur(Number(l.unit_price)), 0, 9, { right: c.unit + 30 });
+        text(`${l.vat}%`, 0, 9, { right: c.vat + 22 });
+        text(pfEur(lineTot), 0, 9, { right: c.tot });
+        y -= 14;
+      }
+    } else {
+      ensure(14);
+      const vat = inst.is_cash ? 0 : Number(inst.vat_rate ?? 23);
+      totalExcl += inst.amount_excl_vat != null ? Number(inst.amount_excl_vat) : amount / (1 + vat / 100);
+      text((inst.label || "Payment").slice(0, 62), c.desc, 9);
+      text(`${vat}%`, 0, 9, { right: c.vat + 22 });
+      text(pfEur(amount), 0, 9, { right: c.tot });
+      y -= 14;
+    }
+  }
+  y -= 4;
+  page.drawLine({ start: { x: M, y: y + 8 }, end: { x: M + W, y: y + 8 }, thickness: 0.6, color: OLIVE });
+  ensure(46);
+  text("Subtotal excl. VAT", 0, 9, { color: GREY, right: c.vat + 22 });
+  text(pfEur(Math.round(totalExcl * 100) / 100), 0, 9, { right: c.tot });
+  y -= 13;
+  text("VAT", 0, 9, { color: GREY, right: c.vat + 22 });
+  text(pfEur(Math.round((totalIncl - totalExcl) * 100) / 100), 0, 9, { right: c.tot });
+  y -= 15;
+  text("Total due", 0, 11, { font: bold, right: c.vat + 22 });
+  text(pfEur(totalIncl), 0, 11, { font: bold, color: OLIVE, right: c.tot });
+  y -= 30;
+
+  // ---- tableau 2 : echeancier complet du sejour
+  const sched = opts.all
+    .filter((i) => i.category !== "bar")
+    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"));
+  if (sched.length > 1) {
+    ensure(60);
+    text("YOUR PAYMENT SCHEDULE", M, 10, { font: bold, color: OLIVE });
+    y -= 16;
+    page.drawRectangle({ x: M, y: y - 4, width: W, height: 16, color: LIGHT });
+    text("Payment", c.desc, 8.5, { font: bold, color: GREY });
+    text("Due date", M + W - 220, 8.5, { font: bold, color: GREY });
+    text("Status", M + W - 130, 8.5, { font: bold, color: GREY });
+    text("Amount", 0, 8.5, { font: bold, color: GREY, right: c.tot });
+    y -= 17;
+    const requestedIds = new Set(opts.requested.map((r) => r.id));
+    let paidSum = 0, totalSum = 0;
+    for (const i of sched) {
+      ensure(14);
+      const amount = Number(i.amount_due);
+      totalSum += amount;
+      if (i.status === "paid") paidSum += amount;
+      const isReq = requestedIds.has(i.id);
+      const status = i.category === "discount" ? "Discount"
+        : i.status === "paid" ? `Paid${i.paid_on ? ` ${pfDate(i.paid_on)}` : ""}`
+        : isReq ? "This request" : "Upcoming";
+      const f = isReq ? bold : helv;
+      text((i.label || "Payment").slice(0, 44), c.desc, 9, { font: f });
+      text(i.category === "discount" ? "—" : pfDate(i.due_date), M + W - 220, 9, { font: f, color: i.status === "paid" ? GREY : INK });
+      text(status, M + W - 130, 9, { font: f, color: i.status === "paid" ? GREY : isReq ? OLIVE : INK });
+      text(pfEur(amount), 0, 9, { font: f, right: c.tot });
+      y -= 14;
+    }
+    y -= 4;
+    page.drawLine({ start: { x: M, y: y + 8 }, end: { x: M + W, y: y + 8 }, thickness: 0.6, color: OLIVE });
+    ensure(60);
+    const remaining = totalSum - paidSum - totalIncl;
+    text("Total for your stay", 0, 9, { color: GREY, right: M + W - 130 });
+    text(pfEur(totalSum), 0, 9, { right: c.tot });
+    y -= 13;
+    text("Already paid", 0, 9, { color: GREY, right: M + W - 130 });
+    text(pfEur(paidSum), 0, 9, { right: c.tot });
+    y -= 13;
+    text("This payment", 0, 9, { font: bold, right: M + W - 130 });
+    text(pfEur(totalIncl), 0, 9, { font: bold, color: OLIVE, right: c.tot });
+    y -= 13;
+    text("Remaining after this payment", 0, 9, { color: GREY, right: M + W - 130 });
+    text(pfEur(Math.max(0, Math.round(remaining * 100) / 100)), 0, 9, { right: c.tot });
+    y -= 24;
+  }
+
+  // ---- pied de page
+  ensure(40);
+  text("This document is not an invoice. Your official invoice-receipt (fatura-recibo)", M, 8, { color: GREY });
+  y -= 11;
+  text("will be issued and emailed to you as soon as your payment is received.", M, 8, { color: GREY });
+  y -= 16;
+  text("Quinta do Amor · www.quintamor.com · hello@quintamor.com · +351 931 377 682", M, 8, { color: GREY });
+
+  return await doc.saveAsBase64();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -141,7 +330,7 @@ serve(async (req) => {
     }
 
     const { data: instsData } = await admin.from("payment_installments")
-      .select("id,booking_id,label,amount_due,status,is_cash,category,invoice_file_url,invoice_file_name,invoice_number,stripe_session_id")
+      .select("id,booking_id,label,amount_due,amount_excl_vat,status,is_cash,category,due_date,paid_on,vat_rate,product_lines,invoice_file_url,invoice_file_name,invoice_number,stripe_session_id")
       .in("id", ids);
     const insts = (instsData ?? []);
     if (insts.length !== ids.length) return json({ error: "Installment not found" }, 404);
@@ -152,7 +341,7 @@ serve(async (req) => {
     const inst = insts.find((i) => i.id === ids[0])!;
 
     const { data: booking } = await admin.from("bookings")
-      .select("id,email,first_name,retreat_name,check_in_date,check_out_date")
+      .select("id,email,first_name,last_name,retreat_name,check_in_date,check_out_date")
       .eq("id", inst.booking_id).maybeSingle();
     if (!booking?.email) return json({ error: "Booking has no email" }, 400);
     const to = booking.email;
@@ -204,12 +393,34 @@ Geo`;
         payUrl = `${FUNCTIONS_BASE}/stripe-checkout?installment=${inst.id}&t=${token}`;
       }
       const amount = fmtEur(insts.reduce((s, i) => s + Number(i.amount_due || 0), 0));
+
+      // Pro forma PDF joint : detail de ce paiement + echeancier du sejour.
+      // Best-effort — si la generation echoue, l'email part sans PDF.
+      let proFormaAttached = false;
+      try {
+        const { data: allInsts } = await admin.from("payment_installments")
+          .select("id,label,amount_due,amount_excl_vat,status,is_cash,category,due_date,paid_on,vat_rate,product_lines")
+          .eq("booking_id", inst.booking_id);
+        const guestName = `${booking.first_name ?? ""} ${booking.last_name ?? ""}`.trim() || booking.email;
+        const pdfB64 = await buildProFormaPdf({
+          guestName,
+          retreatName: booking.retreat_name ?? null,
+          checkIn: booking.check_in_date, checkOut: booking.check_out_date,
+          requested: insts as unknown as PfInst[],
+          all: (allInsts ?? []) as unknown as PfInst[],
+        });
+        attachments.push({ filename: "Payment details - Quinta do Amor.pdf", content: pdfB64 });
+        proFormaAttached = true;
+      } catch (e) {
+        console.error("[pro-forma] generation failed (email sent without PDF):", e);
+      }
+
       // Mise en page sobre façon mail personnel, mais avec un vrai bouton
       // (aligné à gauche, pas de bloc centré marketing).
       html = emailShell(`
 ${paras(parsed.data.body_top ?? "")}
 <p style="margin:18px 0 6px 0;"><a href="${payUrl}" style="display:inline-block;background:#6d7855;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;">Pay ${esc(amount)}</a></p>
-<p style="margin:0 0 18px 0;font-size:11px;color:#888888;">Secure bank payment (debit or transfer), powered by Stripe.</p>
+<p style="margin:0 0 18px 0;font-size:11px;color:#888888;">Secure bank payment (debit or transfer), powered by Stripe.${proFormaAttached ? " The full details of this payment are attached." : ""}</p>
 ${paras(parsed.data.body_bottom ?? "")}
 `);
     } else {
