@@ -139,12 +139,21 @@ async function generateInvoice(installmentId: string) {
   // bancaire (paid_bank_tx_id, 27 août 2026) et pas encore facturées
   // -> une seule fatura-recibo à plusieurs lignes.
   let group: InstRow[] = [inst];
+  // Honesty bar (27 août 2026) : UNE fatura-recibo "Consumidor Final" par
+  // événement, regroupant les lignes bar 23 % et 6 % pas encore facturées.
+  const isBar = (inst.category ?? "") === "bar";
+  if (isBar) {
+    const { data: barSibs } = await admin.from("payment_installments")
+      .select(INST_COLS).eq("booking_id", inst.booking_id).eq("category", "bar") as { data: InstRow[] | null };
+    group = (barSibs ?? []).filter((s) => !s.moloni_document_id && Number(s.amount_due) > 0);
+    if (!group.length) throw new Error("All bar lines are already invoiced");
+  }
   const groupKey: [string, string] | null = inst.stripe_session_id
     ? ["stripe_session_id", inst.stripe_session_id]
     : (inst as InstRow & { paid_bank_tx_id?: string | null }).paid_bank_tx_id
       ? ["paid_bank_tx_id", (inst as InstRow & { paid_bank_tx_id?: string | null }).paid_bank_tx_id as string]
       : null;
-  if (groupKey) {
+  if (!isBar && groupKey) {
     const { data: siblings } = await admin.from("payment_installments")
       .select(INST_COLS)
       .eq(groupKey[0], groupKey[1])
@@ -182,8 +191,36 @@ async function generateInvoice(installmentId: string) {
 
   // 2. Cherche le client Moloni (par NIF, sinon par email), sinon le crée.
   let customerId: number | null = null;
+  // Bar : fatura simplificada au "Consumidor Final" (NIF 999999990) — les
+  // guests paient individuellement au QR, pas de client nominatif.
+  if (isBar) {
+    const cfRes = await gql(`query($c: Int!, $s: String!) {
+      customers(companyId: $c, options: { search: { field: ALL, value: $s }, pagination: { page: 1, qty: 5 } }) {
+        data { customerId name vat }
+        errors { field msg }
+      }
+    }`, { c: cfg.company_id, s: "999999990" });
+    const cfHit = (cfRes?.data?.customers?.data ?? []).find((h: any) => h.vat === "999999990")
+      ?? (cfRes?.data?.customers?.data ?? [])[0];
+    if (cfHit) customerId = cfHit.customerId;
+    else {
+      const next = await gql(`query($c: Int!) { customerNextNumber(companyId: $c) { data errors { msg } } }`,
+        { c: cfg.company_id });
+      const number = next?.data?.customerNextNumber?.data ?? `C${Date.now()}`;
+      const created = await gql(`mutation($c: Int!, $d: CustomerInsert!) {
+        customerCreate(companyId: $c, data: $d) { data { customerId } errors { field msg } }
+      }`, {
+        c: cfg.company_id,
+        d: { number: String(number), name: "Consumidor Final", vat: "999999990", countryId: 1, languageId: 1 },
+      });
+      const errs = created?.data?.customerCreate?.errors;
+      if (errs?.length) throw new Error(`Moloni customerCreate (Consumidor Final): ${JSON.stringify(errs).slice(0, 300)}`);
+      customerId = created?.data?.customerCreate?.data?.customerId;
+    }
+    if (!customerId) throw new Error("Could not resolve the Consumidor Final customer in Moloni");
+  }
   const searchValue = isPtNif ? vatRaw : email;
-  if (searchValue) {
+  if (!isBar && searchValue) {
     const res = await gql(`query($c: Int!, $s: String!) {
       customers(companyId: $c, options: { search: { field: ALL, value: $s }, pagination: { page: 1, qty: 5 } }) {
         data { customerId name vat email }
@@ -284,7 +321,10 @@ async function generateInvoice(installmentId: string) {
     `${Number.isInteger(n) ? n.toLocaleString("en-GB") : n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€`;
 
   const products = group.map((g, idx) => {
-    const productId = cfg.products[g.category ?? "rental"] ?? cfg.products["rental"];
+    // bar : produit dédié si configuré (app_settings.moloni.products.bar), sinon extra
+    const productId = cfg.products[g.category ?? "rental"]
+      ?? (g.category === "bar" ? cfg.products["extra"] : undefined)
+      ?? cfg.products["rental"];
     if (!productId) throw new Error(`No Moloni product configured for category ${g.category}`);
     const rate = rateFor(g);
     const net = netHt(g);

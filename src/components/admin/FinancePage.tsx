@@ -515,22 +515,30 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       arr[m] += net;
       revRows.set(line, arr);
     }
-    // Bar (merchant) : seule source de revenu bar en base = les payouts
-    // quotidiens Revolut Merchant (honesty bar) — ni échéances catégorie
-    // "bar", ni bar_sales à ce jour. Comptés au mois du payout, montant net
-    // des frais Revolut (TVA bar non déduite : montants faibles, mix 13/23 %).
-    // ⚠ Si un jour le bar passe par des échéances ou bar_sales, retirer ce
-    // bloc pour éviter le double comptage.
-    for (const t of txs) {
-      if (t.kind !== "bar_payout" || t.amount <= 0) continue;
-      const bm = t.pnl_month ?? t.date.slice(0, 7);
-      if (!bm.startsWith(year)) continue;
-      const m = Number(bm.slice(5, 7)) - 1;
-      const v = t.amount_net ?? t.amount;
-      revBar[m] += v;
-      const arr = revRows.get("Bar (merchant)") ?? Array.from({ length: 12 }, () => 0);
-      arr[m] += v;
-      revRows.set("Bar (merchant)", arr);
+    // Bar (merchant) — 27 août 2026 : la source de revenu bar est passée aux
+    // ÉCHÉANCES catégorie "bar" (rollup revolut-bar-sync : HT exact par taux
+    // 23/6 %, rattachées à l'événement — comptées dans la boucle ci-dessus).
+    // Les transactions kind bar_payout (virements Merchant -> compte, nets de
+    // frais) ne comptent donc PLUS dans le P&L — uniquement dans le cash flow.
+    // Filet anti-trou : tant qu'AUCUNE échéance bar n'existe sur l'année
+    // (clé Merchant pas encore configurée), on garde l'ancien comptage payouts.
+    const hasBarInstallments = installments.some((i) => {
+      if (i.category !== "bar") return false;
+      const b = bookingById.get(i.booking_id);
+      return !!b?.check_in_date && b.check_in_date.startsWith(year);
+    });
+    if (!hasBarInstallments) {
+      for (const t of txs) {
+        if (t.kind !== "bar_payout" || t.amount <= 0) continue;
+        const bm = t.pnl_month ?? t.date.slice(0, 7);
+        if (!bm.startsWith(year)) continue;
+        const m = Number(bm.slice(5, 7)) - 1;
+        const v = t.amount_net ?? t.amount;
+        revBar[m] += v;
+        const arr = revRows.get("Bar (merchant)") ?? Array.from({ length: 12 }, () => 0);
+        arr[m] += v;
+        revRows.set("Bar (merchant)", arr);
+      }
     }
     // Dépenses : booking lié -> mois du check-in ; sinon date de transaction
     const byCat = new Map<string, number[]>();
@@ -726,11 +734,19 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       else if (i.category === "catering") revCatering += net;
       else revVenue += net; // venue + extras − discounts
     }
-    // Bar (merchant payouts) + other income, coûts HT (accrual)
+    // Bar (merchant payouts) + other income, coûts HT (accrual).
+    // 27 août 2026 : dès qu'il existe des échéances bar sur l'année (rollup
+    // revolut-bar-sync), elles sont LA source du revenu bar (revBarInst
+    // ci-dessus) — les payouts n'entrent plus (anti-double comptage).
+    const yrHasBarInst = installments.some((i) => {
+      if (i.category !== "bar") return false;
+      const b = bookingById.get(i.booking_id);
+      return !!b?.check_in_date && b.check_in_date.startsWith(yr);
+    });
     let barMonth = 0, barYtd = 0, oiMonth = 0, oiYtd = 0;
     let costVar = 0, costFix = 0, costYtd = 0;
     for (const t of txs) {
-      if (t.kind === "bar_payout" && t.amount > 0) {
+      if (t.kind === "bar_payout" && t.amount > 0 && !yrHasBarInst) {
         const bm = t.pnl_month ?? t.date.slice(0, 7);
         if (!bm.startsWith(yr)) continue;
         const v = t.amount_net ?? t.amount;
