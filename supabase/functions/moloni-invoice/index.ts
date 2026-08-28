@@ -37,10 +37,13 @@ const MOLONI_API = "https://api.molonion.pt/v1";
 const MEDIA_BASE = "https://mediaapi.moloni.org";
 
 const BodySchema = z.object({
-  action: z.enum(["gql", "generate", "pdf", "attach_doc"]),
+  action: z.enum(["gql", "generate", "pdf", "attach_doc", "bar_month"]),
   query: z.string().max(20000).optional(),
   variables: z.record(z.unknown()).optional(),
   installment_id: z.string().uuid().optional(),
+  // bar_month : fatura mensuelle Consumidor Final du honesty bar
+  // (mois YYYY-MM ; défaut = mois précédent, heure Lisbonne)
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
   // attach_doc : rapatrie le PDF d'un document Moloni (nota de credito,
   // fatura...) dans purchase_docs, lie a une fin_transaction (25 aout 2026).
   document_id: z.number().int().positive().optional(),
@@ -139,14 +142,12 @@ async function generateInvoice(installmentId: string) {
   // bancaire (paid_bank_tx_id, 27 août 2026) et pas encore facturées
   // -> une seule fatura-recibo à plusieurs lignes.
   let group: InstRow[] = [inst];
-  // Honesty bar (27 août 2026) : UNE fatura-recibo "Consumidor Final" par
-  // événement, regroupant les lignes bar 23 % et 6 % pas encore facturées.
+  // Honesty bar (27 août 2026) : les lignes bar ne se facturent PAS par
+  // événement — une fatura mensuelle "Consumidor Final" est générée
+  // automatiquement depuis bar_sales (action bar_month, cron le 1er du mois).
   const isBar = (inst.category ?? "") === "bar";
   if (isBar) {
-    const { data: barSibs } = await admin.from("payment_installments")
-      .select(INST_COLS).eq("booking_id", inst.booking_id).eq("category", "bar") as { data: InstRow[] | null };
-    group = (barSibs ?? []).filter((s) => !s.moloni_document_id && Number(s.amount_due) > 0);
-    if (!group.length) throw new Error("All bar lines are already invoiced");
+    throw new Error("Bar sales are invoiced automatically: one monthly Consumidor Final fatura (generated on the 1st for the previous month) — nothing to do here");
   }
   const groupKey: [string, string] | null = inst.stripe_session_id
     ? ["stripe_session_id", inst.stripe_session_id]
@@ -191,36 +192,8 @@ async function generateInvoice(installmentId: string) {
 
   // 2. Cherche le client Moloni (par NIF, sinon par email), sinon le crée.
   let customerId: number | null = null;
-  // Bar : fatura simplificada au "Consumidor Final" (NIF 999999990) — les
-  // guests paient individuellement au QR, pas de client nominatif.
-  if (isBar) {
-    const cfRes = await gql(`query($c: Int!, $s: String!) {
-      customers(companyId: $c, options: { search: { field: ALL, value: $s }, pagination: { page: 1, qty: 5 } }) {
-        data { customerId name vat }
-        errors { field msg }
-      }
-    }`, { c: cfg.company_id, s: "999999990" });
-    const cfHit = (cfRes?.data?.customers?.data ?? []).find((h: any) => h.vat === "999999990")
-      ?? (cfRes?.data?.customers?.data ?? [])[0];
-    if (cfHit) customerId = cfHit.customerId;
-    else {
-      const next = await gql(`query($c: Int!) { customerNextNumber(companyId: $c) { data errors { msg } } }`,
-        { c: cfg.company_id });
-      const number = next?.data?.customerNextNumber?.data ?? `C${Date.now()}`;
-      const created = await gql(`mutation($c: Int!, $d: CustomerInsert!) {
-        customerCreate(companyId: $c, data: $d) { data { customerId } errors { field msg } }
-      }`, {
-        c: cfg.company_id,
-        d: { number: String(number), name: "Consumidor Final", vat: "999999990", countryId: 1, languageId: 1 },
-      });
-      const errs = created?.data?.customerCreate?.errors;
-      if (errs?.length) throw new Error(`Moloni customerCreate (Consumidor Final): ${JSON.stringify(errs).slice(0, 300)}`);
-      customerId = created?.data?.customerCreate?.data?.customerId;
-    }
-    if (!customerId) throw new Error("Could not resolve the Consumidor Final customer in Moloni");
-  }
   const searchValue = isPtNif ? vatRaw : email;
-  if (!isBar && searchValue) {
+  if (searchValue) {
     const res = await gql(`query($c: Int!, $s: String!) {
       customers(companyId: $c, options: { search: { field: ALL, value: $s }, pagination: { page: 1, qty: 5 } }) {
         data { customerId name vat email }
@@ -434,6 +407,152 @@ async function generateInvoice(installmentId: string) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Honesty bar — fatura MENSUELLE "Consumidor Final" (27 août 2026).
+// Générée le 1er du mois (cron bar-invoice-monthly) pour le mois écoulé :
+// toutes les ventes bar_sales classées du mois pas encore facturées, groupées
+// en lignes wine (23 %), why not / beer (23 %), coconut water (6 %).
+// L'analytique par événement reste portée par les échéances bar par booking —
+// cette fatura est purement fiscale (aucun lien aux installments).
+// ---------------------------------------------------------------------------
+const BAR_PRICE = { wine: 22, soft: 3, coconut: 4 };
+
+async function consumidorFinalId(cfg: MoloniCfg): Promise<number> {
+  const res = await gql(`query($c: Int!, $s: String!) {
+    customers(companyId: $c, options: { search: { field: ALL, value: $s }, pagination: { page: 1, qty: 5 } }) {
+      data { customerId name vat }
+      errors { field msg }
+    }
+  }`, { c: cfg.company_id, s: "999999990" });
+  const hit = (res?.data?.customers?.data ?? []).find((h: { vat?: string }) => h.vat === "999999990")
+    ?? (res?.data?.customers?.data ?? [])[0];
+  if (hit?.customerId) return hit.customerId;
+  const next = await gql(`query($c: Int!) { customerNextNumber(companyId: $c) { data errors { msg } } }`,
+    { c: cfg.company_id });
+  const number = next?.data?.customerNextNumber?.data ?? `C${Date.now()}`;
+  const created = await gql(`mutation($c: Int!, $d: CustomerInsert!) {
+    customerCreate(companyId: $c, data: $d) { data { customerId } errors { field msg } }
+  }`, {
+    c: cfg.company_id,
+    d: { number: String(number), name: "Consumidor Final", vat: "999999990", countryId: 1, languageId: 1 },
+  });
+  const errs = created?.data?.customerCreate?.errors;
+  if (errs?.length) throw new Error(`Moloni customerCreate (Consumidor Final): ${JSON.stringify(errs).slice(0, 300)}`);
+  const id = created?.data?.customerCreate?.data?.customerId;
+  if (!id) throw new Error("Could not resolve the Consumidor Final customer in Moloni");
+  return id;
+}
+
+const lisbonDay = (iso: string) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Lisbon" }).format(new Date(iso));
+
+async function barMonthInvoice(monthArg?: string) {
+  const cfg = await moloniCfg();
+  const admin = _adminAuthClient;
+  // Mois cible : paramètre YYYY-MM, sinon le mois PRÉCÉDENT (heure Lisbonne)
+  let month = monthArg ?? "";
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    const now = lisbonDay(new Date().toISOString()); // YYYY-MM-DD
+    const d = new Date(`${now.slice(0, 7)}-01T12:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() - 1);
+    month = d.toISOString().slice(0, 7);
+  }
+
+  const { data: salesRaw } = await admin.from("bar_sales")
+    .select("id,paid_at,amount,qty_wine,qty_coconut,qty_soft,state,moloni_document_id")
+    .eq("state", "classified").is("moloni_document_id", null);
+  const sales = (salesRaw ?? []).filter((s) => lisbonDay(s.paid_at).slice(0, 7) === month);
+  if (!sales.length) return { month, skipped: true, reason: "no uninvoiced classified sales" };
+
+  const wine = sales.reduce((t, s) => t + (s.qty_wine ?? 0), 0);
+  const soft = sales.reduce((t, s) => t + (s.qty_soft ?? 0), 0);
+  const coconut = sales.reduce((t, s) => t + (s.qty_coconut ?? 0), 0);
+  const totalTtc = Math.round(sales.reduce((t, s) => t + Number(s.amount), 0) * 100) / 100;
+
+  const customerId = await consumidorFinalId(cfg);
+  const productId = cfg.products["bar"] ?? cfg.products["extra"] ?? cfg.products["rental"];
+  const monthLabel = new Date(`${month}-15T12:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+
+  type Line = { label: string; qty: number; unitTtc: number; rate: number };
+  const lines: Line[] = [
+    { label: "wine", qty: wine, unitTtc: BAR_PRICE.wine, rate: 23 },
+    { label: "why not / beer", qty: soft, unitTtc: BAR_PRICE.soft, rate: 23 },
+    { label: "coconut water", qty: coconut, unitTtc: BAR_PRICE.coconut, rate: 6 },
+  ].filter((l) => l.qty > 0);
+
+  const products = lines.map((l, idx) => ({
+    productId,
+    qty: l.qty,
+    ordering: idx + 1,
+    price: Math.round((l.unitTtc / (1 + l.rate / 100)) * 1e6) / 1e6,
+    summary: `Honesty bar ${monthLabel} — ${l.label} (€${l.unitTtc} incl. VAT)`,
+    taxes: [{ taxId: TAX_IDS[l.rate], ordering: 1, cumulative: false }],
+  }));
+
+  const docData: Record<string, unknown> = {
+    documentSetId: cfg.document_set_id,
+    customerId,
+    date: new Date().toISOString(),
+    expirationDate: new Date().toISOString().slice(0, 10),
+    status: 1,
+    products,
+    payments: [{ paymentMethodId: cfg.payment_method_id, value: totalTtc }],
+    notes: `Honesty bar — self-service sales collected via Revolut Merchant, ${monthLabel} (${sales.length} payment(s)).`,
+  };
+  const createMutation = `mutation($c: Int!, $d: InvoiceReceiptInsert!) {
+    invoiceReceiptCreate(companyId: $c, data: $d) {
+      data { documentId number date totalValue grossValue taxesValue status }
+      errors { field msg }
+    }
+  }`;
+  let created = await gql(createMutation, { c: cfg.company_id, d: docData }).catch((e: unknown) => ({ __err: String(e) }));
+  const firstErr = (created as { __err?: string })?.__err ?? JSON.stringify((created as { errors?: unknown })?.errors ?? "");
+  if (/notes/i.test(String(firstErr))) {
+    delete docData.notes;
+    created = await gql(createMutation, { c: cfg.company_id, d: docData });
+  } else if ((created as { __err?: string })?.__err) {
+    throw new Error(String((created as { __err?: string }).__err));
+  }
+  const cErrs = created?.data?.invoiceReceiptCreate?.errors;
+  if (cErrs?.length) throw new Error(`Moloni invoiceReceiptCreate (bar): ${JSON.stringify(cErrs).slice(0, 400)}`);
+  const doc = created?.data?.invoiceReceiptCreate?.data;
+  if (!doc?.documentId) throw new Error(`bar invoiceReceiptCreate returned no document: ${JSON.stringify(created).slice(0, 400)}`);
+
+  // Estampille les ventes couvertes (anti double facturation)
+  await admin.from("bar_sales").update({
+    moloni_document_id: doc.documentId, invoice_number: doc.number ?? null,
+  }).in("id", sales.map((s) => s.id));
+
+  // PDF -> bucket invoices, chemin bar/{numero}.pdf (consultation/archive)
+  let pdfStored = false, pdfError: string | undefined;
+  try {
+    await gql(`mutation($c: Int!, $d: Int!) { invoiceReceiptGetPDF(companyId: $c, documentId: $d) }`,
+      { c: cfg.company_id, d: doc.documentId });
+    let tok: { token?: string; path?: string } | null = null;
+    for (let i = 0; i < 10 && !tok?.path; i++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      const t = await gql(`query($d: Int!) { invoiceReceiptGetPDFToken(documentId: $d) { data { token path filename } errors { msg } } }`,
+        { d: doc.documentId });
+      tok = t?.data?.invoiceReceiptGetPDFToken?.data ?? null;
+    }
+    if (tok?.path && tok?.token) {
+      const pdfRes = await fetch(`${MEDIA_BASE}${tok.path}?jwt=${tok.token}`);
+      if (pdfRes.ok) {
+        const bytes = new Uint8Array(await pdfRes.arrayBuffer());
+        const path = `bar/${String(doc.number ?? doc.documentId).replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`;
+        const up = await admin.storage.from("invoices").upload(path, bytes, { contentType: "application/pdf", upsert: true });
+        if (up.error) pdfError = up.error.message; else pdfStored = true;
+      } else pdfError = `mediaapi HTTP ${pdfRes.status}`;
+    } else pdfError = "PDF not ready after ~25s";
+  } catch (e) { pdfError = String((e as Error)?.message ?? e); }
+
+  console.log(`[bar-month] ${month}: fatura ${doc.number ?? doc.documentId} — ${sales.length} sale(s), €${totalTtc}${pdfStored ? "" : ` (pdf: ${pdfError})`}`);
+  return {
+    month, document_id: doc.documentId, number: doc.number, total: doc.totalValue,
+    sales: sales.length, wine, soft, coconut, pdf_stored: pdfStored, pdf_error: pdfError,
+  };
+}
+
 // Récupère le PDF d'un document Moloni (patience : la génération d'un document
 // final prend ~10 s) et l'attache aux échéances du groupe.
 async function attachPdf(
@@ -604,6 +723,10 @@ serve(async (req) => {
     if (action === "attach_doc") {
       if (!parsed.data.document_id || !parsed.data.tx_id) return json({ error: "document_id and tx_id required" }, 400);
       return json(await attachDocToTx(parsed.data.document_id, parsed.data.tx_id, parsed.data.file_label));
+    }
+
+    if (action === "bar_month") {
+      return json(await barMonthInvoice(parsed.data.month));
     }
 
     if (!installment_id) return json({ error: "installment_id required" }, 400);

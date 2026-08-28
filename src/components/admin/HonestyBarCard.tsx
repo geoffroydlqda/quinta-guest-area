@@ -42,7 +42,7 @@ const qtyLabel = (q: Qty) =>
   [
     q.wine ? `${q.wine} wine` : null,
     q.coconut ? `${q.coconut} coconut` : null,
-    q.soft ? `${q.soft} beer/soda` : null,
+    q.soft ? `${q.soft} why not / beer` : null,
   ].filter(Boolean).join(" + ") || "nothing";
 
 const fmtDay = (iso: string) =>
@@ -141,7 +141,7 @@ export function HonestyBarCard() {
           </span>
           Honesty bar
           <span className="text-xs font-normal text-muted-foreground">
-            Revolut · wine €22 (23%) · coconut €4 (6%) · beer/soda €3 (23%)
+            Revolut · wine €22 (23%) · coconut €4 (6%) · why not / beer €3 (23%) · monthly Consumidor Final fatura auto (1st)
           </span>
         </h2>
         <div className="flex items-center gap-2">

@@ -162,7 +162,7 @@ async function rollupBooking(bookingId: string) {
   };
 
   await upsertLine(23, LABEL_23, eur23,
-    `Honesty bar (Revolut) — ${wine} wine, ${soft} beer/soda`);
+    `Honesty bar (Revolut) — ${wine} wine, ${soft} why not / beer`);
   await upsertLine(6, LABEL_6, eur6,
     `Honesty bar (Revolut) — ${coconut} coconut water`);
 }
