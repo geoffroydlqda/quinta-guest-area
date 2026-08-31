@@ -563,6 +563,7 @@ export type Database = {
       client_profiles: {
         Row: {
           address: string | null
+          cc_emails: string[] | null
           city: string | null
           company_name: string | null
           country: string | null
@@ -580,6 +581,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          cc_emails?: string[] | null
           city?: string | null
           company_name?: string | null
           country?: string | null
@@ -597,6 +599,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          cc_emails?: string[] | null
           city?: string | null
           company_name?: string | null
           country?: string | null

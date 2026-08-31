@@ -37,6 +37,28 @@ const ADMIN_BCC = "hello@quintamor.com";
 // booking_id optionnel : quand il est fourni, l'email ne couvre QUE les trips
 // de ce sejour (avant, un guest a 2 sejours recevait le melange — 25 aout 2026).
 const BodySchema = z.object({ user_id: z.string().uuid(), booking_id: z.string().uuid().optional() });
+// CC : adresses secondaires de la fiche client (client_profiles.cc_emails,
+// 31 aout 2026) — le mail part au principal, les secondaires en copie.
+async function ccEmailsFor(bookingId: string | null, primaryEmail: string | null): Promise<string[]> {
+  try {
+    let cc: string[] | null = null;
+    if (bookingId) {
+      const { data: b } = await _adminAuthClient.from("bookings").select("email,client_id").eq("id", bookingId).maybeSingle();
+      if (b?.client_id) {
+        const { data } = await _adminAuthClient.from("client_profiles").select("cc_emails").eq("id", b.client_id).maybeSingle();
+        cc = (data?.cc_emails as string[] | null) ?? null;
+      }
+      primaryEmail = primaryEmail ?? (b?.email as string | null) ?? null;
+    }
+    if (!cc && primaryEmail) {
+      const { data } = await _adminAuthClient.from("client_profiles").select("cc_emails").eq("email", primaryEmail.toLowerCase()).maybeSingle();
+      cc = (data?.cc_emails as string[] | null) ?? null;
+    }
+    const main = (primaryEmail ?? "").toLowerCase();
+    return [...new Set((cc ?? []).map((e) => String(e).trim()).filter((e) => /^\S+@\S+\.\S+$/.test(e) && e.toLowerCase() !== main))].slice(0, 5);
+  } catch { return []; }
+}
+
 
 function escapeHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -147,9 +169,11 @@ serve(async (req) => {
     </body></html>`;
 
     const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+    const ccList = await ccEmailsFor(booking_id ?? null, profile.email);
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: [profile.email],
+      ...(ccList.length ? { cc: ccList } : {}),
       bcc: [ADMIN_BCC],
       subject: "Your transportation pricing has been updated — Quinta do Amor",
       html,

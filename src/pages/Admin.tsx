@@ -1857,6 +1857,8 @@ type ClientProfile = {
   country: string | null;
   nationality: string | null;
   notes: string | null;
+  // Adresses secondaires : tous les emails guests partent avec elles en CC.
+  cc_emails: string[] | null;
 };
 
 type ClientForm = Omit<ClientProfile, "id">;
@@ -1864,7 +1866,7 @@ type ClientForm = Omit<ClientProfile, "id">;
 const EMPTY_CLIENT: ClientForm = {
   email: "", first_name: null, last_name: null, company_name: null, phone: null,
   tax_number: null, address: null, zip_code: null, city: null, country: null, nationality: null,
-  notes: null,
+  notes: null, cc_emails: null,
 };
 
 function GuestsView({ bookings, installments, onOpen, onReload }: {
@@ -1896,7 +1898,7 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
 
   const fetchProfiles = async () => {
     const { data, error } = await supabase.from("client_profiles")
-      .select("id,email,first_name,last_name,company_name,phone,tax_number,address,zip_code,city,country,nationality,notes");
+      .select("id,email,first_name,last_name,company_name,phone,tax_number,address,zip_code,city,country,nationality,notes,cc_emails");
     if (!error && data) setProfilesArr(data as ClientProfile[]);
   };
   useEffect(() => { fetchProfiles(); }, []);
@@ -2002,6 +2004,7 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
       country: current.profile?.country ?? null,
       nationality: current.profile?.nationality ?? null,
       notes: current.profile?.notes ?? null,
+      cc_emails: current.profile?.cc_emails ?? null,
     };
     setForm(hydrated);
     lastSavedRef.current = JSON.stringify({ ...hydrated, email: "" });
@@ -2360,6 +2363,23 @@ function GuestsView({ bookings, installments, onOpen, onReload }: {
                     />
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       Used for guest-area invitations and payment reminders — applies to all this guest's bookings.
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-muted-foreground mb-1">Additional emails (CC)</label>
+                    <Input
+                      value={(form.cc_emails ?? []).join(", ")}
+                      placeholder="partner@email.com, assistant@email.com"
+                      onChange={(e) => setForm((f) => ({
+                        ...f,
+                        cc_emails: e.target.value.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean).length
+                          ? e.target.value.split(/[,;]+/).map((x) => x.trim()).filter(Boolean)
+                          : null,
+                      }))}
+                      className={PLACEHOLDER_CLS}
+                    />
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Every email sent to this guest (payment requests, confirmations, reminders, invitations…) goes to the main address with these in CC.
                     </p>
                   </div>
                   {field("Company name", "company_name", "Optional — invoiced entity")}

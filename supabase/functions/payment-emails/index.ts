@@ -16,6 +16,28 @@ const admin = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+// CC : adresses secondaires de la fiche client (client_profiles.cc_emails,
+// 31 aout 2026) — le mail part au principal, les secondaires en copie.
+async function ccEmailsFor(CLIENT: ReturnType<typeof createClient>, bookingId: string | null, primaryEmail: string | null): Promise<string[]> {
+  try {
+    let cc: string[] | null = null;
+    if (bookingId) {
+      const { data: b } = await CLIENT.from("bookings").select("email,client_id").eq("id", bookingId).maybeSingle();
+      if (b?.client_id) {
+        const { data } = await CLIENT.from("client_profiles").select("cc_emails").eq("id", b.client_id).maybeSingle();
+        cc = (data?.cc_emails as string[] | null) ?? null;
+      }
+      primaryEmail = primaryEmail ?? (b?.email as string | null) ?? null;
+    }
+    if (!cc && primaryEmail) {
+      const { data } = await CLIENT.from("client_profiles").select("cc_emails").eq("email", primaryEmail.toLowerCase()).maybeSingle();
+      cc = (data?.cc_emails as string[] | null) ?? null;
+    }
+    const main = (primaryEmail ?? "").toLowerCase();
+    return [...new Set((cc ?? []).map((e) => String(e).trim()).filter((e) => /^\S+@\S+\.\S+$/.test(e) && e.toLowerCase() !== main))].slice(0, 5);
+  } catch { return []; }
+}
+
 
 const FROM_EMAIL = "Geo — Quinta do Amor <hello@quintamor.com>";
 const REPLY_TO = "hello@quintamor.com";
@@ -573,9 +595,11 @@ ${paras(parsed.data.body_bottom ?? "")}
       attachments.push({ filename: a.filename.replace(/[/\\]/g, "_"), content: a.content });
     }
 
+    const ccList = await ccEmailsFor(admin, inst.booking_id, to);
     const sent = await resend.emails.send({
       from: FROM_EMAIL,
       to: [to],
+      ...(ccList.length ? { cc: ccList } : {}),
       reply_to: REPLY_TO,
       subject,
       html,
