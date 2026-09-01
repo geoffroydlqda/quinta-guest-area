@@ -23,7 +23,12 @@ export const FIN_CATEGORIES: { group: string; items: string[] }[] = [
   { group: "Core team — fixed payroll", items: ["Management - Geo", "Management - Loïs", "Logistics - Luis"] },
   { group: "Property operations & maintenance", items: [
     "Car maintenance", "Cleaning (out of season)", "Cleaning (in season)", "Equipment & furniture", "Furniture maintenance",
-    "Gardening (contract)", "Gardening (seasonal)", "General maintenance", "Pool maintenance",
+    "Gardening (contract)", "Gardening (seasonal)", "General maintenance",
+    // Petits travaux d'amélioration du bâti par l'OpCo (étagères, aménagements
+    // fixes...) : ni FF&E (pas emportable), ni maintenance (crée de la valeur).
+    // Nature capex/benfeitorias — amortissable, clause d'indemnisation à
+    // prévoir au bail avec Surreal. À distinguer de "Paid on behalf of Surreal".
+    "Improvement works (leasehold)", "Pool maintenance",
     "Property operations & supplies",
   ]},
   { group: "Insurance & legal", items: ["Insurance — property", "Insurance — events"] },
