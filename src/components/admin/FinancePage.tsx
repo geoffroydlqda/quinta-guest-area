@@ -72,6 +72,8 @@ type FinTx = {
   booking_id: string | null; notes: string | null; reviewed: boolean;
   parent_id?: string | null; payer?: string | null; pnl_month?: string | null;
   is_cash?: boolean;
+  // "Pas de justificatif a attendre" (cash, pourboires...) — sort du filtre No receipt
+  receipt_waived?: boolean;
 };
 
 type FinRule = { id: string; pattern: string; kind: string; category: string | null; vat_rate: number | null };
@@ -618,7 +620,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   }, [txs, installments, bookingById, year]);
 
   const reviewCount = txs.filter((t) => !t.reviewed).length;
-  const noReceiptCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id)).length;
+  const noReceiptCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived).length;
 
   // ---- Cash box (caisse espèces) -------------------------------------------
   // Entrées : échéances is_cash payées (hors tests). Sorties/ajustements :
@@ -956,7 +958,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     if (filter === "review") arr = arr.filter((t) => !t.reviewed);
     if (filter === "in") arr = arr.filter((t) => t.amount > 0);
     // Dépenses sans justificatif lié (contrôle compta avant envoi au comptable)
-    if (filter === "noreceipt") arr = arr.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id));
+    if (filter === "noreceipt") arr = arr.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived);
     if (monthFilter) arr = arr.filter((t) => t.date.startsWith(monthFilter));
     if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
     if (catFilter === "__none__") arr = arr.filter((t) => !t.category && t.kind === "expense");
@@ -1364,13 +1366,28 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                                 {attachBusy === t.id ? "…" : "📎"}
                               </button>
                             </>
-                          ) : (
+                          ) : t.receipt_waived ? (
                             <button type="button"
-                              className="ml-1.5 text-[11px] text-muted-foreground/60 hover:text-foreground"
-                              title="Attach the receipt (photo or PDF) — vendor, date and VAT are read automatically"
-                              onClick={() => { setAttachTxId(t.id); attachRef.current?.click(); }}>
-                              {attachBusy === t.id ? "…" : "📎"}
+                              className="ml-1.5 inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground align-middle"
+                              title="No receipt to expect for this line — click to undo"
+                              onClick={() => patch(t.id, { receipt_waived: false })}>
+                              ∅ no receipt
                             </button>
+                          ) : (
+                            <>
+                              <button type="button"
+                                className="ml-1.5 text-[11px] text-muted-foreground/60 hover:text-foreground"
+                                title="Attach the receipt (photo or PDF) — vendor, date and VAT are read automatically"
+                                onClick={() => { setAttachTxId(t.id); attachRef.current?.click(); }}>
+                                {attachBusy === t.id ? "…" : "📎"}
+                              </button>
+                              <button type="button"
+                                className="ml-1 text-[11px] text-muted-foreground/40 hover:text-foreground"
+                                title="No receipt to expect (cash, tip, no-ticket purchase) — removes this line from the No receipt filter"
+                                onClick={() => patch(t.id, { receipt_waived: true })}>
+                                ∅
+                              </button>
+                            </>
                           )
                         )}
                         {t.kind !== "split" && (deleteArm === t.id ? (

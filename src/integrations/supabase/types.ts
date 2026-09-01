@@ -34,6 +34,7 @@ export type Database = {
           payer: string | null
           pnl_month: string | null
           is_cash: boolean
+          receipt_waived: boolean
           created_at: string
         }
         Insert: {
@@ -55,6 +56,7 @@ export type Database = {
           payer?: string | null
           pnl_month?: string | null
           is_cash?: boolean
+          receipt_waived?: boolean
           created_at?: string
         }
         Update: {
@@ -76,6 +78,7 @@ export type Database = {
           payer?: string | null
           pnl_month?: string | null
           is_cash?: boolean
+          receipt_waived?: boolean
           created_at?: string
         }
         Relationships: []
