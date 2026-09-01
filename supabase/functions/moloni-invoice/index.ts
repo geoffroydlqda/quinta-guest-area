@@ -95,7 +95,12 @@ const fmtDatePt = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
 // Taux (%) -> taxId Moloni (IVA 23/13/6)
-const TAX_IDS: Record<number, number> = { 23: 1923, 13: 1924, 6: 1925 };
+// ⚠️ 1er sept 2026 : l'ancienne taxe 1923 ("IVA 23%") a été reconfigurée dans
+// Moloni en "IVA 0%" mode ISE avec valeur **1 %** (par qui ? à clarifier avec
+// BDO) — les 4 faturas bar du 1er sept (n°12-15) sont parties avec 1 % de TVA
+// sur les lignes 23 % et doivent être régularisées. Nouvelle taxe créée via
+// l'API : 22469 = IVA 23 % (NOR). NE JAMAIS réutiliser 1923 pour du 23 %.
+const TAX_IDS: Record<number, number> = { 23: 22469, 13: 1924, 6: 1925 };
 const DEFAULT_RATE: Record<string, number> = { rental: 23, catering: 13, extra: 23 };
 
 type InstRow = {
@@ -459,7 +464,7 @@ async function barMonthInvoice(monthArg?: string) {
   }
 
   const { data: salesRaw } = await admin.from("bar_sales")
-    .select("id,paid_at,amount,qty_wine,qty_coconut,qty_soft,state,moloni_document_id")
+    .select("id,paid_at,amount,qty_wine,qty_coconut,qty_soft,misc_amount,state,moloni_document_id")
     .eq("state", "classified").is("moloni_document_id", null);
   const sales = (salesRaw ?? []).filter((s) => lisbonDay(s.paid_at).slice(0, 7) === month);
   if (!sales.length) return { month, skipped: true, reason: "no uninvoiced classified sales" };
@@ -467,6 +472,9 @@ async function barMonthInvoice(monthArg?: string) {
   const wine = sales.reduce((t, s) => t + (s.qty_wine ?? 0), 0);
   const soft = sales.reduce((t, s) => t + (s.qty_soft ?? 0), 0);
   const coconut = sales.reduce((t, s) => t + (s.qty_coconut ?? 0), 0);
+  // Part "misc" : montants non decomposables en produits (tests de carte,
+  // pourboires) — une ligne divers a 23 % (decision Geoffroy 1er sept 2026).
+  const misc = Math.round(sales.reduce((t, s) => t + Number(s.misc_amount ?? 0), 0) * 100) / 100;
   const totalTtc = Math.round(sales.reduce((t, s) => t + Number(s.amount), 0) * 100) / 100;
 
   const customerId = await consumidorFinalId(cfg);
@@ -478,6 +486,7 @@ async function barMonthInvoice(monthArg?: string) {
     { label: "wine", qty: wine, unitTtc: BAR_PRICE.wine, rate: 23 },
     { label: "why not / beer", qty: soft, unitTtc: BAR_PRICE.soft, rate: 23 },
     { label: "coconut water", qty: coconut, unitTtc: BAR_PRICE.coconut, rate: 6 },
+    { label: "miscellaneous", qty: misc > 0 ? 1 : 0, unitTtc: misc, rate: 23 },
   ].filter((l) => l.qty > 0);
 
   const products = lines.map((l, idx) => ({
@@ -549,7 +558,7 @@ async function barMonthInvoice(monthArg?: string) {
   console.log(`[bar-month] ${month}: fatura ${doc.number ?? doc.documentId} — ${sales.length} sale(s), €${totalTtc}${pdfStored ? "" : ` (pdf: ${pdfError})`}`);
   return {
     month, document_id: doc.documentId, number: doc.number, total: doc.totalValue,
-    sales: sales.length, wine, soft, coconut, pdf_stored: pdfStored, pdf_error: pdfError,
+    sales: sales.length, wine, soft, coconut, misc, pdf_stored: pdfStored, pdf_error: pdfError,
   };
 }
 

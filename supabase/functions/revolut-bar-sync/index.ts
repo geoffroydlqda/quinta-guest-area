@@ -2,9 +2,9 @@
 // Le QR à montant libre encaisse vin (22 €), coconut water (4 €) et
 // bières/why not (3 €). Cette fonction :
 //   1. récupère les paiements COMPLETED via l'API Merchant (depuis mai 2026),
-//   2. classe chaque montant par décomposition 22a + 4b + 3c
-//      (unique -> classé ; plusieurs solutions -> file "à classer" avec
-//      suggestion = moins d'articles),
+//   2. classe chaque montant AUTOMATIQUEMENT par décomposition 22a + 4b + 3c
+//      (règle du 1er sept 2026 : >= 22 € max vin puis max coconut ; < 22 €
+//      max coconut ; non décomposable -> misc 23 % — voir classify()),
 //   3. rattache la vente au booking dont le séjour couvre la date (hors tests),
 //   4. agrège par booking en 2 échéances "bar" déjà payées :
 //      TVA 23 % (vin — prudence AT — + bières/sodas) et TVA 6 % (coconut).
@@ -53,17 +53,27 @@ function decompositions(amount: number): Qty[] {
   return out;
 }
 
-// Classement : solution unique -> classé ; sinon suggestion = moins d'articles
-// (22 € = 1 vin plutôt que 1 coconut + 6 bières), mais laissé "ambiguous"
-// pour validation en un tap dans l'admin.
-function classify(amount: number): { qty: Qty | null; state: "classified" | "ambiguous" } {
+// Classement AUTOMATIQUE (règle validée par Geoffroy le 1er sept 2026 —
+// plus de file "à classer") :
+//   - >= 22 € : max de vins, puis max de coconut sur le reste (solde en
+//     bières/why not). Paniers crédibles ; le coconut (6 %) est privilégié
+//     partout où c'est défendable, sans produire de lignes absurdes du type
+//     "1 vin + 43 coconuts" (variante coconut-max écartée : ~29 € de TVA
+//     d'écart sur toute la file, pas la peine).
+//   - < 22 € : max de coconut, solde en bières/why not.
+//   - Montant non décomposable (0,01 € test de carte, 2,50 € pourboire,
+//     centimes, > 2 000 €) : part "misc" facturée en divers 23 % sur la
+//     fatura mensuelle (décision : exhaustivité plutôt qu'ignorer).
+// Le résultat est toujours "classified" — déterministe et rejouable.
+function classify(amount: number): { qty: Qty; misc: number } {
   const sols = decompositions(amount);
-  if (sols.length === 1) return { qty: sols[0], state: "classified" };
-  if (sols.length === 0) return { qty: null, state: "ambiguous" };
-  const count = (q: Qty) => q.wine + q.coconut + q.soft;
-  const sorted = [...sols].sort((x, y) => count(x) - count(y));
-  const suggestion = count(sorted[0]) < count(sorted[1]) ? sorted[0] : null;
-  return { qty: suggestion, state: "ambiguous" };
+  if (sols.length === 0) return { qty: { wine: 0, coconut: 0, soft: 0 }, misc: amount };
+  const pick = [...sols].sort((x, y) =>
+    amount >= PRICE_WINE
+      ? (y.wine - x.wine) || (y.coconut - x.coconut)
+      : (y.coconut - x.coconut)
+  )[0];
+  return { qty: pick, misc: 0 };
 }
 
 async function internalValue(key: string): Promise<string | null> {
@@ -129,12 +139,13 @@ const LABEL_6 = "Honesty bar — drinks 6%";
 
 async function rollupBooking(bookingId: string) {
   const { data: sales } = await admin.from("bar_sales")
-    .select("qty_wine,qty_coconut,qty_soft,state")
+    .select("qty_wine,qty_coconut,qty_soft,misc_amount,state")
     .eq("booking_id", bookingId).eq("state", "classified");
   const wine = (sales ?? []).reduce((s, r) => s + (r.qty_wine ?? 0), 0);
   const coconut = (sales ?? []).reduce((s, r) => s + (r.qty_coconut ?? 0), 0);
   const soft = (sales ?? []).reduce((s, r) => s + (r.qty_soft ?? 0), 0);
-  const eur23 = wine * PRICE_WINE + soft * PRICE_SOFT;
+  const misc = (sales ?? []).reduce((s, r) => s + Number(r.misc_amount ?? 0), 0);
+  const eur23 = wine * PRICE_WINE + soft * PRICE_SOFT + misc;
   const eur6 = coconut * PRICE_COCONUT;
 
   const { data: booking } = await admin.from("bookings")
@@ -165,7 +176,7 @@ async function rollupBooking(bookingId: string) {
   };
 
   await upsertLine(23, LABEL_23, eur23,
-    `Honesty bar (Revolut) — ${wine} wine, ${soft} why not / beer`);
+    `Honesty bar (Revolut) — ${wine} wine, ${soft} why not / beer${misc > 0 ? `, €${misc} misc` : ""}`);
   await upsertLine(6, LABEL_6, eur6,
     `Honesty bar (Revolut) — ${coconut} coconut water`);
 }
@@ -209,6 +220,29 @@ serve(async (req) => {
       return json({ ok: true });
     }
 
+    // --- Reclassement en masse (règle auto du 1er sept 2026) ---------------
+    // Applique la règle max-vin/max-coconut à toutes les ventes encore
+    // "ambiguous" (one-shot après le changement de règle ; rejouable sans
+    // effet sur les ventes déjà classées ou facturées).
+    if (action === "reclassify_all") {
+      const { data: pending } = await admin.from("bar_sales")
+        .select("id,amount,booking_id").neq("state", "classified");
+      const touchedB = new Set<string>();
+      let done = 0, misc = 0;
+      for (const s of pending ?? []) {
+        const { qty, misc: m } = classify(Number(s.amount));
+        await admin.from("bar_sales").update({
+          qty_wine: qty.wine, qty_coconut: qty.coconut, qty_soft: qty.soft,
+          misc_amount: m, state: "classified",
+        }).eq("id", s.id);
+        done++;
+        if (m > 0) misc++;
+        if (s.booking_id) touchedB.add(String(s.booking_id));
+      }
+      for (const b of touchedB) await rollupBooking(b);
+      return json({ ok: true, reclassified: done, misc_sales: misc, bookings_updated: touchedB.size });
+    }
+
     // --- Rattachement manuel à un booking ----------------------------------
     if (action === "assign") {
       const { sale_id, booking_id } = body as Record<string, unknown>;
@@ -236,7 +270,7 @@ serve(async (req) => {
       .not("check_in_date", "is", null).not("check_out_date", "is", null);
     const realBookings = (bookings ?? []).filter((b) => !b.is_test);
 
-    let inserted = 0, ambiguous = 0, unassigned = 0;
+    let inserted = 0, unassigned = 0;
     const touched = new Set<string>();
 
     for (const o of orders) {
@@ -250,32 +284,32 @@ serve(async (req) => {
       const matches = realBookings.filter((b) =>
         (b.check_in_date as string) <= saleDay && saleDay <= (b.check_out_date as string));
       const bookingId = matches.length === 1 ? matches[0].id : null;
-      const { qty, state } = classify(amount);
+      const { qty, misc } = classify(amount);
 
       const { error } = await admin.from("bar_sales").insert({
         revolut_order_id: o.id,
         paid_at: paidAt,
         amount,
         currency: o.order_amount?.currency ?? o.currency ?? "EUR",
-        qty_wine: qty?.wine ?? null,
-        qty_coconut: qty?.coconut ?? null,
-        qty_soft: qty?.soft ?? null,
-        state,
+        qty_wine: qty.wine,
+        qty_coconut: qty.coconut,
+        qty_soft: qty.soft,
+        misc_amount: misc,
+        state: "classified",
         booking_id: bookingId,
       });
       if (error) { console.error("[bar-sync] insert failed:", error.message); continue; }
       inserted++;
-      if (state === "ambiguous") ambiguous++;
       if (!bookingId) unassigned++;
-      if (bookingId && state === "classified") touched.add(bookingId);
+      if (bookingId) touched.add(bookingId);
     }
 
     for (const b of touched) await rollupBooking(b);
 
-    console.log(`[bar-sync] ${inserted} new sale(s), ${ambiguous} to classify, ${unassigned} without event, ${touched.size} booking(s) updated`);
+    console.log(`[bar-sync] ${inserted} new sale(s), ${unassigned} without event, ${touched.size} booking(s) updated`);
     return json({
       configured: true, fetched: orders.length, inserted,
-      to_classify: ambiguous, unassigned, bookings_updated: touched.size,
+      to_classify: 0, unassigned, bookings_updated: touched.size,
     });
   } catch (e) {
     const msg = String((e as Error)?.message ?? e);

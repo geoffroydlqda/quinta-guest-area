@@ -1339,11 +1339,22 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                       <td className="px-3 py-2 whitespace-nowrap">
                         {t.reviewed ? (
                           <span className="inline-flex rounded-full bg-[#E5F5EA] px-2 py-0.5 text-[10px] font-semibold text-[#178A3F]">OK</span>
-                        ) : t.kind === "expense" && t.category ? (
+                        ) : (t.kind === "expense" || t.kind === "review") && t.category ? (
+                          // Le kind "review" avec catégorie arrive via le bouton
+                          // "edit" (qui repasse la ligne en review SANS vider la
+                          // catégorie) : re-choisir la même catégorie ne déclenche
+                          // aucun onChange, donc Confirm doit aussi couvrir ce cas
+                          // en re-normalisant kind/TVA/HT (bug Jake, 1er sept 2026).
                           <button type="button"
                             className="inline-flex rounded-full bg-[#35532A] px-2.5 py-0.5 text-[10px] font-semibold text-white hover:bg-[#2A4221]"
-                            title="Auto-classified from your rules — check category, VAT and event, then confirm"
-                            onClick={() => patch(t.id, { reviewed: true })}>
+                            title="Check category, VAT and event, then confirm"
+                            onClick={() => {
+                              const vat = t.vat_rate ?? 23;
+                              patch(t.id, {
+                                kind: "expense", reviewed: true, vat_rate: vat,
+                                amount_net: t.amount_net ?? Math.round(Math.abs(t.amount) / (1 + vat / 100) * 100) / 100,
+                              });
+                            }}>
                             ✓ Confirm
                           </button>
                         ) : (
