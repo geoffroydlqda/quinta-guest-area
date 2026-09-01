@@ -31,6 +31,10 @@ export const FIN_CATEGORIES: { group: string; items: string[] }[] = [
   { group: "Utilities", items: ["Electricity", "Water", "Gas", "Fuel"] },
   { group: "Marketing & sales", items: ["Advertising", "Commission", "Listing fee"] },
   { group: "Other fixed", items: ["Bank & payment fees", "Taxes & duties"] },
+  // Dépenses immo payées par l'OpCo pour le compte de Surreal Estate (AssetCo) :
+  // visibles comme un bloc à part dans le P&L — jamais fondues dans le reste.
+  // En fin d'année : refacturation ou conta corrente, à trancher avec BDO.
+  { group: "Intercompany — Surreal Estate (AssetCo)", items: ["Paid on behalf of Surreal (property)"] },
   { group: "Variable — retreat", items: [
     "Retreat — catering / staff", "Retreat — catering / food", "Retreat — venue / cleaning & fixed", "Retreat - extras",
   ]},
