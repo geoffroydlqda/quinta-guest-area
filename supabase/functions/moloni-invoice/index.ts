@@ -115,6 +115,11 @@ const INST_COLS = "id,booking_id,label,amount_due,amount_excl_vat,category,statu
 
 function rateFor(inst: InstRow): number {
   const r = inst.vat_rate ?? DEFAULT_RATE[inst.category ?? "rental"] ?? 23;
+  // 0 % explicite = ligne isenta (indemnités type "broken items"…) — gérée
+  // par exemptionReason M19 dans le builder (1er sept 2026, cas Hanne & Max),
+  // même code que la fatura n°11 saisie à la main dans Moloni. À confirmer
+  // avec BDO si un code plus précis s'impose (M99 non sujeito ?).
+  if (r === 0) return 0;
   return TAX_IDS[r] ? r : 23;
 }
 
@@ -326,7 +331,11 @@ async function generateInvoice(installmentId: string) {
       price: Math.round(price * 1e6) / 1e6,
       ...(d > 0 ? { discount: d } : {}),
       summary: `${booking.retreat_name || clientName} — ${desc}${idx === 0 ? stayLine : ""}`,
-      taxes: [{ taxId: TAX_IDS[rate], ordering: 1, cumulative: false }],
+      // rate 0 -> ligne isenta : pas de taxe + motif d'isenção (M19, comme la
+      // fatura n°11 saisie manuellement dans Moloni). Sinon taxe normale.
+      ...(rate === 0
+        ? { taxes: [], exemptionReason: "M19" }
+        : { taxes: [{ taxId: TAX_IDS[rate], ordering: 1, cumulative: false }] }),
     };
   });
 
