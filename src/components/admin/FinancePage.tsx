@@ -88,6 +88,7 @@ const PNL_VARIABLE_CATS = new Set([
 ]);
 
 export type FinInstallment = {
+  id?: string;
   booking_id: string; amount_due: number; amount_excl_vat?: number | null;
   category?: string | null; is_cash?: boolean; status?: string;
   due_date?: string | null; paid_on?: string | null; label?: string | null;
@@ -253,15 +254,20 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   const realBookings = useMemo(() => bookings.filter((b) => !b.is_test), [bookings]);
   const bookingById = useMemo(() => new Map(realBookings.map((b) => [b.id, b])), [realBookings]);
 
+  // Date de signature de chaque echeance (pipeline de l'investor update)
+  const [instCreated, setInstCreated] = useState<Map<string, string>>(new Map());
   const load = async () => {
-    const [t, r, pd] = await Promise.all([
+    const [t, r, pd, ic] = await Promise.all([
       supabase.from("fin_transactions").select("*").order("date", { ascending: false }).limit(2000),
       supabase.from("fin_rules").select("*"),
       supabase.from("purchase_docs").select("tx_id,storage_path").not("tx_id", "is", null),
+      supabase.from("payment_installments").select("id,created_at"),
     ]);
     setTxs((t.data as FinTx[] | null) ?? []);
     setRules((r.data as FinRule[] | null) ?? []);
     setDocsByTx(buildDocsMap(pd.data as { tx_id: string; storage_path: string }[] | null));
+    setInstCreated(new Map(((ic.data ?? []) as { id: string; created_at: string }[])
+      .map((x) => [x.id, x.created_at.slice(0, 10)])));
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -832,6 +838,44 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     }
     const hosted = realBookings.filter((b) => b.check_in_date?.startsWith(m));
 
+    // Bookings & pipeline (31 aout 2026) : ventes signees pendant le mois
+    // (= echeances creees ce mois-ci, hors bar — nouvelles resas ET upsells,
+    // toutes annees de sejour confondues) + carnet "on the books" des annees
+    // futures. Montants TVAC, coherents avec la section Revenue secured.
+    const realIds = new Set(realBookings.map((b) => b.id));
+    let signedMonth = 0;
+    const signedByYear = new Map<string, number>();
+    for (const i of installments) {
+      if (!i.id || i.category === "bar" || !realIds.has(i.booking_id)) continue;
+      const createdDay = instCreated.get(i.id);
+      if (!createdDay || !createdDay.startsWith(m)) continue;
+      const v = Number(i.amount_due || 0);
+      signedMonth += v;
+      const stayYear = bookingById.get(i.booking_id)?.check_in_date?.slice(0, 4) ?? "TBD";
+      signedByYear.set(stayYear, (signedByYear.get(stayYear) ?? 0) + v);
+    }
+    const signedDetail = [...signedByYear.entries()].sort()
+      .map(([y2, v]) => `${y2} stays ${f(v)}`).join(" · ");
+    const futureYears = new Map<string, { value: number; events: Set<string>; nights: number }>();
+    for (const i of installments) {
+      if (i.category === "bar" || !realIds.has(i.booking_id)) continue;
+      const b = bookingById.get(i.booking_id);
+      const y2 = b?.check_in_date?.slice(0, 4);
+      if (!y2 || y2 <= yr) continue;
+      const e = futureYears.get(y2) ?? { value: 0, events: new Set<string>(), nights: 0 };
+      e.value += Number(i.amount_due || 0);
+      if (!e.events.has(i.booking_id)) {
+        e.events.add(i.booking_id);
+        if (b?.check_in_date && b?.check_out_date) {
+          e.nights += Math.max(0, (new Date(b.check_out_date).getTime() - new Date(b.check_in_date).getTime()) / 86400000);
+        }
+      }
+      futureYears.set(y2, e);
+    }
+    const onTheBooks = [...futureYears.entries()].sort()
+      .map(([y2, e]) => `${f(e.value)} already on the books for ${y2} (${e.events.size} event${e.events.size > 1 ? "s" : ""}, ${Math.round(e.nights)} nights)`)
+      .join("; ");
+
     const lines = [
       `💐 QUINTA DO AMOR OPERATIONS`,
       `Investor update — ${monthLong}`,
@@ -844,7 +888,11 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       ``,
       `3. Revenue secured — ${f(secured)} contracted for ${yr} across ${securedEvents.size} events, of which ${f(collectedAmt)} (${pctCollected}%) has already been collected; the balance falls due ahead of each event. ${upcoming.length > 0 ? `${upcoming.length} event${upcoming.length > 1 ? "s" : ""} in the next 90 days represent${upcoming.length > 1 ? "" : "s"} ${f(upcomingValue)} of contracted revenue.` : "No events are scheduled in the next 90 days."}`,
       ``,
-      `4. Activity — ${hosted.length > 0
+      `4. Bookings & pipeline — ${signedMonth > 0
+        ? `${f(signedMonth)} of new business signed in ${monthShort}${signedDetail ? ` (${signedDetail})` : ""}.`
+        : `no new business signed in ${monthShort}.`}${onTheBooks ? ` ${onTheBooks[0].toUpperCase()}${onTheBooks.slice(1)}.` : ""}`,
+      ``,
+      `5. Activity — ${hosted.length > 0
         ? `${hosted.length} event${hosted.length > 1 ? "s" : ""} hosted in ${monthShort} (${hosted.map((b) => b.name).join(", ")}).`
         : `no events hosted in ${monthShort}.`}`,
     ];
@@ -859,7 +907,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     const html = lines.map((l) => l === "" ? "<br>" : `<p style="margin:0 0 2px">${esc(l)}</p>`).join("")
       + (liveUrl ? `<br><p style="margin:0"><a href="${liveUrl}">${linkLabel}</a></p>` : "");
     return { display, plain, html };
-  }, [reportMonth, txs, installments, bookingById, realBookings, shareToken]);
+  }, [reportMonth, txs, installments, bookingById, realBookings, shareToken, instCreated]);
 
   const copyReport = async () => {
     try {
