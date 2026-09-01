@@ -91,20 +91,23 @@ async function fetchCompletedOrders(apiKey: string): Promise<RevOrder[]> {
   const out: RevOrder[] = [];
   let createdBefore: string | null = null;
   for (let page = 0; page < 40; page++) {
-    const url = new URL("https://merchant.revolut.com/api/orders");
+    // 1er sept. 2026 : la version datee de l'API ("/api/orders" +
+    // Revolut-Api-Version) enveloppe la reponse dans {orders:[...]} — la
+    // fonction attendait un tableau nu et voyait 0 commande. L'endpoint
+    // /api/1.0/orders renvoie le format historique (tableau, order_amount,
+    // etats en MAJUSCULES) et supporte created_before : on s'y tient.
+    const url = new URL("https://merchant.revolut.com/api/1.0/orders");
     url.searchParams.set("limit", "100");
     if (createdBefore) url.searchParams.set("created_before", createdBefore);
     const r = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Revolut-Api-Version": "2024-09-01",
-      },
+      headers: { Authorization: `Bearer ${apiKey}` },
     });
     if (!r.ok) {
       const t = await r.text();
       throw new Error(`Revolut API ${r.status}: ${t.slice(0, 300)}`);
     }
-    const batch = (await r.json()) as RevOrder[];
+    const raw = await r.json();
+    const batch = (Array.isArray(raw) ? raw : (raw?.orders ?? [])) as RevOrder[];
     if (!Array.isArray(batch) || batch.length === 0) break;
     out.push(...batch);
     const oldest = batch[batch.length - 1]?.created_at;
