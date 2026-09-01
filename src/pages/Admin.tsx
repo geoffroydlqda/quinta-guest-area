@@ -1585,6 +1585,8 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
           amount: -total, currency: "EUR", kind: "expense",
           category, vat_rate: 0, amount_net: total, reviewed: true,
           booking_id: b.id, payer: "Cash", is_cash: true,
+          // Cash = jamais de reçu à attendre (convention 1er sept 2026)
+          receipt_waived: true,
           notes: `Paiement staff en espèces — créé automatiquement depuis l'onglet Catering (${r.paid_days} ${r.rate_type === "hourly" ? "h" : "j"} × €${r.daily_fee})`,
         } as never).select("id").single();
         if (txErr) throw txErr;

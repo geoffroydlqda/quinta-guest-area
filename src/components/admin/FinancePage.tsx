@@ -462,6 +462,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         kind: "expense", category: l.category, vat_rate: vat,
         amount_net: Math.round(Math.abs(Number(l.amount)) / (1 + vat / 100) * 100) / 100,
         booking_id: l.booking_id || null, parent_id: t.id, reviewed: true,
+        // Les parts héritent du mode cash du parent (et donc du "pas de reçu
+        // à attendre" — convention du 1er sept 2026 : cash = jamais de reçu)
+        is_cash: !!t.is_cash, receipt_waived: !!t.is_cash,
       };
     });
     const { error } = await supabase.from("fin_transactions").insert(children);
@@ -625,7 +628,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   }, [txs, installments, bookingById, year]);
 
   const reviewCount = txs.filter((t) => !t.reviewed).length;
-  const noReceiptCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived).length;
+  // Convention (1er sept 2026) : les dépenses CASH n'ont jamais de reçu à
+  // attendre — exclues d'office du filtre No receipt (en plus du waiver ∅).
+  const noReceiptCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived && !t.is_cash).length;
 
   // ---- Cash box (caisse espèces) -------------------------------------------
   // Entrées : échéances is_cash payées (hors tests). Sorties/ajustements :
@@ -964,7 +969,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     if (filter === "review") arr = arr.filter((t) => !t.reviewed);
     if (filter === "in") arr = arr.filter((t) => t.amount > 0);
     // Dépenses sans justificatif lié (contrôle compta avant envoi au comptable)
-    if (filter === "noreceipt") arr = arr.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived);
+    if (filter === "noreceipt") arr = arr.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived && !t.is_cash);
     if (monthFilter) arr = arr.filter((t) => t.date.startsWith(monthFilter));
     if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
     if (catFilter === "__none__") arr = arr.filter((t) => !t.category && t.kind === "expense");
@@ -1024,6 +1029,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       kind: "expense", category: mCat, vat_rate: vat,
       amount_net: Math.round(Math.abs(amt) / (1 + vat / 100) * 100) / 100,
       booking_id: mBooking || null, reviewed: true, is_cash: mCash,
+      // Convention (1er sept 2026) : une dépense cash n'a jamais de reçu à
+      // attendre — elle n'apparaît pas dans le filtre "No receipt".
+      receipt_waived: mCash,
     });
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
     toast({ title: "Expense added" });
