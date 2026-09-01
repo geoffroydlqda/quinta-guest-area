@@ -46,7 +46,11 @@ export const FIN_CATEGORIES: { group: string; items: string[] }[] = [
   { group: "Variable — wedding", items: [
     "Wedding — catering / staff", "Wedding — catering / food", "Wedding — venue / cleaning & fixed", "Wedding - extras",
   ]},
-  { group: "Variable — other", items: ["Bar — stock", "Other variable"] },
+  // "Guest transport" : chauffeurs / taxis payés pour les guests (souvent en
+  // cash), rattachés a l'événement — le revenu correspondant est facturé aux
+  // guests en échéance "transport". Reste hors PNL_VARIABLE_CATS (modèle du
+  // 6 août : seuls les 8 tags retreat/wedding comptent en variable).
+  { group: "Variable — other", items: ["Bar — stock", "Guest transport", "Other variable"] },
 ];
 const ALL_CATEGORIES = FIN_CATEGORIES.flatMap((g) => g.items);
 
@@ -627,7 +631,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // fin_transactions is_cash (dépenses cash, ajustements kind=internal —
   // ces derniers ne comptent QUE dans la caisse, jamais ailleurs).
   const box = useMemo(() => {
-    type Move = { date: string; label: string; sub: string | null; amount: number; kind: "in" | "out" | "adj"; txId?: string; txKind?: string };
+    type Move = { date: string; label: string; sub: string | null; amount: number; kind: "in" | "out" | "adj"; txId?: string; txKind?: string; bookingId?: string | null };
     const moves: Move[] = [];
     let undated = 0;
     for (const i of installments) {
@@ -652,6 +656,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         kind: t.kind === "internal" ? "adj" : t.amount < 0 ? "out" : "in",
         txId: t.id,
         txKind: t.kind,
+        bookingId: t.booking_id,
       });
     }
     moves.sort((a, b) => a.date.localeCompare(b.date));
@@ -671,7 +676,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // Édition / suppression d'un mouvement de caisse basé sur une transaction
   // (dépense cash, ajustement). Les encaissements guests s'éditent depuis la
   // fiche guest (échéance), pas ici.
-  const [boxEdit, setBoxEdit] = useState<{ txId: string; txKind: string; date: string; label: string; amount: string; note: string } | null>(null);
+  const [boxEdit, setBoxEdit] = useState<{ txId: string; txKind: string; date: string; label: string; amount: string; note: string; bookingId: string } | null>(null);
   const [boxDeleteArm, setBoxDeleteArm] = useState<string | null>(null);
   const saveBoxEdit = async () => {
     if (!boxEdit) return;
@@ -682,7 +687,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       description: boxEdit.label.trim() || null,
       amount: amt,
       // Dépense cash : HT = montant (pas de TVA) ; ajustement : pas de HT
-      ...(boxEdit.txKind === "expense" ? { amount_net: Math.abs(amt) } : {}),
+      ...(boxEdit.txKind === "expense" ? { amount_net: Math.abs(amt), booking_id: boxEdit.bookingId || null } : {}),
       ...(boxEdit.txKind === "internal" ? { notes: boxEdit.note.trim() || null } : {}),
     });
     setBoxEdit(null);
@@ -1754,6 +1759,15 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                       </td>
                       <td className="px-3 py-2">
                         <Input value={boxEdit.label} onChange={(e) => setBoxEdit((v) => v && { ...v, label: e.target.value })} className="h-8 text-xs" />
+                        {boxEdit.txKind === "expense" && (
+                          <select className="h-8 mt-1 w-full rounded-md border border-input bg-background px-1.5 text-xs"
+                            title="Attach this cash expense to an event — it will show in the event's margins and hit the P&L on the event's month"
+                            value={boxEdit.bookingId}
+                            onChange={(e) => setBoxEdit((v) => v && { ...v, bookingId: e.target.value })}>
+                            <option value="">No event</option>
+                            {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                          </select>
+                        )}
                         {boxEdit.txKind === "internal" && (
                           <Input value={boxEdit.note} placeholder="Note"
                             onChange={(e) => setBoxEdit((v) => v && { ...v, note: e.target.value })}
@@ -1776,6 +1790,11 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                     <td className="px-3 py-2 whitespace-nowrap tabular-nums text-xs">{fmtDayEU(m.date)} {m.date.slice(0, 4)}</td>
                     <td className="px-3 py-2">
                       <span className="font-medium">{m.label}</span>
+                      {m.kind !== "in" && m.bookingId && bookingById.has(m.bookingId) && (
+                        <span className="ml-1.5 inline-block rounded-full bg-[#EFF3EC] text-[#35532A] px-1.5 py-0.5 text-[10px] font-medium align-middle">
+                          {bookingById.get(m.bookingId)!.name}
+                        </span>
+                      )}
                       {m.sub && <span className="block text-[11px] text-muted-foreground truncate max-w-[380px]">{m.sub}</span>}
                     </td>
                     <td className={`px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap ${m.amount > 0 ? "text-[#178A3F]" : "text-[#C0392B]"}`}>
@@ -1787,7 +1806,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                         <>
                           <button type="button" className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
                             title="Edit this movement (date, description, amount)"
-                            onClick={() => setBoxEdit({ txId: m.txId!, txKind: m.txKind!, date: m.date, label: m.label, amount: String(m.amount), note: m.txKind === "internal" ? (m.sub ?? "") : "" })}>
+                            onClick={() => setBoxEdit({ txId: m.txId!, txKind: m.txKind!, date: m.date, label: m.label, amount: String(m.amount), note: m.txKind === "internal" ? (m.sub ?? "") : "", bookingId: m.bookingId ?? "" })}>
                             edit
                           </button>
                           {boxDeleteArm === m.txId ? (
