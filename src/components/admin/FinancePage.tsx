@@ -79,6 +79,9 @@ type FinTx = {
   is_cash?: boolean;
   // "Pas de justificatif a attendre" (cash, pourboires...) — sort du filtre No receipt
   receipt_waived?: boolean;
+  // Immobilisation (1er sept 2026) : nombre de mois d'amortissement (60 = 5 ans).
+  // La dépense sort de l'EBITDA et s'étale en ligne "Amortissements" -> EBIT.
+  amortize_months?: number | null;
 };
 
 type FinRule = { id: string; pattern: string; kind: string; category: string | null; vat_rate: number | null };
@@ -94,13 +97,16 @@ const VARIABLE_CATS = new Set(
 );
 
 // P&L : coûts VARIABLES au sens du modèle financier (validé avec Geoffroy,
-// 6 août 2026) — uniquement les 8 tags retreat/wedding. "Bar — stock" et
-// "Other variable" restent dans le bloc fixe & autres.
+// 6 août 2026 ; élargi le 1er sept 2026) — les 8 tags retreat/wedding
+// + Cleaning (in season) et Gardening (seasonal), directement tirés par les
+// events (mêmes postes que le pooling par jour d'événement d'Event margins).
+// "Bar — stock" et "Other variable" restent dans le bloc fixe & autres.
 const PNL_VARIABLE_CATS = new Set([
   "Retreat — catering / staff", "Retreat — catering / food",
   "Retreat — venue / cleaning & fixed", "Retreat - extras",
   "Wedding — catering / staff", "Wedding — catering / food",
   "Wedding — venue / cleaning & fixed", "Wedding - extras",
+  "Cleaning (in season)", "Gardening (seasonal)",
 ]);
 
 export type FinInstallment = {
@@ -575,6 +581,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         continue;
       }
       if (t.kind !== "expense" || !t.category) continue;
+      // Immobilisées : hors EBITDA — comptées dans la ligne Amortissements
+      if (t.amortize_months && t.amortize_months > 0) continue;
       // Priorité : mois P&L forcé (facture d'un autre mois) > check-in > date
       const b = t.booking_id ? bookingById.get(t.booking_id) : null;
       const accrual = t.pnl_month ? `${t.pnl_month}-01` : (b?.check_in_date ?? t.date);
@@ -596,7 +604,22 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       revEvents[m] + revBar[m] + otherIncome[m] - totalVar[m]);
     const ebitda = Array.from({ length: 12 }, (_, m) =>
       revEvents[m] + revBar[m] + otherIncome[m] - totalExp[m]);
-    return { revEvents, revBar, revRows, totalRev, otherIncome, byCat, totalExp, totalVar, totalFix, grossMargin, ebitda };
+    // Amortissements (1er sept 2026) : les dépenses immobilisées (bouton
+    // "Amort. 5y") s'étalent en linéaire HT/mois à partir du mois d'achat
+    // (pnl_month prioritaire), à cheval sur les années. EBIT = EBITDA − D&A.
+    const dep = Array.from({ length: 12 }, () => 0);
+    for (const t of txs) {
+      if (t.kind !== "expense" || !t.amortize_months || t.amortize_months <= 0) continue;
+      const start = t.pnl_month ?? t.date.slice(0, 7);
+      const sy = Number(start.slice(0, 4)), sm = Number(start.slice(5, 7)) - 1;
+      const share = (t.amount_net ?? Math.abs(t.amount)) / t.amortize_months;
+      for (let m = 0; m < 12; m++) {
+        const diff = (Number(year) * 12 + m) - (sy * 12 + sm);
+        if (diff >= 0 && diff < t.amortize_months) dep[m] += share;
+      }
+    }
+    const ebit = Array.from({ length: 12 }, (_, m) => ebitda[m] - dep[m]);
+    return { revEvents, revBar, revRows, totalRev, otherIncome, byCat, totalExp, totalVar, totalFix, grossMargin, ebitda, dep, ebit };
   }, [txs, installments, bookingById, year]);
 
   const cash = useMemo(() => {
@@ -791,6 +814,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         continue;
       }
       if (t.kind !== "expense" || !t.category) continue;
+      // Immobilisées : hors EBITDA (mêmes règles que l'onglet P&L)
+      if (t.amortize_months && t.amortize_months > 0) continue;
       const b = t.booking_id ? bookingById.get(t.booking_id) : null;
       const accrual = t.pnl_month ? `${t.pnl_month}-01` : (b?.check_in_date ?? t.date);
       if (!accrual.startsWith(yr)) continue;
@@ -1330,6 +1355,21 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                                   {splitFor === t.id ? "Close" : "Split"}
                                 </button>
                               )}
+                              {t.kind === "expense" && t.amount < 0 && (
+                                t.amortize_months ? (
+                                  <button type="button" className="text-[10px] font-semibold text-[#1C5CAB] hover:underline whitespace-nowrap"
+                                    title={`Capitalised — depreciated over ${t.amortize_months} months (out of EBITDA, spread in the D&A line). Click to undo.`}
+                                    onClick={() => patch(t.id, { amortize_months: null })}>
+                                    ⏳ {Math.round(t.amortize_months / 12)}y
+                                  </button>
+                                ) : (
+                                  <button type="button" className="text-[10px] font-medium text-muted-foreground/70 hover:text-[#1C5CAB] hover:underline whitespace-nowrap"
+                                    title="Capitalise this purchase: spread it over 5 years in the P&L (out of EBITDA, monthly D&A line from the purchase month). Cash flow unchanged."
+                                    onClick={() => patch(t.id, { amortize_months: 60 })}>
+                                    Amort.
+                                  </button>
+                                )
+                              )}
                             </span>
                             {!t.booking_id && t.amount < 0 && (() => {
                               const b = eventForDate(t.date);
@@ -1597,6 +1637,25 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                 ))}
                 <td className="py-2 px-2 text-right tabular-nums font-extrabold">{fmt0(pnl.ebitda.reduce((s, v) => s + v, 0))}</td>
               </tr>
+              {pnl.dep.some((v) => v > 0) && (
+                <>
+                  <tr className="border-t border-border/40">
+                    <td className="py-1.5 pr-2 pl-3 text-muted-foreground sticky left-0 bg-card whitespace-nowrap"
+                      title="Straight-line depreciation of capitalised purchases (Amort. button on the transaction) — HT spread monthly from the purchase month">
+                      Depreciation &amp; amortisation
+                    </td>
+                    {pnl.dep.map((v, i) => <td key={i} className="py-1.5 px-2 text-right tabular-nums">{v ? `−${fmt0(v)}` : "·"}</td>)}
+                    <td className="py-1.5 px-2 text-right tabular-nums font-semibold">−{fmt0(pnl.dep.reduce((s, v) => s + v, 0))}</td>
+                  </tr>
+                  <tr className="border-t-2 border-border bg-secondary/40">
+                    <td className="py-2 pr-2 font-bold sticky left-0 bg-secondary/40">EBIT</td>
+                    {pnl.ebit.map((v, i) => (
+                      <td key={i} className={`py-2 px-2 text-right tabular-nums font-bold ${v < 0 ? "text-destructive" : ""}`}>{v ? fmt0(v) : "·"}</td>
+                    ))}
+                    <td className="py-2 px-2 text-right tabular-nums font-extrabold">{fmt0(pnl.ebit.reduce((s, v) => s + v, 0))}</td>
+                  </tr>
+                </>
+              )}
             </tbody>
           </table>
           {pnl.byCat.size === 0 && (

@@ -35,6 +35,7 @@ export type Database = {
           pnl_month: string | null
           is_cash: boolean
           receipt_waived: boolean
+          amortize_months: number | null
           created_at: string
         }
         Insert: {
@@ -57,6 +58,7 @@ export type Database = {
           pnl_month?: string | null
           is_cash?: boolean
           receipt_waived?: boolean
+          amortize_months?: number | null
           created_at?: string
         }
         Update: {
@@ -79,6 +81,7 @@ export type Database = {
           pnl_month?: string | null
           is_cash?: boolean
           receipt_waived?: boolean
+          amortize_months?: number | null
           created_at?: string
         }
         Relationships: []
