@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCw, Wine } from "lucide-react";
+import { EventPicker } from "@/components/admin/EventPicker";
 
 /**
  * Honesty bar (Revolut Merchant) — carte admin de l'onglet Payments.
@@ -129,9 +130,6 @@ export function HonestyBarCard() {
     };
   }, [sales]);
 
-  const bookingName = (b: BookingOpt) =>
-    `${b.retreat_name || "Booking"} (${b.check_in_date.slice(8, 10)}/${b.check_in_date.slice(5, 7)} → ${b.check_out_date.slice(8, 10)}/${b.check_out_date.slice(5, 7)})`;
-
   return (
     <section className="rounded-2xl bg-card p-4 shadow-sm border border-border/60 space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -198,17 +196,13 @@ export function HonestyBarCard() {
                 <div key={s.id} className="rounded-lg border border-border px-3 py-2 text-sm flex items-center gap-2 flex-wrap">
                   <span className="font-semibold tabular-nums">€{Number(s.amount).toLocaleString("en-GB", { maximumFractionDigits: 2 })}</span>
                   <span className="text-xs text-muted-foreground">{fmtDay(s.paid_at)}</span>
-                  <select
-                    className="h-7 rounded-md border border-input bg-background px-1.5 text-xs max-w-[280px]"
-                    defaultValue=""
+                  <EventPicker
+                    className="w-[280px]"
+                    events={bookings.map((b) => ({ id: b.id, name: b.retreat_name || "Booking", checkIn: b.check_in_date, checkOut: b.check_out_date }))}
+                    value=""
                     disabled={busyId === s.id}
-                    onChange={(e) => e.target.value && assign(s, e.target.value)}
-                  >
-                    <option value="" disabled>Link to an event…</option>
-                    {bookings.map((b) => (
-                      <option key={b.id} value={b.id}>{bookingName(b)}</option>
-                    ))}
-                  </select>
+                    onChange={(id) => id && assign(s, id)}
+                  />
                 </div>
               ))}
             </div>

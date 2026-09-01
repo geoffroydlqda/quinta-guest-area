@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote, Percent as PercentIcon } from "lucide-react";
 import { EventMarginsTab } from "@/components/admin/EventMarginsTab";
+import { EventPicker } from "@/components/admin/EventPicker";
 
 /**
  * Onglet Finance (4 août 2026) — phase 1, alimentée par import CSV Revolut
@@ -1091,11 +1092,10 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
               <option value="">All months</option>
               {monthsAvailable.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
             </select>
-            <select className="h-7 rounded-full border border-border bg-card px-2.5 text-xs max-w-[190px]"
-              value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}>
-              <option value="">All events</option>
-              {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+            <EventPicker className="w-[190px]"
+              events={realBookings.map((b) => ({ id: b.id, name: b.name, checkIn: b.check_in_date, checkOut: b.check_out_date }))}
+              value={eventFilter} onChange={setEventFilter}
+              pastOnly={false} allowNone noneLabel="All events" placeholder="All events" />
             <select className="h-7 rounded-full border border-border bg-card px-2.5 text-xs max-w-[210px]"
               value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
               <option value="">All categories</option>
@@ -1153,11 +1153,12 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                 <label className="space-y-1 flex-1"><div className="text-xs text-muted-foreground">Category</div>
                   <CategorySelect value={mCat} onChange={setMCat} /></label>
               </div>
-              <label className="space-y-1 sm:col-span-2"><div className="text-xs text-muted-foreground">Event (optional)</div>
-                <select className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm" value={mBooking} onChange={(e) => setMBooking(e.target.value)}>
-                  <option value="">—</option>
-                  {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select></label>
+              <label className="space-y-1 sm:col-span-2"><div className="text-xs text-muted-foreground">Event (optional — past events only)</div>
+                <EventPicker
+                  events={realBookings.map((b) => ({ id: b.id, name: b.name, checkIn: b.check_in_date, checkOut: b.check_out_date }))}
+                  value={mBooking} allowNone placeholder="No event"
+                  onChange={setMBooking}
+                /></label>
               <label className="flex items-center gap-2 text-sm pb-2" title="Paid in cash: also deducted from the Cash box tab. Untick if paid another way (personal card…).">
                 <input type="checkbox" checked={mCash} onChange={(e) => setMCash(e.target.checked)} className="h-4 w-4 accent-[#35532A]" />
                 Paid in cash
@@ -1311,11 +1312,10 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                         ) : editable || t.kind === "guest_payment" ? (
                           <>
                             <span className="inline-flex items-center gap-1.5">
-                              <select className="h-7 rounded-md border border-input bg-background px-1 text-xs max-w-[180px]"
-                                value={t.booking_id ?? ""} onChange={(e) => patch(t.id, { booking_id: e.target.value || null })}>
-                                <option value="">—</option>
-                                {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                              </select>
+                              <EventPicker className="w-[180px]"
+                                events={realBookings.map((b) => ({ id: b.id, name: b.name, checkIn: b.check_in_date, checkOut: b.check_out_date }))}
+                                value={t.booking_id ?? ""} allowNone placeholder="—"
+                                onChange={(id) => patch(t.id, { booking_id: id || null })} />
                               {editable && !t.parent_id && (
                                 <button type="button" className="text-[10px] font-medium text-[#7C3AED] hover:underline whitespace-nowrap"
                                   onClick={() => (splitFor === t.id ? setSplitFor(null) : openSplit(t))}>
@@ -1434,12 +1434,10 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                                     onChange={(e) => setSplitLines(splitLines.map((x, j) => (j === i ? { ...x, vat: e.target.value } : x)))}>
                                     {[23, 13, 6, 0].map((v) => <option key={v} value={v}>{v}%</option>)}
                                   </select>
-                                  <select className="h-7 rounded-md border border-input bg-background px-1 text-xs max-w-[180px]"
-                                    value={l.booking_id}
-                                    onChange={(e) => setSplitLines(splitLines.map((x, j) => (j === i ? { ...x, booking_id: e.target.value } : x)))}>
-                                    <option value="">No event</option>
-                                    {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                  </select>
+                                  <EventPicker className="w-[180px]"
+                                    events={realBookings.map((b) => ({ id: b.id, name: b.name, checkIn: b.check_in_date, checkOut: b.check_out_date }))}
+                                    value={l.booking_id} allowNone
+                                    onChange={(id) => setSplitLines(splitLines.map((x, j) => (j === i ? { ...x, booking_id: id } : x)))} />
                                   {splitLines.length > 2 && (
                                     <button type="button" className="text-xs text-muted-foreground hover:text-destructive"
                                       onClick={() => setSplitLines(splitLines.filter((_, j) => j !== i))}>✕</button>
@@ -1760,13 +1758,15 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                       <td className="px-3 py-2">
                         <Input value={boxEdit.label} onChange={(e) => setBoxEdit((v) => v && { ...v, label: e.target.value })} className="h-8 text-xs" />
                         {boxEdit.txKind === "expense" && (
-                          <select className="h-8 mt-1 w-full rounded-md border border-input bg-background px-1.5 text-xs"
-                            title="Attach this cash expense to an event — it will show in the event's margins and hit the P&L on the event's month"
-                            value={boxEdit.bookingId}
-                            onChange={(e) => setBoxEdit((v) => v && { ...v, bookingId: e.target.value })}>
-                            <option value="">No event</option>
-                            {realBookings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                          </select>
+                          <div className="mt-1" title="Attach this cash expense to an event — it will show in the event's margins and hit the P&L on the event's month">
+                            <EventPicker
+                              events={realBookings.map((b) => ({ id: b.id, name: b.name, checkIn: b.check_in_date, checkOut: b.check_out_date }))}
+                              value={boxEdit.bookingId}
+                              allowNone
+                              placeholder="No event"
+                              onChange={(id) => setBoxEdit((v) => v && { ...v, bookingId: id })}
+                            />
+                          </div>
                         )}
                         {boxEdit.txKind === "internal" && (
                           <Input value={boxEdit.note} placeholder="Note"
