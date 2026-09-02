@@ -24,7 +24,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
         setSession(newSession);
-        setUser(newSession?.user ?? null);
+        // Identité STABLE du user (2 sept 2026) : au retour sur l'onglet,
+        // Supabase émet TOKEN_REFRESHED avec un NOUVEL objet user — même id,
+        // référence différente. Tous les useEffect qui dépendent de `user`
+        // rechargeaient alors leurs données (perte des formulaires en cours,
+        // ex. Add passenger dans Transportation). On garde l'ancienne
+        // référence tant que l'utilisateur connecté est le même.
+        setUser((prev) => (prev && newSession?.user && prev.id === newSession.user.id ? prev : newSession?.user ?? null));
 
         if (event !== 'INITIAL_SESSION' || hasResolvedInitialSession.current) {
           setIsLoading(false);
