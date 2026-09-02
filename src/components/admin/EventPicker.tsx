@@ -55,7 +55,7 @@ export function EventPicker({
       .filter((e) => !pastOnly || !e.checkIn || e.checkIn.slice(0, 4) <= thisYear)
       .filter((e) => !needle || e.name.toLowerCase().includes(needle))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
-  }, [events, q, pastOnly, today]);
+  }, [events, q, pastOnly, thisYear]);
 
   const selected = events.find((e) => e.id === value) ?? null;
 
