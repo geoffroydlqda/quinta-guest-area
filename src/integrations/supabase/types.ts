@@ -739,6 +739,33 @@ export type Database = {
           },
         ]
       }
+      investor_updates: {
+        Row: {
+          month: string
+          content: string
+          status: string
+          reviewed_by: string | null
+          reviewed_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          month: string
+          content: string
+          status?: string
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          month?: string
+          content?: string
+          status?: string
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_templates: {
         Row: {
           body: string | null

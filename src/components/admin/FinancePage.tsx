@@ -973,19 +973,67 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     return { display, plain, html };
   }, [reportMonth, txs, installments, bookingById, realBookings, shareToken, instCreated]);
 
+  // ---- Brouillon éditable + statut "reviewed" (2 sept 2026) ---------------
+  // Le texte généré sert de base ; dès qu'il est édité/sauvé il est FIGÉ en
+  // base (investor_updates) — les chiffres validés ne bougent plus derrière
+  // le dos de Geoffroy. "Mark as reviewed" signale à l'admin que la version
+  // est validée avant envoi ; toute modification repasse en draft.
+  type ReportDraft = { content: string; status: string; reviewed_by: string | null; reviewed_at: string | null };
+  const [reportDraft, setReportDraft] = useState<ReportDraft | null>(null);
+  const [draftDirty, setDraftDirty] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  useEffect(() => {
+    setReportDraft(null); setDraftDirty(false);
+    supabase.from("investor_updates").select("content,status,reviewed_by,reviewed_at").eq("month", reportMonth).maybeSingle()
+      .then(({ data }) => { if (data) setReportDraft(data as ReportDraft); });
+  }, [reportMonth]);
+  const draftContent = reportDraft?.content ?? reportText.display;
+  const persistDraft = async (status: "draft" | "reviewed") => {
+    setDraftSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const row = {
+        month: reportMonth, content: draftContent, status,
+        reviewed_by: status === "reviewed" ? (user?.email ?? null) : null,
+        reviewed_at: status === "reviewed" ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await supabase.from("investor_updates").upsert(row, { onConflict: "month" });
+      if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
+      setReportDraft({ content: row.content, status, reviewed_by: row.reviewed_by, reviewed_at: row.reviewed_at });
+      setDraftDirty(false);
+      toast({ title: status === "reviewed" ? "Marked as reviewed" : "Draft saved",
+        description: status === "reviewed" ? "The admin can now send this version to investors." : undefined });
+    } finally { setDraftSaving(false); }
+  };
+  const regenerateDraft = async () => {
+    await supabase.from("investor_updates").delete().eq("month", reportMonth);
+    setReportDraft(null); setDraftDirty(false);
+    toast({ title: "Regenerated", description: "Back to the live numbers — edits and review status cleared." });
+  };
+
   const copyReport = async () => {
+    // Copie la version ÉDITÉE si elle existe (lien investisseurs recomposé)
+    const label = "📈 Consult live P&L & cashflow";
+    const liveUrl = shareToken ? `https://guest.quintamor.com/investors/${shareToken}` : null;
+    const escH = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const plainC = liveUrl && draftContent.includes(label) ? draftContent.replace(label, `${label}: ${liveUrl}`) : draftContent;
+    const htmlC = draftContent.split("\n").map((l) =>
+      l === "" ? "<br>" : (liveUrl && l.trim() === label)
+        ? `<p style="margin:0"><a href="${liveUrl}">${label}</a></p>`
+        : `<p style="margin:0 0 2px">${escH(l)}</p>`).join("");
     try {
       // HTML (liens cliquables dans Gmail & co) + repli texte brut avec URLs
       await navigator.clipboard.write([
         new ClipboardItem({
-          "text/html": new Blob([reportText.html], { type: "text/html" }),
-          "text/plain": new Blob([reportText.plain], { type: "text/plain" }),
+          "text/html": new Blob([htmlC], { type: "text/html" }),
+          "text/plain": new Blob([plainC], { type: "text/plain" }),
         }),
       ]);
       toast({ title: "Copied", description: "Paste into your email — the P&L and Cashflow links arrive as clickable hyperlinks." });
     } catch {
       try {
-        await navigator.clipboard.writeText(reportText.plain);
+        await navigator.clipboard.writeText(plainC);
         toast({ title: "Copied (plain text)", description: "Links included as full URLs." });
       } catch {
         toast({ title: "Copy failed", description: "Select the text and copy it manually.", variant: "destructive" });
@@ -1971,13 +2019,43 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
             <Button size="sm" onClick={copyReport}>
               <Copy className="w-4 h-4 mr-1" /> Copy for email
             </Button>
+            {draftDirty && (
+              <Button size="sm" variant="outline" disabled={draftSaving} onClick={() => persistDraft("draft")}>
+                Save draft
+              </Button>
+            )}
+            {reportDraft?.status === "reviewed" && !draftDirty ? (
+              <span className="inline-flex items-center rounded-full bg-[#E5F5EA] px-2.5 py-1 text-[11px] font-semibold text-[#178A3F]"
+                title={`Validated by ${reportDraft.reviewed_by ?? "admin"} — the admin can send this version to investors`}>
+                ✓ Reviewed{reportDraft.reviewed_by ? ` by ${reportDraft.reviewed_by.split("@")[0]}` : ""}
+                {reportDraft.reviewed_at ? ` · ${new Date(reportDraft.reviewed_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}
+              </span>
+            ) : (
+              <Button size="sm" variant="outline" disabled={draftSaving}
+                title="Freeze this text and signal the admin that the numbers are validated and ready to send to investors"
+                onClick={() => persistDraft("reviewed")}>
+                ✓ Mark as reviewed
+              </Button>
+            )}
+            {reportDraft && (
+              <button type="button" className="text-[11px] text-muted-foreground hover:underline"
+                title="Discard the saved version (edits + review status) and go back to the live generated numbers"
+                onClick={regenerateDraft}>
+                ↺ Regenerate from live data
+              </button>
+            )}
             <span className="text-xs text-muted-foreground">
-              Draft generated from live data (P&L net of VAT, cash at bank date) — reread, adjust the narrative, then paste into your email.
+              {reportDraft
+                ? "Saved version — frozen, it no longer follows live data. Edit freely; edits reset the reviewed status."
+                : "Draft generated from live data (P&L net of VAT, cash at bank date) — edit directly, then Save / Mark as reviewed."}
             </span>
           </div>
           <textarea
-            readOnly
-            value={reportText.display}
+            value={draftContent}
+            onChange={(e) => {
+              setReportDraft((d) => ({ content: e.target.value, status: "draft", reviewed_by: null, reviewed_at: null, ...(d ? {} : {}) }));
+              setDraftDirty(true);
+            }}
             rows={14}
             className="w-full resize-y rounded-xl border border-border bg-background p-4 text-[13px] leading-relaxed"
           />
