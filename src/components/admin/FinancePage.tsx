@@ -1186,7 +1186,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                 <label className="space-y-1 flex-1"><div className="text-xs text-muted-foreground">Category</div>
                   <CategorySelect value={mCat} onChange={setMCat} /></label>
               </div>
-              <label className="space-y-1 sm:col-span-2"><div className="text-xs text-muted-foreground">Event (optional — past events only)</div>
+              <label className="space-y-1 sm:col-span-2"><div className="text-xs text-muted-foreground">Event (optional — this year &amp; earlier)</div>
                 <EventPicker
                   events={realBookings.map((b) => ({ id: b.id, name: b.name, checkIn: b.check_in_date, checkOut: b.check_out_date }))}
                   value={mBooking} allowNone placeholder="No event"

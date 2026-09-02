@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, ChevronDown, X } from "lucide-react";
 
 // Sélecteur d'événement avec recherche — remplace les <select> natifs devenus
-// illisibles (50+ bookings). Tri ALPHABÉTIQUE, et par défaut seuls les
-// événements DÉJÀ COMMENCÉS apparaissent (pastOnly) : ces pickers servent à
-// classer a posteriori (ventes bar, dépenses cash) — un event futur n'a rien
-// à y faire. Passer pastOnly={false} pour les cas où on prépare l'avenir.
+// illisibles (50+ bookings). Tri ALPHABÉTIQUE, et par défaut (pastOnly) les
+// événements de l'ANNÉE EN COURS et du passé apparaissent — les années
+// futures (2027+) sont masquées : ces pickers servent à classer des dépenses
+// et ventes de la saison courante (correctif du 1er sept 2026 : un event
+// futur de l'année en cours doit être sélectionnable, p. ex. une dépense
+// engagée avant un mariage d'octobre). Passer pastOnly={false} pour tout voir.
 export type PickerEvent = {
   id: string;
   name: string;
@@ -45,11 +47,12 @@ export function EventPicker({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  // pastOnly = passé + année en cours (les années futures sont masquées)
+  const thisYear = new Date().toISOString().slice(0, 4);
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return events
-      .filter((e) => !pastOnly || !e.checkIn || e.checkIn <= today)
+      .filter((e) => !pastOnly || !e.checkIn || e.checkIn.slice(0, 4) <= thisYear)
       .filter((e) => !needle || e.name.toLowerCase().includes(needle))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   }, [events, q, pastOnly, today]);
@@ -96,7 +99,7 @@ export function EventPicker({
             )}
             {list.length === 0 ? (
               <div className="px-2.5 py-3 text-center text-xs text-muted-foreground italic">
-                No past event matches
+                No event matches
               </div>
             ) : list.map((e) => (
               <button key={e.id} type="button"
