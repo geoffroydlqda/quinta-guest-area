@@ -78,7 +78,13 @@ serve(async (req) => {
     const { data: { user }, error: authErr } = await userClient.auth.getUser();
     if (authErr || !user || !(await isAdminEmailDb(user.email))) return json({ error: "Forbidden" }, 403);
 
-    const { booking_id } = await req.json();
+    // 1er sept 2026 : l'admin peut relire/modifier l'email avant envoi.
+    // { preview: true } -> renvoie sujet + corps texte par défaut (variables
+    // déjà substituées) sans rien envoyer ; { subject, body_text } -> envoi
+    // avec le texte modifié. Le corps est du TEXTE (paragraphes séparés par
+    // une ligne vide) ; le marqueur [[button]] positionne le bouton d'accès
+    // (ajouté à la fin s'il est retiré — l'email doit toujours porter le lien).
+    const { booking_id, preview, subject: subjectOverride, body_text: bodyOverride } = await req.json();
     if (typeof booking_id !== "string" || !booking_id) return json({ error: "booking_id required" }, 400);
 
     const { data: booking, error: findErr } = await admin
@@ -100,7 +106,7 @@ serve(async (req) => {
     }
 
     const inviteUrl = `${GUEST_AREA_ORIGIN}/invite/${token}`;
-    const firstName = escapeHtml(booking.first_name || "there");
+    const firstName = booking.first_name || "there";
 
     // "from 1 to 8 January 2027" — plage humaine, robuste aux dates manquantes
     const fmtDay = (iso: string) => new Date(iso + "T12:00:00Z").getUTCDate();
@@ -119,14 +125,32 @@ serve(async (req) => {
       stayLine = `at Quinta do Amor from ${fmtFull(ci)}`;
     }
 
-    const subject = `Your invitation to the Quinta do Amor Guest Area`;
+    const defaultSubject = `Your invitation to the Quinta do Amor Guest Area`;
+    const defaultBody = [
+      `Hi ${firstName},`,
+      `We're happy to support you in creating magical moments ${stayLine}.`,
+      `Your personal Guest Area is ready. It's where you can choose your room setup, plan your meals and arrange your transportation.`,
+      `[[button]]`,
+      `Please let me know if you have any questions!`,
+      `Geo\nQuinta do Amor`,
+    ].join("\n\n");
+
+    const ccList = await ccEmailsFor(admin, booking_id, booking.email);
+
+    if (preview === true) {
+      return json({
+        to: booking.email, cc: ccList,
+        subject: defaultSubject, body_text: defaultBody, invite_url: inviteUrl,
+      });
+    }
+
+    const subject = (typeof subjectOverride === "string" && subjectOverride.trim()) ? subjectOverride.trim() : defaultSubject;
+    let bodyText = (typeof bodyOverride === "string" && bodyOverride.trim()) ? bodyOverride : defaultBody;
+    // Le lien d'invitation doit TOUJOURS figurer dans l'email
+    if (!bodyText.includes("[[button]]")) bodyText = `${bodyText}\n\n[[button]]`;
+
     const FONT = "font-family: Helvetica, Arial, sans-serif; font-size: 12pt; line-height: 1.5; color: #000;";
-    const html = `
-    <div style="${FONT} text-align: left;">
-      <p style="margin: 0 0 14px;">Hi ${firstName},</p>
-      <p style="margin: 0 0 14px;">We're happy to support you in creating magical moments ${stayLine}.</p>
-      <p style="margin: 0 0 14px;">Your personal Guest Area is ready. It's where you can choose your room
-        setup, plan your meals and arrange your transportation.</p>
+    const buttonHtml = `
       <p style="margin: 20px 0;">
         <a href="${inviteUrl}"
            style="${FONT} background: #6d7855; color: #ffffff; padding: 10px 22px; border-radius: 6px; text-decoration: none; display: inline-block;">
@@ -134,12 +158,16 @@ serve(async (req) => {
         </a>
       </p>
       <p style="margin: 0 0 14px; font-size: 10pt; color: #555;">If the button doesn't work, copy this link into your browser:<br/>
-        <a href="${inviteUrl}" style="color: #6d7855; word-break: break-all;">${inviteUrl}</a></p>
-      <p style="margin: 0 0 14px;">Please let me know if you have any questions!</p>
-      <p style="margin: 0;">Geo<br/>Quinta do Amor</p>
+        <a href="${inviteUrl}" style="color: #6d7855; word-break: break-all;">${inviteUrl}</a></p>`;
+    const paragraphs = bodyText.split(/\n\s*\n/).map((p) =>
+      p.trim() === "[[button]]"
+        ? buttonHtml
+        : `<p style="margin: 0 0 14px;">${escapeHtml(p.trim()).replace(/\n/g, "<br/>")}</p>`
+    );
+    const html = `
+    <div style="${FONT} text-align: left;">
+      ${paragraphs.join("\n")}
     </div>`;
-
-    const ccList = await ccEmailsFor(admin, booking_id, booking.email);
     const res = await resend.emails.send({
       from: FROM_EMAIL,
       to: [booking.email],

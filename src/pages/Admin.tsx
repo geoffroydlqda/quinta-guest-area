@@ -3044,21 +3044,43 @@ function EventTable({
   };
 
   const [sendingInviteId, setSendingInviteId] = useState<string | null>(null);
+  // Brouillon d'invitation éditable avant envoi (1er sept 2026) : le bouton
+  // Mail ouvre une box avec sujet + corps (préremplis par la fonction,
+  // variables déjà substituées) ; [[button]] marque la position du bouton
+  // d'accès — il est réinséré en fin de mail s'il est supprimé.
+  const [inviteDraft, setInviteDraft] = useState<{ bookingId: string; to: string; cc: string[]; subject: string; body: string; label: string } | null>(null);
+  const [inviteSending, setInviteSending] = useState(false);
   const sendInvite = async (e: React.MouseEvent, bookingId: string, guestLabel: string) => {
     e.stopPropagation();
-    if (!window.confirm(`Send the invitation email to ${guestLabel}?`)) return;
     setSendingInviteId(bookingId);
     try {
       const { data, error } = await supabase.functions.invoke("send-invite-email", {
-        body: { booking_id: bookingId },
+        body: { booking_id: bookingId, preview: true },
+      });
+      if (error || data?.error) {
+        toast({ title: "Could not prepare the invitation", description: error?.message || data?.error || "Unknown error", variant: "destructive" });
+        return;
+      }
+      setInviteDraft({ bookingId, to: data.to, cc: data.cc ?? [], subject: data.subject, body: data.body_text, label: guestLabel });
+    } finally {
+      setSendingInviteId(null);
+    }
+  };
+  const confirmSendInvite = async () => {
+    if (!inviteDraft) return;
+    setInviteSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-invite-email", {
+        body: { booking_id: inviteDraft.bookingId, subject: inviteDraft.subject, body_text: inviteDraft.body },
       });
       if (error || data?.error) {
         toast({ title: "Invitation not sent", description: error?.message || data?.error || "Unknown error", variant: "destructive" });
       } else {
         toast({ title: "Invitation sent", description: `Email sent to ${data.sent_to}` });
+        setInviteDraft(null);
       }
     } finally {
-      setSendingInviteId(null);
+      setInviteSending(false);
     }
   };
 
@@ -3073,6 +3095,34 @@ function EventTable({
 
   return (
     <div className="overflow-auto rounded-2xl bg-card shadow-sm border border-border/60 max-h-[70vh]">
+      {inviteDraft && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => !inviteSending && setInviteDraft(null)}>
+          <div className="w-full max-w-xl rounded-2xl bg-card shadow-xl border border-border p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="font-semibold text-sm">Invitation email — {inviteDraft.label}</div>
+            <div className="text-xs text-muted-foreground">
+              To: {inviteDraft.to}{inviteDraft.cc.length > 0 && <> · CC: {inviteDraft.cc.join(", ")}</>}
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs text-muted-foreground">Subject</span>
+              <input className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                value={inviteDraft.subject}
+                onChange={(e) => setInviteDraft((d) => d && { ...d, subject: e.target.value })} />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs text-muted-foreground">Message — <code className="text-[11px]">[[button]]</code> marks where the "Open my Guest Area" button goes (added at the end if you remove it)</span>
+              <textarea className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm leading-relaxed" rows={12}
+                value={inviteDraft.body}
+                onChange={(e) => setInviteDraft((d) => d && { ...d, body: e.target.value })} />
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" disabled={inviteSending} onClick={() => setInviteDraft(null)}>Cancel</Button>
+              <Button size="sm" disabled={inviteSending} onClick={confirmSendInvite}>
+                {inviteSending ? "Sending…" : "Send invitation"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-muted/80 backdrop-blur">
           <tr className="text-left">
