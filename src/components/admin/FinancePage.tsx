@@ -250,7 +250,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [filter, setFilter] = useState<"review" | "in" | "noreceipt" | "bills" | "all">("all");
+  const [filter, setFilter] = useState<"review" | "in" | "noreceipt" | "bills" | "nobills" | "all">("all");
   const [showManual, setShowManual] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
@@ -1015,6 +1015,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     // Bills & virements : sorties par virement bancaire (method 'transfer') —
     // c'est là que vivent les Bills Revolut, dont la facture est dans l'app.
     if (filter === "bills") arr = arr.filter((t) => t.method === "transfer" && t.amount < 0 && t.kind !== "internal" && t.kind !== "split");
+    // Vue inverse : tout SAUF les virements sortants (cartes, cash, entrées…)
+    if (filter === "nobills") arr = arr.filter((t) => !(t.method === "transfer" && t.amount < 0));
     if (monthFilter) arr = arr.filter((t) => t.date.startsWith(monthFilter));
     if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
     if (catFilter === "__none__") arr = arr.filter((t) => !t.category && t.kind === "expense");
@@ -1129,11 +1131,11 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         <>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex bg-card border border-border rounded-full p-0.5">
-              {(["review", "in", "noreceipt", "bills", "all"] as const).map((f) => (
+              {(["review", "in", "noreceipt", "bills", "nobills", "all"] as const).map((f) => (
                 <button key={f} type="button" onClick={() => setFilter(f)}
-                  title={f === "noreceipt" ? "Expenses without a linked receipt — clear this list before sending the month to the accountant" : f === "bills" ? "Outgoing bank transfers (Revolut Bills & manual transfers) — their invoice usually lives in Revolut's Bills section" : undefined}
+                  title={f === "noreceipt" ? "Expenses without a linked receipt — clear this list before sending the month to the accountant" : f === "bills" ? "Outgoing bank transfers (Revolut Bills & manual transfers) — their invoice usually lives in Revolut's Bills section" : f === "nobills" ? "Everything except outgoing bank transfers — cards, cash and money in" : undefined}
                   className={`rounded-full px-3.5 py-1 text-xs font-semibold ${filter === f ? "bg-foreground text-background" : "text-muted-foreground"}`}>
-                  {f === "review" ? `To review (${reviewCount})` : f === "in" ? "Money in" : f === "noreceipt" ? `📎 No receipt (${noReceiptCount})` : f === "bills" ? "🏦 Bills / transfers" : "All"}
+                  {f === "review" ? `To review (${reviewCount})` : f === "in" ? "Money in" : f === "noreceipt" ? `📎 No receipt (${noReceiptCount})` : f === "bills" ? "🏦 Bills / transfers" : f === "nobills" ? "💳 Without transfers" : "All"}
                 </button>
               ))}
             </div>
