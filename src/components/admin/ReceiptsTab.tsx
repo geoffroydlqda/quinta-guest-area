@@ -47,7 +47,9 @@ export function ReceiptsTab() {
 
   const load = async () => {
     const [d, t] = await Promise.all([
-      supabase.from("purchase_docs").select("*").order("created_at", { ascending: false }).limit(300),
+      // 'discarded' = PJ Gmail écartées par le tri strict (screenshots Wise/
+      // Revolut, factures sortantes...) — on ne les affiche pas du tout.
+      supabase.from("purchase_docs").select("*").neq("status", "discarded").order("created_at", { ascending: false }).limit(300),
       supabase.from("fin_transactions").select("id", { count: "exact", head: true })
         .eq("kind", "expense").gte("date", `${new Date().getFullYear()}-01-01`),
     ]);

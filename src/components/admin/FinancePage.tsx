@@ -253,6 +253,21 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   const fileRef = useRef<HTMLInputElement>(null);
   // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
   const [splitFor, setSplitFor] = useState<string | null>(null);
+  // Édition du montant d'une ligne saisie à la main (source 'manual') :
+  // le signe d'origine est conservé, le HT est recalculé depuis la TVA.
+  const [amtEdit, setAmtEdit] = useState<{ id: string; value: string } | null>(null);
+  const saveAmtEdit = async (t: FinTx) => {
+    if (!amtEdit || amtEdit.id !== t.id) return;
+    const v = Number(amtEdit.value);
+    setAmtEdit(null);
+    if (!Number.isFinite(v) || v <= 0 || Math.abs(v - Math.abs(t.amount)) < 0.005) return;
+    const signed = t.amount < 0 ? -Math.abs(v) : Math.abs(v);
+    const vat = t.vat_rate ?? 0;
+    await patch(t.id, {
+      amount: signed,
+      ...(t.kind === "expense" ? { amount_net: Math.round(Math.abs(v) / (1 + vat / 100) * 100) / 100 } : {}),
+    });
+  };
   const [deleteArm, setDeleteArm] = useState<string | null>(null);
   // Justificatifs d'achat : tx qui ont au moins un doc + rattachement "2 clics"
   // tx_id -> chemins storage des justificatifs liés (icône verte cliquable)
@@ -1275,7 +1290,26 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                       <td className="px-3 py-2 max-w-[110px]">
                         {t.payer ? <span className="block truncate text-[11px] text-muted-foreground" title={t.payer}>{t.payer}</span> : <span className="text-muted-foreground/40">—</span>}
                       </td>
-                      <td className={`px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap ${t.amount > 0 ? "text-[#178A3F]" : ""}`}>{fmt2(t.amount)}</td>
+                      <td className={`px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap ${t.amount > 0 ? "text-[#178A3F]" : ""}`}>
+                        {/* Montant éditable pour les lignes saisies à la main
+                            (1er sept 2026) — les lignes bancaires (Revolut,
+                            sheet, split) restent verrouillées : leur montant
+                            vient du compte. */}
+                        {t.source === "manual" && amtEdit?.id === t.id ? (
+                          <input type="number" step="0.01" autoFocus
+                            className="h-7 w-24 rounded-md border border-input bg-background px-1 text-right text-xs"
+                            value={amtEdit.value}
+                            onChange={(e) => setAmtEdit({ id: t.id, value: e.target.value })}
+                            onKeyDown={(e) => { if (e.key === "Enter") saveAmtEdit(t); if (e.key === "Escape") setAmtEdit(null); }}
+                            onBlur={() => saveAmtEdit(t)} />
+                        ) : t.source === "manual" ? (
+                          <button type="button" className="hover:underline decoration-dotted underline-offset-2"
+                            title="Manually entered amount — click to edit"
+                            onClick={() => setAmtEdit({ id: t.id, value: String(Math.abs(t.amount)) })}>
+                            {fmt2(t.amount)}
+                          </button>
+                        ) : fmt2(t.amount)}
+                      </td>
                       <td className="px-3 py-2">
                         {editable ? (
                           <select className="h-7 rounded-md border border-input bg-background px-1 text-xs"

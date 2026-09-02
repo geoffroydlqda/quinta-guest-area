@@ -60,6 +60,7 @@ type Extract = {
   vendor: string | null; doc_date: string | null; total_ttc: number | null;
   nif: string | null; currency: string | null;
   vat_breakdown: { rate: number; base: number; vat: number }[] | null;
+  doc_kind: string | null;
 };
 
 async function callClaude(b64: string, mime: string): Promise<Extract> {
@@ -71,8 +72,13 @@ async function callClaude(b64: string, mime: string): Promise<Extract> {
       ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } }
       : { type: "image", source: { type: "base64", media_type: mime, data: b64 } },
     { type: "text", text:
-`This is a purchase receipt or supplier invoice (likely Portuguese). Extract and return ONLY a JSON object, no prose:
+`Classify this document, then extract its fields. Return ONLY a JSON object, no prose:
 {
+  "doc_kind": one of
+    "invoice"          (a REAL supplier invoice, fatura, fatura-recibo, recibo or shop/till purchase receipt issued to the buyer)
+    "outgoing_invoice" (an invoice issued BY Quinta do Amor / Grupo OHM / Surreal Estate TO a client — our own sales document)
+    "payment_proof"    (a bank or payment-app confirmation/screenshot: Wise, Revolut, PayPal, bank transfer status, "money on its way", account statement)
+    "other"            (anything else: quote/orcamento, order or booking confirmation, email body, license form, random screenshot — even if it shows an amount),
   "vendor": "supplier name as printed",
   "doc_date": "YYYY-MM-DD or null",
   "total_ttc": total amount including VAT as a number,
@@ -117,6 +123,7 @@ Amounts use dot as decimal separator. If a field is unreadable, use null.` },
     nif: parsed.nif != null ? String(parsed.nif) : null,
     currency: parsed.currency ?? "EUR",
     vat_breakdown: Array.isArray(parsed.vat_breakdown) ? parsed.vat_breakdown : null,
+    doc_kind: parsed.doc_kind != null ? String(parsed.doc_kind) : null,
   };
 }
 
@@ -149,6 +156,22 @@ async function extractAndMatch(docId: string) {
   const b64 = btoa(bin);
 
   const ex = await callClaude(b64, doc.mime_type || "image/jpeg");
+
+  // Tri STRICT des PJ Gmail (1er sept 2026, demande Geoffroy) : seules les
+  // vraies factures/recibos/tickets fournisseurs passent. Les captures
+  // Wise/Revolut, confirmations de virement, nos propres factures clients et
+  // autres screenshots qui affichent un montant sont écartés (status
+  // 'discarded' — invisibles dans l'onglet Receipts, exclus du re-matching).
+  // Les uploads MANUELS restent permissifs : un ticket photographié est
+  // accepté quel que soit doc_kind.
+  const fromEmail = String(doc.storage_path ?? "").startsWith("email/");
+  if (fromEmail && ex.doc_kind && ex.doc_kind !== "invoice") {
+    await admin.from("purchase_docs").update({
+      ...ex, vat_breakdown: ex.vat_breakdown, status: "discarded",
+      error: `Not a supplier invoice (${ex.doc_kind})`, updated_at: new Date().toISOString(),
+    }).eq("id", docId);
+    return { doc_id: docId, status: "discarded", doc_kind: ex.doc_kind };
+  }
 
   // Si le doc a déjà été lié à la main (porte "2 clics"), on garde le lien :
   // extraction -> TVA sur la transaction, pas de matching.
