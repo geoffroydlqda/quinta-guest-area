@@ -82,6 +82,8 @@ type FinTx = {
   // Immobilisation (1er sept 2026) : nombre de mois d'amortissement (60 = 5 ans).
   // La dépense sort de l'EBITDA et s'étale en ligne "Amortissements" -> EBIT.
   amortize_months?: number | null;
+  // Type Revolut brut (2 sept 2026) : 'card' / 'transfer' (bills & virements) / 'topup'...
+  method?: string | null;
 };
 
 type FinRule = { id: string; pattern: string; kind: string; category: string | null; vat_rate: number | null };
@@ -248,7 +250,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [filter, setFilter] = useState<"review" | "in" | "noreceipt" | "all">("all");
+  const [filter, setFilter] = useState<"review" | "in" | "noreceipt" | "bills" | "all">("all");
   const [showManual, setShowManual] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
@@ -1010,6 +1012,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     if (filter === "in") arr = arr.filter((t) => t.amount > 0);
     // Dépenses sans justificatif lié (contrôle compta avant envoi au comptable)
     if (filter === "noreceipt") arr = arr.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived && !t.is_cash);
+    // Bills & virements : sorties par virement bancaire (method 'transfer') —
+    // c'est là que vivent les Bills Revolut, dont la facture est dans l'app.
+    if (filter === "bills") arr = arr.filter((t) => t.method === "transfer" && t.amount < 0 && t.kind !== "internal" && t.kind !== "split");
     if (monthFilter) arr = arr.filter((t) => t.date.startsWith(monthFilter));
     if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
     if (catFilter === "__none__") arr = arr.filter((t) => !t.category && t.kind === "expense");
@@ -1124,11 +1129,11 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         <>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex bg-card border border-border rounded-full p-0.5">
-              {(["review", "in", "noreceipt", "all"] as const).map((f) => (
+              {(["review", "in", "noreceipt", "bills", "all"] as const).map((f) => (
                 <button key={f} type="button" onClick={() => setFilter(f)}
-                  title={f === "noreceipt" ? "Expenses without a linked receipt — clear this list before sending the month to the accountant" : undefined}
+                  title={f === "noreceipt" ? "Expenses without a linked receipt — clear this list before sending the month to the accountant" : f === "bills" ? "Outgoing bank transfers (Revolut Bills & manual transfers) — their invoice usually lives in Revolut's Bills section" : undefined}
                   className={`rounded-full px-3.5 py-1 text-xs font-semibold ${filter === f ? "bg-foreground text-background" : "text-muted-foreground"}`}>
-                  {f === "review" ? `To review (${reviewCount})` : f === "in" ? "Money in" : f === "noreceipt" ? `📎 No receipt (${noReceiptCount})` : "All"}
+                  {f === "review" ? `To review (${reviewCount})` : f === "in" ? "Money in" : f === "noreceipt" ? `📎 No receipt (${noReceiptCount})` : f === "bills" ? "🏦 Bills / transfers" : "All"}
                 </button>
               ))}
             </div>
@@ -1288,7 +1293,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                         {t.source === "manual" && <span className="text-[10px] text-muted-foreground">manual</span>}
                         {t.source === "split" && <span className="text-[10px] font-medium text-[#7C3AED]">↳ part</span>}</td>
                       <td className="px-3 py-2 max-w-[110px]">
-                        {t.payer ? <span className="block truncate text-[11px] text-muted-foreground" title={t.payer}>{t.payer}</span> : <span className="text-muted-foreground/40">—</span>}
+                        {t.payer ? <span className="block truncate text-[11px] text-muted-foreground" title={t.payer}>{t.payer}</span>
+                          : t.method === "transfer" && t.amount < 0 ? <span className="text-[10px] text-muted-foreground/70" title="Paid by bank transfer — if it's a Revolut Bill, the invoice is in the Bills section of the app">🏦 transfer</span>
+                          : <span className="text-muted-foreground/40">—</span>}
                       </td>
                       <td className={`px-3 py-2 text-right tabular-nums font-semibold whitespace-nowrap ${t.amount > 0 ? "text-[#178A3F]" : ""}`}>
                         {/* Montant éditable pour les lignes saisies à la main

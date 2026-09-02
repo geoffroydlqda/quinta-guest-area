@@ -36,6 +36,7 @@ export type Database = {
           is_cash: boolean
           receipt_waived: boolean
           amortize_months: number | null
+          method: string | null
           created_at: string
         }
         Insert: {
@@ -59,6 +60,7 @@ export type Database = {
           is_cash?: boolean
           receipt_waived?: boolean
           amortize_months?: number | null
+          method?: string | null
           created_at?: string
         }
         Update: {
@@ -82,6 +84,7 @@ export type Database = {
           is_cash?: boolean
           receipt_waived?: boolean
           amortize_months?: number | null
+          method?: string | null
           created_at?: string
         }
         Relationships: []

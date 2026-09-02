@@ -321,11 +321,16 @@ async function syncTransactions(token: string) {
     const cardName = [t.card?.first_name, t.card?.last_name].filter(Boolean).join(" ").trim();
     const cardDigits = (t.card?.card_number ?? "").replace(/\D/g, "");
     const payer = cardName || (cardDigits ? `Card •${cardDigits.slice(-4)}` : null);
+    // Type brut Revolut (2 sept 2026) : card_payment -> 'card' (expense),
+    // transfer -> 'transfer' (virement — c'est là que vivent les Bills),
+    // le reste tel quel (topup, direct_debit, fee, exchange...).
+    const method = (t.type ?? "").toLowerCase() === "card_payment" ? "card" : ((t.type ?? "").toLowerCase() || null);
     payloads.push({
       source: "revolut", dedup_key: `revapi|${t.id}`,
       date, description: desc, amount, currency: leg.currency ?? "EUR",
       ...cls, ...(booking ? { booking_id: booking } : {}),
       ...(payer ? { payer } : {}),
+      ...(method ? { method } : {}),
     });
   }
 
