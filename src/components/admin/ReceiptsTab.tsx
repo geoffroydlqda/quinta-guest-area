@@ -64,12 +64,25 @@ export function ReceiptsTab() {
     return data;
   };
 
+  // HEIC (photos iPhone) -> JPEG côté navigateur avant upload : l'extraction
+  // (API Anthropic) n'accepte que jpeg/png/gif/webp, et Chrome ne sait de
+  // toute façon pas afficher le HEIC. heic2any est chargé à la demande.
+  const isHeic = (f: File) => /\.hei[cf]$/i.test(f.name) || /hei[cf]/i.test(f.type);
+  const toJpegIfHeic = async (f: File): Promise<File> => {
+    if (!isHeic(f)) return f;
+    const { default: heic2any } = await import("heic2any");
+    const out = await heic2any({ blob: f, toType: "image/jpeg", quality: 0.86 });
+    const blob = Array.isArray(out) ? out[0] : out;
+    return new File([blob], f.name.replace(/\.hei[cf]$/i, "") + ".jpg", { type: "image/jpeg" });
+  };
+
   const onFiles = async (list: FileList | null) => {
     if (!list?.length) return;
     const files = Array.from(list);
     setUploading(files.length);
-    for (const f of files) {
+    for (const raw of files) {
       try {
+        const f = await toJpegIfHeic(raw);
         const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
         const path = `${new Date().toISOString().slice(0, 7)}/${crypto.randomUUID()}.${ext}`;
         const up = await supabase.storage.from("purchase-docs").upload(path, f, { contentType: f.type || "image/jpeg" });
@@ -80,7 +93,7 @@ export function ReceiptsTab() {
         if (insErr) throw new Error(insErr.message);
         await extract(row.id);
       } catch (e) {
-        toast({ title: `${f.name} failed`, description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+        toast({ title: `${raw.name} failed`, description: e instanceof Error ? e.message : String(e), variant: "destructive" });
       } finally {
         setUploading((n) => n - 1);
         load();
@@ -109,7 +122,26 @@ export function ReceiptsTab() {
 
   const retry = async (doc: PurchaseDoc) => {
     setBusyDoc(doc.id);
-    try { await extract(doc.id); } catch (e) {
+    try {
+      // Auto-réparation des HEIC déjà uploadés (avant la conversion à
+      // l'upload) : on télécharge, convertit en JPEG, remplace le fichier
+      // au même chemin logique (.jpg) puis on relance l'extraction.
+      const heicStored = /\.hei[cf]$/i.test(doc.storage_path) || /hei[cf]/i.test(doc.mime_type ?? "");
+      if (heicStored) {
+        const dl = await supabase.storage.from("purchase-docs").download(doc.storage_path);
+        if (dl.error || !dl.data) throw new Error(dl.error?.message ?? "Download failed");
+        const jpg = await toJpegIfHeic(new File([dl.data], doc.file_name ?? "receipt.heic", { type: "image/heic" }));
+        const newPath = doc.storage_path.replace(/\.[^.]+$/, "") + ".jpg";
+        const up = await supabase.storage.from("purchase-docs").upload(newPath, jpg, { contentType: "image/jpeg", upsert: true });
+        if (up.error) throw new Error(up.error.message);
+        await supabase.from("purchase_docs").update({
+          storage_path: newPath, mime_type: "image/jpeg",
+          file_name: (doc.file_name ?? "receipt").replace(/\.hei[cf]$/i, ".jpg"),
+        }).eq("id", doc.id);
+        await supabase.storage.from("purchase-docs").remove([doc.storage_path]);
+      }
+      await extract(doc.id);
+    } catch (e) {
       toast({ title: "Extraction failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
     } finally { setBusyDoc(null); load(); }
   };
@@ -144,7 +176,7 @@ export function ReceiptsTab() {
     <div className="space-y-4">
       {/* Zone de dépôt */}
       <label className="block rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 px-4 py-6 text-center cursor-pointer hover:bg-primary/10 transition-colors">
-        <input type="file" multiple accept="image/*,application/pdf" className="hidden"
+        <input type="file" multiple accept="image/*,.heic,.heif,application/pdf" className="hidden"
           onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
         <Upload className="w-5 h-5 inline mr-2 text-[#35532A]" />
         <span className="text-sm font-medium">Drop receipts here or tap to photograph / pick files</span>
