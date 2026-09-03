@@ -128,6 +128,20 @@ export function PaymentEmailDialog({
   const insts = kind === "request" && groupInsts && groupInsts.length > 1 ? groupInsts : [inst];
   const totalDue = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
   const { toast } = useToast();
+  // Adresses secondaires (client_profiles.cc_emails) : le serveur les met en
+  // CC à l'envoi — on les AFFICHE ici pour que ce soit visible avant d'envoyer
+  // (2 sept 2026 : Geoffroy croyait que l'email ne partait qu'au principal).
+  const [ccEmails, setCcEmails] = useState<string[]>([]);
+  useEffect(() => {
+    setCcEmails([]);
+    const email = (booking.email ?? "").toLowerCase();
+    if (!email) return;
+    supabase.from("client_profiles").select("cc_emails").eq("email", email).maybeSingle()
+      .then(({ data }) => {
+        const cc = ((data?.cc_emails as string[] | null) ?? []).filter((e) => e && e.toLowerCase() !== email);
+        setCcEmails(cc.slice(0, 5));
+      });
+  }, [booking.email]);
   const [subject, setSubject] = useState("");
   const [bodyTop, setBodyTop] = useState("");
   const [bodyBottom, setBodyBottom] = useState("");
@@ -248,7 +262,9 @@ export function PaymentEmailDialog({
 
         <div className="space-y-3 text-sm">
           <div className="text-xs text-muted-foreground">
-            To <span className="font-medium text-foreground">{booking.email}</span> · from hello@quintamor.com
+            To <span className="font-medium text-foreground">{booking.email}</span>
+            {ccEmails.length > 0 && <> · CC <span className="font-medium text-foreground">{ccEmails.join(", ")}</span></>}
+            {" "}· from hello@quintamor.com
           </div>
 
           <label className="block space-y-1">
