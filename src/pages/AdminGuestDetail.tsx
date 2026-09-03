@@ -2137,7 +2137,7 @@ function PaymentSection({ userId }: { userId: string }) {
             <div className="h-full bg-green-500 transition-all" style={{ width: `${totals.pct}%` }} />
           </div>
           <div className="text-xs text-muted-foreground">
-            €{totals.totalPaid} paid of €{totals.rental} · €{totals.remaining} remaining
+            €{totals.totalPaid.toLocaleString("en-GB", { maximumFractionDigits: 2 })} paid of €{totals.rental.toLocaleString("en-GB", { maximumFractionDigits: 2 })} · €{totals.remaining.toLocaleString("en-GB", { maximumFractionDigits: 2 })} remaining
           </div>
           {totals.mismatch && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
