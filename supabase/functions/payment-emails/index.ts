@@ -519,6 +519,17 @@ Warmly,
 Geo`);
     }
 
+    // Récap solde du séjour (2 sept 2026, demande Geoffroy) : chaque email de
+    // paiement dit ce qui est déjà payé et ce qui restera à payer — évite les
+    // confusions de montant (cas Michael / Max / Shandra). Hors lignes bar
+    // (admin-only) ; les discounts négatifs sont inclus dans le total dû.
+    const { data: balRows } = await admin.from("payment_installments")
+      .select("id,amount_due,status,category")
+      .eq("booking_id", inst.booking_id);
+    const balAll = (balRows ?? []).filter((r) => r.category !== "bar");
+    const balTotal = balAll.reduce((s, r) => s + Number(r.amount_due || 0), 0);
+    const balPaid = balAll.filter((r) => r.status === "paid").reduce((s, r) => s + Number(r.amount_due || 0), 0);
+
     let html = "";
     const attachments: { filename: string; content: string }[] = [];
 
@@ -564,7 +575,14 @@ Geo`);
       html = emailShell(`
 ${paras(parsed.data.body_top ?? "")}
 <p style="margin:18px 0 6px 0;"><a href="${payUrl}" style="display:inline-block;background:#6d7855;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;">Pay ${esc(amount)}</a></p>
-<p style="margin:0 0 18px 0;font-size:11px;color:#888888;">Secure bank payment (debit or transfer), powered by Stripe.${proFormaAttached ? " The full details of this payment are attached." : ""}</p>
+<p style="margin:0 0 6px 0;font-size:11px;color:#888888;">Secure bank payment (debit or transfer), powered by Stripe.${proFormaAttached ? " The full details of this payment are attached." : ""}</p>
+<p style="margin:0 0 18px 0;font-size:11px;color:#555555;">${(() => {
+  const thisPay = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+  const after = Math.max(0, Math.round((balTotal - balPaid - thisPay) * 100) / 100);
+  const paidPart = balPaid > 0.005 ? `${fmtEur(balPaid)} already received · ` : "";
+  const afterPart = after > 0.005 ? `${fmtEur(after)} will remain for later` : "after it, your stay is fully settled";
+  return `Where you stand: ${paidPart}this payment ${fmtEur(thisPay)} · ${afterPart}.`;
+})()}</p>
 ${paras(parsed.data.body_bottom ?? "")}
 `);
     } else {
@@ -584,7 +602,10 @@ ${paras(parsed.data.body_bottom ?? "")}
         filename: inst.invoice_file_name ?? `${(inst.invoice_number ?? "invoice").replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`,
         content: btoa(bin),
       });
-      html = emailShell(paras(bodyText));
+      // Récap solde en pied de confirmation (balPaid inclut déjà ce paiement)
+      const remaining = Math.max(0, Math.round((balTotal - balPaid) * 100) / 100);
+      html = emailShell(paras(bodyText)
+        + `<p style="margin:18px 0 0 0;font-size:11px;color:#888888;">Payment overview: ${fmtEur(balPaid)} received of ${fmtEur(balTotal)}${remaining > 0.005 ? ` · ${fmtEur(remaining)} remaining` : " — your stay is fully settled"}.</p>`);
     }
 
     // Pièces jointes fournies par l'admin (les deux kinds)
