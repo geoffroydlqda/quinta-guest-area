@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
+import { openKitchenSheet } from "@/lib/kitchenSheet";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
@@ -1093,6 +1094,13 @@ const AdminGuestDetailContent = () => {
             </h2>
             {food && (
               <div className="flex items-center gap-1">
+                {booking && (
+                  <Button size="sm" variant="outline"
+                    title="Branded printable food plan for the kitchen team (same as the Catering tab)"
+                    onClick={() => openKitchenSheet(booking, food)}>
+                    <Printer className="w-3.5 h-3.5 mr-1" /> Kitchen sheet
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" onClick={handleCopyFoodInfo}>
                   <Copy className="w-3.5 h-3.5 mr-1" /> Copy info
                 </Button>

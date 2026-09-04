@@ -49,7 +49,10 @@ export function openKitchenSheet(booking: KitchenBooking, plan: KitchenFoodPlan)
   const meatDinner = Number(dc.meat_dinner_count ?? 0);
   const meatBoth = Number(dc.meat_lunch_dinner_count ?? 0);
   const mt = (plan.meal_times ?? {}) as Record<string, string>;
-  const timeOf = (k: string, dflt: string) => (mt[k] || dflt).slice(0, 5);
+  // ⚠️ Le Food tool guest stocke les clés "breakfast_time"/"lunch_time"/
+  // "dinner_time" — la fiche lisait "breakfast"/... et retombait TOUJOURS sur
+  // les défauts (bug Root to rise, 2 sept 2026). On lit les deux formes.
+  const timeOf = (k: string, dflt: string) => ((mt[`${k}_time`] || mt[k] || dflt) as string).slice(0, 5);
   const baseGuests = Number(booking.guest_count ?? 0);
 
   const days = [...selections]
