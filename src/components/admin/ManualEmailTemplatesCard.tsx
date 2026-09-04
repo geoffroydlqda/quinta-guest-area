@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Mail, RotateCcw, Save } from "lucide-react";
+import { Loader2, Mail, RotateCcw, Save, Send } from "lucide-react";
 import {
   DEFAULT_TEMPLATES,
   TEMPLATE_VARIABLES,
@@ -46,6 +46,24 @@ function TemplateEditor({ tplKey }: { tplKey: ManualTemplateKey }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [testing, setTesting] = useState(false);
+  // Test : rend le template SAUVÉ avec des données d'exemple et l'envoie à
+  // l'admin connecté (bouton Pay factice, échéancier d'exemple).
+  const sendTest = async () => {
+    setTesting(true);
+    try {
+      if (dirty) await save();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) throw new Error("No admin email");
+      const { data, error } = await supabase.functions.invoke("payment-emails", {
+        body: { test_template: { key: tplKey, to: user.email } },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message);
+      toast({ title: "Test sent", description: `Check ${user.email} — subject starts with [TEST].` });
+    } catch (e) {
+      toast({ title: "Test failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    } finally { setTesting(false); }
+  };
 
   useEffect(() => {
     (async () => {
@@ -97,6 +115,11 @@ function TemplateEditor({ tplKey }: { tplKey: ManualTemplateKey }) {
           <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">{META[tplKey].note}</p>
         </div>
         <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={sendTest} disabled={testing || saving}
+            title="Send this template to your own inbox with sample data (saves your edits first)">
+            {testing ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+            Send me a test
+          </Button>
           <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={resetToDefault} disabled={saving}
             title="Restore the original wording">
             <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reset

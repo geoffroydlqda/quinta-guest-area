@@ -55,7 +55,13 @@ function json(body: unknown, status = 200) {
 }
 
 const BodySchema = z.object({
-  kind: z.enum(["request", "confirmation"]),
+  kind: z.enum(["request", "confirmation"]).optional(),
+  // Test d'un template manuel (2 sept 2026) : rend le template demande avec
+  // des donnees d'exemple et l'envoie a l'adresse donnee (admin uniquement).
+  test_template: z.object({
+    key: z.enum(["payment_request", "payment_request_followup", "payment_confirmation"]),
+    to: z.string().email(),
+  }).optional(),
   // Renvoie le PDF pro forma en base64 SANS envoyer d'email (bouton
   // "Preview PDF" de la fenetre d'envoi, 27 aout 2026).
   preview_proforma: z.boolean().optional(),
@@ -434,7 +440,70 @@ serve(async (req) => {
 
     const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
+
+    // --- Test d'un template manuel : donnees d'exemple, envoi a l'admin.
+    // Le bouton Pay pointe vers la guest area (aucun vrai lien de paiement),
+    // rien n'est journalise dans reminder_log.
+    if (parsed.data.test_template) {
+      const tt = parsed.data.test_template;
+      const { data: tplRow } = await admin.from("email_templates")
+        .select("subject,body_top,body_bottom,body").eq("key", tt.key).maybeSingle();
+      if (!tplRow) return json({ error: `Template ${tt.key} not found — save it once from the Emails tab first` }, 404);
+      const followup = tt.key === "payment_request_followup";
+      const vars: Record<string, string> = {
+        first_name: "Alex",
+        stay_line: followup
+          ? "Your stay at Quinta do Amor from June 4 to 10 is getting close"
+          : "We're happy to confirm your stay at Quinta do Amor from June 4 to 10",
+        payment_intro: `Here's the link for the ${followup ? "second and final" : "first"} payment for your stay:`,
+        amount: "\u20ac4,170.00",
+        payment_or_final: followup ? "final payment" : "payment",
+        retreat_name: "Sample Retreat",
+        check_in_date: "2027-06-04",
+        check_out_date: "2027-06-10",
+        settled_note: " Your stay is now fully settled.",
+      };
+      const render = (t: string) => t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k: string) => vars[k] ?? "");
+      const FONT2 = "font-family: Helvetica, Arial, sans-serif; font-size: 12pt; line-height: 1.5; color: #000;";
+      let testHtml: string;
+      if (tt.key === "payment_confirmation") {
+        testHtml = emailShell(paras(render(tplRow.body ?? ""))
+          + `<p style="margin:18px 0 0 0;font-size:11px;color:#888888;">Payment overview: \u20ac13,900.00 received of \u20ac13,900.00 \u2014 your stay is fully settled.</p>`);
+      } else {
+        const scheduleRows = [
+          ["\u2713", "#178A3F", "Deposit 1/2", "paid", "\u20ac4,170.00", ""],
+          ["\u2192", "#35532A", followup ? "Deposit 2/2" : "Deposit 1/2", "this payment", "\u20ac4,170.00", "font-weight:bold;"],
+          ["\u25cb", "#888888", "Final payment", "due 4 May 2027", "\u20ac5,560.00", ""],
+        ].map(([mark, col, label, note, amt, w]) => `<tr>
+          <td style="padding:5px 8px 5px 0;color:${col};font-size:12px;width:14px;">${mark}</td>
+          <td style="padding:5px 8px 5px 0;color:#31352E;font-size:12px;${w}">${label}</td>
+          <td style="padding:5px 8px;color:${col};font-size:11px;white-space:nowrap;">${note}</td>
+          <td style="padding:5px 0;color:#31352E;font-size:12px;text-align:right;white-space:nowrap;${w}">${amt}</td>
+        </tr>`).join("");
+        testHtml = emailShell(`
+${paras(render(tplRow.body_top ?? ""))}
+<p style="margin:18px 0 6px 0;"><a href="https://guest.quintamor.com" style="${FONT2} display:inline-block;background:#6d7855;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-size:13px;">Pay \u20ac4,170.00</a></p>
+<p style="margin:0 0 6px 0;font-size:11px;color:#888888;">Secure bank payment (debit or transfer), powered by Stripe. The full details of this payment are attached.</p>
+<p style="margin:0 0 18px 0;font-size:11px;color:#555555;">Where you stand: \u20ac4,170.00 already received \u00b7 this payment \u20ac4,170.00 \u00b7 \u20ac5,560.00 will remain for later.</p>
+<div style="margin:4px 0 18px 0;border:1px solid #E5D9C8;border-radius:10px;padding:12px 16px;background:#FDFCF8;">
+  <p style="margin:0 0 6px 0;font-size:10px;font-weight:bold;letter-spacing:.08em;color:#35532A;">PAYMENT SCHEDULE \u2014 YOUR STAY</p>
+  <table style="width:100%;border-collapse:collapse;">${scheduleRows}</table>
+</div>
+${paras(render(tplRow.body_bottom ?? ""))}
+`);
+      }
+      const testSubject = `[TEST] ${render(tplRow.subject)}`;
+      const sentTest = await resend.emails.send({
+        from: FROM_EMAIL, to: [tt.to], reply_to: REPLY_TO, subject: testSubject, html: testHtml,
+      });
+      if ((sentTest as { error?: { message?: string } }).error) {
+        return json({ error: String((sentTest as { error?: { message?: string } }).error?.message ?? "send failed") }, 502);
+      }
+      return json({ sent: true, test: true, to: tt.to, subject: testSubject });
+    }
+
     const { kind } = parsed.data;
+    if (!kind) return json({ error: "kind required" }, 400);
     if (kind === "request" && !parsed.data.subject && !parsed.data.preview_proforma) {
       return json({ error: "subject required" }, 400);
     }

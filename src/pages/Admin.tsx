@@ -849,12 +849,7 @@ const AdminContent = () => {
 
         {view === "rooms" && <RoomsView data={data} onOpen={navigateToBooking} />}
 
-        {view === "emails" && (
-          <div className="space-y-4">
-            <AutomatedEmailsCard />
-            <ManualEmailTemplatesCard />
-          </div>
-        )}
+        {view === "emails" && <EmailsView />}
 
         {view === "staff" && <StaffPage />}
 
@@ -3394,5 +3389,25 @@ function InlineNameCell({
       <span>{value || <span className="text-muted-foreground italic">{placeholder}</span>}</span>
       <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
     </button>
+  );
+}
+
+
+// Onglet Emails : deux capsules (Automatic / Manual templates) — évite
+// l'empilement carte auto + longue liste + carte manuelle (2 sept 2026).
+function EmailsView() {
+  const [sub, setSub] = useState<"auto" | "manual">("auto");
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1.5">
+        {([["auto", "Automatic emails"], ["manual", "Manual templates"]] as const).map(([k, label]) => (
+          <button key={k} type="button" onClick={() => setSub(k)}
+            className={`rounded-full px-4 py-1.5 text-xs font-semibold border ${sub === k ? "bg-foreground text-background border-foreground" : "bg-card text-muted-foreground border-border hover:text-foreground"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {sub === "auto" ? <AutomatedEmailsCard /> : <ManualEmailTemplatesCard />}
+    </div>
   );
 }
