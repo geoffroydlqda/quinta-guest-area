@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,15 +30,13 @@ const initial = {
   guest_count: 1,
   check_in_date: "",
   check_out_date: "",
-  payment_status: "pending" as "pending" | "deposit_paid" | "paid_in_full" | "overdue",
-  deposit_amount: "",
-  remaining_balance: "",
   internal_notes: "",
 };
 
 type GuestOption = { id: string; email: string; first_name: string | null; last_name: string | null };
 
 export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [form, setForm] = useState(initial);
   const [submitting, setSubmitting] = useState(false);
@@ -139,9 +138,11 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
       guest_count: Number(form.guest_count) || 1,
       check_in_date: form.check_in_date || null,
       check_out_date: form.check_out_date || null,
-      payment_status: form.payment_status,
-      deposit_amount: form.deposit_amount === "" ? null : Number(form.deposit_amount),
-      remaining_balance: form.remaining_balance === "" ? null : Number(form.remaining_balance),
+      // Simplifié (2 sept 2026) : plus de champs prix dans le pop-up — les
+      // montants se gèrent dans l'onglet Payments de la fiche booking.
+      payment_status: "pending",
+      deposit_amount: null,
+      remaining_balance: null,
       internal_notes: form.internal_notes.trim() || null,
       origin: window.location.origin,
     };
@@ -175,8 +176,7 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
       }
 
       console.log("[create-booking] success", { booking_id: data.booking.id, invite_url: data.invite_url });
-      setInviteUrl(data.invite_url ?? null);
-      toast({ title: "Booking created" });
+      toast({ title: "Booking created", description: "Opening the booking page — the invite link is available from the Bookings tab (link icon)." });
       // Rattache le booking à sa fiche guest (existante ou créée à la volée).
       try {
         let clientId = guestId !== "new" ? guestId : null;
@@ -198,6 +198,11 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
       // service account n'est pas configuré côté Supabase).
       supabase.functions.invoke("sync-booking-calendar", { body: { booking_id: data.booking.id } }).catch(() => {});
       onCreated?.();
+      // Ouvre directement la fiche du booking créé (2 sept 2026) — plus de
+      // retour au créateur vide ; le lien d'invitation reste accessible via
+      // l'icône lien / le bouton Mail du tableau Bookings.
+      handleClose(false);
+      navigate(`/admin/guest/${data.booking.id}?bookingId=${data.booking.id}`);
     } catch (e: any) {
       console.error("[create-booking] threw", e);
       toast({ title: "Failed to create booking", description: e?.message ?? String(e), variant: "destructive" });
@@ -352,30 +357,6 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
               <div>
                 <Label htmlFor="guest_count">Guests</Label>
                 <Input id="guest_count" type="number" min={1} max={50} value={form.guest_count} onChange={(e) => setForm({ ...form, guest_count: Number(e.target.value) || 1 })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <Label htmlFor="payment_status">Payment</Label>
-                <select
-                  id="payment_status"
-                  value={form.payment_status}
-                  onChange={(e) => setForm({ ...form, payment_status: e.target.value as typeof form.payment_status })}
-                  className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background h-10"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="deposit_paid">Deposit paid</option>
-                  <option value="paid_in_full">Paid in full</option>
-                  <option value="overdue">Overdue</option>
-                </select>
-              </div>
-              <div>
-                <Label htmlFor="deposit_amount">Deposit</Label>
-                <Input id="deposit_amount" type="number" min={0} step="0.01" value={form.deposit_amount} onChange={(e) => setForm({ ...form, deposit_amount: e.target.value })} />
-              </div>
-              <div>
-                <Label htmlFor="remaining_balance">Balance</Label>
-                <Input id="remaining_balance" type="number" min={0} step="0.01" value={form.remaining_balance} onChange={(e) => setForm({ ...form, remaining_balance: e.target.value })} />
               </div>
             </div>
             <div>
