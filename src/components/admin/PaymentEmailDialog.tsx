@@ -169,7 +169,14 @@ export function PaymentEmailDialog({
       const { data, error } = await supabase.functions.invoke("payment-emails", { body: payload });
       if (error || data?.error || !data?.html) throw new Error(data?.error || error?.message || "No preview returned");
       const banner = `<div style="position:sticky;top:0;background:#FDF1E0;color:#8A4A1B;font-family:Helvetica,Arial,sans-serif;font-size:12px;padding:8px 16px;border-bottom:1px solid #E3B48F;">PREVIEW — nothing has been sent. To: ${data.to}${(data.cc ?? []).length ? ` · CC: ${(data.cc as string[]).join(", ")}` : ""} · Subject: ${data.subject}${data.attachment ? ` · Attachment: ${data.attachment}` : ""}</div>`;
-      const url = URL.createObjectURL(new Blob([banner + data.html], { type: "text/html" }));
+      // Charset UTF-8 obligatoire (2 sept 2026) : sans lui le blob s'ouvrait
+      // en Latin-1 (â€", â,¬…). Le meta est injecté DANS le document et la
+      // bannière juste après <body> pour garder un HTML valide.
+      const withMeta = (data.html as string).replace("<html>", `<html><head><meta charset="utf-8"></head>`);
+      const doc = withMeta.includes("<body")
+        ? withMeta.replace(/<body([^>]*)>/, (_m, attrs) => `<body${attrs}>${banner}`)
+        : `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0">${banner}${data.html}</body></html>`;
+      const url = URL.createObjectURL(new Blob([doc], { type: "text/html;charset=utf-8" }));
       window.open(url, "_blank", "noopener,noreferrer");
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (e) {
