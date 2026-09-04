@@ -22,8 +22,12 @@ import {
 
 const META: Record<ManualTemplateKey, { title: string; note: string }> = {
   payment_request: {
-    title: "Payment request",
-    note: "Sent from a booking's Payments tab. The Pay button and the pro forma PDF (payment details + schedule) are inserted automatically between the two text parts.",
+    title: "Payment request — first payment",
+    note: "Sent from a booking's Payments tab for the FIRST payment. The Pay button, the balance recap, the payment schedule and the pro forma PDF are inserted automatically between the two text parts.",
+  },
+  payment_request_followup: {
+    title: "Payment request — follow-up (2nd payment onwards)",
+    note: "Same mechanics, used for the second and later payments (the \"getting close\" one). Pay button, balance recap, schedule and pro forma inserted automatically.",
   },
   payment_confirmation: {
     title: "Payment confirmation (default)",
@@ -34,7 +38,7 @@ const META: Record<ManualTemplateKey, { title: string; note: string }> = {
 function TemplateEditor({ tplKey }: { tplKey: ManualTemplateKey }) {
   const { toast } = useToast();
   const def = DEFAULT_TEMPLATES[tplKey];
-  const isRequest = tplKey === "payment_request";
+  const isRequest = tplKey !== "payment_confirmation";
   const [subject, setSubject] = useState(def.subject);
   const [bodyTop, setBodyTop] = useState(def.body_top ?? "");
   const [bodyBottom, setBodyBottom] = useState(def.body_bottom ?? "");
@@ -156,6 +160,7 @@ export function ManualEmailTemplatesCard() {
         </p>
       </div>
       <TemplateEditor tplKey="payment_request" />
+      <TemplateEditor tplKey="payment_request_followup" />
       <TemplateEditor tplKey="payment_confirmation" />
     </section>
   );

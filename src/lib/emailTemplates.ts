@@ -9,7 +9,7 @@
 // pour garder la logique conditionnelle (paiement groupé, dernier paiement…)
 // hors du template.
 
-export type ManualTemplateKey = "payment_request" | "payment_confirmation";
+export type ManualTemplateKey = "payment_request" | "payment_request_followup" | "payment_confirmation";
 
 export type ManualTemplate = {
   subject: string;
@@ -20,6 +20,29 @@ export type ManualTemplate = {
 
 export const DEFAULT_TEMPLATES: Record<ManualTemplateKey, ManualTemplate> = {
   payment_request: {
+    subject: "Your stay at Quinta do Amor — {{payment_or_final}}",
+    body_top:
+`Hi {{first_name}},
+
+I hope you're doing well!
+
+{{stay_line}}
+
+{{payment_intro}}`,
+    body_bottom:
+`Your invoice will arrive in your inbox as soon as the payment comes through.
+
+If anything feels unclear, just reply to this email, I'm happy to help.
+
+Looking forward to welcoming you soon.
+
+Warmly,
+Geo`,
+    body: null,
+  },
+  // 2e paiement et suivants (ordinal > 1) — même structure, ton "getting
+  // close". Éditable séparément du 1er dans l'onglet Emails (2 sept 2026).
+  payment_request_followup: {
     subject: "Your stay at Quinta do Amor — {{payment_or_final}}",
     body_top:
 `Hi {{first_name}},
@@ -62,7 +85,17 @@ Geo`,
 export const TEMPLATE_VARIABLES: Record<ManualTemplateKey, { name: string; hint: string }[]> = {
   payment_request: [
     { name: "first_name", hint: "guest first name (\"there\" fallback)" },
-    { name: "stay_line", hint: "1st payment: \"We're delighted to confirm your stay…\" · later payments: \"Your stay … is getting close\"" },
+    { name: "stay_line", hint: "1st payment: \"We're happy to confirm your stay…\" · later payments: \"Your stay … is getting close\"" },
+    { name: "payment_intro", hint: "\"Here's the link for the second and final payment…\" or the grouped recap" },
+    { name: "amount", hint: "total of the requested payment(s)" },
+    { name: "payment_or_final", hint: "\"payment\" or \"final payment\"" },
+    { name: "retreat_name", hint: "event name" },
+    { name: "check_in_date", hint: "check-in date" },
+    { name: "check_out_date", hint: "check-out date" },
+  ],
+  payment_request_followup: [
+    { name: "first_name", hint: "guest first name (\"there\" fallback)" },
+    { name: "stay_line", hint: "\"Your stay at Quinta do Amor from June 4 to 10 is getting close\"" },
     { name: "payment_intro", hint: "\"Here's the link for the second and final payment…\" or the grouped recap" },
     { name: "amount", hint: "total of the requested payment(s)" },
     { name: "payment_or_final", hint: "\"payment\" or \"final payment\"" },

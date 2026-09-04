@@ -88,8 +88,8 @@ You can settle everything in one go with the link below:`
         ? `Your stay at Quinta do Amor from ${stay} is getting close`
         : `Your stay at Quinta do Amor is getting close`)
       : (stay
-        ? `We're delighted to confirm your stay at Quinta do Amor from ${stay}`
-        : `We're delighted to confirm your stay at Quinta do Amor`),
+        ? `We're happy to confirm your stay at Quinta do Amor from ${stay}`
+        : `We're happy to confirm your stay at Quinta do Amor`),
     payment_intro: paymentIntro,
     amount: fmtEur(total),
     payment_or_final: isLast ? "final payment" : "payment",
@@ -206,7 +206,10 @@ export function PaymentEmailDialog({
     if (!open) return;
     let cancelled = false;
     (async () => {
-      const key: ManualTemplateKey = kind === "request" ? "payment_request" : "payment_confirmation";
+      // 1er paiement et suivants : deux templates distincts (2 sept 2026)
+      const key: ManualTemplateKey = kind === "request"
+        ? (ordinal > 1 ? "payment_request_followup" : "payment_request")
+        : "payment_confirmation";
       const { data } = await supabase.from("email_templates")
         .select("subject,body_top,body_bottom,body").eq("key", key).maybeSingle();
       if (cancelled) return;
@@ -214,8 +217,8 @@ export function PaymentEmailDialog({
       if (kind === "request") {
         const vars = requestTemplateVars(booking, inst, ordinal, isLast, insts);
         setSubject(renderTemplate(tpl.subject, vars));
-        setBodyTop(renderTemplate(tpl.body_top ?? DEFAULT_TEMPLATES.payment_request.body_top ?? "", vars));
-        setBodyBottom(renderTemplate(tpl.body_bottom ?? DEFAULT_TEMPLATES.payment_request.body_bottom ?? "", vars));
+        setBodyTop(renderTemplate(tpl.body_top ?? DEFAULT_TEMPLATES[key].body_top ?? "", vars));
+        setBodyBottom(renderTemplate(tpl.body_bottom ?? DEFAULT_TEMPLATES[key].body_bottom ?? "", vars));
       } else {
         const vars = confirmationTemplateVars(booking, inst, allSettled);
         setSubject(renderTemplate(tpl.subject, vars));
@@ -289,6 +292,9 @@ export function PaymentEmailDialog({
                 <div className="mt-1 text-xs text-muted-foreground">Secure bank payment (debit or transfer), powered by Stripe.</div>
                 <div className="mt-1.5 text-[11px] text-muted-foreground">
                   Inserted automatically — opens a fresh Stripe checkout on every click.
+                </div>
+                <div className="mt-1.5 text-[11px] text-muted-foreground">
+                  Also inserted here at send time: <b>balance recap</b> (paid / this payment / remaining) and the <b>payment schedule</b> of the stay (✓ paid · → this payment · ○ upcoming — with the catering &amp; extras note when none are scheduled yet).
                 </div>
               </div>
               <div className="flex items-center gap-2 text-xs rounded-lg border border-border bg-muted/40 px-2.5 py-2 text-muted-foreground">
