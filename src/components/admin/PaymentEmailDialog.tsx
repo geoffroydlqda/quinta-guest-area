@@ -80,9 +80,16 @@ You can settle everything in one go with the link below:`
     : `Here's the link for the ${ordinalWord(ordinal)}${isLast ? " and final" : ""} payment for your stay:`;
   return {
     first_name: (booking.first_name ?? "").trim() || "there",
-    stay_line: stay
-      ? `Your stay at Quinta do Amor from ${stay} is getting close`
-      : `Your stay at Quinta do Amor is getting close`,
+    // "is getting close" n'a de sens que pour le 2e paiement / solde (70 %) —
+    // pour le 1er (acompte, souvent des mois avant), on confirme le séjour
+    // (demande Geoffroy, 2 sept 2026).
+    stay_line: ordinal > 1
+      ? (stay
+        ? `Your stay at Quinta do Amor from ${stay} is getting close`
+        : `Your stay at Quinta do Amor is getting close`)
+      : (stay
+        ? `We're delighted to confirm your stay at Quinta do Amor from ${stay}`
+        : `We're delighted to confirm your stay at Quinta do Amor`),
     payment_intro: paymentIntro,
     amount: fmtEur(total),
     payment_or_final: isLast ? "final payment" : "payment",

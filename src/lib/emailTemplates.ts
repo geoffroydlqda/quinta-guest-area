@@ -62,7 +62,7 @@ Geo`,
 export const TEMPLATE_VARIABLES: Record<ManualTemplateKey, { name: string; hint: string }[]> = {
   payment_request: [
     { name: "first_name", hint: "guest first name (\"there\" fallback)" },
-    { name: "stay_line", hint: "\"Your stay at Quinta do Amor from June 4 to 10 is getting close\"" },
+    { name: "stay_line", hint: "1st payment: \"We're delighted to confirm your stay…\" · later payments: \"Your stay … is getting close\"" },
     { name: "payment_intro", hint: "\"Here's the link for the second and final payment…\" or the grouped recap" },
     { name: "amount", hint: "total of the requested payment(s)" },
     { name: "payment_or_final", hint: "\"payment\" or \"final payment\"" },

@@ -524,7 +524,7 @@ Geo`);
     // confusions de montant (cas Michael / Max / Shandra). Hors lignes bar
     // (admin-only) ; les discounts négatifs sont inclus dans le total dû.
     const { data: balRows } = await admin.from("payment_installments")
-      .select("id,amount_due,status,category")
+      .select("id,amount_due,status,category,label,due_date")
       .eq("booking_id", inst.booking_id);
     const balAll = (balRows ?? []).filter((r) => r.category !== "bar");
     const balTotal = balAll.reduce((s, r) => s + Number(r.amount_due || 0), 0);
@@ -583,6 +583,41 @@ ${paras(parsed.data.body_top ?? "")}
   const afterPart = after > 0.005 ? `${fmtEur(after)} will remain for later` : "after it, your stay is fully settled";
   return `Where you stand: ${paidPart}this payment ${fmtEur(thisPay)} · ${afterPart}.`;
 })()}</p>
+${(() => {
+  // Échéancier structuré dans l'email (2 sept 2026, demande Geoffroy) : le
+  // client voit tout le calendrier — payé ✓, ce paiement →, à venir ○.
+  // Hors lignes bar (admin-only) ; discounts affichés en ligne neutre.
+  const fmtD = (d: string | null) => d
+    ? new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
+    : "";
+  const idSet = new Set(insts.map((i) => i.id));
+  const rows = [...balAll]
+    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"))
+    .map((r) => {
+      const isThis = idSet.has(r.id);
+      const isPaid = r.status === "paid";
+      const isDisc = r.category === "discount";
+      const mark = isDisc ? "&nbsp;" : isPaid ? "✓" : isThis ? "→" : "○";
+      const col = isPaid ? "#178A3F" : isThis ? "#35532A" : "#888888";
+      const w = isThis ? "font-weight:bold;" : "";
+      const note = isPaid ? "paid" : isThis ? "this payment" : (fmtD(r.due_date) ? `due ${fmtD(r.due_date)}` : "upcoming");
+      return `<tr>
+        <td style="padding:5px 8px 5px 0;color:${col};font-size:12px;width:14px;">${mark}</td>
+        <td style="padding:5px 8px 5px 0;color:${isDisc ? "#888888" : "#31352E"};font-size:12px;${w}">${esc(r.label || (isDisc ? "Discount" : "Payment"))}</td>
+        <td style="padding:5px 8px;color:${col};font-size:11px;white-space:nowrap;">${isDisc ? "" : note}</td>
+        <td style="padding:5px 0;color:${isDisc ? "#888888" : "#31352E"};font-size:12px;text-align:right;white-space:nowrap;${w}">${fmtEur(Number(r.amount_due))}</td>
+      </tr>`;
+    }).join("");
+  const hasCateringLines = balAll.some((r) => ["catering", "extra", "transport"].includes(r.category ?? ""));
+  const cateringNote = hasCateringLines ? "" :
+    `<p style="margin:8px 0 0 0;font-size:11px;color:#888888;">Catering &amp; extras are invoiced separately, one week before check-in.</p>`;
+  return `
+<div style="margin:4px 0 18px 0;border:1px solid #E5D9C8;border-radius:10px;padding:12px 16px;background:#FDFCF8;">
+  <p style="margin:0 0 6px 0;font-size:10px;font-weight:bold;letter-spacing:.08em;color:#35532A;">PAYMENT SCHEDULE — YOUR STAY</p>
+  <table style="width:100%;border-collapse:collapse;">${rows}</table>
+  ${cateringNote}
+</div>`;
+})()}
 ${paras(parsed.data.body_bottom ?? "")}
 `);
     } else {
