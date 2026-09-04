@@ -69,7 +69,7 @@ type FoodPlan = { user_id: string; booking_id?: string | null; selections: any; 
 
 type BookingRow = {
   id: string; retreat_name: string; first_name: string | null; last_name: string | null;
-  email: string; guest_count: number;
+  email: string; guest_count: number | null;
   check_in_date: string | null; check_out_date: string | null;
   payment_status: string; invitation_token: string | null; invitation_claimed: boolean;
   user_id: string | null; created_at: string;
@@ -311,7 +311,7 @@ const AdminContent = () => {
     email: string;
     checkIn: string | null;
     checkOut: string | null;
-    guestsCount: number;
+    guestsCount: number | null;
     statusOverall: string;
     submittedAt: string | null;
     invitationClaimed: boolean;
@@ -669,7 +669,7 @@ const AdminContent = () => {
                 ["First name","Last name","Email","Check-in","Check-out","Guests","Room","Food","Transport","Status","Submitted at","Claimed"],
                 ...filteredEvents.map((e) => {
                   const ts = toolStatus(e.userId, e.bookingId);
-                  return [e.firstName||"", e.lastName||"", e.email, e.checkIn||"", e.checkOut||"", e.guestsCount, ts.room, ts.food, ts.trip, e.statusOverall, e.submittedAt||"", e.invitationClaimed ? "yes" : "no"];
+                  return [e.firstName||"", e.lastName||"", e.email, e.checkIn||"", e.checkOut||"", e.guestsCount ?? "", ts.room, ts.food, ts.trip, e.statusOverall, e.submittedAt||"", e.invitationClaimed ? "yes" : "no"];
                 }),
               ])}><Download className="w-4 h-4 mr-1" />CSV</Button>
             </div>
@@ -1031,7 +1031,7 @@ function DashboardView({
 }: {
   data: Data;
   installments: Installment[];
-  events: { bookingId: string; firstName: string | null; lastName: string | null; email: string; checkIn: string | null; checkOut: string | null; guestsCount: number }[];
+  events: { bookingId: string; firstName: string | null; lastName: string | null; email: string; checkIn: string | null; checkOut: string | null; guestsCount: number | null }[];
   categoryOf: (e: any) => "upcoming" | "past" | "live" | "none";
   todayIso: string;
   onOpen: (bookingId: string) => void;
@@ -1240,36 +1240,51 @@ function DashboardView({
       const vat = cat === "catering" ? 1.13 : 1.23;
       actual[cat] += i.amount_excl_vat != null ? Number(i.amount_excl_vat) : Number(i.amount_due || 0) / vat;
     }
-    // Catering ATTENDU (projection) : retraites pas encore commencées, sans
-    // catering validé — 14 participants × prix moyen des 3 formules :
-    // dîner le jour d'arrivée + full board les jours pleins + petit-déj au départ.
+    // Catering ATTENDU (projection) : événements pas encore commencés, sans
+    // catering validé.
+    //  - Retraites : guest_count du booking (vide tant que le retreat leader
+    //    ne l'a pas rempli → 14 participants par défaut) × prix moyen des
+    //    3 formules : dîner à l'arrivée + full board les jours pleins +
+    //    petit-déj au départ. Converti en HT (TVA food 13 %).
+    //  - Mariages : forfait 10 000 € HT catering/bar (Geoffroy, 4 sept 2026).
     const dp = getDietPricing(year);
     const avg = {
       fullBoard: (dp.vegetarian.fullBoard + dp.meat_dinner.fullBoard + dp.meat_lunch_dinner.fullBoard) / 3,
       dinner: (dp.vegetarian.dinner + dp.meat_dinner.dinner + dp.meat_lunch_dinner.dinner) / 3,
       breakfast: (dp.vegetarian.breakfast + dp.meat_dinner.breakfast + dp.meat_lunch_dinner.breakfast) / 3,
     };
+    const WEDDING_CATERING_EXPECTED_HT = 10000;
     const hasCatering = new Set(
       installments.filter((i) => i.category === "catering").map((i) => i.booking_id)
     );
+    // Mariage : le forfait tombe dès qu'un installment catering OU bar existe.
+    const hasCateringOrBar = new Set(
+      installments.filter((i) => i.category === "catering" || i.category === "bar").map((i) => i.booking_id)
+    );
     let expectedCateringTvac = 0;
+    let expectedWeddingHt = 0;
     for (const b of bookings) {
-      if ((b.event_type ?? "retreat") !== "retreat") continue;
+      const type = b.event_type ?? "retreat";
+      if (type !== "retreat" && type !== "wedding") continue;
       if (b.catering_expected === false) continue; // organisateur sans catering
       if ((b as { cancelled_at?: string | null }).cancelled_at) continue; // annule : plus de catering attendu
       if (!b.check_in_date || !b.check_out_date) continue;
       if (!b.check_in_date.startsWith(year)) continue;
       if (b.check_in_date <= todayIso) continue; // déjà commencé / passé
+      if (type === "wedding") {
+        if (!hasCateringOrBar.has(b.id)) expectedWeddingHt += WEDDING_CATERING_EXPECTED_HT;
+        continue;
+      }
       if (hasCatering.has(b.id)) continue;       // catering déjà validé
       const nights = Math.round(
         (new Date(`${b.check_out_date}T12:00:00`).getTime() - new Date(`${b.check_in_date}T12:00:00`).getTime()) / 86400000
       );
       if (nights <= 0) continue;
       const perPax = avg.dinner + Math.max(0, nights - 1) * avg.fullBoard + avg.breakfast;
-      // guest_count reel du booking (14 = repli historique si non renseigne)
+      // guest_count du booking ; vide (leader pas encore passé) → 14 attendus
       expectedCateringTvac += (Number(b.guest_count) > 0 ? Number(b.guest_count) : 14) * perPax;
     }
-    const expectedCatering = expectedCateringTvac / 1.13; // HT (TVA food 13 %)
+    const expectedCatering = expectedCateringTvac / 1.13 + expectedWeddingHt; // HT (TVA food 13 %)
 
     const total = actual.rental + actual.catering + actual.extra + actual.bar;
     const rows = [
@@ -2973,7 +2988,7 @@ type EventRowProps = {
   email: string;
   checkIn: string | null;
   checkOut: string | null;
-  guestsCount: number;
+  guestsCount: number | null;
   statusOverall: string;
   submittedAt: string | null;
   invitationClaimed: boolean;

@@ -471,7 +471,7 @@ export type Database = {
           disabled_rooms: number[]
           email: string
           first_name: string | null
-          guest_count: number
+          guest_count: number | null
           id: string
           internal_notes: string | null
           invitation_claimed: boolean
@@ -510,7 +510,7 @@ export type Database = {
           disabled_rooms?: number[]
           email: string
           first_name?: string | null
-          guest_count?: number
+          guest_count?: number | null
           id?: string
           internal_notes?: string | null
           invitation_claimed?: boolean
@@ -549,7 +549,7 @@ export type Database = {
           disabled_rooms?: number[]
           email?: string
           first_name?: string | null
-          guest_count?: number
+          guest_count?: number | null
           id?: string
           internal_notes?: string | null
           invitation_claimed?: boolean

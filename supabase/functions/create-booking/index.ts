@@ -34,7 +34,8 @@ const BodySchema = z.object({
   first_name: z.string().trim().max(100).optional().nullable(),
   last_name: z.string().trim().max(100).optional().nullable(),
   email: z.string().trim().email().max(255),
-  guest_count: z.number().int().min(1).max(50).default(1),
+  // null = le retreat leader renseignera lui-meme le nombre de guests (4 sept 2026)
+  guest_count: z.number().int().min(1).max(50).optional().nullable(),
   check_in_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   check_out_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   payment_status: z.enum(["pending", "deposit_paid", "paid_in_full", "overdue"]).default("pending"),
@@ -116,7 +117,7 @@ serve(async (req) => {
       first_name: body.first_name ?? null,
       last_name: body.last_name ?? null,
       email: body.email.toLowerCase(),
-      guest_count: body.guest_count,
+      guest_count: body.guest_count ?? null,
       check_in_date: body.check_in_date ?? null,
       check_out_date: body.check_out_date ?? null,
       payment_status: body.payment_status,

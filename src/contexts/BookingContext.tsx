@@ -8,7 +8,7 @@ export interface Booking {
   first_name: string | null;
   last_name: string | null;
   email: string;
-  guest_count: number;
+  guest_count: number | null;
   check_in_date: string | null;
   check_out_date: string | null;
   payment_status: 'pending' | 'deposit_paid' | 'paid_in_full' | 'overdue';

@@ -120,9 +120,11 @@ function BookingSelectorContent() {
               )}
             </div>
             <p className="text-sm text-muted-foreground">{formatRange(b.check_in_date, b.check_out_date)}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {b.guest_count} {b.guest_count === 1 ? 'guest' : 'guests'}
-            </p>
+            {b.guest_count != null && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {b.guest_count} {b.guest_count === 1 ? 'guest' : 'guests'}
+              </p>
+            )}
           </div>
         </div>
         <Button onClick={() => openBooking(b.id)} className="gap-2 shrink-0">

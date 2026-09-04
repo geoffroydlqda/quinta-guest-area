@@ -27,7 +27,9 @@ const initial = {
   first_name: "",
   last_name: "",
   email: "",
-  guest_count: 1,
+  // Vide par défaut (4 sept 2026) : le retreat leader renseigne lui-même le
+  // nombre de guests à sa première connexion ; le dashboard projette 14.
+  guest_count: "" as string | number,
   check_in_date: "",
   check_out_date: "",
   internal_notes: "",
@@ -135,7 +137,7 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
       first_name: form.first_name.trim() || null,
       last_name: form.last_name.trim() || null,
       email: form.email.trim().toLowerCase(),
-      guest_count: Number(form.guest_count) || 1,
+      guest_count: Number(form.guest_count) > 0 ? Number(form.guest_count) : null,
       check_in_date: form.check_in_date || null,
       check_out_date: form.check_out_date || null,
       // Simplifié (2 sept 2026) : plus de champs prix dans le pop-up — les
@@ -355,8 +357,8 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
                 <Input id="check_out_date" type="date" value={form.check_out_date} onChange={(e) => setForm({ ...form, check_out_date: e.target.value })} />
               </div>
               <div>
-                <Label htmlFor="guest_count">Guests</Label>
-                <Input id="guest_count" type="number" min={1} max={50} value={form.guest_count} onChange={(e) => setForm({ ...form, guest_count: Number(e.target.value) || 1 })} />
+                <Label htmlFor="guest_count">Guests <span className="text-muted-foreground font-normal">(optional — the retreat leader fills it in)</span></Label>
+                <Input id="guest_count" type="number" min={1} max={50} placeholder="Left to the leader" value={form.guest_count} onChange={(e) => setForm({ ...form, guest_count: e.target.value })} />
               </div>
             </div>
             <div>
