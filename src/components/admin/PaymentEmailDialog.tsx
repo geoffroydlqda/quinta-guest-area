@@ -155,6 +155,27 @@ export function PaymentEmailDialog({
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [previewingEmail, setPreviewingEmail] = useState(false);
+  // Aperçu du mail complet (blocs serveur inclus : bouton, récap, échéancier)
+  // dans un nouvel onglet — rien n'est envoyé.
+  const previewEmail = async () => {
+    setPreviewingEmail(true);
+    try {
+      const payload = kind === "request"
+        ? (insts.length > 1
+          ? { kind, installment_ids: insts.map((i) => i.id), subject, body_top: bodyTop, body_bottom: bodyBottom, preview_email: true }
+          : { kind, installment_id: inst.id, subject, body_top: bodyTop, body_bottom: bodyBottom, preview_email: true })
+        : { kind, installment_id: inst.id, subject, body, preview_email: true };
+      const { data, error } = await supabase.functions.invoke("payment-emails", { body: payload });
+      if (error || data?.error || !data?.html) throw new Error(data?.error || error?.message || "No preview returned");
+      const banner = `<div style="position:sticky;top:0;background:#FDF1E0;color:#8A4A1B;font-family:Helvetica,Arial,sans-serif;font-size:12px;padding:8px 16px;border-bottom:1px solid #E3B48F;">PREVIEW — nothing has been sent. To: ${data.to}${(data.cc ?? []).length ? ` · CC: ${(data.cc as string[]).join(", ")}` : ""} · Subject: ${data.subject}${data.attachment ? ` · Attachment: ${data.attachment}` : ""}</div>`;
+      const url = URL.createObjectURL(new Blob([banner + data.html], { type: "text/html" }));
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      toast({ title: "Preview failed", description: e instanceof Error ? e.message : String(e), variant: "destructive" });
+    } finally { setPreviewingEmail(false); }
+  };
 
   // Ouvre le pro forma PDF (celui qui sera joint à l'email) dans un nouvel
   // onglet, sans rien envoyer — pour vérifier le contenu avant l'envoi.
@@ -351,6 +372,11 @@ export function PaymentEmailDialog({
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={sending}>Cancel</Button>
+          <Button variant="outline" onClick={previewEmail} disabled={previewingEmail || sending || !subject.trim()}
+            title="Open the exact rendered email (button, balance recap, schedule) in a new tab — nothing is sent">
+            {previewingEmail ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : null}
+            Preview email
+          </Button>
           <Button onClick={send} disabled={sending || missingInvoice || !subject.trim()}>
             {sending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Mail className="w-4 h-4 mr-1.5" />}
             Send

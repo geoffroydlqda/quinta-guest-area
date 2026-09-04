@@ -65,6 +65,9 @@ const BodySchema = z.object({
   // Renvoie le PDF pro forma en base64 SANS envoyer d'email (bouton
   // "Preview PDF" de la fenetre d'envoi, 27 aout 2026).
   preview_proforma: z.boolean().optional(),
+  // Renvoie le HTML rendu de l'email SANS l'envoyer (bouton "Preview email"
+  // de la fenetre d'envoi, 2 sept 2026) — memes blocs que l'envoi reel.
+  preview_email: z.boolean().optional(),
   installment_id: z.string().uuid().optional(),
   // Demande groupée : plusieurs échéances du même booking, un seul lien de
   // paiement (une session Stripe -> une fatura-recibo multi-lignes).
@@ -470,11 +473,20 @@ serve(async (req) => {
         testHtml = emailShell(paras(render(tplRow.body ?? ""))
           + `<p style="margin:18px 0 0 0;font-size:11px;color:#888888;">Payment overview: \u20ac13,900.00 received of \u20ac13,900.00 \u2014 your stay is fully settled.</p>`);
       } else {
-        const scheduleRows = [
-          ["\u2713", "#178A3F", "Deposit 1/2", "paid", "\u20ac4,170.00", ""],
-          ["\u2192", "#35532A", followup ? "Deposit 2/2" : "Deposit 1/2", "this payment", "\u20ac4,170.00", "font-weight:bold;"],
-          ["\u25cb", "#888888", "Final payment", "due 4 May 2027", "\u20ac5,560.00", ""],
-        ].map(([mark, col, label, note, amt, w]) => `<tr>
+        // Échantillon cohérent par template (corrigé 2 sept 2026) : le test du
+        // 1er paiement ne montre RIEN de déjà payé ; le followup montre
+        // l'acompte payé + ce paiement.
+        const scheduleRows = (followup
+          ? [
+            ["\u2713", "#178A3F", "Deposit 1/2", "paid", "\u20ac4,170.00", ""],
+            ["\u2192", "#35532A", "Deposit 2/2", "this payment", "\u20ac4,170.00", "font-weight:bold;"],
+            ["\u25cb", "#888888", "Final payment", "due 4 May 2027", "\u20ac5,560.00", ""],
+          ]
+          : [
+            ["\u2192", "#35532A", "Deposit 1/2", "this payment", "\u20ac4,170.00", "font-weight:bold;"],
+            ["\u25cb", "#888888", "Deposit 2/2", "due 31 Jul 2026", "\u20ac4,170.00", ""],
+            ["\u25cb", "#888888", "Final payment", "due 4 May 2027", "\u20ac5,560.00", ""],
+          ]).map(([mark, col, label, note, amt, w]) => `<tr>
           <td style="padding:5px 8px 5px 0;color:${col};font-size:12px;width:14px;">${mark}</td>
           <td style="padding:5px 8px 5px 0;color:#31352E;font-size:12px;${w}">${label}</td>
           <td style="padding:5px 8px;color:${col};font-size:11px;white-space:nowrap;">${note}</td>
@@ -484,7 +496,7 @@ serve(async (req) => {
 ${paras(render(tplRow.body_top ?? ""))}
 <p style="margin:18px 0 6px 0;"><a href="https://guest.quintamor.com" style="${FONT2} display:inline-block;background:#6d7855;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-size:13px;">Pay \u20ac4,170.00</a></p>
 <p style="margin:0 0 6px 0;font-size:11px;color:#888888;">Secure bank payment (debit or transfer), powered by Stripe. The full details of this payment are attached.</p>
-<p style="margin:0 0 18px 0;font-size:11px;color:#555555;">Where you stand: \u20ac4,170.00 already received \u00b7 this payment \u20ac4,170.00 \u00b7 \u20ac5,560.00 will remain for later.</p>
+<p style="margin:0 0 18px 0;font-size:11px;color:#555555;">Where you stand: ${followup ? "\u20ac4,170.00 already received \u00b7 this payment \u20ac4,170.00 \u00b7 \u20ac5,560.00 will remain for later" : "this payment \u20ac4,170.00 \u00b7 \u20ac9,730.00 will remain for later"}.</p>
 <div style="margin:4px 0 18px 0;border:1px solid #E5D9C8;border-radius:10px;padding:12px 16px;background:#FDFCF8;">
   <p style="margin:0 0 6px 0;font-size:10px;font-weight:bold;letter-spacing:.08em;color:#35532A;">PAYMENT SCHEDULE \u2014 YOUR STAY</p>
   <table style="width:100%;border-collapse:collapse;">${scheduleRows}</table>
@@ -690,10 +702,12 @@ ${(() => {
 ${paras(parsed.data.body_bottom ?? "")}
 `);
     } else {
-      // confirmation : facture en pièce jointe obligatoire
-      if (!inst.invoice_file_url) {
+      // confirmation : facture en pièce jointe obligatoire (sauf preview —
+      // la PJ n'apparait pas dans le HTML de toute facon)
+      if (!inst.invoice_file_url && !parsed.data.preview_email) {
         return json({ error: "No invoice attached to this payment — generate it first" }, 400);
       }
+      if (inst.invoice_file_url) {
       const dl = await admin.storage.from("invoices").download(inst.invoice_file_url);
       if (dl.error || !dl.data) return json({ error: `Could not read invoice file: ${dl.error?.message}` }, 500);
       const buf = new Uint8Array(await dl.data.arrayBuffer());
@@ -706,6 +720,7 @@ ${paras(parsed.data.body_bottom ?? "")}
         filename: inst.invoice_file_name ?? `${(inst.invoice_number ?? "invoice").replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`,
         content: btoa(bin),
       });
+      }
       // Récap solde en pied de confirmation (balPaid inclut déjà ce paiement)
       const remaining = Math.max(0, Math.round((balTotal - balPaid) * 100) / 100);
       html = emailShell(paras(bodyText)
@@ -721,6 +736,10 @@ ${paras(parsed.data.body_bottom ?? "")}
     }
 
     const ccList = await ccEmailsFor(admin, inst.booking_id, to);
+    // Aperçu : renvoie le HTML rendu (banniere ajoutee cote client), zero envoi
+    if (parsed.data.preview_email) {
+      return json({ preview: true, subject, html, to, cc: ccList, attachment: attachments[0]?.filename ?? null });
+    }
     const sent = await resend.emails.send({
       from: FROM_EMAIL,
       to: [to],
