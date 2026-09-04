@@ -498,7 +498,7 @@ ${paras(render(tplRow.body_top ?? ""))}
 <p style="margin:0 0 6px 0;font-size:11px;color:#888888;">Secure bank payment (debit or transfer), powered by Stripe. The full details of this payment are attached.</p>
 <p style="margin:0 0 18px 0;font-size:11px;color:#555555;">Where you stand: ${followup ? "\u20ac4,170.00 already received \u00b7 this payment \u20ac4,170.00 \u00b7 \u20ac5,560.00 will remain for later" : "this payment \u20ac4,170.00 \u00b7 \u20ac9,730.00 will remain for later"}.</p>
 <div style="margin:4px 0 18px 0;border:1px solid #E5D9C8;border-radius:10px;padding:12px 16px;background:#FDFCF8;">
-  <p style="margin:0 0 6px 0;font-size:10px;font-weight:bold;letter-spacing:.08em;color:#35532A;">PAYMENT SCHEDULE \u2014 YOUR STAY</p>
+  <p style="margin:0 0 6px 0;font-size:10px;font-weight:bold;letter-spacing:.08em;color:#35532A;">PAYMENT SCHEDULE</p>
   <table style="width:100%;border-collapse:collapse;">${scheduleRows}</table>
 </div>
 ${paras(render(tplRow.body_bottom ?? ""))}
@@ -694,7 +694,7 @@ ${(() => {
     `<p style="margin:8px 0 0 0;font-size:11px;color:#888888;">Catering &amp; extras are invoiced separately, one week before check-in.</p>`;
   return `
 <div style="margin:4px 0 18px 0;border:1px solid #E5D9C8;border-radius:10px;padding:12px 16px;background:#FDFCF8;">
-  <p style="margin:0 0 6px 0;font-size:10px;font-weight:bold;letter-spacing:.08em;color:#35532A;">PAYMENT SCHEDULE — YOUR STAY</p>
+  <p style="margin:0 0 6px 0;font-size:10px;font-weight:bold;letter-spacing:.08em;color:#35532A;">PAYMENT SCHEDULE</p>
   <table style="width:100%;border-collapse:collapse;">${rows}</table>
   ${cateringNote}
 </div>`;
