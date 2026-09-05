@@ -88,6 +88,74 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// ---------------------------------------------------------------------------
+// Rappel MANUEL depuis un template editable (onglet Emails, 4 sept 2026) :
+// cles email_templates 'payment_reminder' (a venir) / 'payment_reminder_overdue'
+// (en retard). Corps TEXTE avec variables {{first_name}} {{label}} {{amount}}
+// {{due_date}} et marqueurs [[details]] (encadre montant/date, reinsere s'il
+// manque) et [[button]] (bouton Pay now, seulement si payment_link existe).
+// "Guest Area" dans le texte devient automatiquement un lien.
+// Repli sur ces defauts si la ligne a disparu — miroir de src/lib/emailTemplates.ts.
+// ---------------------------------------------------------------------------
+const MANUAL_FALLBACK: Record<"payment_upcoming" | "payment_overdue", { subject: string; body: string }> = {
+  payment_upcoming: {
+    subject: "Payment reminder — {{label}} — Quinta do Amor",
+    body: "Hi {{first_name}},\n\nThis is a friendly reminder that the payment below is due on {{due_date}}.\n\n[[details]]\n\n[[button]]\n\nYou can review your payment details anytime in your Guest Area.\n\nIf you have already made this payment, please disregard this message — it can take us a little time to reconcile transfers.\n\nWarm regards,\nQuinta do Amor",
+  },
+  payment_overdue: {
+    subject: "Payment follow-up — {{label}} — Quinta do Amor",
+    body: "Hi {{first_name}},\n\nThis is a friendly follow-up: the payment below was due on {{due_date}} and is still marked as pending.\n\n[[details]]\n\n[[button]]\n\nYou can review your payment details anytime in your Guest Area.\n\nIf you have already made this payment, please disregard this message — it can take us a little time to reconcile transfers.\n\nWarm regards,\nQuinta do Amor",
+  },
+};
+
+async function manualEmailFromTemplate(c: ReminderCandidate): Promise<{ subject: string; html: string }> {
+  const key = c.type === "payment_overdue" ? "payment_reminder_overdue" : "payment_reminder";
+  const fallback = MANUAL_FALLBACK[c.type];
+  let tplSubject = fallback.subject;
+  let tplBody = fallback.body;
+  try {
+    const { data } = await admin.from("email_templates").select("subject,body").eq("key", key).maybeSingle();
+    if (data?.subject?.trim()) tplSubject = data.subject;
+    if (data?.body?.trim()) tplBody = data.body;
+  } catch { /* repli */ }
+  const vars: Record<string, string> = {
+    first_name: c.first_name || "there",
+    label: c.label,
+    amount: `€${Number(c.amount_due).toFixed(2)}`,
+    due_date: c.due_date,
+  };
+  const render = (t: string) => t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k: string) => vars[k] ?? "");
+  const subject = render(tplSubject);
+  let body = render(tplBody);
+  if (!body.includes("[[details]]")) body += "\n\n[[details]]"; // l'encadre doit toujours partir
+  const detailsHtml = `
+    <table width="100%" style="background:#f6efea;border-radius:8px;margin:16px 0;">
+      <tr><td style="padding:12px 16px;font-weight:bold;">${escapeHtml(c.label)}</td></tr>
+      <tr><td style="padding:0 16px 4px;">Amount: <strong>€${Number(c.amount_due).toFixed(2)}</strong></td></tr>
+      <tr><td style="padding:0 16px 12px;">Due date: ${escapeHtml(c.due_date)}</td></tr>
+    </table>`;
+  const buttonHtml = c.payment_link && /^https?:\/\//i.test(c.payment_link) ? `
+    <p style="margin:20px 0;">
+      <a href="${escapeHtml(c.payment_link)}"
+         style="background:#6d7855;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:6px;display:inline-block;">
+        Pay now
+      </a>
+    </p>` : "";
+  const paragraphs = body.split(/\n\s*\n/).map((p) => {
+    const t = p.trim();
+    if (t === "[[details]]") return detailsHtml;
+    if (t === "[[button]]") return buttonHtml;
+    return `<p>${escapeHtml(t).replace(/\n/g, "<br/>")
+      .replace(/Guest Area/, `<a href="${GUEST_AREA_URL}" style="color:#6d7855;">Guest Area</a>`)}</p>`;
+  }).filter(Boolean);
+  const html = `
+  <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 560px; margin: 0 auto; color: #222;">
+    <h2 style="color:#6d7855;">Quinta do Amor</h2>
+    ${paragraphs.join("\n")}
+  </div>`;
+  return { subject, html };
+}
+
 function reminderHtml(c: ReminderCandidate): string {
   const isOverdue = c.type === "payment_overdue";
   const intro = !c.due_date || c.due_date === "—"
@@ -190,11 +258,9 @@ serve(async (req) => {
         due_date: due,
         payment_link: (inst as any).payment_link ?? null,
       };
-      const subject = c.type === "payment_overdue"
-        ? `Payment follow-up — ${c.label} — Quinta do Amor`
-        : `Payment reminder — ${c.label} — Quinta do Amor`;
+      // Sujet + corps depuis le template editable (onglet Emails)
+      const { subject, html: manualHtml } = await manualEmailFromTemplate(c);
       try {
-        const manualHtml = reminderHtml(c);
         const ccList = await ccEmailsFor(admin, c.booking_id, c.recipient);
         const res = await resend.emails.send({
           from: FROM_EMAIL, to: [c.recipient], ...(ccList.length ? { cc: ccList } : {}), reply_to: ADMIN_EMAIL,
@@ -209,7 +275,7 @@ serve(async (req) => {
       } catch (e) {
         await admin.from("reminder_log").insert({
           type: "payment_manual", installment_id: c.installment_id, booking_id: c.booking_id,
-          recipient: c.recipient, subject, status: "error", error: String(e).slice(0, 500), body_html: reminderHtml(c),
+          recipient: c.recipient, subject, status: "error", error: String(e).slice(0, 500), body_html: manualHtml,
         });
         return json({ error: `Send failed: ${String(e).slice(0, 200)}` }, 500);
       }

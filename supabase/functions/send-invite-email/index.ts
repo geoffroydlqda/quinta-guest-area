@@ -125,15 +125,28 @@ serve(async (req) => {
       stayLine = `at Quinta do Amor from ${fmtFull(ci)}`;
     }
 
-    const defaultSubject = `Your invitation to the Quinta do Amor Guest Area`;
-    const defaultBody = [
-      `Hi ${firstName},`,
-      `We're happy to support you in creating magical moments ${stayLine}.`,
+    // Template editable dans l'onglet Emails (table email_templates, cle
+    // 'invitation', 4 sept 2026) — repli sur le texte historique si la ligne
+    // a disparu. Variables : {{first_name}}, {{stay_line}}, {{retreat_name}}.
+    const FALLBACK_SUBJECT = "Your invitation to the Quinta do Amor Guest Area";
+    const FALLBACK_BODY = [
+      `Hi {{first_name}},`,
+      `We're happy to support you in creating magical moments {{stay_line}}.`,
       `Your personal Guest Area is ready. It's where you can choose your room setup, plan your meals and arrange your transportation.`,
       `[[button]]`,
       `Please let me know if you have any questions!`,
       `Geo\nQuinta do Amor`,
     ].join("\n\n");
+    const { data: tplRow } = await admin.from("email_templates")
+      .select("subject,body").eq("key", "invitation").maybeSingle();
+    const vars: Record<string, string> = {
+      first_name: firstName,
+      stay_line: stayLine,
+      retreat_name: booking.retreat_name ?? "",
+    };
+    const render = (t: string) => t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k: string) => vars[k] ?? "");
+    const defaultSubject = render(tplRow?.subject?.trim() ? tplRow.subject : FALLBACK_SUBJECT);
+    const defaultBody = render(tplRow?.body?.trim() ? tplRow.body : FALLBACK_BODY);
 
     const ccList = await ccEmailsFor(admin, booking_id, booking.email);
 

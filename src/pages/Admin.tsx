@@ -25,7 +25,7 @@ import { renderRoomMapCanvas, downloadRoomMapPdf, type RoomMapEntry } from "@/li
 import { openKitchenSheet } from "@/lib/kitchenSheet";
 import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { AutomatedEmailsCard } from "@/components/admin/AutomatedEmailsCard";
-import { ManualEmailTemplatesCard } from "@/components/admin/ManualEmailTemplatesCard";
+import { EmailSnippetsCard, ManualEmailTemplatesCard } from "@/components/admin/ManualEmailTemplatesCard";
 import { HonestyBarCard } from "@/components/admin/HonestyBarCard";
 import { HousekeepingScheduler } from "@/components/admin/HousekeepingScheduler";
 import { FinancePage } from "@/components/admin/FinancePage";
@@ -3408,21 +3408,38 @@ function InlineNameCell({
 }
 
 
-// Onglet Emails : deux capsules (Automatic / Manual templates) — évite
-// l'empilement carte auto + longue liste + carte manuelle (2 sept 2026).
+// Onglet Emails : trois capsules — règles automatiques / templates (TOUS les
+// emails guests, 4 sept 2026) / phrases (les blocs composés dynamiquement).
 function EmailsView() {
-  const [sub, setSub] = useState<"auto" | "manual">("auto");
+  const [sub, setSub] = useState<"auto" | "manual" | "phrases">("auto");
   return (
     <div className="space-y-4">
       <div className="flex gap-1.5">
-        {([["auto", "Automatic emails"], ["manual", "Manual templates"]] as const).map(([k, label]) => (
+        {([["auto", "Automatic emails"], ["manual", "Templates"], ["phrases", "Phrases"]] as const).map(([k, label]) => (
           <button key={k} type="button" onClick={() => setSub(k)}
             className={`rounded-full px-4 py-1.5 text-xs font-semibold border ${sub === k ? "bg-foreground text-background border-foreground" : "bg-card text-muted-foreground border-border hover:text-foreground"}`}>
             {label}
           </button>
         ))}
       </div>
-      {sub === "auto" ? <AutomatedEmailsCard /> : <ManualEmailTemplatesCard />}
+      {sub === "auto" && (
+        <>
+          {/* Un seul chemin de confirmation, jamais deux emails (4 sept 2026) */}
+          <div className="rounded-2xl border border-border bg-card px-5 py-4 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Automatic payment confirmation.</span>{" "}
+            When a Stripe payment arrives, the guest automatically receives the{" "}
+            <button type="button" className="underline decoration-dotted text-foreground" onClick={() => setSub("manual")}>
+              "Payment confirmation" template
+            </button>{" "}
+            with the invoice attached. If you enable a payment-received rule below, that rule is sent{" "}
+            <span className="font-medium text-foreground">instead</span> — the guest never gets both. Payments marked
+            paid manually (bank transfers) don't trigger anything automatic: use the booking's ✉️ button.
+          </div>
+          <AutomatedEmailsCard />
+        </>
+      )}
+      {sub === "manual" && <ManualEmailTemplatesCard />}
+      {sub === "phrases" && <EmailSnippetsCard />}
     </div>
   );
 }

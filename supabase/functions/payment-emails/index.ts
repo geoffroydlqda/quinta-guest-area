@@ -141,6 +141,46 @@ ${SIGNATURE}
 const fmtEur = (n: number) => `€${Number(n).toLocaleString("en-GB", { maximumFractionDigits: 2 })}`;
 
 // ---------------------------------------------------------------------------
+// Phrases editables (4 sept 2026) : les blocs inseres cote serveur (caption
+// Stripe, "Where you stand", echeancier, overview) lisent la table
+// email_templates (cles `snippet.*`, texte dans body — onglet Emails >
+// Phrases). Repli sur ces defauts si la ligne manque. Miroir des defauts de
+// src/lib/emailTemplates.ts — garder les deux synchronises.
+// ---------------------------------------------------------------------------
+const SNIP_DEFAULTS: Record<string, string> = {
+  stay_line_first: "We're happy to confirm your stay at Quinta do Amor from {{stay_range}}",
+  stay_line_followup: "Your stay at Quinta do Amor from {{stay_range}} is getting close",
+  payment_intro_single: "Here's the link for the {{ordinal}}{{and_final}} payment for your stay:",
+  settled_note: "Your stay is now fully settled.",
+  stripe_caption: "Secure bank payment (debit or transfer), powered by Stripe.",
+  stripe_caption_attached: "The full details of this payment are attached.",
+  recap_line: "Where you stand: {{parts}}.",
+  recap_already_received: "{{amount}} already received",
+  recap_this_payment: "this payment {{amount}}",
+  recap_remaining: "{{amount}} will remain for later",
+  recap_settled_after: "after it, your stay is fully settled",
+  schedule_title: "PAYMENT SCHEDULE",
+  schedule_catering_note: "Catering & extras are invoiced separately, one week before check-in.",
+  overview_line: "Payment overview: {{paid}} received of {{total}}",
+  overview_remaining: "{{amount}} remaining",
+  overview_settled: "your stay is fully settled",
+};
+const renderTpl = (t: string, vars: Record<string, string>) =>
+  t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k: string) => vars[k] ?? "");
+type Snip = (k: string, vars?: Record<string, string>) => string;
+async function loadSnippets(): Promise<Snip> {
+  const map = { ...SNIP_DEFAULTS };
+  try {
+    const { data } = await admin.from("email_templates").select("key,body").like("key", "snippet.%");
+    for (const r of (data ?? []) as { key: string; body: string | null }[]) {
+      const k = r.key.replace(/^snippet\./, "");
+      if (r.body && r.body.trim() && k in map) map[k] = r.body;
+    }
+  } catch { /* defauts */ }
+  return (k, vars = {}) => renderTpl(map[k] ?? "", vars);
+}
+
+// ---------------------------------------------------------------------------
 // Pro forma PDF (27 aout 2026) — joint a chaque email de demande de paiement.
 // Detaille ce que le guest paie (lignes produits quand elles existent) et,
 // pour tout le sejour, l'echeancier : deja paye / cette demande / a venir.
@@ -444,6 +484,9 @@ serve(async (req) => {
     const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
 
+    // Phrases editables (blocs serveur + variables composees des tests)
+    const snip = await loadSnippets();
+
     // --- Test d'un template manuel : donnees d'exemple, envoi a l'admin.
     // Le bouton Pay pointe vers la guest area (aucun vrai lien de paiement),
     // rien n'est journalise dans reminder_log.
@@ -453,25 +496,28 @@ serve(async (req) => {
         .select("subject,body_top,body_bottom,body").eq("key", tt.key).maybeSingle();
       if (!tplRow) return json({ error: `Template ${tt.key} not found — save it once from the Emails tab first` }, 404);
       const followup = tt.key === "payment_request_followup";
+      // Les variables composees viennent des phrases editables (onglet Emails
+      // > Phrases) \u2014 le test reflete donc les textes reellement envoyes.
       const vars: Record<string, string> = {
         first_name: "Alex",
-        stay_line: followup
-          ? "Your stay at Quinta do Amor from June 4 to 10 is getting close"
-          : "We're happy to confirm your stay at Quinta do Amor from June 4 to 10",
-        payment_intro: `Here's the link for the ${followup ? "second and final" : "first"} payment for your stay:`,
+        stay_line: snip(followup ? "stay_line_followup" : "stay_line_first", { stay_range: "June 4 to 10" }),
+        payment_intro: snip("payment_intro_single", {
+          ordinal: followup ? "second" : "first",
+          and_final: followup ? " and final" : "",
+        }),
         amount: "\u20ac4,170.00",
         payment_or_final: followup ? "final payment" : "payment",
         retreat_name: "Sample Retreat",
         check_in_date: "2027-06-04",
         check_out_date: "2027-06-10",
-        settled_note: " Your stay is now fully settled.",
+        settled_note: ` ${snip("settled_note")}`,
       };
       const render = (t: string) => t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k: string) => vars[k] ?? "");
       const FONT2 = "font-family: Helvetica, Arial, sans-serif; font-size: 12pt; line-height: 1.5; color: #000;";
       let testHtml: string;
       if (tt.key === "payment_confirmation") {
         testHtml = emailShell(paras(render(tplRow.body ?? ""))
-          + `<p style="margin:18px 0 0 0;font-size:11px;color:#888888;">Payment overview: \u20ac13,900.00 received of \u20ac13,900.00 \u2014 your stay is fully settled.</p>`);
+          + `<p style="margin:18px 0 0 0;font-size:11px;color:#888888;">${esc(snip("overview_line", { paid: "\u20ac13,900.00", total: "\u20ac13,900.00" }))} \u2014 ${esc(snip("overview_settled"))}.</p>`);
       } else {
         // Échantillon cohérent par template (corrigé 2 sept 2026) : le test du
         // 1er paiement ne montre RIEN de déjà payé ; le followup montre
@@ -495,10 +541,15 @@ serve(async (req) => {
         testHtml = emailShell(`
 ${paras(render(tplRow.body_top ?? ""))}
 <p style="margin:18px 0 6px 0;"><a href="https://guest.quintamor.com" style="${FONT2} display:inline-block;background:#6d7855;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-size:13px;">Pay \u20ac4,170.00</a></p>
-<p style="margin:0 0 6px 0;font-size:11px;color:#888888;">Secure bank payment (debit or transfer), powered by Stripe. The full details of this payment are attached.</p>
-<p style="margin:0 0 18px 0;font-size:11px;color:#555555;">Where you stand: ${followup ? "\u20ac4,170.00 already received \u00b7 this payment \u20ac4,170.00 \u00b7 \u20ac5,560.00 will remain for later" : "this payment \u20ac4,170.00 \u00b7 \u20ac9,730.00 will remain for later"}.</p>
+<p style="margin:0 0 6px 0;font-size:11px;color:#888888;">${esc(snip("stripe_caption"))} ${esc(snip("stripe_caption_attached"))}</p>
+<p style="margin:0 0 18px 0;font-size:11px;color:#555555;">${esc(snip("recap_line", {
+  parts: (followup
+    ? [snip("recap_already_received", { amount: "\u20ac4,170.00" }), snip("recap_this_payment", { amount: "\u20ac4,170.00" }), snip("recap_remaining", { amount: "\u20ac5,560.00" })]
+    : [snip("recap_this_payment", { amount: "\u20ac4,170.00" }), snip("recap_remaining", { amount: "\u20ac9,730.00" })]
+  ).join(" \u00b7 "),
+}))}</p>
 <div style="margin:4px 0 18px 0;border:1px solid #E5D9C8;border-radius:10px;padding:12px 16px;background:#FDFCF8;">
-  <p style="margin:0 0 6px 0;font-size:10px;font-weight:bold;letter-spacing:.08em;color:#35532A;">PAYMENT SCHEDULE</p>
+  <p style="margin:0 0 6px 0;font-size:10px;font-weight:bold;letter-spacing:.08em;color:#35532A;">${esc(snip("schedule_title"))}</p>
   <table style="width:100%;border-collapse:collapse;">${scheduleRows}</table>
 </div>
 ${paras(render(tplRow.body_bottom ?? ""))}
@@ -582,7 +633,7 @@ ${paras(render(tplRow.body_bottom ?? ""))}
       const vars: Record<string, string> = {
         first_name: first,
         amount: fmtEur(amount),
-        settled_note: allSettled ? " Your stay is now fully settled." : "",
+        settled_note: allSettled ? ` ${snip("settled_note")}` : "",
         retreat_name: booking.retreat_name ?? "",
       };
       const render = (t: string) => t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => vars[k] ?? "");
@@ -656,13 +707,15 @@ Geo`);
       html = emailShell(`
 ${paras(parsed.data.body_top ?? "")}
 <p style="margin:18px 0 6px 0;"><a href="${payUrl}" style="display:inline-block;background:#6d7855;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;">Pay ${esc(amount)}</a></p>
-<p style="margin:0 0 6px 0;font-size:11px;color:#888888;">Secure bank payment (debit or transfer), powered by Stripe.${proFormaAttached ? " The full details of this payment are attached." : ""}</p>
+<p style="margin:0 0 6px 0;font-size:11px;color:#888888;">${esc(snip("stripe_caption"))}${proFormaAttached ? ` ${esc(snip("stripe_caption_attached"))}` : ""}</p>
 <p style="margin:0 0 18px 0;font-size:11px;color:#555555;">${(() => {
   const thisPay = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
   const after = Math.max(0, Math.round((balTotal - balPaid - thisPay) * 100) / 100);
-  const paidPart = balPaid > 0.005 ? `${fmtEur(balPaid)} already received · ` : "";
-  const afterPart = after > 0.005 ? `${fmtEur(after)} will remain for later` : "after it, your stay is fully settled";
-  return `Where you stand: ${paidPart}this payment ${fmtEur(thisPay)} · ${afterPart}.`;
+  const parts: string[] = [];
+  if (balPaid > 0.005) parts.push(snip("recap_already_received", { amount: fmtEur(balPaid) }));
+  parts.push(snip("recap_this_payment", { amount: fmtEur(thisPay) }));
+  parts.push(after > 0.005 ? snip("recap_remaining", { amount: fmtEur(after) }) : snip("recap_settled_after"));
+  return esc(snip("recap_line", { parts: parts.join(" · ") }));
 })()}</p>
 ${(() => {
   // Échéancier structuré dans l'email (2 sept 2026, demande Geoffroy) : le
@@ -691,10 +744,10 @@ ${(() => {
     }).join("");
   const hasCateringLines = balAll.some((r) => ["catering", "extra", "transport"].includes(r.category ?? ""));
   const cateringNote = hasCateringLines ? "" :
-    `<p style="margin:8px 0 0 0;font-size:11px;color:#888888;">Catering &amp; extras are invoiced separately, one week before check-in.</p>`;
+    `<p style="margin:8px 0 0 0;font-size:11px;color:#888888;">${esc(snip("schedule_catering_note"))}</p>`;
   return `
 <div style="margin:4px 0 18px 0;border:1px solid #E5D9C8;border-radius:10px;padding:12px 16px;background:#FDFCF8;">
-  <p style="margin:0 0 6px 0;font-size:10px;font-weight:bold;letter-spacing:.08em;color:#35532A;">PAYMENT SCHEDULE</p>
+  <p style="margin:0 0 6px 0;font-size:10px;font-weight:bold;letter-spacing:.08em;color:#35532A;">${esc(snip("schedule_title"))}</p>
   <table style="width:100%;border-collapse:collapse;">${rows}</table>
   ${cateringNote}
 </div>`;
@@ -723,8 +776,10 @@ ${paras(parsed.data.body_bottom ?? "")}
       }
       // Récap solde en pied de confirmation (balPaid inclut déjà ce paiement)
       const remaining = Math.max(0, Math.round((balTotal - balPaid) * 100) / 100);
+      const overview = snip("overview_line", { paid: fmtEur(balPaid), total: fmtEur(balTotal) })
+        + (remaining > 0.005 ? ` · ${snip("overview_remaining", { amount: fmtEur(remaining) })}` : ` — ${snip("overview_settled")}`);
       html = emailShell(paras(bodyText)
-        + `<p style="margin:18px 0 0 0;font-size:11px;color:#888888;">Payment overview: ${fmtEur(balPaid)} received of ${fmtEur(balTotal)}${remaining > 0.005 ? ` · ${fmtEur(remaining)} remaining` : " — your stay is fully settled"}.</p>`);
+        + `<p style="margin:18px 0 0 0;font-size:11px;color:#888888;">${esc(overview)}.</p>`);
     }
 
     // Pièces jointes fournies par l'admin (les deux kinds)

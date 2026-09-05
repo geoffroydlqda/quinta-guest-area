@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Mail, Paperclip, X } from "lucide-react";
-import { DEFAULT_TEMPLATES, renderTemplate, type ManualTemplateKey } from "@/lib/emailTemplates";
+import { DEFAULT_TEMPLATES, SNIPPETS, mergeSnippets, renderTemplate, type ManualTemplateKey } from "@/lib/emailTemplates";
 
 /**
  * Compose éditable des emails de paiement (textes validés par Geoffroy).
@@ -61,35 +61,33 @@ const fmtDue = (d?: string | null): string | null => {
 
 // Valeurs des variables {{...}} du template "payment_request" — la logique
 // conditionnelle (groupé, dernier paiement…) vit ici, le texte dans la table
-// email_templates (éditable depuis l'onglet Emails).
-export function requestTemplateVars(booking: EmailBooking, inst: EmailInstallment, ordinal: number, isLast: boolean, groupInsts: EmailInstallment[] = []): Record<string, string> {
+// email_templates : templates + phrases `snippet.*` (éditables, onglet Emails).
+export function requestTemplateVars(booking: EmailBooking, inst: EmailInstallment, ordinal: number, isLast: boolean, groupInsts: EmailInstallment[] = [], snips?: Record<string, string>): Record<string, string> {
+  const S = (k: string) => snips?.[k] ?? SNIPPETS[k].text;
   const stay = stayRange(booking.check_in_date, booking.check_out_date);
   const grouped = groupInsts.length > 1;
   const total = (grouped ? groupInsts : [inst]).reduce((s, i) => s + Number(i.amount_due || 0), 0);
   const paymentIntro = grouped
-    ? `Here's a quick recap of the payments for your stay:
-
-${[...groupInsts]
-    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"))
-    .map((i) => {
-      const due = fmtDue(i.due_date);
-      return `– ${i.label || "Payment"}: ${fmtEur(Number(i.amount_due))}${due ? ` (due ${due})` : ""}`;
-    }).join("\n")}
-
-You can settle everything in one go with the link below:`
-    : `Here's the link for the ${ordinalWord(ordinal)}${isLast ? " and final" : ""} payment for your stay:`;
+    ? renderTemplate(S("payment_intro_grouped"), {
+      payment_list: [...groupInsts]
+        .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"))
+        .map((i) => {
+          const due = fmtDue(i.due_date);
+          return `– ${i.label || "Payment"}: ${fmtEur(Number(i.amount_due))}${due ? ` (due ${due})` : ""}`;
+        }).join("\n"),
+    })
+    : renderTemplate(S("payment_intro_single"), {
+      ordinal: ordinalWord(ordinal),
+      and_final: isLast ? " and final" : "",
+    });
+  // "is getting close" n'a de sens que pour le 2e paiement / solde (70 %) —
+  // pour le 1er (acompte, souvent des mois avant), on confirme le séjour.
+  // Sans dates sur le booking, la clause "from {{stay_range}}" est retirée.
+  let stayTpl = S(ordinal > 1 ? "stay_line_followup" : "stay_line_first");
+  if (!stay) stayTpl = stayTpl.replace(/\s*from \{\{\s*stay_range\s*\}\}/, "");
   return {
     first_name: (booking.first_name ?? "").trim() || "there",
-    // "is getting close" n'a de sens que pour le 2e paiement / solde (70 %) —
-    // pour le 1er (acompte, souvent des mois avant), on confirme le séjour
-    // (demande Geoffroy, 2 sept 2026).
-    stay_line: ordinal > 1
-      ? (stay
-        ? `Your stay at Quinta do Amor from ${stay} is getting close`
-        : `Your stay at Quinta do Amor is getting close`)
-      : (stay
-        ? `We're happy to confirm your stay at Quinta do Amor from ${stay}`
-        : `We're happy to confirm your stay at Quinta do Amor`),
+    stay_line: renderTemplate(stayTpl, { stay_range: stay ?? "" }),
     payment_intro: paymentIntro,
     amount: fmtEur(total),
     payment_or_final: isLast ? "final payment" : "payment",
@@ -99,11 +97,12 @@ You can settle everything in one go with the link below:`
   };
 }
 
-export function confirmationTemplateVars(booking: EmailBooking, inst: EmailInstallment, allSettled: boolean): Record<string, string> {
+export function confirmationTemplateVars(booking: EmailBooking, inst: EmailInstallment, allSettled: boolean, snips?: Record<string, string>): Record<string, string> {
+  const S = (k: string) => snips?.[k] ?? SNIPPETS[k].text;
   return {
     first_name: (booking.first_name ?? "").trim() || "there",
     amount: fmtEur(Number(inst.amount_due)),
-    settled_note: allSettled ? " Your stay is now fully settled." : "",
+    settled_note: allSettled ? ` ${S("settled_note")}` : "",
     retreat_name: booking.retreat_name ?? "",
   };
 }
@@ -238,17 +237,21 @@ export function PaymentEmailDialog({
       const key: ManualTemplateKey = kind === "request"
         ? (ordinal > 1 ? "payment_request_followup" : "payment_request")
         : "payment_confirmation";
-      const { data } = await supabase.from("email_templates")
-        .select("subject,body_top,body_bottom,body").eq("key", key).maybeSingle();
+      const [{ data }, { data: snipRows }] = await Promise.all([
+        supabase.from("email_templates")
+          .select("subject,body_top,body_bottom,body").eq("key", key).maybeSingle(),
+        supabase.from("email_templates").select("key,body").like("key", "snippet.%"),
+      ]);
       if (cancelled) return;
+      const snips = mergeSnippets(snipRows);
       const tpl = data ?? DEFAULT_TEMPLATES[key];
       if (kind === "request") {
-        const vars = requestTemplateVars(booking, inst, ordinal, isLast, insts);
+        const vars = requestTemplateVars(booking, inst, ordinal, isLast, insts, snips);
         setSubject(renderTemplate(tpl.subject, vars));
         setBodyTop(renderTemplate(tpl.body_top ?? DEFAULT_TEMPLATES[key].body_top ?? "", vars));
         setBodyBottom(renderTemplate(tpl.body_bottom ?? DEFAULT_TEMPLATES[key].body_bottom ?? "", vars));
       } else {
-        const vars = confirmationTemplateVars(booking, inst, allSettled);
+        const vars = confirmationTemplateVars(booking, inst, allSettled, snips);
         setSubject(renderTemplate(tpl.subject, vars));
         setBody(renderTemplate(tpl.body ?? DEFAULT_TEMPLATES.payment_confirmation.body ?? "", vars));
       }
