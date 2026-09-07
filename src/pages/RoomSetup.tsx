@@ -83,7 +83,9 @@ interface RoomCardProps {
 
 function RoomCard({ roomId, bathroomType, note, bedType, isExpanded, onToggle, isFixed = false, isLocked, onChange, guests, onAddGuest, onUpdateGuest, onRemoveGuest }: RoomCardProps) {
   // Photo selon le lit choisi : twin -> photo lits jumeaux, sinon photo lit
-  // double (les images etaient inversees — corrige le 25 aout 2026).
+  // double. ⚠️ Les FICHIERS assets etaient inverses (room-twins.jpg montrait le
+  // lit double) — echanges le 5 sept 2026 : les noms correspondent maintenant
+  // au contenu, la logique ici reste directe. Ne pas "compenser" dans le code.
   const image =
     roomId === 1 || roomId === 6
       ? roomKingImage

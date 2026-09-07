@@ -221,15 +221,24 @@ async function generateInvoice(installmentId: string) {
     // Nom facturé : société si renseignée, sinon la personne.
     const invoiceName = (profile?.company_name ?? "").trim() || clientName;
     // Pays : lookup Moloni par nom (fiche guest), défaut Portugal.
+    // ⚠️ 7 sept 2026 : le champ s'appelle `title` (pas `name`) — l'ancienne
+    // requête échouait en GRAPHQL_VALIDATION_FAILED, avalée par le catch, et
+    // TOUS les clients étrangers retombaient sur Portugal (fatura Simone/UK
+    // bloquée par son code postal). On ne demande que countryId (robuste).
     let countryId = 1;
     const countryName = (profile?.country ?? "").trim();
     if (countryName) {
       try {
-        const cRes = await gql(`query($s: String!) { countries(options: { search: { field: ALL, value: $s }, pagination: { page: 1, qty: 5 } }) { data { countryId name } errors { msg } } }`, { s: countryName });
+        const cRes = await gql(`query($s: String!) { countries(options: { search: { field: ALL, value: $s }, pagination: { page: 1, qty: 5 } }) { data { countryId } errors { msg } } }`, { s: countryName });
         const hit = (cRes?.data?.countries?.data ?? [])[0];
         if (hit?.countryId) countryId = hit.countryId;
       } catch (_e) { /* défaut PT */ }
     }
+    // Ceinture + bretelles : Moloni ne valide le format du code postal que
+    // pour le Portugal (0000-000). Si on est retombés sur PT avec un code
+    // etranger, on OMET le zip plutot que de faire echouer la fatura.
+    const zipRaw = (profile?.zip_code ?? "").trim();
+    const zipOk = zipRaw && (countryId !== 1 || /^\d{4}-\d{3}$/.test(zipRaw));
     const next = await gql(`query($c: Int!) { customerNextNumber(companyId: $c) { data errors { msg } } }`,
       { c: cfg.company_id });
     const number = next?.data?.customerNextNumber?.data ?? `C${Date.now()}`;
@@ -244,12 +253,13 @@ async function generateInvoice(installmentId: string) {
         number: String(number),
         name: invoiceName,
         countryId,
-        // Requis par l'API Moloni : 1 = portugais (clients PT), 2 = anglais (etrangers)
-        languageId: countryId === 1 ? 1 : 2,
+        // Requis par l'API Moloni : 1 = Portugues, 3 = English (il n'y a PAS
+        // de 2 — verifie via la query languages, 7 sept 2026).
+        languageId: countryId === 1 ? 1 : 3,
         ...(isPtNif ? { vat: vatRaw } : {}),
         ...(email ? { email } : {}),
         ...(profile?.address ? { address: profile.address } : {}),
-        ...(profile?.zip_code ? { zipCode: profile.zip_code } : {}),
+        ...(zipOk ? { zipCode: zipRaw } : {}),
         ...(profile?.city ? { city: profile.city } : {}),
       },
     });

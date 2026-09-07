@@ -101,7 +101,10 @@ async function getOrCreateCustomer(key: string, email: string): Promise<string |
 
 // Pays de la fiche guest -> la carte n'est proposée QUE hors zone SEPA
 // (choix Geoffroy : rails bancaires pour l'Europe, carte en secours pour US/CA & co).
-const SEPA_COUNTRIES = ["portugal","france","belgium","belgique","spain","espagne","espana","germany","allemagne","deutschland","netherlands","pays-bas","holland","italy","italie","italia","ireland","irlande","luxembourg","austria","autriche","united kingdom","uk","england","scotland","wales","switzerland","suisse","schweiz","poland","pologne","sweden","suede","denmark","danemark","norway","norvege","finland","finlande","greece","grece","czech","tchequie","hungary","hongrie","romania","roumanie","bulgaria","bulgarie","croatia","croatie","slovenia","slovenie","slovakia","slovaquie","estonia","estonie","latvia","lettonie","lithuania","lituanie","malta","malte","cyprus","chypre","iceland","islande","liechtenstein","monaco","andorra","andorre"];
+// ⚠️ Le pays est du texte libre tapé par le guest : matching TOLÉRANT aux
+// fautes courantes ("United Kindom" a fait passer Simone/Elevate en USD,
+// 4 sept 2026) — d'où les tokens "kingdom"/"kindom"/"britain".
+const SEPA_COUNTRIES = ["portugal","france","belgium","belgique","spain","espagne","espana","germany","allemagne","deutschland","netherlands","pays-bas","holland","italy","italie","italia","ireland","irlande","luxembourg","austria","autriche","united kingdom","kingdom","kindom","britain","uk","england","scotland","wales","switzerland","suisse","schweiz","poland","pologne","sweden","suede","denmark","danemark","norway","norvege","finland","finlande","greece","grece","czech","tchequie","hungary","hongrie","romania","roumanie","bulgaria","bulgarie","croatia","croatie","slovenia","slovenie","slovakia","slovaquie","estonia","estonie","latvia","lettonie","lithuania","lituanie","malta","malte","cyprus","chypre","iceland","islande","liechtenstein","monaco","andorra","andorre"];
 
 async function guestCountry(booking: { client_id?: string | null; email: string | null }): Promise<string> {
   let country = "";
