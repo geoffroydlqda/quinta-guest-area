@@ -160,16 +160,19 @@ export async function renderRoomMapCanvas(
 export async function downloadRoomMapPdf(
   imageSrc: string,
   entries: RoomMapEntry[],
-  opts?: { title?: string; subtitle?: string; notes?: string | null; lang?: 'en' | 'pt' },
+  opts?: { title?: string; subtitle?: string; notes?: string | null; lang?: 'en' | 'pt'; recap?: boolean },
 ): Promise<void> {
   const canvas = await renderRoomMapCanvas(imageSrc, entries);
   const W = canvas.width;
   const H = canvas.height;
 
-  // PDF A4 paysage (8 sept 2026) : plan à gauche + colonne récap à droite
-  // (chambres 1-11 avec typologie, sets de lits à préparer, notes du séjour).
-  // lang 'pt' (Housekeeping — l'équipe est portugaise, 8 sept 2026) traduit la
-  // colonne ; le plan lui-même (noms des guests) reste tel quel.
+  // PDF A4 paysage. Deux variantes (8 sept 2026, validé Geoffroy) :
+  //  - guest (défaut) : le plan SEUL, pleine largeur — les infos d'intendance
+  //    ne le concernent pas ;
+  //  - recap:true (Housekeeping) : plan à gauche + colonne récap à droite
+  //    (chambres 1-11 avec typologie, jogos de cama, notes du séjour),
+  //    lang 'pt' pour l'équipe portugaise. Le plan lui-même reste tel quel.
+  const recap = opts?.recap === true;
   const pt = opts?.lang === 'pt';
   const L = pt ? {
     rooms: 'QUARTOS', notInPlan: 'fora deste plano', empty: '· vazio',
@@ -208,8 +211,8 @@ export async function downloadRoomMapPdf(
     doc.text(opts.subtitle, margin, margin + 12);
   }
 
-  // ---- plan (zone de gauche)
-  const availW = pageW - margin * 2 - SIDEBAR_W - GAP;
+  // ---- plan (pleine largeur pour le guest, zone de gauche avec la colonne)
+  const availW = pageW - margin * 2 - (recap ? SIDEBAR_W + GAP : 0);
   const availH = pageH - margin * 2 - headerH;
   const scale = Math.min(availW / W, availH / H);
   const drawW = W * scale;
@@ -217,6 +220,11 @@ export async function downloadRoomMapPdf(
   const dx = margin + (availW - drawW) / 2;
   const dy = margin + headerH + (availH - drawH) / 2;
   doc.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', dx, dy, drawW, drawH);
+
+  if (!recap) {
+    doc.save('quinta-do-amor-room-map.pdf');
+    return;
+  }
 
   // ---- colonne récap (droite)
   const byRoom = new Map(entries.map((e) => [e.roomId, e]));

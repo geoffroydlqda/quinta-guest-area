@@ -220,6 +220,7 @@ function RoomPlanInline({ booking, plan }: { booking: HkBooking; plan: HkRoomPla
         subtitle: `${fmtDY(booking.check_in_date)} → ${fmtDY(booking.check_out_date)} · ${plan.guestsPlaced} guests placed`,
         notes,
         lang: "pt",
+        recap: true,
       });
     } finally {
       setDownloading(false);

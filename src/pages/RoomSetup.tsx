@@ -545,7 +545,9 @@ const RoomSetup = () => {
                   await downloadRoomMapPdf(
                     roomsArrangement,
                     buildMapEntries(),
-                    { subtitle: 'Who sleeps where — bring this along for an easy check-in.', notes: remarks },
+                    // Guest : le plan seul — les infos d'intendance (typologie,
+                    // jogos de cama, notes) sont réservées au PDF Housekeeping.
+                    { subtitle: 'Who sleeps where — bring this along for an easy check-in.' },
                   );
                 } finally {
                   setDownloadingMap(false);
