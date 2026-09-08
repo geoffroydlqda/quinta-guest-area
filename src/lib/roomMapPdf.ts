@@ -160,7 +160,7 @@ export async function renderRoomMapCanvas(
 export async function downloadRoomMapPdf(
   imageSrc: string,
   entries: RoomMapEntry[],
-  opts?: { title?: string; subtitle?: string; notes?: string | null },
+  opts?: { title?: string; subtitle?: string; notes?: string | null; lang?: 'en' | 'pt' },
 ): Promise<void> {
   const canvas = await renderRoomMapCanvas(imageSrc, entries);
   const W = canvas.width;
@@ -168,6 +168,24 @@ export async function downloadRoomMapPdf(
 
   // PDF A4 paysage (8 sept 2026) : plan à gauche + colonne récap à droite
   // (chambres 1-11 avec typologie, sets de lits à préparer, notes du séjour).
+  // lang 'pt' (Housekeeping — l'équipe est portugaise, 8 sept 2026) traduit la
+  // colonne ; le plan lui-même (noms des guests) reste tel quel.
+  const pt = opts?.lang === 'pt';
+  const L = pt ? {
+    rooms: 'QUARTOS', notInPlan: 'fora deste plano', empty: '· vazio',
+    guests: (n: number) => `· ${n} hóspede${n > 1 ? 's' : ''}`,
+    king: 'Cama de casal', twin: 'Camas de solteiro',
+    setsTitle: 'JOGOS DE CAMA A PREPARAR',
+    sets: (d: number, s: number) => `${d} jogo${d === 1 ? '' : 's'} de casal  ·  ${s} de solteiro`,
+    notes: 'NOTAS',
+  } : {
+    rooms: 'ROOMS', notInPlan: 'not in this plan', empty: '· empty',
+    guests: (n: number) => `· ${n} guest${n > 1 ? 's' : ''}`,
+    king: 'King bed', twin: 'Twin beds',
+    setsTitle: 'BED SETS TO PREPARE',
+    sets: (d: number, s: number) => `${d} double bed set${d === 1 ? '' : 's'}  ·  ${s} single bed set${s === 1 ? '' : 's'}`,
+    notes: 'NOTES',
+  };
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pageW = 297;
   const pageH = 210;
@@ -202,14 +220,14 @@ export async function downloadRoomMapPdf(
 
   // ---- colonne récap (droite)
   const byRoom = new Map(entries.map((e) => [e.roomId, e]));
-  const bedLabel = (t?: 'king' | 'twin') => (t === 'twin' ? 'Twin beds' : t === 'king' ? 'King bed' : '—');
+  const bedLabel = (t?: 'king' | 'twin') => (t === 'twin' ? L.twin : t === 'king' ? L.king : '—');
   const sx = pageW - margin - SIDEBAR_W;
   let sy = margin + headerH + 2;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...OLIVE);
-  doc.text('ROOMS', sx, sy);
+  doc.text(L.rooms, sx, sy);
   sy += 1.6;
   doc.setDrawColor(...OLIVE);
   doc.setLineWidth(0.4);
@@ -225,13 +243,13 @@ export async function downloadRoomMapPdf(
     doc.setFont('helvetica', 'normal');
     if (!e) {
       doc.setTextColor(...GREY);
-      doc.text('not in this plan', sx + 7, sy);
+      doc.text(L.notInPlan, sx + 7, sy);
     } else {
       doc.setTextColor(...INK);
       doc.text(bedLabel(e.bedType), sx + 7, sy);
       const n = e.guests.length;
       doc.setTextColor(...GREY);
-      doc.text(n ? `· ${n} guest${n > 1 ? 's' : ''}` : '· empty', sx + 27, sy);
+      doc.text(n ? L.guests(n) : L.empty, sx + 33, sy);
     }
     sy += 5.4;
   }
@@ -249,11 +267,11 @@ export async function downloadRoomMapPdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(...OLIVE);
-  doc.text('BED SETS TO PREPARE', sx + 3, sy);
+  doc.text(L.setsTitle, sx + 3, sy);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(...INK);
-  doc.text(`${doubles} double bed set${doubles === 1 ? '' : 's'}  ·  ${singles} single bed set${singles === 1 ? '' : 's'}`, sx + 3, sy + 5.4);
+  doc.text(L.sets(doubles, singles), sx + 3, sy + 5.4);
   sy += 15;
 
   // ---- notes du séjour (room setup remarks), en bas de la colonne
@@ -262,7 +280,7 @@ export async function downloadRoomMapPdf(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(...OLIVE);
-    doc.text('NOTES', sx, sy);
+    doc.text(L.notes, sx, sy);
     sy += 1.6;
     doc.line(sx, sy, sx + SIDEBAR_W, sy);
     sy += 4.6;

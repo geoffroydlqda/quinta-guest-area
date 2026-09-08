@@ -199,12 +199,32 @@ function RoomPlanInline({ booking, plan }: { booking: HkBooking; plan: HkRoomPla
     return () => { cancelled = true; };
   }, [booking.id]);
 
-  const download = () =>
-    downloadRoomMapPdf(roomsArrangement, plan.entries, {
-      title: `Quinta do Amor — Room map — ${booking.name}`,
-      subtitle: `${fmtDY(booking.check_in_date)} → ${fmtDY(booking.check_out_date)} · ${plan.guestsPlaced} guests placed`,
-      notes: plan.remarks,
-    });
+  // PDF pour l'équipe de ménage (portugaise) : colonne récap en PT, et les
+  // room setup remarks traduites via translate-text (best-effort — texte
+  // original si la traduction échoue). 8 sept 2026.
+  const [downloading, setDownloading] = useState(false);
+  const download = async () => {
+    setDownloading(true);
+    try {
+      let notes = plan.remarks;
+      if (notes?.trim()) {
+        try {
+          const { data } = await supabase.functions.invoke("translate-text", {
+            body: { text: notes, target: "pt" },
+          });
+          if (data?.text) notes = data.text as string;
+        } catch { /* texte original */ }
+      }
+      await downloadRoomMapPdf(roomsArrangement, plan.entries, {
+        title: `Quinta do Amor — Room map — ${booking.name}`,
+        subtitle: `${fmtDY(booking.check_in_date)} → ${fmtDY(booking.check_out_date)} · ${plan.guestsPlaced} guests placed`,
+        notes,
+        lang: "pt",
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="space-y-2">
@@ -212,8 +232,8 @@ function RoomPlanInline({ booking, plan }: { booking: HkBooking; plan: HkRoomPla
         <div className="text-xs uppercase text-muted-foreground flex items-center gap-1.5">
           <BedDouble className="w-3.5 h-3.5" /> Bedroom arrangement · {plan.guestsPlaced} guests placed
         </div>
-        <Button size="sm" variant="outline" onClick={download}>
-          <FileDown className="w-4 h-4 mr-1" /> PDF
+        <Button size="sm" variant="outline" onClick={download} disabled={downloading}>
+          {downloading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <FileDown className="w-4 h-4 mr-1" />} PDF
         </Button>
       </div>
       {mapUrl ? (
