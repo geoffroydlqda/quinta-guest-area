@@ -3270,6 +3270,10 @@ function BookingEmailField({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(display);
   const [saving, setSaving] = useState(false);
+  // Confirmation INTÉGRÉE (8 sept 2026) : window.confirm pouvait être bloqué
+  // silencieusement par Chrome ("empêcher les boîtes de dialogue") — le ✓
+  // semblait mort. Premier clic = demande de confirmation inline, second = save.
+  const [confirmStep, setConfirmStep] = useState(false);
 
   if (!booking) return <div className="font-medium break-all">{display || "—"}</div>;
 
@@ -3280,8 +3284,9 @@ function BookingEmailField({
       return;
     }
     const oldEmail = (booking.email || "").toLowerCase();
-    if (newEmail === oldEmail) { setEditing(false); return; }
-    if (!window.confirm(`Change this booking's email to ${newEmail}?\n\nThe guest profile is updated too — invitations and payment reminders will go there.`)) return;
+    if (newEmail === oldEmail) { setEditing(false); setConfirmStep(false); return; }
+    if (!confirmStep) { setConfirmStep(true); return; }
+    setConfirmStep(false);
     setSaving(true);
     try {
       let clientId: string | null = null;
@@ -3338,25 +3343,38 @@ function BookingEmailField({
 
   if (editing) {
     return (
-      <div className="flex items-center gap-2">
-        <Input
-          autoFocus
-          type="email"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); save(); }
-            else if (e.key === "Escape") { e.preventDefault(); setDraft(display); setEditing(false); }
-          }}
-          disabled={saving}
-          className="h-8"
-        />
-        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={save} disabled={saving} aria-label="Save">
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-        </Button>
-        <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setDraft(display); setEditing(false); }} disabled={saving} aria-label="Cancel">
-          <X className="w-3.5 h-3.5" />
-        </Button>
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <Input
+            autoFocus
+            type="email"
+            value={draft}
+            onChange={(e) => { setDraft(e.target.value); setConfirmStep(false); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); save(); }
+              else if (e.key === "Escape") { e.preventDefault(); setDraft(display); setEditing(false); setConfirmStep(false); }
+            }}
+            disabled={saving}
+            className="h-8"
+          />
+          {confirmStep ? (
+            <Button size="sm" className="h-8 text-xs px-2 shrink-0" onClick={save} disabled={saving} aria-label="Confirm">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Confirm"}
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={save} disabled={saving} aria-label="Save">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setDraft(display); setEditing(false); setConfirmStep(false); }} disabled={saving} aria-label="Cancel">
+            <X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+        {confirmStep && (
+          <div className="text-[11px] text-muted-foreground">
+            The guest profile and their other bookings switch to this email too (invitations, payment emails). Click <b>Confirm</b> to apply.
+          </div>
+        )}
       </div>
     );
   }
