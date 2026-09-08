@@ -765,17 +765,25 @@ const AdminGuestDetailContent = () => {
             </div>
             <div>
               <div className="text-muted-foreground">Email</div>
+              {/* ⚠️ Toujours l'email du BOOKING (source de vérité des envois) —
+                  pas celui du compte de connexion du guest. Les deux peuvent
+                  différer (cas Simone, 8 sept 2026) : l'afficher depuis le
+                  profil faisait croire que l'édition ne sauvait rien. */}
               <BookingEmailField
                 booking={booking}
-                display={email}
+                display={booking?.email ?? email}
                 onSaved={(newEmail) => {
                   setData((d) => d ? {
                     ...d,
                     booking: d.booking ? { ...d.booking, email: newEmail } : d.booking,
-                    profile: d.profile ? { ...d.profile, email: newEmail } : d.profile,
                   } : d);
                 }}
               />
+              {profile?.email && booking?.email && profile.email.toLowerCase() !== booking.email.toLowerCase() && (
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  Guest area login: {profile.email}
+                </div>
+              )}
             </div>
             <div>
               <div className="text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> Guests</div>
