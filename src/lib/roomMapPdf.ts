@@ -160,22 +160,28 @@ export async function renderRoomMapCanvas(
 export async function downloadRoomMapPdf(
   imageSrc: string,
   entries: RoomMapEntry[],
-  opts?: { title?: string; subtitle?: string },
+  opts?: { title?: string; subtitle?: string; notes?: string | null },
 ): Promise<void> {
   const canvas = await renderRoomMapCanvas(imageSrc, entries);
   const W = canvas.width;
   const H = canvas.height;
 
-  // PDF A4 paysage : titre + plan
+  // PDF A4 paysage (8 sept 2026) : plan à gauche + colonne récap à droite
+  // (chambres 1-11 avec typologie, sets de lits à préparer, notes du séjour).
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pageW = 297;
   const pageH = 210;
   const margin = 10;
   const headerH = 16;
+  const SIDEBAR_W = 76;
+  const GAP = 6;
+  const OLIVE: [number, number, number] = [74, 90, 58];
+  const GREY: [number, number, number] = [110, 116, 107];
+  const INK: [number, number, number] = [40, 42, 38];
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.setTextColor(74, 90, 58);
+  doc.setTextColor(...OLIVE);
   doc.text(opts?.title ?? 'Quinta do Amor — Room map', margin, margin + 6);
   if (opts?.subtitle) {
     doc.setFont('helvetica', 'normal');
@@ -184,14 +190,91 @@ export async function downloadRoomMapPdf(
     doc.text(opts.subtitle, margin, margin + 12);
   }
 
-  const availW = pageW - margin * 2;
+  // ---- plan (zone de gauche)
+  const availW = pageW - margin * 2 - SIDEBAR_W - GAP;
   const availH = pageH - margin * 2 - headerH;
   const scale = Math.min(availW / W, availH / H);
   const drawW = W * scale;
   const drawH = H * scale;
-  const dx = (pageW - drawW) / 2;
+  const dx = margin + (availW - drawW) / 2;
   const dy = margin + headerH + (availH - drawH) / 2;
-
   doc.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', dx, dy, drawW, drawH);
+
+  // ---- colonne récap (droite)
+  const byRoom = new Map(entries.map((e) => [e.roomId, e]));
+  const bedLabel = (t?: 'king' | 'twin') => (t === 'twin' ? 'Twin beds' : t === 'king' ? 'King bed' : '—');
+  const sx = pageW - margin - SIDEBAR_W;
+  let sy = margin + headerH + 2;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...OLIVE);
+  doc.text('ROOMS', sx, sy);
+  sy += 1.6;
+  doc.setDrawColor(...OLIVE);
+  doc.setLineWidth(0.4);
+  doc.line(sx, sy, sx + SIDEBAR_W, sy);
+  sy += 5;
+
+  for (let id = 1; id <= 11; id++) {
+    const e = byRoom.get(id);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...(e ? INK : GREY));
+    doc.text(String(id), sx + (id < 10 ? 1.6 : 0), sy);
+    doc.setFont('helvetica', 'normal');
+    if (!e) {
+      doc.setTextColor(...GREY);
+      doc.text('not in this plan', sx + 7, sy);
+    } else {
+      doc.setTextColor(...INK);
+      doc.text(bedLabel(e.bedType), sx + 7, sy);
+      const n = e.guests.length;
+      doc.setTextColor(...GREY);
+      doc.text(n ? `· ${n} guest${n > 1 ? 's' : ''}` : '· empty', sx + 27, sy);
+    }
+    sy += 5.4;
+  }
+
+  // ---- sets de lits : chambres occupées uniquement — king/queen = 1 set
+  // double ; twins = 1 set simple PAR guest (max 2).
+  const occupied = entries.filter((e) => e.guests.length > 0);
+  const doubles = occupied.filter((e) => e.bedType !== 'twin').length;
+  const singles = occupied
+    .filter((e) => e.bedType === 'twin')
+    .reduce((s, e) => s + Math.min(e.guests.length, 2), 0);
+  sy += 2;
+  doc.setFillColor(245, 243, 236);
+  doc.roundedRect(sx, sy - 4, SIDEBAR_W, 13, 2, 2, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(...OLIVE);
+  doc.text('BED SETS TO PREPARE', sx + 3, sy);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(...INK);
+  doc.text(`${doubles} double bed set${doubles === 1 ? '' : 's'}  ·  ${singles} single bed set${singles === 1 ? '' : 's'}`, sx + 3, sy + 5.4);
+  sy += 15;
+
+  // ---- notes du séjour (room setup remarks), en bas de la colonne
+  const notes = (opts?.notes ?? '').trim();
+  if (notes) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...OLIVE);
+    doc.text('NOTES', sx, sy);
+    sy += 1.6;
+    doc.line(sx, sy, sx + SIDEBAR_W, sy);
+    sy += 4.6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...INK);
+    const lines: string[] = doc.splitTextToSize(notes, SIDEBAR_W);
+    const maxLines = Math.max(0, Math.floor((pageH - margin - sy) / 4));
+    const shown = lines.slice(0, maxLines);
+    if (lines.length > maxLines && shown.length > 0) shown[shown.length - 1] += ' …';
+    doc.text(shown, sx, sy, { lineHeightFactor: 1.25 });
+  }
+
   doc.save('quinta-do-amor-room-map.pdf');
 }

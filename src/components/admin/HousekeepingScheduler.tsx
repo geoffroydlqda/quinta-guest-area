@@ -203,6 +203,7 @@ function RoomPlanInline({ booking, plan }: { booking: HkBooking; plan: HkRoomPla
     downloadRoomMapPdf(roomsArrangement, plan.entries, {
       title: `Quinta do Amor — Room map — ${booking.name}`,
       subtitle: `${fmtDY(booking.check_in_date)} → ${fmtDY(booking.check_out_date)} · ${plan.guestsPlaced} guests placed`,
+      notes: plan.remarks,
     });
 
   return (
