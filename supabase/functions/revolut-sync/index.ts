@@ -51,10 +51,15 @@ async function internalValue(key: string): Promise<string | null> {
   return (data?.value as Record<string, string> | null)?.[key] ?? null;
 }
 
+// ⚠️ INCIDENT 10 sept 2026 : l'ancienne version lisait tout l'objet puis le
+// réécrivait — une lecture en échec transitoire renvoyait null et l'update
+// écrasait TOUTES les clés internes (cron_key, moloni, stripe, revolut,
+// github). Désormais : merge jsonb ATOMIQUE côté SQL (set_internal_value),
+// et on remonte l'erreur au lieu d'écrire quoi que ce soit en cas d'échec.
+// Ne JAMAIS revenir à un read-modify-write ici.
 async function setInternalValue(key: string, value: string) {
-  const { data } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
-  const v = { ...((data?.value as Record<string, unknown>) ?? {}), [key]: value };
-  await admin.from("app_settings").update({ value: v }).eq("key", "internal");
+  const { error } = await admin.rpc("set_internal_value", { k: key, v: value });
+  if (error) throw new Error(`set_internal_value(${key}): ${error.message}`);
 }
 
 async function isAdminEmailDb(email?: string | null): Promise<boolean> {

@@ -2425,6 +2425,15 @@ function InstallmentForm({
     setLines((arr) => arr.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const removeLine = (i: number) => setLines((arr) => arr.filter((_, j) => j !== i));
 
+  // Ligne LIBRE (10 sept 2026, demande Geoffroy) : qty × prix unitaire sans
+  // passer par le catalogue — le montant du paiement se calcule tout seul et
+  // la fatura Moloni + le pro forma détaillent la ligne (ex : 24 × Lunch).
+  const addCustomLine = () =>
+    setLines((arr) => [...arr, {
+      product_id: null, name: arr.length === 0 ? label.trim() : "", qty: 1, unit_price: 0,
+      vat: isCash ? 0 : (category === "catering" ? chosenVat : category === "extra" ? chosenVat : 23),
+    }]);
+
   // Remise à l'intérieur du paiement : une ligne à prix négatif, déduite du
   // total (et affichée telle quelle dans le pro forma joint à l'email).
   const addDiscountLine = () =>
@@ -2537,10 +2546,12 @@ function InstallmentForm({
         </div>
       )}
 
-      {/* Lignes produits — sélection depuis le catalogue (onglet Products) */}
-      {(products.length > 0 || lines.length > 0) && (
+      {/* Lignes produits — catalogue (onglet Products) OU lignes libres
+          qty × prix. Toujours visible : la ligne libre ne dépend pas du
+          catalogue (10 sept 2026). */}
+      {category !== "discount" && (
         <div className="space-y-1.5">
-          <div className="text-xs text-muted-foreground">Products (optional)</div>
+          <div className="text-xs text-muted-foreground">Lines — qty × unit price (optional, shown on the invoice)</div>
           {lines.map((ln, i) => (
             <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-background/60 px-2 py-1.5">
               <Input value={ln.name} onChange={(e) => patchLine(i, { name: e.target.value })}
@@ -2566,7 +2577,13 @@ function InstallmentForm({
               </button>
             </div>
           ))}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+          <button type="button" onClick={addCustomLine}
+            className="h-8 rounded-md border border-dashed border-input bg-background px-2 text-xs text-muted-foreground hover:text-foreground"
+            title="Free line: quantity × unit price (incl. VAT) — the payment amount is computed automatically and the line appears on the invoice">
+            + Line (qty × price)
+          </button>
+          {products.length > 0 && (
           <select
             className="h-8 rounded-md border border-dashed border-input bg-background px-2 text-xs text-muted-foreground"
             value=""
@@ -2586,6 +2603,7 @@ function InstallmentForm({
                 </optgroup>
               ))}
           </select>
+          )}
           {lines.length > 0 && category !== "discount" && (
             <button type="button" onClick={addDiscountLine}
               className="h-8 rounded-md border border-dashed border-input bg-background px-2 text-xs text-muted-foreground hover:text-foreground"
@@ -2596,7 +2614,7 @@ function InstallmentForm({
           </div>
           {lines.length > 0 && (
             <div className="text-[11px] text-muted-foreground">
-              Amount is set from the lines (still editable) — VAT is applied per line. Use a negative unit price for a discount.
+              Amount = Σ qty × unit price (still editable) — VAT per line. These lines appear on the Moloni invoice and the pro forma. Negative unit price = discount.
             </div>
           )}
         </div>

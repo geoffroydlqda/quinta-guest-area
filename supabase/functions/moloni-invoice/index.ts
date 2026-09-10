@@ -103,15 +103,18 @@ const fmtDatePt = (d: string) =>
 const TAX_IDS: Record<number, number> = { 23: 22469, 13: 1924, 6: 1925 };
 const DEFAULT_RATE: Record<string, number> = { rental: 23, catering: 13, extra: 23 };
 
+type ProductLine = { name: string; qty: number; unit_price: number; vat: number };
+
 type InstRow = {
   id: string; booking_id: string; label: string; amount_due: number;
   amount_excl_vat: number | null; category: string | null; status: string;
   is_cash: boolean | null; moloni_document_id: number | null; invoice_number: string | null;
   invoice_file_url: string | null; vat_rate: number | null; stripe_session_id: string | null;
   paid_usd: number | null; usd_rate: number | null; notes: string | null;
+  product_lines: ProductLine[] | null;
 };
 
-const INST_COLS = "id,booking_id,label,amount_due,amount_excl_vat,category,status,is_cash,moloni_document_id,invoice_number,invoice_file_url,vat_rate,stripe_session_id,paid_bank_tx_id,paid_usd,usd_rate,notes";
+const INST_COLS = "id,booking_id,label,amount_due,amount_excl_vat,category,status,is_cash,moloni_document_id,invoice_number,invoice_file_url,vat_rate,stripe_session_id,paid_bank_tx_id,paid_usd,usd_rate,notes,product_lines";
 
 function rateFor(inst: InstRow): number {
   const r = inst.vat_rate ?? DEFAULT_RATE[inst.category ?? "rental"] ?? 23;
@@ -313,12 +316,41 @@ async function generateInvoice(installmentId: string) {
   const fmtEurInt = (n: number) =>
     `${Number.isInteger(n) ? n.toLocaleString("en-GB") : n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€`;
 
-  const products = group.map((g, idx) => {
+  // deno-lint-ignore no-explicit-any
+  const products: any[] = group.flatMap((g) => {
     // bar : produit dédié si configuré (app_settings.moloni.products.bar), sinon extra
     const productId = cfg.products[g.category ?? "rental"]
       ?? (g.category === "bar" ? cfg.products["extra"] : undefined)
       ?? cfg.products["rental"];
     if (!productId) throw new Error(`No Moloni product configured for category ${g.category}`);
+
+    // Échéance détaillée en lignes produits (qty × prix unitaire TTC, saisies
+    // dans le formulaire de paiement) : UNE ligne Moloni par ligne produit —
+    // la fatura devient lisible pour le client (demande Geoffroy, 10 sept
+    // 2026). Si le montant TTC a été ajusté à la main, les prix unitaires
+    // sont mis à l'échelle au prorata (même logique que le pro forma PDF).
+    const pLines = (Array.isArray(g.product_lines) ? g.product_lines : [])
+      .filter((l) => Number(l.qty) && Number(l.unit_price) !== 0);
+    if (pLines.length > 0) {
+      const linesSum = pLines.reduce((s, l) => s + Number(l.qty) * Number(l.unit_price), 0);
+      const ratio = linesSum !== 0 ? Number(g.amount_due) / linesSum : 1;
+      return pLines.map((l) => {
+        const vraw = Number(l.vat ?? 0);
+        const rate = vraw === 0 ? 0 : (TAX_IDS[vraw] ? vraw : 23);
+        const unitTtc = Number(l.unit_price) * ratio;
+        return {
+          productId,
+          qty: Number(l.qty),
+          ordering: 0, // renuméroté après
+          price: Math.round((unitTtc / (1 + rate / 100)) * 1e6) / 1e6,
+          summary: `${booking.retreat_name || clientName} — ${l.name || g.label || g.category}`,
+          ...(rate === 0
+            ? { taxes: [], exemptionReason: "M19" }
+            : { taxes: [{ taxId: TAX_IDS[rate], ordering: 1, cumulative: false }] }),
+        };
+      });
+    }
+
     const rate = rateFor(g);
     const net = netHt(g);
     const isRental = (g.category ?? "rental") === "rental";
@@ -334,20 +366,22 @@ async function generateInvoice(installmentId: string) {
     const desc = isRental && pct !== null
       ? `${pct}% of ${fmtEurInt(rentalTotalTtc)}${note ? ` · ${note}` : ""}`
       : (note || g.label || g.category);
-    return {
+    return [{
       productId,
       qty: 1,
-      ordering: idx + 1,
+      ordering: 0, // renuméroté après
       price: Math.round(price * 1e6) / 1e6,
       ...(d > 0 ? { discount: d } : {}),
-      summary: `${booking.retreat_name || clientName} — ${desc}${idx === 0 ? stayLine : ""}`,
+      summary: `${booking.retreat_name || clientName} — ${desc}`,
       // rate 0 -> ligne isenta : pas de taxe + motif d'isenção (M19, comme la
       // fatura n°11 saisie manuellement dans Moloni). Sinon taxe normale.
       ...(rate === 0
         ? { taxes: [], exemptionReason: "M19" }
         : { taxes: [{ taxId: TAX_IDS[rate], ordering: 1, cumulative: false }] }),
-    };
+    }];
   });
+  products.forEach((p, i) => { p.ordering = i + 1; });
+  if (products.length > 0) products[0].summary += stayLine;
 
   // Note de bas de document (demande Geoffroy, 20 août 2026) :
   // - facture d'acompte rental -> solde restant + échéance
