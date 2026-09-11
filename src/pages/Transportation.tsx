@@ -531,11 +531,15 @@ const Transportation = () => {
                   {/* Passengers — la taille/le nombre de véhicules est choisi par nos soins */}
                   <div>
                     <Label>Number of passengers <span className="text-destructive">*</span></Label>
+                    {/* Champ vidable (11 sept 2026) : l'ancien `|| 1` réinjectait
+                        1 à chaque frappe — impossible d'effacer sur mobile.
+                        Vide = 0 (affiché vide), bloqué par la validation. */}
                     <Input
                       type="number"
                       min={1}
-                      value={newTrip.passengers_count}
-                      onChange={(e) => setNewTrip(prev => ({ ...prev, passengers_count: parseInt(e.target.value) || 1 }))}
+                      inputMode="numeric"
+                      value={newTrip.passengers_count || ''}
+                      onChange={(e) => setNewTrip(prev => ({ ...prev, passengers_count: parseInt(e.target.value) || 0 }))}
                       className={validationErrors.includes('passengers_count') ? 'border-destructive' : ''}
                     />
                     <p className="text-xs text-muted-foreground mt-1">
@@ -996,11 +1000,13 @@ function EditTripForm({
 
         <div>
           <Label>Number of passengers <span className="text-destructive">*</span></Label>
+          {/* Vidable — même fix que le formulaire de création (11 sept 2026) */}
           <Input
             type="number"
             min={1}
-            value={form.passengers_count}
-            onChange={(e) => setForm(p => ({ ...p, passengers_count: parseInt(e.target.value) || 1 }))}
+            inputMode="numeric"
+            value={form.passengers_count || ''}
+            onChange={(e) => setForm(p => ({ ...p, passengers_count: parseInt(e.target.value) || 0 }))}
             className={validationErrors.includes('passengers_count') ? 'border-destructive' : ''}
           />
           <p className="text-xs text-muted-foreground mt-1">
