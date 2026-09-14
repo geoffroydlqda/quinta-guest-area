@@ -114,6 +114,17 @@ Toute modification de schéma passe par un fichier SQL dans `supabase/migrations
 
 ⚠️ Elles ne se déploient PAS via le push GitHub. Depuis que les connecteurs MCP Supabase/Vercel sont branchés sur la session, utiliser `mcp__Supabase__deploy_edge_function` (et `apply_migration` pour le SQL). Si une fonction est modifiée dans le repo, penser à la redéployer. Certaines ont `verify_jwt = false` dans `supabase/config.toml` (dont `payment-reminders`, appelée par le cron avec `x-cron-key`).
 
+## Conditions générales (T&C) acceptées au paiement
+
+Deux endroits, à ne plus jamais rechercher (galère vécue deux fois — août puis sept 2026) :
+
+1. **Le PDF** : Supabase Storage, bucket public `legal` → `quinta-do-amor-general-conditions-v1.2.pdf` (uploadé le 20 août 2026 via l'Edge Function dédiée `legal-upload`). URL publique : `https://fnlgeeuohvethmfpsxpf.supabase.co/storage/v1/object/public/legal/quinta-do-amor-general-conditions-v1.2.pdf`.
+2. **Le lien de la case à cocher Stripe** (celui que le guest voit au checkout) : configuré dans le **Stripe Dashboard → Settings → Business → Public details → Terms of service**. ⚠️ Ce réglage n'apparaît NI dans le code, NI via l'API Stripe (`/v1/account` ne l'expose pas), NI dans le HTML statique du checkout — c'est pour ça qu'il est introuvable si on ne le sait pas.
+
+Le code (`stripe-checkout`) se contente d'exiger l'acceptation (`consent_collection[terms_of_service]=required`, avec retry sans consent si Stripe refuse) ; chaque acceptation est archivée dans `terms_acceptances` par `stripe-webhook` (migration `20260820140000`).
+
+**Pour publier une nouvelle version (v1.3…)** : uploader le nouveau PDF dans le bucket `legal` sous un NOUVEAU nom (ne jamais écraser l'ancien — il fait preuve de ce que les guests précédents ont accepté), puis mettre à jour l'URL dans le Stripe Dashboard au même endroit.
+
 ## Authentification
 
 - Email + mot de passe : natif Supabase (`signInWithPassword` / `signUp` avec first_name/last_name en metadata)
