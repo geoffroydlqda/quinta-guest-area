@@ -1151,8 +1151,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       {/* Sous-onglets + année */}
       <div className="flex items-center gap-2 flex-wrap">
         {(mode === "analytics"
-          ? ([["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["report", "Investor update", Mail]] as const)
-          : ([["tx", "Transactions", ReceiptText], ["box", "Cash box", Banknote], ["margins", "Event margins", PercentIcon]] as const)
+          ? ([["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["margins", "Event margins", PercentIcon], ["report", "Investor update", Mail]] as const)
+          : ([["tx", "Transactions", ReceiptText], ["box", "Cash box", Banknote]] as const)
         ).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm border transition-colors ${
