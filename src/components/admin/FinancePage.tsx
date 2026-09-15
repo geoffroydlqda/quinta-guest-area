@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote, Percent as PercentIcon } from "lucide-react";
 import { EventMarginsTab } from "@/components/admin/EventMarginsTab";
 import { EventPicker } from "@/components/admin/EventPicker";
+import { CategoryPicker } from "@/components/admin/CategoryPicker";
 
 /**
  * Onglet Finance (4 août 2026) — phase 1, alimentée par import CSV Revolut
@@ -1134,16 +1135,10 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     load();
   };
 
+  // Sélecteur de catégorie avec recherche (15 sept 2026) — même UX que
+  // l'EventPicker, demandé par Geoffroy pour la liste des transactions.
   const CategorySelect = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
-    <select className="h-7 rounded-md border border-input bg-background px-1.5 text-xs max-w-[230px]"
-      value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">Category…</option>
-      {FIN_CATEGORIES.map((g) => (
-        <optgroup key={g.group} label={g.group}>
-          {g.items.map((c) => <option key={c} value={c}>{c}</option>)}
-        </optgroup>
-      ))}
-    </select>
+    <CategoryPicker groups={FIN_CATEGORIES} value={value} onChange={onChange} className="w-[230px]" />
   );
 
   return (
@@ -1199,16 +1194,10 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
               events={realBookings.map((b) => ({ id: b.id, name: b.name, checkIn: b.check_in_date, checkOut: b.check_out_date }))}
               value={eventFilter} onChange={setEventFilter}
               pastOnly={false} allowNone noneLabel="All events" placeholder="All events" />
-            <select className="h-7 rounded-full border border-border bg-card px-2.5 text-xs max-w-[210px]"
-              value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
-              <option value="">All categories</option>
-              <option value="__none__">Uncategorised expenses</option>
-              {FIN_CATEGORIES.map((g) => (
-                <optgroup key={g.group} label={g.group}>
-                  {g.items.map((c) => <option key={c} value={c}>{c}</option>)}
-                </optgroup>
-              ))}
-            </select>
+            <CategoryPicker className="w-[190px]" pill
+              groups={FIN_CATEGORIES} value={catFilter} onChange={setCatFilter}
+              allowNone noneLabel="All categories" placeholder="All categories"
+              extra={[{ value: "__none__", label: "Uncategorised expenses" }]} />
             {(monthFilter || eventFilter || catFilter || search) && (
               <button type="button" className="text-xs text-muted-foreground hover:underline"
                 onClick={() => { setMonthFilter(""); setEventFilter(""); setCatFilter(""); setSearch(""); }}>
