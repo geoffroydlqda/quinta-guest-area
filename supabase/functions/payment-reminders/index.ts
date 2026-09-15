@@ -270,6 +270,7 @@ serve(async (req) => {
         await admin.from("reminder_log").insert({
           type: "payment_manual", installment_id: c.installment_id, booking_id: c.booking_id,
           recipient: c.recipient, subject, status: "sent", body_html: manualHtml,
+          resend_id: (res as { data?: { id?: string } })?.data?.id ?? null,
         });
         return json({ mode: "manual", sent: 1, recipient: c.recipient });
       } catch (e) {

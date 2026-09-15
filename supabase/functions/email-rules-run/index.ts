@@ -365,6 +365,7 @@ async function sendMatch(
     status: errMsg ? "error" : "sent",
     error: errMsg,
     body_html: html,
+    resend_id: errMsg ? null : ((sent as { data?: { id?: string } })?.data?.id ?? null),
     dedup_key: errMsg ? `${m.dedupKey}|err:${Date.now()}` : m.dedupKey,
   });
   if (logErr) console.error("[email-rules] log insert failed:", logErr.message);

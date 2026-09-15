@@ -199,6 +199,7 @@ serve(async (req) => {
 
     await admin.from("reminder_log").insert({
       type: "invitation", booking_id, recipient: booking.email, subject, status: "sent", body_html: html,
+      resend_id: (res as { data?: { id?: string } })?.data?.id ?? null,
     });
 
     return json({ ok: true, sent_to: booking.email });

@@ -26,6 +26,7 @@ import { openKitchenSheet } from "@/lib/kitchenSheet";
 import roomsArrangement from "@/assets/rooms-arrangement_floor-plan.jpg";
 import { AutomatedEmailsCard } from "@/components/admin/AutomatedEmailsCard";
 import { EmailSnippetsCard, ManualEmailTemplatesCard } from "@/components/admin/ManualEmailTemplatesCard";
+import { SentEmailsCard } from "@/components/admin/SentEmailsCard";
 import { HonestyBarCard } from "@/components/admin/HonestyBarCard";
 import { HousekeepingScheduler } from "@/components/admin/HousekeepingScheduler";
 import { FinancePage } from "@/components/admin/FinancePage";
@@ -3408,14 +3409,15 @@ function InlineNameCell({
 }
 
 
-// Onglet Emails : trois capsules — règles automatiques / templates (TOUS les
-// emails guests, 4 sept 2026) / phrases (les blocs composés dynamiquement).
+// Onglet Emails : quatre capsules — règles automatiques / templates (TOUS les
+// emails guests, 4 sept 2026) / phrases (les blocs composés dynamiquement) /
+// historique global des envois avec statut d'ouverture (15 sept 2026).
 function EmailsView() {
-  const [sub, setSub] = useState<"auto" | "manual" | "phrases">("auto");
+  const [sub, setSub] = useState<"auto" | "manual" | "phrases" | "sent">("auto");
   return (
     <div className="space-y-4">
-      <div className="flex gap-1.5">
-        {([["auto", "Automatic emails"], ["manual", "Templates"], ["phrases", "Phrases"]] as const).map(([k, label]) => (
+      <div className="flex flex-wrap gap-1.5">
+        {([["auto", "Automatic emails"], ["manual", "Templates"], ["phrases", "Phrases"], ["sent", "Sent"]] as const).map(([k, label]) => (
           <button key={k} type="button" onClick={() => setSub(k)}
             className={`rounded-full px-4 py-1.5 text-xs font-semibold border ${sub === k ? "bg-foreground text-background border-foreground" : "bg-card text-muted-foreground border-border hover:text-foreground"}`}>
             {label}
@@ -3440,6 +3442,7 @@ function EmailsView() {
       )}
       {sub === "manual" && <ManualEmailTemplatesCard />}
       {sub === "phrases" && <EmailSnippetsCard />}
+      {sub === "sent" && <SentEmailsCard />}
     </div>
   );
 }

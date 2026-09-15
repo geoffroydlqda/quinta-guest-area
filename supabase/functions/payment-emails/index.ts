@@ -821,6 +821,7 @@ ${paras(parsed.data.body_bottom ?? "")}
       type: kind === "request" ? "payment_request" : "payment_receipt",
       installment_id: i.id, booking_id: booking.id, recipient: to, subject,
       status: "sent", error: null, body_html: html,
+      resend_id: (sent as { data?: { id?: string } }).data?.id ?? null,
     })));
     if (logErr) console.error("reminder_log insert failed (email WAS sent):", logErr.message);
 
