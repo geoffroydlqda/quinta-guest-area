@@ -246,6 +246,11 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // sidebar — "Accounting" (Transactions, Cash box, Event margins) et
   // "Analytics" (P&L, Cash flow, Investor update). Receipts = page à part.
   const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "box" | "margins" | "report">(mode === "analytics" ? "pnl" : "tx");
+  // Chaque onglet sidebar ouvre sur SA capsule par défaut (15 sept 2026,
+  // demande Geoffroy) : Analytics -> P&L, Accounting -> Transactions. Sans ce
+  // reset, la capsule active de l'autre mode restait sélectionnée (et Event
+  // margins semblait avoir disparu).
+  useEffect(() => { setTab(mode === "analytics" ? "pnl" : "tx"); }, [mode]);
   const [txs, setTxs] = useState<FinTx[]>([]);
   const [rules, setRules] = useState<FinRule[]>([]);
   const [loading, setLoading] = useState(true);

@@ -73,6 +73,9 @@ export function EventMarginsTab({ year }: { year: string }) {
   const [savingKeys, setSavingKeys] = useState(false);
   const [showMethod, setShowMethod] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Deux vues (15 sept 2026, demande Geoffroy) : "By product" = ses formules
+  // simples par produit (rental / catering / extras), "Detailed" = M1/M2/M3.
+  const [view, setView] = useState<"products" | "detail">("products");
 
   useEffect(() => {
     (async () => {
@@ -201,6 +204,77 @@ export function EventMarginsTab({ year }: { year: string }) {
     };
   }, [bookings, insts, txs, keys]);
 
+  // ---- Vue "par produit" (15 sept 2026) — formules validées avec Geoffroy :
+  // Rental  = prix rental HT (remises déduites) − coûts liés à l'event (hors
+  //           catering/transport) − coûts fixes de l'année au prorata des
+  //           JOURS − cleaning saison ÷ nb d'events − gardening saison ÷ nb
+  //           d'events (cleaning coûte pareil pour 4 ou 8 jours ; le gardening
+  //           doit être fait quoi qu'il arrive → répartition PAR ÉVÉNEMENT).
+  // Catering = revenu catering + bar HT − food & staff liés à l'event − part
+  //           du pool food/staff non rattaché (au prorata du revenu catering).
+  // Extras  = revenu extras/transport HT − Guest transport lié à l'event.
+  const productModel = useMemo(() => {
+    const ht = (t: TxRow) => Math.abs(t.amount_net ?? t.amount);
+    const events = bookings.map((b) => {
+      const nights = b.check_in_date && b.check_out_date
+        ? Math.max(0, Math.round((new Date(b.check_out_date).getTime() - new Date(b.check_in_date).getTime()) / 86400000))
+        : 0;
+      return {
+        b,
+        name: b.retreat_name || `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim() || "—",
+        nights,
+        days: Math.max(nights, 1),
+      };
+    });
+    const totalDays = events.reduce((s, e) => s + e.days, 0);
+    const nEvents = events.length;
+    const unlinked = txs.filter((t) => !t.booking_id);
+    const cleaningPool = unlinked.filter((t) => CLEANING_CATS.includes(t.category ?? "")).reduce((s, t) => s + ht(t), 0);
+    const gardeningPool = unlinked.filter((t) => t.category === "Gardening (seasonal)").reduce((s, t) => s + ht(t), 0);
+    const cateringPool = unlinked.filter((t) => CATERING_COST_CATS.includes(t.category ?? "")).reduce((s, t) => s + ht(t), 0);
+    // Hors coûts fixes : capex amortissable (Improvement works) et dépenses
+    // payées pour le compte de Surreal (refacturées — pas un coût d'OHM).
+    const FIXED_EXCLUDED = new Set(["Paid on behalf of Surreal (property)", "Improvement works (leasehold)"]);
+    const fixedPool = unlinked.reduce((s, t) => {
+      const c = t.category ?? "";
+      if (CLEANING_CATS.includes(c) || c === "Gardening (seasonal)" || CATERING_COST_CATS.includes(c) || FIXED_EXCLUDED.has(c)) return s;
+      return s + ht(t);
+    }, 0);
+
+    const instHt = (i: InstRow) => Number(i.amount_excl_vat ?? i.amount_due);
+    const revCatOf = (id: string) =>
+      insts.filter((i) => i.booking_id === id && ["catering", "bar"].includes(i.category ?? "")).reduce((s, i) => s + instHt(i), 0);
+    const totalRevCat = events.reduce((s, e) => s + revCatOf(e.b.id), 0);
+
+    const rows = events.map((e) => {
+      const bInsts = insts.filter((i) => i.booking_id === e.b.id);
+      const revRental = bInsts.filter((i) => ["rental", "discount"].includes(i.category ?? "")).reduce((s, i) => s + instHt(i), 0);
+      const revCat = revCatOf(e.b.id);
+      const revExtra = bInsts.filter((i) => !["rental", "discount", "catering", "bar"].includes(i.category ?? "")).reduce((s, i) => s + instHt(i), 0);
+
+      const linked = txs.filter((t) => t.booking_id === e.b.id);
+      const linkedCatering = linked.filter((t) => CATERING_COST_CATS.includes(t.category ?? "")).reduce((s, t) => s + ht(t), 0);
+      const linkedTransport = linked.filter((t) => t.category === "Guest transport").reduce((s, t) => s + ht(t), 0);
+      const linkedVenue = linked.filter((t) => !CATERING_COST_CATS.includes(t.category ?? "") && t.category !== "Guest transport").reduce((s, t) => s + ht(t), 0);
+
+      const fixedAlloc = totalDays > 0 ? fixedPool * (e.days / totalDays) : 0;
+      const cleaningAlloc = nEvents > 0 ? cleaningPool / nEvents : 0;
+      const gardeningAlloc = nEvents > 0 ? gardeningPool / nEvents : 0;
+      const cateringPoolAlloc = totalRevCat > 0 ? cateringPool * (revCat / totalRevCat) : 0;
+
+      const rentalMargin = revRental - linkedVenue - fixedAlloc - cleaningAlloc - gardeningAlloc;
+      const cateringMargin = revCat - linkedCatering - cateringPoolAlloc;
+      const extrasMargin = revExtra - linkedTransport;
+      return {
+        ...e, revRental, revCat, revExtra, linkedCatering, linkedTransport, linkedVenue,
+        fixedAlloc, cleaningAlloc, gardeningAlloc, cateringPoolAlloc,
+        rentalMargin, cateringMargin, extrasMargin,
+        total: rentalMargin + cateringMargin + extrasMargin,
+      };
+    });
+    return { rows, totalDays, nEvents, cleaningPool, gardeningPool, cateringPool, fixedPool, totalRevCat };
+  }, [bookings, insts, txs]);
+
   if (loading) return <div className="py-10 text-center"><Loader2 className="w-5 h-5 animate-spin inline text-muted-foreground" /></div>;
 
   const K = ({ field, step = 1, w = "w-16" }: { field: keyof MarginKeys; step?: number; w?: string }) => (
@@ -210,8 +284,130 @@ export function EventMarginsTab({ year }: { year: string }) {
   );
   const keysDirty = JSON.stringify(keys) !== JSON.stringify(keysDraft);
 
+  const pm = productModel;
+
   return (
     <div className="space-y-4">
+      {/* Deux vues : par produit (formules simples) / détaillée M1-M2-M3 */}
+      <div className="flex gap-1.5">
+        {([["products", "By product"], ["detail", "Detailed (M1 / M2 / M3)"]] as const).map(([k, label]) => (
+          <button key={k} type="button" onClick={() => setView(k)}
+            className={`rounded-full px-4 py-1.5 text-xs font-semibold border ${view === k ? "bg-foreground text-background border-foreground" : "bg-card text-muted-foreground border-border hover:text-foreground"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "products" && (
+        <>
+          {/* Méthode — les règles de Geoffroy, affichées en clair */}
+          <div className="rounded-2xl border border-border bg-card shadow-sm px-4 py-3.5 text-xs text-muted-foreground space-y-2 leading-relaxed">
+            <p>
+              <span className="font-semibold text-foreground">Rental</span> — rental revenue excl. VAT (discounts deducted)
+              − costs linked to this event (cleaning, supplies, maintenance…)
+              − fixed costs of {year} ({fmt(pm.fixedPool)}) shared <span className="text-foreground">pro-rata event days</span> ({pm.totalDays} days total)
+              − season cleaning pool ({fmt(pm.cleaningPool)}) split <span className="text-foreground">equally per event</span> (cleaning costs the same for a 4-day or 8-day event)
+              − seasonal gardening ({fmt(pm.gardeningPool)}) split <span className="text-foreground">equally per event</span> (it has to happen regardless).
+            </p>
+            <p>
+              <span className="font-semibold text-foreground">Catering</span> — catering + bar revenue excl. VAT
+              − food &amp; staff costs linked to this event
+              {pm.cateringPool > 0.005 && <> − a share of the unassigned food/staff pool ({fmt(pm.cateringPool)}, split by catering revenue — link those lines to their event to sharpen this)</>}.
+            </p>
+            <p>
+              <span className="font-semibold text-foreground">Extras</span> — transport &amp; extras revenue − Guest transport costs linked to the event.
+            </p>
+            <p className="text-[11px]">
+              Fixed costs exclude "Paid on behalf of Surreal" (re-invoiced) and "Improvement works" (capex).
+              Everything is net of VAT. The more transactions you link to events, the sharper these margins get.
+            </p>
+          </div>
+
+          <div className="overflow-auto rounded-2xl bg-card shadow-sm border border-border/60">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/80">
+                <tr className="text-left">
+                  {["Event", "Days", "Rental margin", "Catering margin", "Extras", "Total", ""].map((h, i) => (
+                    <th key={i} className={`px-3 py-2.5 text-[11px] uppercase tracking-wider font-semibold text-muted-foreground whitespace-nowrap ${i >= 2 ? "text-right" : ""}`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pm.rows.map((r) => {
+                  const open = expanded.has(r.b.id);
+                  return (
+                    <Fragment key={r.b.id}>
+                      <tr className="border-t border-border/60 cursor-pointer hover:bg-muted/30"
+                        onClick={() => setExpanded((s) => { const n = new Set(s); if (open) { n.delete(r.b.id); } else { n.add(r.b.id); } return n; })}>
+                        <td className="px-3 py-2">
+                          <div className="font-medium">{r.name}</div>
+                          <div className="text-[10px] text-muted-foreground capitalize">{(r.b.event_type ?? "").replace("_", " ")}</div>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">{r.nights > 0 ? `${r.nights} n` : "day"}</td>
+                        <td className={`px-3 py-2 text-right whitespace-nowrap font-medium ${r.rentalMargin < 0 ? "text-[#B3261E]" : ""}`}>
+                          {fmt(r.rentalMargin)} <span className="text-[10px] font-normal text-muted-foreground">{pct(r.rentalMargin, r.revRental)}</span>
+                        </td>
+                        <td className={`px-3 py-2 text-right whitespace-nowrap font-medium ${r.cateringMargin < 0 ? "text-[#B3261E]" : ""}`}>
+                          {r.revCat > 0.005 ? <>{fmt(r.cateringMargin)} <span className="text-[10px] font-normal text-muted-foreground">{pct(r.cateringMargin, r.revCat)}</span></> : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          {r.revExtra > 0.005 || r.linkedTransport > 0.005 ? fmt(r.extrasMargin) : "—"}
+                        </td>
+                        <td className={`px-3 py-2 text-right whitespace-nowrap font-semibold ${r.total < 0 ? "text-[#B3261E]" : "text-[#35532A]"}`}>
+                          {fmt(r.total)}
+                        </td>
+                        <td className="px-2 py-2 text-muted-foreground">{open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</td>
+                      </tr>
+                      {open && (
+                        <tr className="border-t border-border/40 bg-muted/20">
+                          <td colSpan={7} className="px-4 py-3">
+                            <div className="grid sm:grid-cols-2 gap-x-8 gap-y-1 text-xs max-w-3xl">
+                              <div className="font-semibold text-[11px] uppercase tracking-wide text-muted-foreground pt-1">Rental</div>
+                              <div className="font-semibold text-[11px] uppercase tracking-wide text-muted-foreground pt-1">Catering</div>
+                              <Detail label="Rental revenue (discounts deducted)" v={r.revRental} />
+                              <Detail label="Catering + bar revenue" v={r.revCat} />
+                              <Detail label="− Costs linked to this event (venue)" v={-r.linkedVenue} />
+                              <Detail label="− Food & staff linked to this event" v={-r.linkedCatering} />
+                              <Detail label={`− Fixed costs: ${r.days}/${pm.totalDays} days of ${fmt(pm.fixedPool)}`} v={-r.fixedAlloc} />
+                              <Detail label={pm.cateringPool > 0.005 ? `− Share of unassigned food/staff pool` : "(all catering costs are linked)"} v={-r.cateringPoolAlloc} />
+                              <Detail label={`− Cleaning: 1/${pm.nEvents} of ${fmt(pm.cleaningPool)}`} v={-r.cleaningAlloc} />
+                              <Detail label="= Catering margin" v={r.cateringMargin} strong />
+                              <Detail label={`− Gardening (seasonal): 1/${pm.nEvents} of ${fmt(pm.gardeningPool)}`} v={-r.gardeningAlloc} />
+                              <div />
+                              <Detail label="= Rental margin" v={r.rentalMargin} strong />
+                              <div />
+                            </div>
+                            {(r.revExtra > 0.005 || r.linkedTransport > 0.005) && (
+                              <div className="mt-2 pt-2 border-t border-border/50 text-xs text-muted-foreground">
+                                Extras: revenue {fmt(r.revExtra)} − Guest transport linked {fmt(r.linkedTransport)} =
+                                <span className="font-semibold text-foreground ml-1">{fmt(r.extrasMargin)}</span>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+                {pm.rows.length > 0 && (
+                  <tr className="border-t-2 border-border bg-muted/40 font-semibold">
+                    <td className="px-3 py-2">Total {year}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{pm.totalDays} d</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">{fmt(pm.rows.reduce((s, r) => s + r.rentalMargin, 0))}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">{fmt(pm.rows.reduce((s, r) => s + r.cateringMargin, 0))}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">{fmt(pm.rows.reduce((s, r) => s + r.extrasMargin, 0))}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap text-[#35532A]">{fmt(pm.rows.reduce((s, r) => s + r.total, 0))}</td>
+                    <td />
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {view === "detail" && (
+      <>
       {/* Méthodologie — toujours visible pour qu'un lecteur comprenne le calcul */}
       <div className="rounded-2xl border border-border bg-card shadow-sm">
         <button type="button" className="w-full flex items-center justify-between px-4 py-3 text-left"
@@ -357,6 +553,8 @@ export function EventMarginsTab({ year }: { year: string }) {
         Margins are net of VAT. Direct costs come from transactions linked to each event in the Transactions tab —
         the more you link, the more accurate M1 gets. Click a row for the full calculation.
       </p>
+      </>
+      )}
     </div>
   );
 }
