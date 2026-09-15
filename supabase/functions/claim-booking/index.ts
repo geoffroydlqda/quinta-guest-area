@@ -93,9 +93,15 @@ serve(async (req) => {
     const bookingId = booking.id;
     // payment_installments retire de la liste : la table n'a pas de colonne
     // user_id (l'update echouait — en silence — a chaque claim, 25 aout 2026).
+    // ⚠️ transportation_requests ajoutee le 15 sept 2026 : son absence
+    // laissait la ligne request au user precedent apres un re-claim -> la page
+    // Transportation du nouveau compte ne voyait rien (RLS par user_id),
+    // tentait de recreer une request et echouait ("Failed to load
+    // transportation data", bug Simone Muller).
     const tablesToReassign = [
       "room_setups",
       "food_plans",
+      "transportation_requests",
       "transportation_trips",
       "transportation_passengers",
       "docs_ack",
