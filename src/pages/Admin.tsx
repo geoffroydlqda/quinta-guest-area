@@ -35,7 +35,7 @@ import { ReceiptsTab } from "@/components/admin/ReceiptsTab";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
 import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass, FlaskConical } from "lucide-react";
-import { calculateTransportationCost } from "@/lib/transportationPricing";
+import { calculateTransportationCost, getEffectiveTripPrice } from "@/lib/transportationPricing";
 import { getDietPricing } from "@/lib/pricing";
 import type { TransportationTrip } from "@/types/guest";
 
@@ -1124,17 +1124,23 @@ function DashboardView({
         ? Number(i.amount_excl_vat)
         : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23)), 0);
     const collected = thisYear.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
-    // Overdue : bookings réels (non-test, non annulés), TOUTES années — une
-    // échéance en retard reste due quelle que soit l'année affichée.
+    // Overdue (15 sept 2026, demande Geoffroy) : le chiffre principal est
+    // scopé à l'année affichée (année de check-in du booking, comme le reste
+    // du dashboard) ; le total TOUTES années reste visible en sous-ligne —
+    // une échéance en retard reste due quelle que soit l'année.
     // Outstanding : scoped à l'année affichée (thisYear).
     const real = installments.filter((i) => bookingById.has(i.booking_id));
-    const overdue = real.filter((i) => i.status !== "paid" && i.due_date && i.due_date < todayIso);
-    const overdueTotal = overdue.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    const overdueAll = real.filter((i) => i.status !== "paid" && i.due_date && i.due_date < todayIso);
+    const overdueAllTotal = overdueAll.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    const overdueYear = overdueAll.filter((i) =>
+      (finBookingById.get(i.booking_id)?.check_in_date || "").startsWith(year));
+    const overdueTotal = overdueYear.reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const outstanding = thisYear.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
 
     return {
       contracted, contractedHt, collected, overdueTotal, outstanding,
-      overdueCount: overdue.length,
+      overdueCount: overdueYear.length,
+      overdueAllTotal, overdueAllCount: overdueAll.length,
     };
   }, [installments, bookingById, finBookingById, todayIso, year]);
 
@@ -1362,12 +1368,12 @@ function DashboardView({
             chip="bg-[#EDF5FF] text-[#4a86e0]"
           />
           <Tile
-            label="Overdue"
+            label={`Overdue ${year}`}
             value={fmtMoney(kpis.overdueTotal)}
-            sub={`${kpis.overdueCount} payment${kpis.overdueCount === 1 ? "" : "s"} late · ${fmtMoney(kpis.outstanding)} outstanding total`}
-            tone={kpis.overdueTotal > 0 ? "danger" : undefined}
-            icon={kpis.overdueTotal > 0 ? <AlertTriangle className="w-4 h-4" /> : <Hourglass className="w-4 h-4" />}
-            chip={kpis.overdueTotal > 0 ? "bg-[#FFEAE7] text-[#F36F63]" : "bg-[#FFF8E4] text-[#b8912b]"}
+            sub={`${kpis.overdueCount} payment${kpis.overdueCount === 1 ? "" : "s"} late this year · all years: ${fmtMoney(kpis.overdueAllTotal)} (${kpis.overdueAllCount}) · ${fmtMoney(kpis.outstanding)} outstanding`}
+            tone={kpis.overdueAllTotal > 0 ? "danger" : undefined}
+            icon={kpis.overdueAllTotal > 0 ? <AlertTriangle className="w-4 h-4" /> : <Hourglass className="w-4 h-4" />}
+            chip={kpis.overdueAllTotal > 0 ? "bg-[#FFEAE7] text-[#F36F63]" : "bg-[#FFF8E4] text-[#b8912b]"}
           />
           <Tile
             label={`Season occupancy · ${year}`}
@@ -2694,6 +2700,40 @@ function TransportView({ data, guestName, onTripPatched, onReload, onInvalidateT
                   <span>{g.cost.totalTrips} trip{g.cost.totalTrips === 1 ? "" : "s"}</span>
                   {hasSubtotal && <span className="font-medium text-foreground">Total: €{g.cost.subtotal}</span>}
                   {g.cost.customOfferCount > 0 && <span>{g.cost.customOfferCount} custom offer{g.cost.customOfferCount === 1 ? "" : "s"}</span>}
+                  {/* Résumé prêt à coller (15 sept 2026) : une ligne par trip
+                      avec son prix, + total — pour prévenir la retreat leader
+                      que les prix sont à jour, ou récapituler à Luis. */}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    title="Copy a text summary of these trips (one line per trip, price, total)"
+                    className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1 font-medium text-foreground hover:bg-muted"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const dayFmt = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+                      const lines = g.trips.map((t) => {
+                        const price = getEffectiveTripPrice(t as unknown as TransportationTrip);
+                        const priceTxt = price !== null ? `€${price}` : "price to be confirmed";
+                        const pax = t.passengers_count ? ` · ${t.passengers_count} pax` : "";
+                        return `• ${dayFmt(t.trip_date)}, ${String(t.trip_time).slice(0, 5)} — ${t.pickup_location} → ${t.dropoff_location}${pax} — ${priceTxt}`;
+                      });
+                      const period = g.checkIn && g.checkOut ? ` (${fmtDate(g.checkIn)} → ${fmtDate(g.checkOut)})` : "";
+                      const text = [
+                        `Transportation — ${g.retreatName}${period}`,
+                        "",
+                        ...lines,
+                        "",
+                        `Total: €${g.cost.subtotal}${g.cost.customOfferCount > 0 ? ` (+ ${g.cost.customOfferCount} trip${g.cost.customOfferCount > 1 ? "s" : ""} pending a custom offer)` : ""}`,
+                      ].join("\n");
+                      navigator.clipboard.writeText(text).then(
+                        () => toast({ title: "Trip summary copied", description: "Paste it in WhatsApp or an email." }),
+                        () => toast({ title: "Copy failed", variant: "destructive" }),
+                      );
+                    }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); (e.currentTarget as HTMLElement).click(); } }}
+                  >
+                    <Copy className="w-3 h-3" /> Copy info
+                  </span>
                 </div>
               </button>
 
