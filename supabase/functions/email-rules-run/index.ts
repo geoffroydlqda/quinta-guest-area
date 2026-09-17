@@ -380,11 +380,11 @@ async function sendMatch(
 // matche), le webhook retombe sur le template par defaut de payment-emails.
 async function handlePaymentReceived(installmentId: string): Promise<Response> {
   const { data: instRow } = await admin.from("payment_installments")
-    .select("id,booking_id,label,amount_due,due_date,status,is_cash,category,stripe_session_id,invoice_file_url,invoice_file_name,invoice_number")
+    .select("id,booking_id,label,amount_due,due_date,status,is_cash,category,stripe_session_id,paid_bank_tx_id,invoice_file_url,invoice_file_name,invoice_number")
     .eq("id", installmentId).maybeSingle();
   if (!instRow) return json({ matched: 0, sent: 0, error: "Installment not found" }, 404);
   const inst = instRow as Inst & {
-    stripe_session_id: string | null;
+    stripe_session_id: string | null; paid_bank_tx_id: string | null;
     invoice_file_url: string | null; invoice_file_name: string | null; invoice_number: string | null;
   };
 
@@ -396,9 +396,9 @@ async function handlePaymentReceived(installmentId: string): Promise<Response> {
 
   // Toutes les echeances du booking (pour deposit / final + le montant groupe)
   const { data: sibsData } = await admin.from("payment_installments")
-    .select("id,amount_due,status,category,is_cash,stripe_session_id")
+    .select("id,amount_due,status,category,is_cash,stripe_session_id,paid_bank_tx_id")
     .eq("booking_id", inst.booking_id);
-  const sibs = (sibsData ?? []) as Array<Inst & { stripe_session_id: string | null }>;
+  const sibs = (sibsData ?? []) as Array<Inst & { stripe_session_id: string | null; paid_bank_tx_id: string | null }>;
   // deposit = premier paiement rental du booking (aucun autre rental paye avant)
   const isDeposit = inst.category === "rental" &&
     !sibs.some((s) => s.id !== inst.id && s.category === "rental" && s.status === "paid");
@@ -408,10 +408,14 @@ async function handlePaymentReceived(installmentId: string): Promise<Response> {
   const isFinal = sibs
     .filter((s) => s.category !== "discount" && s.category !== "bar" && !s.is_cash)
     .every((s) => s.status === "paid");
-  // Montant affiche : le groupe de la session Stripe (paiement groupe possible)
+  // Montant affiche : le groupe de la session Stripe OU du virement bancaire
+  // (paid_bank_tx_id partage — cas Mark & Philine 17 sept 2026 : un virement
+  // de 9 614 € couvrait 4 echeances, l'email n'en annoncait qu'une).
   const group = inst.stripe_session_id
     ? sibs.filter((s) => s.stripe_session_id === inst.stripe_session_id)
-    : [inst];
+    : inst.paid_bank_tx_id
+      ? sibs.filter((s) => s.paid_bank_tx_id === inst.paid_bank_tx_id)
+      : [inst];
   const groupAmount = group.reduce((s, g) => s + Math.abs(Number(g.amount_due || 0)), 0);
 
   const { data: rulesData } = await admin.from("email_rules")

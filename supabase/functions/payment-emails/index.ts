@@ -579,7 +579,7 @@ ${paras(render(tplRow.body_bottom ?? ""))}
     }
 
     const { data: instsData } = await admin.from("payment_installments")
-      .select("id,booking_id,label,amount_due,amount_excl_vat,status,is_cash,category,due_date,paid_on,vat_rate,product_lines,invoice_file_url,invoice_file_name,invoice_number,stripe_session_id")
+      .select("id,booking_id,label,amount_due,amount_excl_vat,status,is_cash,category,due_date,paid_on,vat_rate,product_lines,invoice_file_url,invoice_file_name,invoice_number,stripe_session_id,paid_bank_tx_id")
       .in("id", ids);
     const insts = (instsData ?? []);
     if (insts.length !== ids.length) return json({ error: "Installment not found" }, 404);
@@ -617,11 +617,18 @@ ${paras(render(tplRow.body_bottom ?? ""))}
     let bodyText = parsed.data.body ?? "";
     if (kind === "confirmation" && (!subject || !bodyText)) {
       const { data: sibs } = await admin.from("payment_installments")
-        .select("id,amount_due,status,category,stripe_session_id,is_cash")
+        .select("id,amount_due,status,category,stripe_session_id,paid_bank_tx_id,is_cash")
         .eq("booking_id", inst.booking_id);
+      // ⚠️ 17 sept 2026 (cas Mark & Philine) : un VIREMENT bancaire qui couvre
+      // plusieurs échéances partage un paid_bank_tx_id — le {{amount}} de la
+      // confirmation doit être le TOTAL du virement, pas une seule échéance
+      // (l'email disait 6 370 € pour un virement de 9 614 €).
+      const bankTx = (inst as { paid_bank_tx_id?: string | null }).paid_bank_tx_id ?? null;
       const group = inst.stripe_session_id
         ? (sibs ?? []).filter((s) => s.stripe_session_id === inst.stripe_session_id)
-        : [inst];
+        : bankTx
+          ? (sibs ?? []).filter((s) => (s as { paid_bank_tx_id?: string | null }).paid_bank_tx_id === bankTx)
+          : [inst];
       const amount = group.reduce((s, g) => s + Math.abs(Number(g.amount_due)), 0);
       const allSettled = (sibs ?? []).filter((s) => s.category !== "discount")
         .every((s) => s.status === "paid");
