@@ -76,6 +76,7 @@ type BookingRow = {
   user_id: string | null; created_at: string;
   payment_status_override?: string | null;
   total_rental_price?: number | null;
+  rental_discount?: number | null;
   event_type?: string | null;
   catering_expected?: boolean | null;
   client_id?: string | null;
@@ -866,6 +867,7 @@ const AdminContent = () => {
               check_out_date: b.check_out_date,
               event_type: b.event_type ?? null,
               is_test: !!b.is_test,
+              rental_discount: b.rental_discount ?? null,
             }))}
             installments={installments}
           />

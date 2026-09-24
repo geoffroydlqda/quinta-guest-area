@@ -286,18 +286,13 @@ async function generateInvoice(installmentId: string) {
     stayLine += ` · Paid in USD: $${usdPaid.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (1 EUR = ${Number(usdRate).toFixed(4)} USD)`;
   }
 
-  // % de remise sur le rental. Convention : total_rental_price = prix de base
-  // (catalogue) ; le client paie total − discount. d% = discount / total,
-  // appliqué à chaque ligne rental -> prorata automatique.
-  const rentalDiscount = Math.abs(Number(booking.rental_discount ?? 0));
-  let discountPct = 0;
-  if (rentalDiscount > 0) {
-    // Fallback si le total n'est pas rempli : les échéances somment au net,
-    // donc catalogue = somme des échéances rental + remise.
-    const catalog = Number(booking.total_rental_price ?? 0) ||
-      (group.filter((g) => (g.category ?? "rental") === "rental").reduce((s, g) => s + Number(g.amount_due), 0) + rentalDiscount);
-    if (catalog > 0) discountPct = Math.round((rentalDiscount / catalog) * 10000) / 100;
-  }
+  // ⚠️ Sémantique changée le 24 sept 2026 (demande Geoffroy) : le champ
+  // bookings.rental_discount est désormais PUREMENT INDICATIF (manque à
+  // gagner vs prix brochure, affiché dans le P&L). Le Total rental price est
+  // ce que le client paie, remise déjà incluse — la fatura ne montre donc
+  // plus aucun pourcentage de remise. discountPct reste à 0 en dur pour
+  // neutraliser l'ancien prorata sans toucher au reste du code.
+  const discountPct = 0;
 
   // Total location TTC du booking (toutes échéances rental, payées ou non) —
   // sert à afficher "30% of €4,000" sur chaque ligne rental de la facture.

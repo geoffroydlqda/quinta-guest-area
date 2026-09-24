@@ -1393,6 +1393,14 @@ type Installment = {
   vat_rate?: number | null;
   group_id?: string | null;
   product_lines?: ProductLine[] | null;
+  // Remises uniquement : raison du manque à gagner (24 sept 2026)
+  discount_reason?: "negotiation" | "internal" | "other" | null;
+};
+
+const DISCOUNT_REASONS: Record<string, string> = {
+  negotiation: "Negotiation",
+  internal: "Internal",
+  other: "Other",
 };
 
 const fmtEUR = (v: number | string) => {
@@ -1548,7 +1556,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
     const iRes = await supabase
       .from("payment_installments")
-      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash,vat_rate,group_id,product_lines")
+      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash,vat_rate,group_id,product_lines,discount_reason")
       .eq("booking_id", b.id)
       .order("due_date", { ascending: true, nullsFirst: false });
     if (!iRes.error) setInstallments((iRes.data || []) as Installment[]);
@@ -1665,8 +1673,10 @@ function PaymentSection({ userId }: { userId: string }) {
     const totalDue = rentalInst.reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const totalPaid = rentalInst.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
     // Convention (définitive, 29 juil. 2026) : total_rental_price = prix de base ;
-    // le client paie total − discount. Les échéances somment à total − discount.
-    const rental = Math.max(0, Number(booking?.total_rental_price || 0) - Number(booking?.rental_discount || 0));
+    // ⚠️ Sémantique changée le 24 sept 2026 : le Total rental price EST ce que
+    // le client paie (remise déjà incluse). Le champ Discount est purement
+    // indicatif (manque à gagner vs brochure, pour le P&L) — plus déduit.
+    const rental = Number(booking?.total_rental_price || 0);
     const remaining = Math.max(0, rental - totalPaid);
     const pct = rental > 0 ? Math.min(100, (totalPaid / rental) * 100) : 0;
     const mismatch = rental > 0 && rentalInst.length > 0 && Math.abs(totalDue - rental) > 0.001;
@@ -1715,7 +1725,7 @@ function PaymentSection({ userId }: { userId: string }) {
     }
     setBooking({ ...booking, rental_discount: v });
     setEditingDiscount(false);
-    toast({ title: "Saved", description: v ? "The discount will be split pro-rata across rental invoice lines." : undefined });
+    toast({ title: "Saved", description: v ? "Indicative only — shown in the P&L as missed revenue vs the brochure price." : undefined });
   };
 
   const setOverride = async (value: BookingStatus | null) => {
@@ -1757,7 +1767,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const upsertInstallment = async (
     id: string | null,
-    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number; product_lines?: ProductLine[] | null },
+    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number; product_lines?: ProductLine[] | null; discount_reason?: "negotiation" | "internal" | "other" | null },
     file?: File | null
   ) => {
     if (!booking) return false;
@@ -1773,6 +1783,7 @@ function PaymentSection({ userId }: { userId: string }) {
       is_cash: values.is_cash,
       vat_rate: values.vat_rate,
       product_lines: values.product_lines ?? null,
+      discount_reason: values.discount_reason ?? null,
     };
     let installmentId = id;
     if (id) {
@@ -1826,8 +1837,9 @@ function PaymentSection({ userId }: { userId: string }) {
   const generate3070 = async () => {
     if (!booking?.total_rental_price || rentalInst.length > 0) return;
     setGenerating(true);
-    // Le plan 30/70 porte sur ce que le client paie : total − discount.
-    const total = Math.max(0, Number(booking.total_rental_price) - Number(booking.rental_discount || 0));
+    // Le plan 30/70 porte sur le Total rental price — qui EST ce que le client
+    // paie (24 sept 2026 : le champ Discount est purement indicatif).
+    const total = Number(booking.total_rental_price);
     const deposit = Math.round(total * 0.3 * 100) / 100;
     const balance = Math.round((total - deposit) * 100) / 100;
     const depositDue = todayIso();
@@ -1987,6 +1999,14 @@ function PaymentSection({ userId }: { userId: string }) {
             <span className="text-[10px] uppercase px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground">
               {inst.category}
             </span>
+            {inst.category === "discount" && inst.discount_reason && (
+              <span
+                className="text-[10px] uppercase px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-800 whitespace-nowrap"
+                title={inst.notes || undefined}
+              >
+                {DISCOUNT_REASONS[inst.discount_reason] ?? inst.discount_reason}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
@@ -2112,7 +2132,8 @@ function PaymentSection({ userId }: { userId: string }) {
             </div>
           )}
           <div className="text-[11px] text-muted-foreground">
-            Deducted from the total — the client pays total − discount. Shown on invoices, split pro-rata across rental payments.
+            Indicative only — the total rental price already includes the discount and is what the client pays.
+            This amount feeds the P&amp;L as missed revenue vs the brochure price (nothing is deducted anywhere).
           </div>
         </div>
 
@@ -2378,7 +2399,7 @@ function InstallmentForm({
   transportSuggestion?: PaymentSuggestion | null;
   onCancel: () => void;
   onSave: (
-    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number; product_lines?: ProductLine[] | null },
+    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number; product_lines?: ProductLine[] | null; discount_reason?: "negotiation" | "internal" | "other" | null },
     file?: File | null
   ) => Promise<void> | void;
 }) {
@@ -2399,6 +2420,11 @@ function InstallmentForm({
   // "bar" est auto-géré par revolut-bar-sync — l'édition retombe sur "extra"
   const [category, setCategory] = useState<"rental" | "catering" | "extra" | "discount">(
     initial?.category === "bar" ? "extra" : (initial?.category ?? "rental")
+  );
+  // Raison de la remise (24 sept 2026) : negotiation / internal / other — la
+  // note libre associée passe par le champ Notes existant.
+  const [discountReason, setDiscountReason] = useState<"negotiation" | "internal" | "other">(
+    initial?.discount_reason ?? "negotiation"
   );
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -2506,6 +2532,7 @@ function InstallmentForm({
         is_cash: isCash,
         vat_rate: vatRate,
         product_lines: lines.length > 0 ? lines : null,
+        discount_reason: isDiscount ? discountReason : null,
       },
       isCash ? null : file
     );
@@ -2689,9 +2716,24 @@ function InstallmentForm({
           </label>
         )}
         {category === "discount" && (
-          <div className="sm:col-span-2 text-xs text-muted-foreground italic self-end pb-1">
-            Enter the discount as a positive amount — it is stored as a deduction and reduces revenue.
-          </div>
+          <>
+            <label className="space-y-1">
+              <div className="text-xs text-muted-foreground">Reason *</div>
+              <select
+                className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                value={discountReason}
+                onChange={(e) => setDiscountReason(e.target.value as "negotiation" | "internal" | "other")}
+              >
+                <option value="negotiation">Negotiation</option>
+                <option value="internal">Internal (friends & family, team…)</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <div className="text-xs text-muted-foreground italic self-end pb-1">
+              Enter the discount as a positive amount — it is stored as a deduction and reduces revenue.
+              Use Notes below to explain (e.g. "sold at old price grid", "returning client −10%").
+            </div>
+          </>
         )}
       </div>
 

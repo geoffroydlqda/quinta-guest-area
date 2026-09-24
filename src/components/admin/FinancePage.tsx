@@ -92,6 +92,9 @@ type FinRule = { id: string; pattern: string; kind: string; category: string | n
 export type FinBooking = {
   id: string; name: string; check_in_date: string | null; check_out_date?: string | null;
   event_type: string | null; is_test: boolean;
+  // Remise saisie à côté du Total rental price (fiche booking) — réduit les
+  // échéances rental au pro-rata, donc invisible en tant que discount sans elle.
+  rental_discount?: number | null;
 };
 
 // Catégories variables : les seules qu'on rattache automatiquement à un séjour
@@ -568,6 +571,30 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       const arr = revRows.get(line) ?? Array.from({ length: 12 }, () => 0);
       arr[m] += net;
       revRows.set(line, arr);
+    }
+    // Remise "à côté du Total rental price" (24 sept 2026, demande Geoffroy) :
+    // bookings.rental_discount est INDICATIF — le client paie le Total rental
+    // price tel quel, la remise mesure le manque à gagner vs prix brochure.
+    // Dans le P&L : on affiche le rental au BRUT brochure (+HT de la remise)
+    // et l'opposé dans la ligne Discounts — le net reste exactement ce qui a
+    // été facturé. Ne s'applique qu'aux bookings ayant des échéances rental.
+    // ⚠️ Un booking qui cumule le champ ET une ligne discount équivalente
+    // compterait double — à nettoyer dans les données, pas ici.
+    for (const b of realBookings) {
+      const disc = Number(b.rental_discount || 0);
+      if (!(disc > 0) || !b.check_in_date || !b.check_in_date.startsWith(year)) continue;
+      const hasRental = installments.some((i) => i.booking_id === b.id && (i.category ?? "rental") === "rental");
+      if (!hasRental) continue;
+      const m = Number(b.check_in_date.slice(5, 7)) - 1;
+      const ht = disc / 1.23;
+      const rentalLine = revenueLine("rental", b.event_type ?? "retreat");
+      const rArr = revRows.get(rentalLine) ?? Array.from({ length: 12 }, () => 0);
+      rArr[m] += ht;
+      revRows.set(rentalLine, rArr);
+      const dArr = revRows.get("Discounts") ?? Array.from({ length: 12 }, () => 0);
+      dArr[m] -= ht;
+      revRows.set("Discounts", dArr);
+      // revEvents inchangé : +HT rental et −HT discount s'annulent.
     }
     // Bar (merchant) — 27 août 2026 : la source de revenu bar est passée aux
     // ÉCHÉANCES catégorie "bar" (rollup revolut-bar-sync : HT exact par taux
