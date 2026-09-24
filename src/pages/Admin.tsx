@@ -1547,7 +1547,8 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
     food.find((f) => !f.booking_id && b.user_id && f.user_id === b.user_id) ?? null;
   const { toast } = useToast();
   const [staff, setStaff] = useState<StaffRow[]>([]);
-  const [pastOpen, setPastOpen] = useState(false);
+  // Pilules Upcoming / Past en tete d'onglet (demande Geoffroy, 24 sept 2026)
+  const [eventsPill, setEventsPill] = useState<"upcoming" | "past">("upcoming");
 
   const loadStaff = async () => {
     const { data, error } = await supabase.from("event_staff")
@@ -1648,31 +1649,31 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
         {knownNames.map((n) => <option key={n} value={n} />)}
       </datalist>
 
-      <div>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">Upcoming & current events</h2>
-        <div className="space-y-3">
-          {upcoming.map((b) => (
-            <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso} foodPlan={foodFor(b)}
-              onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} onSetPaid={setPaid} totalFor={totalFor} />
-          ))}
-          {upcoming.length === 0 && <p className="text-sm text-muted-foreground italic">No upcoming events.</p>}
-        </div>
+      {/* Pilules Upcoming / Past events */}
+      <div className="flex flex-wrap items-center gap-2">
+        {([["upcoming", "Upcoming & current", upcoming.length], ["past", "Past events", past.length]] as const).map(([key, label, count]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setEventsPill(key)}
+            className={`px-3.5 py-1.5 rounded-full text-sm border transition-colors ${
+              eventsPill === key
+                ? "bg-primary text-primary-foreground border-primary font-medium"
+                : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/40"
+            }`}
+          >
+            {label} <span className="opacity-70">({count})</span>
+          </button>
+        ))}
       </div>
 
-      <div>
-        <button type="button" onClick={() => setPastOpen(!pastOpen)}
-          className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2 hover:text-foreground">
-          {pastOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Past events ({past.length})
-        </button>
-        {pastOpen && (
-          <div className="space-y-3">
-            {past.map((b) => (
-              <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso} foodPlan={foodFor(b)}
-                onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} onSetPaid={setPaid} totalFor={totalFor} />
-            ))}
-          </div>
-        )}
+      <div className="space-y-3">
+        {(eventsPill === "upcoming" ? upcoming : past).map((b) => (
+          <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso} foodPlan={foodFor(b)}
+            onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} onSetPaid={setPaid} totalFor={totalFor} />
+        ))}
+        {eventsPill === "upcoming" && upcoming.length === 0 && <p className="text-sm text-muted-foreground italic">No upcoming events.</p>}
+        {eventsPill === "past" && past.length === 0 && <p className="text-sm text-muted-foreground italic">No past events.</p>}
       </div>
     </div>
   );
