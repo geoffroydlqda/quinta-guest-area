@@ -1547,8 +1547,9 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
     food.find((f) => !f.booking_id && b.user_id && f.user_id === b.user_id) ?? null;
   const { toast } = useToast();
   const [staff, setStaff] = useState<StaffRow[]>([]);
-  // Pilules Upcoming / Past en tete d'onglet (demande Geoffroy, 24 sept 2026)
+  // Pilules Upcoming / Past + recherche en tete d'onglet (demande Geoffroy, 24 sept 2026)
   const [eventsPill, setEventsPill] = useState<"upcoming" | "past">("upcoming");
+  const [eventSearch, setEventSearch] = useState("");
 
   const loadStaff = async () => {
     const { data, error } = await supabase.from("event_staff")
@@ -1569,7 +1570,13 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
 
   const knownNames = useMemo(() => [...new Set(staff.map((s) => s.name))].sort(), [staff]);
 
-  const dated = bookings.filter((b) => b.check_in_date && b.check_out_date);
+  const q = eventSearch.toLowerCase().trim();
+  const matchesSearch = (b: BookingRow) =>
+    !q ||
+    b.retreat_name.toLowerCase().includes(q) ||
+    `${b.first_name ?? ""} ${b.last_name ?? ""}`.toLowerCase().includes(q) ||
+    b.email.toLowerCase().includes(q);
+  const dated = bookings.filter((b) => b.check_in_date && b.check_out_date && matchesSearch(b));
   const upcoming = dated
     .filter((b) => b.check_out_date! >= todayIso)
     .sort((a, b) => a.check_in_date!.localeCompare(b.check_in_date!));
@@ -1649,8 +1656,9 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
         {knownNames.map((n) => <option key={n} value={n} />)}
       </datalist>
 
-      {/* Pilules Upcoming / Past events */}
+      {/* Pilules Upcoming / Past events + recherche */}
       <div className="flex flex-wrap items-center gap-2">
+        <Input placeholder="Search event, name or email" value={eventSearch} onChange={(e) => setEventSearch(e.target.value)} className="max-w-xs h-9" />
         {([["upcoming", "Upcoming & current", upcoming.length], ["past", "Past events", past.length]] as const).map(([key, label, count]) => (
           <button
             key={key}
@@ -1672,8 +1680,8 @@ function CateringView({ bookings, food, todayIso, onOpen }: {
           <CateringEventCard key={b.id} booking={b} rows={byBooking.get(b.id) || []} todayIso={todayIso} foodPlan={foodFor(b)}
             onOpen={onOpen} onAdd={addStaff} onUpdate={updateStaff} onRemove={removeStaff} onSetPaid={setPaid} totalFor={totalFor} />
         ))}
-        {eventsPill === "upcoming" && upcoming.length === 0 && <p className="text-sm text-muted-foreground italic">No upcoming events.</p>}
-        {eventsPill === "past" && past.length === 0 && <p className="text-sm text-muted-foreground italic">No past events.</p>}
+        {eventsPill === "upcoming" && upcoming.length === 0 && <p className="text-sm text-muted-foreground italic">{q ? "No events match your search." : "No upcoming events."}</p>}
+        {eventsPill === "past" && past.length === 0 && <p className="text-sm text-muted-foreground italic">{q ? "No events match your search." : "No past events."}</p>}
       </div>
     </div>
   );
