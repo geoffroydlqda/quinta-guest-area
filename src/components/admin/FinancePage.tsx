@@ -1423,7 +1423,10 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                                 </button>
                               ) : null;
                             })()}
-                            {t.kind === "review" && (
+                            {/* Aussi sur les depenses deja categorisees (25 sept 2026) :
+                                avant, poser une categorie faisait disparaitre le lien
+                                internal/VAT/refund et la ligne etait coincee en expense. */}
+                            {(t.kind === "review" || t.kind === "expense") && (
                               <span className="mt-1 block whitespace-nowrap text-[10px] text-muted-foreground/70">
                                 not an expense?{" "}
                                 <button type="button" className="font-medium text-muted-foreground hover:text-foreground hover:underline"
