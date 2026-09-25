@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, BedDouble, Utensils, Car, Loader2, Mail, Euro, Users, Calendar, Clock, Trash2, FileDown,
-  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink, Printer, Copy, Lock, LockOpen, FlaskConical, AlertTriangle,
+  Pencil, Check, X, Plus, Download, Upload, Wallet, StickyNote, ExternalLink, Printer, Copy, Lock, LockOpen, FlaskConical, AlertTriangle, GripVertical,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -2451,6 +2451,18 @@ function InstallmentForm({
     setLines((arr) => arr.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const removeLine = (i: number) => setLines((arr) => arr.filter((_, j) => j !== i));
 
+  // Reordonner par glisser-deposer (poignee ⋮⋮, demande Geoffroy 25 sept 2026) —
+  // l'ordre des lignes est celui du pro forma et de la fatura.
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const moveLine = (from: number, to: number) =>
+    setLines((arr) => {
+      if (from === to || to < 0 || to >= arr.length) return arr;
+      const copy = [...arr];
+      const [moved] = copy.splice(from, 1);
+      copy.splice(to, 0, moved);
+      return copy;
+    });
+
   // Ligne LIBRE (10 sept 2026, demande Geoffroy) : qty × prix unitaire sans
   // passer par le catalogue — le montant du paiement se calcule tout seul et
   // la fatura Moloni + le pro forma détaillent la ligne (ex : 24 × Lunch).
@@ -2580,7 +2592,26 @@ function InstallmentForm({
         <div className="space-y-1.5">
           <div className="text-xs text-muted-foreground">Lines — qty × unit price (optional, shown on the invoice)</div>
           {lines.map((ln, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-background/60 px-2 py-1.5">
+            <div
+              key={i}
+              draggable={dragIdx === i}
+              onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (dragIdx !== null && dragIdx !== i) { moveLine(dragIdx, i); setDragIdx(i); }
+              }}
+              onDrop={(e) => e.preventDefault()}
+              onDragEnd={() => setDragIdx(null)}
+              className={`flex flex-wrap items-center gap-1.5 rounded-md border bg-background/60 px-2 py-1.5 ${dragIdx === i ? "border-primary/60 opacity-70" : "border-border"}`}
+            >
+              <span
+                className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-foreground -ml-1 shrink-0"
+                title="Drag to reorder"
+                onMouseDown={() => setDragIdx(i)}
+                onMouseUp={() => setDragIdx(null)}
+              >
+                <GripVertical className="w-3.5 h-3.5" />
+              </span>
               <Input value={ln.name} onChange={(e) => patchLine(i, { name: e.target.value })}
                 className="h-8 flex-1 min-w-[140px] text-sm" />
               <Input type="number" min="0" step="0.5" value={String(ln.qty)} title="Quantity"
