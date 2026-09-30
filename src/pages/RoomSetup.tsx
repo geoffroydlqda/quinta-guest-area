@@ -21,7 +21,7 @@ import { Loader2, Crown, Info, ZoomIn, ShowerHead, Lock, Plus, X, Check, User, U
 import { FIXED_ROOMS, FLEXIBLE_ROOMS_ORDER } from '@/types/room';
 import { cn } from '@/lib/utils';
 import roomsArrangement from '@/assets/rooms-arrangement_floor-plan.jpg';
-import { downloadRoomMapPdf, renderRoomMapCanvas, type RoomMapEntry } from '@/lib/roomMapPdf';
+import { downloadRoomMapPdf, renderRoomMapCanvasDetailed, type RoomMapEntry, type RoomMapHotspot } from '@/lib/roomMapPdf';
 import roomKingImage from '@/assets/room-king.jpg';
 import roomQueenImage from '@/assets/room-queen.jpg';
 import roomTwinsImage from '@/assets/room-twins.jpg';
@@ -50,20 +50,9 @@ const BATHROOM_PAIR_COLOR: Record<number, string> = {
   7: 'bg-amber-500', 8: 'bg-amber-500',
 };
 
-// Position des pastilles sur le plan (pourcentages de l'image)
-const MAP_PINS: Record<number, { x: number; y: number }> = {
-  1: { x: 18.4, y: 39.6 },
-  2: { x: 18.4, y: 54.5 },
-  3: { x: 18.4, y: 67.9 },
-  4: { x: 18.4, y: 83.6 },
-  5: { x: 29.2, y: 83.6 },
-  6: { x: 46.1, y: 83.6 },
-  7: { x: 24.4, y: 5.0 },
-  8: { x: 24.4, y: 24.3 },
-  9: { x: 60.4, y: 9.3 },
-  10: { x: 71.5, y: 9.3 },
-  11: { x: 83.5, y: 9.3 },
-};
+// Les zones cliquables du plan viennent du rendu lui-même (hotspots de
+// renderRoomMapCanvasDetailed) : un seul niveau UX — la carte dessinée
+// (badge numéro + noms) EST l'élément interactif (25 sept 2026).
 
 interface RoomCardProps {
   roomId: number;
@@ -360,6 +349,7 @@ const RoomSetup = () => {
   const [mapOpen, setMapOpen] = useState(false);
   const [downloadingMap, setDownloadingMap] = useState(false);
   const [liveMapUrl, setLiveMapUrl] = useState<string | null>(null);
+  const [mapHotspots, setMapHotspots] = useState<RoomMapHotspot[]>([]);
 
   const {
     roomBedMap,
@@ -423,8 +413,9 @@ const RoomSetup = () => {
     if (isLoadingRecord) return;
     const t = setTimeout(async () => {
       try {
-        const canvas = await renderRoomMapCanvas(roomsArrangement, buildMapEntries());
+        const { canvas, hotspots } = await renderRoomMapCanvasDetailed(roomsArrangement, buildMapEntries());
         setLiveMapUrl(canvas.toDataURL('image/jpeg', 0.85));
+        setMapHotspots(hotspots);
       } catch {
         /* le plan brut reste affiché */
       }
@@ -493,36 +484,31 @@ const RoomSetup = () => {
               alt="Rooms map"
               className="block h-auto max-h-[520px] w-auto"
             />
-            {/* Pastilles interactives : vert plein = guests placés, contour = à faire */}
-            {Object.entries(MAP_PINS)
-              .filter(([id]) => !disabledRooms.includes(Number(id)))
-              .map(([id, pos]) => {
-                const roomId = Number(id);
-                const hasGuests = (roomGuestsMap[roomId] || []).some((n) => n && n.trim().length > 0);
-                return (
-                  <button
-                    key={roomId}
-                    type="button"
-                    title={`Room ${roomId}${hasGuests ? ' — guests assigned' : ' — no guests yet'}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      expandRoom(roomId);
-                      setTimeout(() => {
-                        document.getElementById(`room-card-${roomId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }, 60);
-                    }}
-                    className={cn(
-                      'absolute -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full text-xs font-semibold shadow-md transition-transform hover:scale-125 focus:outline-none focus:ring-2 focus:ring-primary',
-                      hasGuests
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-white text-primary border-2 border-primary'
-                    )}
-                    style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-                  >
-                    {roomId}
-                  </button>
-                );
-              })}
+            {/* Hitboxes invisibles calées sur les cartes DESSINÉES dans le plan :
+                la carte (badge numéro + noms) est elle-même le bouton — plus de
+                seconde pastille par-dessus (demande Geoffroy, 25 sept 2026). */}
+            {liveMapUrl && mapHotspots.map((hs) => (
+              <button
+                key={hs.roomId}
+                type="button"
+                title={`Room ${hs.roomId}${hs.hasGuests ? ' — guests assigned' : ' — no guests yet'} · tap to edit`}
+                aria-label={`Jump to room ${hs.roomId}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  expandRoom(hs.roomId);
+                  setTimeout(() => {
+                    document.getElementById(`room-card-${hs.roomId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 60);
+                }}
+                className="absolute rounded-lg focus:outline-none focus:ring-2 focus:ring-primary hover:ring-2 hover:ring-primary/70 hover:bg-white/10 transition-shadow"
+                style={{
+                  left: `${hs.xPct}%`,
+                  top: `${hs.yPct}%`,
+                  width: `${hs.wPct}%`,
+                  height: `${hs.hPct}%`,
+                }}
+              />
+            ))}
             <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-card/90 rounded-full px-3 py-1.5 flex items-center gap-1.5 shadow-lg pointer-events-none">
               <ZoomIn className="w-3.5 h-3.5 text-primary" />
               <span className="text-xs font-medium">Click to enlarge</span>
@@ -530,7 +516,7 @@ const RoomSetup = () => {
           </div>
           <div className="flex items-center justify-center gap-3 pb-2 flex-wrap">
             <p className="text-center text-xs text-muted-foreground">
-              Tap a room number to jump to it · <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary align-middle" /> guests assigned · <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-primary bg-white align-middle" /> still empty
+              Tap a room on the map to jump to it · <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary align-middle" /> guests assigned · <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-primary bg-white align-middle" /> still empty
             </p>
             <Button
               type="button"

@@ -12,6 +12,20 @@ export interface RoomMapEntry {
   bedType?: 'king' | 'twin';
 }
 
+/**
+ * Zone cliquable d'une carte dessinée sur le canvas (pourcentages de l'image,
+ * badge inclus) — permet à la page de poser des hitboxes EXACTEMENT sur les
+ * cartes, au lieu d'une seconde couche de pastilles (doublon UX, 25 sept 2026).
+ */
+export interface RoomMapHotspot {
+  roomId: number;
+  xPct: number;
+  yPct: number;
+  wPct: number;
+  hPct: number;
+  hasGuests: boolean;
+}
+
 // CENTRE de chaque chambre en pourcentage de l'image : la carte (badge numéro
 // + noms + type de lit) est posée SUR la chambre, en un seul bloc — avant, les
 // noms flottaient sous la pastille imprimée du plan et l'anti-chevauchement
@@ -46,6 +60,14 @@ export async function renderRoomMapCanvas(
   imageSrc: string,
   entries: RoomMapEntry[],
 ): Promise<HTMLCanvasElement> {
+  return (await renderRoomMapCanvasDetailed(imageSrc, entries)).canvas;
+}
+
+/** Variante qui renvoie aussi les zones cliquables des cartes dessinées. */
+export async function renderRoomMapCanvasDetailed(
+  imageSrc: string,
+  entries: RoomMapEntry[],
+): Promise<{ canvas: HTMLCanvasElement; hotspots: RoomMapHotspot[] }> {
   const img = await loadImage(imageSrc);
   const W = img.naturalWidth;
   const H = img.naturalHeight;
@@ -65,7 +87,7 @@ export async function renderRoomMapCanvas(
 
   // 1) Préparer les cartes : badge numéro (sur le bord haut) + noms + type de
   //    lit, un seul bloc centré sur la chambre.
-  interface LabelBox { roomId: number; x: number; y: number; w: number; h: number; lines: string[]; bedLine: string | null }
+  interface LabelBox { roomId: number; x: number; y: number; w: number; h: number; lines: string[]; bedLine: string | null; hasGuests: boolean }
   const bedFontPx = Math.round(fontPx * 0.78);
   const lineH = fontPx * 1.45;
   const bedLineH = bedFontPx * 1.5;
@@ -94,6 +116,7 @@ export async function renderRoomMapCanvas(
       h,
       lines,
       bedLine,
+      hasGuests: lines.length > 0,
     });
   }
 
@@ -127,16 +150,17 @@ export async function renderRoomMapCanvas(
     ctx.fillStyle = GREEN;
     ctx.fill();
 
-    // Badge numéro : cercle vert cerclé de blanc, posé sur le bord haut de la
-    // carte — le numéro et les noms ne peuvent plus être dissociés.
+    // Badge numéro : posé sur le bord haut de la carte — le numéro et les noms
+    // ne peuvent plus être dissociés. L'état vit DANS le badge (un seul niveau
+    // UX, 25 sept 2026) : plein = guests assignés, blanc cerclé de vert = vide.
     ctx.beginPath();
     ctx.arc(x, y - h / 2, badgeR, 0, Math.PI * 2);
-    ctx.fillStyle = GREEN;
+    ctx.fillStyle = box.hasGuests ? GREEN : '#ffffff';
     ctx.fill();
     ctx.lineWidth = Math.max(2, fontPx * 0.14);
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = box.hasGuests ? '#ffffff' : GREEN;
     ctx.stroke();
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = box.hasGuests ? '#ffffff' : GREEN;
     ctx.font = `700 ${Math.round(fontPx * 0.95)}px Helvetica, Arial, sans-serif`;
     ctx.fillText(String(box.roomId), x, y - h / 2 + fontPx * 0.06);
 
@@ -154,7 +178,17 @@ export async function renderRoomMapCanvas(
     }
   }
 
-  return canvas;
+  // Zones cliquables = rectangle de chaque carte, badge inclus (déborde en haut)
+  const hotspots: RoomMapHotspot[] = placed.map((box) => ({
+    roomId: box.roomId,
+    xPct: ((box.x - box.w / 2) / W) * 100,
+    yPct: ((box.y - box.h / 2 - badgeR) / H) * 100,
+    wPct: (box.w / W) * 100,
+    hPct: ((box.h + badgeR) / H) * 100,
+    hasGuests: box.hasGuests,
+  }));
+
+  return { canvas, hotspots };
 }
 
 export async function downloadRoomMapPdf(
