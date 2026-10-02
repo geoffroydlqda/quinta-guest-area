@@ -200,6 +200,13 @@ export function useTransportation() {
       const existing = trips.find(t => t.id === tripId);
       const eventId = (existing as any)?.google_calendar_event_id as string | undefined;
 
+      // Supprimer l'événement calendrier AVANT la ligne (2 oct 2026) : le
+      // contrôle de propriété de sync-transportation-calendar vérifie que
+      // l'event appartient à un trip de l'appelant — la ligne déjà supprimée,
+      // il répondait 403 en silence et l'événement restait dans le calendrier
+      // chauffeur pour tous les guests (seul l'admin passait le contrôle).
+      if (eventId) await deleteTripCalendarEvent(eventId);
+
       let delQuery = supabase
         .from('transportation_trips')
         .delete()
@@ -211,15 +218,19 @@ export function useTransportation() {
 
       if (error) throw error;
       if (!deletedRows || deletedRows.length === 0) {
+        // Ligne pas supprimée : on recrée l'événement calendrier retiré ci-dessus
+        if (eventId) syncTripCalendar(tripId);
         toast({ title: 'Could not delete trip', description: 'Please refresh and try again.', variant: 'destructive' });
         return false;
       }
 
       setTrips(prev => prev.filter(t => t.id !== tripId));
-      if (eventId) deleteTripCalendarEvent(eventId);
       return true;
     } catch (error: any) {
       console.error('Error deleting trip:', error);
+      // La suppression DB a échoué après le retrait de l'événement : on le recrée
+      const existing = trips.find(t => t.id === tripId);
+      if ((existing as any)?.google_calendar_event_id) syncTripCalendar(tripId);
       return false;
     }
   }, [user, activeBookingId, trips, toast]);
