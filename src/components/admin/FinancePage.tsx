@@ -120,6 +120,7 @@ export type FinInstallment = {
   booking_id: string; amount_due: number; amount_excl_vat?: number | null;
   category?: string | null; is_cash?: boolean; status?: string;
   due_date?: string | null; paid_on?: string | null; label?: string | null;
+  discount_reason?: string | null;
 };
 
 // ---- Ventilation des revenus du P&L (10 août 2026) -------------------------
@@ -129,9 +130,20 @@ const REV_EVENT_LABEL: Record<string, string> = {
   retreat: "retreats", wedding: "weddings", day_retreat: "day retreats", other: "other events",
 };
 
-function revenueLine(category: string, eventType: string): string {
+// Deux familles de remises dans le P&L (4 oct 2026, demande Geoffroy) :
+//  - "negotiated"   : remise sur le prix du séjour convenue À L'AVANCE —
+//    le champ bookings.rental_discount (manque à gagner vs brochure) + les
+//    échéances discount taguées negotiation/internal (historique au rental brut) ;
+//  - "goodwill"     : geste commercial POST-SÉJOUR (service issue…) — les
+//    échéances discount sans raison ou taguées other.
+const DISC_NEGOTIATED = "Discounts — negotiated";
+const DISC_GOODWILL = "Discounts — goodwill (post-stay)";
+const discountLine = (reason?: string | null) =>
+  reason === "negotiation" || reason === "internal" ? DISC_NEGOTIATED : DISC_GOODWILL;
+
+function revenueLine(category: string, eventType: string, discountReason?: string | null): string {
   if (category === "bar") return "Bar (merchant)";
-  if (category === "discount") return "Discounts";
+  if (category === "discount") return discountLine(discountReason);
   const ev = REV_EVENT_LABEL[eventType] ?? REV_EVENT_LABEL.retreat;
   if (category === "catering") return `Catering — ${ev}`;
   if (category === "extra") return `Extras — ${ev}`;
@@ -143,7 +155,7 @@ const REV_LINE_ORDER = [
   "Venue — retreats", "Venue — weddings", "Venue — day retreats", "Venue — other events",
   "Catering — retreats", "Catering — weddings", "Catering — day retreats", "Catering — other events",
   "Extras — retreats", "Extras — weddings", "Extras — day retreats", "Extras — other events",
-  "Discounts", "Bar (merchant)",
+  DISC_NEGOTIATED, DISC_GOODWILL, "Bar (merchant)",
 ];
 const revLineRank = (label: string) => {
   const i = REV_LINE_ORDER.indexOf(label);
@@ -567,7 +579,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23);
       if (i.category === "bar") revBar[m] += net;
       else revEvents[m] += net;
-      const line = revenueLine(i.category ?? "rental", b.event_type ?? "retreat");
+      const line = revenueLine(i.category ?? "rental", b.event_type ?? "retreat", i.discount_reason);
       const arr = revRows.get(line) ?? Array.from({ length: 12 }, () => 0);
       arr[m] += net;
       revRows.set(line, arr);
@@ -591,9 +603,10 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       const rArr = revRows.get(rentalLine) ?? Array.from({ length: 12 }, () => 0);
       rArr[m] += ht;
       revRows.set(rentalLine, rArr);
-      const dArr = revRows.get("Discounts") ?? Array.from({ length: 12 }, () => 0);
+      // Le champ rental_discount est par définition une remise NÉGOCIÉE à l'avance
+      const dArr = revRows.get(DISC_NEGOTIATED) ?? Array.from({ length: 12 }, () => 0);
       dArr[m] -= ht;
-      revRows.set("Discounts", dArr);
+      revRows.set(DISC_NEGOTIATED, dArr);
       // revEvents inchangé : +HT rental et −HT discount s'annulent.
     }
     // Bar (merchant) — 27 août 2026 : la source de revenu bar est passée aux

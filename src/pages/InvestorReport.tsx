@@ -42,7 +42,7 @@ const REV_LINE_ORDER = [
   "Venue — retreats", "Venue — weddings", "Venue — day retreats", "Venue — other events",
   "Catering — retreats", "Catering — weddings", "Catering — day retreats", "Catering — other events",
   "Extras — retreats", "Extras — weddings", "Extras — day retreats", "Extras — other events",
-  "Discounts", "Bar (merchant)",
+  "Discounts — negotiated", "Discounts — goodwill (post-stay)", "Discounts", "Bar (merchant)",
 ];
 const rank = (l: string) => { const i = REV_LINE_ORDER.indexOf(l); return i === -1 ? REV_LINE_ORDER.length : i; };
 
