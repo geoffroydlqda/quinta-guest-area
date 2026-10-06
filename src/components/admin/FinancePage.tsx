@@ -95,9 +95,10 @@ export type FinBooking = {
   // Remise saisie à côté du Total rental price (fiche booking) — réduit les
   // échéances rental au pro-rata, donc invisible en tant que discount sans elle.
   rental_discount?: number | null;
+  // Raison du champ (6 oct 2026) : null/negotiation/internal -> ligne
+  // "negotiated" du P&L ; other -> "goodwill (post-stay)".
+  rental_discount_reason?: string | null;
 };
-
-// Catégories variables : les seules qu'on rattache automatiquement à un séjour
 const VARIABLE_CATS = new Set(
   FIN_CATEGORIES.filter((g) => g.group.startsWith("Variable")).flatMap((g) => g.items)
 );
@@ -603,10 +604,12 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       const rArr = revRows.get(rentalLine) ?? Array.from({ length: 12 }, () => 0);
       rArr[m] += ht;
       revRows.set(rentalLine, rArr);
-      // Le champ rental_discount est par définition une remise NÉGOCIÉE à l'avance
-      const dArr = revRows.get(DISC_NEGOTIATED) ?? Array.from({ length: 12 }, () => 0);
+      // Raison du champ (6 oct 2026) : other = geste post-séjour -> goodwill ;
+      // sinon (null/negotiation/internal) remise négociée à l'avance.
+      const fieldLine = b.rental_discount_reason === "other" ? DISC_GOODWILL : DISC_NEGOTIATED;
+      const dArr = revRows.get(fieldLine) ?? Array.from({ length: 12 }, () => 0);
       dArr[m] -= ht;
-      revRows.set(DISC_NEGOTIATED, dArr);
+      revRows.set(fieldLine, dArr);
       // revEvents inchangé : +HT rental et −HT discount s'annulent.
     }
     // Bar (merchant) — 27 août 2026 : la source de revenu bar est passée aux
