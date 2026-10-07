@@ -131,20 +131,19 @@ const REV_EVENT_LABEL: Record<string, string> = {
   retreat: "retreats", wedding: "weddings", day_retreat: "day retreats", other: "other events",
 };
 
-// Deux familles de remises dans le P&L (4 oct 2026, demande Geoffroy) :
-//  - "negotiated"   : remise sur le prix du séjour convenue À L'AVANCE —
-//    le champ bookings.rental_discount (manque à gagner vs brochure) + les
-//    échéances discount taguées negotiation/internal (historique au rental brut) ;
-//  - "goodwill"     : geste commercial POST-SÉJOUR (service issue…) — les
-//    échéances discount sans raison ou taguées other.
+// Deux familles de remises dans le P&L — règle PAR SOURCE (7 oct 2026,
+// demande Geoffroy, remplace le routage par raison du 4 oct) :
+//  - "negotiated"     : TOUJOURS le champ bookings.rental_discount (remise de
+//    prix convenue à l'avance, à côté du Total rental price) ;
+//  - "service issues" : TOUJOURS les échéances catégorie discount (geste
+//    accordé pour un manquement). Le select Reason reste informatif,
+//    il ne route plus rien.
 const DISC_NEGOTIATED = "Discounts — negotiated";
-const DISC_GOODWILL = "Discounts — goodwill (post-stay)";
-const discountLine = (reason?: string | null) =>
-  reason === "negotiation" || reason === "internal" ? DISC_NEGOTIATED : DISC_GOODWILL;
+const DISC_SERVICE = "Discounts — service issues";
 
-function revenueLine(category: string, eventType: string, discountReason?: string | null): string {
+function revenueLine(category: string, eventType: string): string {
   if (category === "bar") return "Bar (merchant)";
-  if (category === "discount") return discountLine(discountReason);
+  if (category === "discount") return DISC_SERVICE;
   const ev = REV_EVENT_LABEL[eventType] ?? REV_EVENT_LABEL.retreat;
   if (category === "catering") return `Catering — ${ev}`;
   if (category === "extra") return `Extras — ${ev}`;
@@ -156,7 +155,7 @@ const REV_LINE_ORDER = [
   "Venue — retreats", "Venue — weddings", "Venue — day retreats", "Venue — other events",
   "Catering — retreats", "Catering — weddings", "Catering — day retreats", "Catering — other events",
   "Extras — retreats", "Extras — weddings", "Extras — day retreats", "Extras — other events",
-  DISC_NEGOTIATED, DISC_GOODWILL, "Bar (merchant)",
+  DISC_NEGOTIATED, DISC_SERVICE, "Bar (merchant)",
 ];
 const revLineRank = (label: string) => {
   const i = REV_LINE_ORDER.indexOf(label);
@@ -580,7 +579,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23);
       if (i.category === "bar") revBar[m] += net;
       else revEvents[m] += net;
-      const line = revenueLine(i.category ?? "rental", b.event_type ?? "retreat", i.discount_reason);
+      const line = revenueLine(i.category ?? "rental", b.event_type ?? "retreat");
       const arr = revRows.get(line) ?? Array.from({ length: 12 }, () => 0);
       arr[m] += net;
       revRows.set(line, arr);
@@ -604,12 +603,10 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       const rArr = revRows.get(rentalLine) ?? Array.from({ length: 12 }, () => 0);
       rArr[m] += ht;
       revRows.set(rentalLine, rArr);
-      // Raison du champ (6 oct 2026) : other = geste post-séjour -> goodwill ;
-      // sinon (null/negotiation/internal) remise négociée à l'avance.
-      const fieldLine = b.rental_discount_reason === "other" ? DISC_GOODWILL : DISC_NEGOTIATED;
-      const dArr = revRows.get(fieldLine) ?? Array.from({ length: 12 }, () => 0);
+      // Le champ = toujours une remise négociée (règle par source, 7 oct 2026)
+      const dArr = revRows.get(DISC_NEGOTIATED) ?? Array.from({ length: 12 }, () => 0);
       dArr[m] -= ht;
-      revRows.set(fieldLine, dArr);
+      revRows.set(DISC_NEGOTIATED, dArr);
       // revEvents inchangé : +HT rental et −HT discount s'annulent.
     }
     // Bar (merchant) — 27 août 2026 : la source de revenu bar est passée aux
