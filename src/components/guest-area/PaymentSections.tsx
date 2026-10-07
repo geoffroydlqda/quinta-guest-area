@@ -253,10 +253,14 @@ export function PaymentOverview({ bookingId }: { bookingId: string | null | unde
     );
   }
 
-  // Ce que la cliente paie = le Total rental price tel quel (24 sept 2026 :
-  // le champ Discount est purement indicatif pour le P&L, jamais déduit).
-  const totalDue = Number(booking?.total_rental_price ?? 0);
-  const totalPaid = rental.filter((i) => i.status === 'paid').reduce((s, i) => s + Number(i.amount_due || 0), 0);
+  // Ce que la cliente paie = Total rental price − compensations service
+  // (échéances catégorie discount, négatives) — règle du 7 oct 2026. Le champ
+  // Discount de la fiche reste purement indicatif pour le P&L, jamais déduit.
+  const serviceComp = payments.filter((i) => i.category === 'discount')
+    .reduce((s, i) => s + Number(i.amount_due || 0), 0); // négatif ou 0
+  const totalDue = Math.max(0, Number(booking?.total_rental_price ?? 0) + serviceComp);
+  const totalPaid = rental.filter((i) => i.status === 'paid').reduce((s, i) => s + Number(i.amount_due || 0), 0)
+    + payments.filter((i) => i.category === 'discount' && i.status === 'paid').reduce((s, i) => s + Number(i.amount_due || 0), 0);
   const remaining = Math.max(totalDue - totalPaid, 0);
   const pct = totalDue > 0 ? Math.min(100, Math.round((totalPaid / totalDue) * 100)) : 0;
 

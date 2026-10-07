@@ -1670,17 +1670,21 @@ function PaymentSection({ userId }: { userId: string }) {
   const barInst = useMemo(() => installments.filter((i) => i.category === "bar"), [installments]);
 
   const totals = useMemo(() => {
-    const totalDue = rentalInst.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    // Règle de cohérence (7 oct 2026, demande Geoffroy) :
+    //   Σ échéances RENTAL = total_rental_price (prix convenu)
+    //   accommodation due (net) = total_rental_price − compensations service
+    //   (échéances catégorie discount, stockées en négatif).
+    const rentalOnly = rentalInst.filter((i) => i.category !== "discount");
+    const serviceSum = rentalInst.filter((i) => i.category === "discount")
+      .reduce((s, i) => s + Number(i.amount_due || 0), 0); // négatif
+    const rentalSum = rentalOnly.reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const totalPaid = rentalInst.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
-    // Convention (définitive, 29 juil. 2026) : total_rental_price = prix de base ;
-    // ⚠️ Sémantique changée le 24 sept 2026 : le Total rental price EST ce que
-    // le client paie (remise déjà incluse). Le champ Discount est purement
-    // indicatif (manque à gagner vs brochure, pour le P&L) — plus déduit.
     const rental = Number(booking?.total_rental_price || 0);
-    const remaining = Math.max(0, rental - totalPaid);
-    const pct = rental > 0 ? Math.min(100, (totalPaid / rental) * 100) : 0;
-    const mismatch = rental > 0 && rentalInst.length > 0 && Math.abs(totalDue - rental) > 0.001;
-    return { totalDue, totalPaid, rental, remaining, pct, mismatch };
+    const netDue = Math.max(0, rental + serviceSum);
+    const remaining = Math.max(0, netDue - totalPaid);
+    const pct = netDue > 0 ? Math.min(100, (totalPaid / netDue) * 100) : 0;
+    const mismatch = rental > 0 && rentalOnly.length > 0 && Math.abs(rentalSum - rental) > 0.001;
+    return { totalDue: rentalSum, totalPaid, rental: netDue, remaining, pct, mismatch };
   }, [rentalInst, booking]);
 
   // Suivi extras & catering : total contracté = somme des échéances hors rental/bar
@@ -2178,7 +2182,7 @@ function PaymentSection({ userId }: { userId: string }) {
           </div>
           {totals.mismatch && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-              Rental installments (€{totals.totalDue}) do not match rental price (€{totals.rental}).
+              Rental installments (€{totals.totalDue}) do not match the rental price (€{Number(booking?.total_rental_price || 0)}).
             </p>
           )}
         </div>

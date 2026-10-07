@@ -595,8 +595,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     for (const b of realBookings) {
       const disc = Number(b.rental_discount || 0);
       if (!(disc > 0) || !b.check_in_date || !b.check_in_date.startsWith(year)) continue;
-      const hasRental = installments.some((i) => i.booking_id === b.id && (i.category ?? "rental") === "rental");
-      if (!hasRental) continue;
+      // Garde hasRental RETIRÉE (7 oct 2026, demande Geoffroy) : un événement
+      // interne offert (0 €, aucune échéance rental — ex. Tommy & friends)
+      // doit quand même porter sa remise négociée dans le P&L.
       const m = Number(b.check_in_date.slice(5, 7)) - 1;
       const ht = disc / 1.23;
       const rentalLine = revenueLine("rental", b.event_type ?? "retreat");
