@@ -35,9 +35,16 @@ const REV_EVENT_LABEL: Record<string, string> = {
   retreat: "retreats", wedding: "weddings", day_retreat: "day retreats", other: "other events",
 };
 
+// Deux familles de remises — règle PAR SOURCE (7 oct 2026, miroir de
+// FinancePage) : échéances catégorie discount = service issues ;
+// champ bookings.rental_discount = negotiated (rental re-grossé d'autant,
+// net inchangé).
+const DISC_NEGOTIATED = "Discounts — negotiated";
+const DISC_SERVICE = "Discounts — service issues";
+
 function revenueLine(category: string, eventType: string): string {
   if (category === "bar") return "Bar (merchant)";
-  if (category === "discount") return "Discounts";
+  if (category === "discount") return DISC_SERVICE;
   const ev = REV_EVENT_LABEL[eventType] ?? REV_EVENT_LABEL.retreat;
   if (category === "catering") return `Catering — ${ev}`;
   if (category === "extra") return `Extras — ${ev}`;
@@ -58,7 +65,7 @@ serve(async (req) => {
     const [{ data: txs }, { data: insts }, { data: bookings }] = await Promise.all([
       admin.from("fin_transactions").select("date,amount,amount_net,kind,category,booking_id,pnl_month,notes,source"),
       admin.from("payment_installments").select("booking_id,amount_due,amount_excl_vat,category,status,is_cash,paid_on,due_date"),
-      admin.from("bookings").select("id,check_in_date,event_type,is_test"),
+      admin.from("bookings").select("id,check_in_date,event_type,is_test,rental_discount"),
     ]);
     const real = new Map((bookings ?? []).filter((b) => !b.is_test).map((b) => [b.id, b]));
 
@@ -89,6 +96,19 @@ serve(async (req) => {
         ? Number(i.amount_excl_vat)
         : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23);
       addRev(revenueLine(String(i.category ?? "rental"), String(b.event_type ?? "retreat")), m, net);
+    }
+    // Remise négociée (champ bookings.rental_discount, indicatif) : le P&L
+    // affiche le rental au BRUT brochure (+HT) et l'opposé en ligne
+    // "Discounts — negotiated" — le net reste ce qui a été facturé. Sans
+    // garde hasRental (7 oct 2026) : un événement interne offert à 0 €
+    // porte quand même sa remise. Miroir exact de FinancePage.
+    for (const b of real.values()) {
+      const disc = Number((b as { rental_discount?: number | null }).rental_discount || 0);
+      if (!(disc > 0) || !b.check_in_date || !String(b.check_in_date).startsWith(year)) continue;
+      const m = Number(String(b.check_in_date).slice(5, 7)) - 1;
+      const ht = disc / 1.23;
+      addRev(revenueLine("rental", String(b.event_type ?? "retreat")), m, ht);
+      addRev(DISC_NEGOTIATED, m, -ht);
     }
     const byCat = new Map<string, number[]>();
     const otherIncome = Z();
