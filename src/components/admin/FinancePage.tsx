@@ -949,13 +949,16 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     }
     const hosted = realBookings.filter((b) => b.check_in_date?.startsWith(m));
 
-    // Bookings & pipeline (31 aout 2026) : ventes signees pendant le mois
-    // (= echeances creees ce mois-ci, hors bar — nouvelles resas ET upsells,
-    // toutes annees de sejour confondues) + carnet "on the books" des annees
+    // Bookings & pipeline (31 aout 2026, reformule 8 oct 2026) : ventes
+    // signees pendant le mois (= echeances creees ce mois-ci, hors bar),
+    // separees par NATURE pour ne pas laisser croire que tout est du rental :
+    // "venue bookings" (rental + discounts) vs "catering & extras" ajoutes a
+    // des evenements deja reserves. + carnet "on the books" des annees
     // futures. Montants TVAC, coherents avec la section Revenue secured.
     const realIds = new Set(realBookings.map((b) => b.id));
     let signedMonth = 0;
-    const signedByYear = new Map<string, number>();
+    const venueByYear = new Map<string, number>();
+    const addonByYear = new Map<string, number>();
     for (const i of installments) {
       if (!i.id || i.category === "bar" || !realIds.has(i.booking_id)) continue;
       const createdDay = instCreated.get(i.id);
@@ -963,10 +966,18 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       const v = Number(i.amount_due || 0);
       signedMonth += v;
       const stayYear = bookingById.get(i.booking_id)?.check_in_date?.slice(0, 4) ?? "TBD";
-      signedByYear.set(stayYear, (signedByYear.get(stayYear) ?? 0) + v);
+      const bucket = i.category === "rental" || i.category === "discount" ? venueByYear : addonByYear;
+      bucket.set(stayYear, (bucket.get(stayYear) ?? 0) + v);
     }
-    const signedDetail = [...signedByYear.entries()].sort()
+    const sumMap = (mm: Map<string, number>) => [...mm.values()].reduce((s, v) => s + v, 0);
+    const yearDetail = (mm: Map<string, number>) => [...mm.entries()].sort()
       .map(([y2, v]) => `${y2} stays ${f(v)}`).join(" · ");
+    const venueTotal = sumMap(venueByYear);
+    const addonTotal = sumMap(addonByYear);
+    const signedParts: string[] = [];
+    if (venueTotal !== 0) signedParts.push(`${f(venueTotal)} of new venue bookings (${yearDetail(venueByYear)})`);
+    if (addonTotal !== 0) signedParts.push(`${f(addonTotal)} of catering & extras added to already-booked events (${yearDetail(addonByYear)})`);
+    const signedDetail = signedParts.join(" and ");
     const futureYears = new Map<string, { value: number; events: Set<string>; nights: number }>();
     for (const i of installments) {
       if (i.category === "bar" || !realIds.has(i.booking_id)) continue;
@@ -1000,8 +1011,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       `3. Revenue secured — ${f(secured)} contracted for ${yr} across ${securedEvents.size} events, of which ${f(collectedAmt)} (${pctCollected}%) has already been collected; the balance falls due ahead of each event. ${upcoming.length > 0 ? `${upcoming.length} event${upcoming.length > 1 ? "s" : ""} in the next 90 days represent${upcoming.length > 1 ? "" : "s"} ${f(upcomingValue)} of contracted revenue.` : "No events are scheduled in the next 90 days."}`,
       ``,
       `4. Bookings & pipeline — ${signedMonth > 0
-        ? `${f(signedMonth)} of new business signed in ${monthShort}${signedDetail ? ` (${signedDetail})` : ""}.`
-        : `no new business signed in ${monthShort}.`}${onTheBooks ? ` ${onTheBooks[0].toUpperCase()}${onTheBooks.slice(1)}.` : ""}`,
+        ? `${f(signedMonth)} of new sales signed in ${monthShort}${signedDetail ? `: ${signedDetail}` : ""}.`
+        : `no new sales signed in ${monthShort}.`}${onTheBooks ? ` ${onTheBooks[0].toUpperCase()}${onTheBooks.slice(1)}.` : ""}`,
       ``,
       `5. Activity — ${hosted.length > 0
         ? `${hosted.length} event${hosted.length > 1 ? "s" : ""} hosted in ${monthShort} (${hosted.map((b) => b.name).join(", ")}).`
