@@ -272,6 +272,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   const [importing, setImporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [filter, setFilter] = useState<"review" | "in" | "noreceipt" | "bills" | "nobills" | "all">("all");
+  // Sous-filtre de "No receipt" (15 oct 2026, demande Geoffroy) : exclure les
+  // virements (method 'transfer') pour ne garder que cartes/cash a justifier.
+  const [noReceiptCardsOnly, setNoReceiptCardsOnly] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
@@ -718,6 +721,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // Convention (1er sept 2026) : les dépenses CASH n'ont jamais de reçu à
   // attendre — exclues d'office du filtre No receipt (en plus du waiver ∅).
   const noReceiptCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived && !t.is_cash).length;
+  // Variante cartes seules (hors virements) pour le toggle "Cards only"
+  const noReceiptCardCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived && !t.is_cash && t.method !== "transfer").length;
 
   // ---- Cash box (caisse espèces) -------------------------------------------
   // Entrées : échéances is_cash payées (hors tests). Sorties/ajustements :
@@ -1117,7 +1122,12 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     if (filter === "review") arr = arr.filter((t) => !t.reviewed);
     if (filter === "in") arr = arr.filter((t) => t.amount > 0);
     // Dépenses sans justificatif lié (contrôle compta avant envoi au comptable)
-    if (filter === "noreceipt") arr = arr.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived && !t.is_cash);
+    if (filter === "noreceipt") {
+      arr = arr.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived && !t.is_cash);
+      // Toggle "Cards only" : exclut les virements sortants (Bills Revolut &
+      // co), dont le justificatif suit un autre circuit.
+      if (noReceiptCardsOnly) arr = arr.filter((t) => t.method !== "transfer");
+    }
     // Bills & virements : sorties par virement bancaire (method 'transfer') —
     // c'est là que vivent les Bills Revolut, dont la facture est dans l'app.
     if (filter === "bills") arr = arr.filter((t) => t.method === "transfer" && t.amount < 0 && t.kind !== "internal" && t.kind !== "split");
@@ -1134,7 +1144,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         || Math.abs(t.amount).toFixed(2).includes(q));
     }
     return arr;
-  }, [txs, filter, monthFilter, eventFilter, catFilter, search, bookingById, docsByTx]);
+  }, [txs, filter, noReceiptCardsOnly, monthFilter, eventFilter, catFilter, search, bookingById, docsByTx]);
   const visible = useMemo(() => filtered.slice(0, 300), [filtered]);
 
   // ---- Export CSV de la plage affichée (tous les filtres, sans la limite d'affichage)
@@ -1239,6 +1249,14 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                 </button>
               ))}
             </div>
+            {filter === "noreceipt" && (
+              <button type="button" onClick={() => setNoReceiptCardsOnly((v) => !v)}
+                title="Hide outgoing bank transfers (Revolut Bills) from the No receipt list — keep only card & manual expenses"
+                className={`rounded-full px-3 py-1 text-xs font-semibold border transition-colors ${
+                  noReceiptCardsOnly ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:bg-muted"}`}>
+                💳 Cards only ({noReceiptCardCount})
+              </button>
+            )}
             <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search description, note, payer, amount…"
               className="h-7 w-[230px] rounded-full border border-border bg-card px-3 text-xs placeholder:text-muted-foreground/60" />
