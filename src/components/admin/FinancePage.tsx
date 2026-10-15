@@ -512,6 +512,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         // Les parts héritent du mode cash du parent (et donc du "pas de reçu
         // à attendre" — convention du 1er sept 2026 : cash = jamais de reçu)
         is_cash: !!t.is_cash, receipt_waived: !!t.is_cash,
+        // ... et du method/payer du parent (15 oct 2026) : une part de
+        // virement reste un virement (badge 🏦, filtres Bills & Cards only)
+        method: t.method ?? null, payer: t.payer ?? null,
       };
     });
     const { error } = await supabase.from("fin_transactions").insert(children);
