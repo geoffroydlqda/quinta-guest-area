@@ -164,6 +164,121 @@ async function notifyAsyncFailure(installmentIds: string[], session: Record<stri
   }
 }
 
+// Virement direct via le QR EPC (15 oct 2026) : le guest vire sur son IBAN
+// virtuel SANS ouvrir de session Checkout — l'argent arrive sur son solde
+// client Stripe et l'événement customer_cash_balance_transaction.created
+// (type funded) est le seul signal. On rapproche le montant des échéances
+// impayées du guest (mêmes règles que bank-payment-match : UNE échéance au
+// montant exact, sinon la totalité des impayés d'UN booking), on encaisse le
+// solde par un PaymentIntent customer_balance confirmé immédiatement, puis
+// markPaid + fatura + email de confirmation (chaîne habituelle). Montant non
+// rapproché -> email admin, l'argent reste en crédit sur le customer.
+async function handleCashBalanceFunded(tx: Record<string, unknown>) {
+  try {
+    if (String(tx?.type) !== "funded" || String(tx?.currency ?? "").toLowerCase() !== "eur") return;
+    const customerId = typeof tx?.customer === "string" ? tx.customer : null;
+    const cents = Number((tx as { net_amount?: number }).net_amount ?? 0);
+    const txId = String(tx?.id ?? "");
+    if (!customerId || !(cents > 0) || !txId) return;
+    const amount = Math.round(cents) / 100;
+
+    const { data: settings } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
+    const key = (settings?.value as Record<string, string> | null)?.stripe_secret_key;
+    if (!key) { console.error("[cash-balance] stripe key missing"); return; }
+    const sHeaders = { Authorization: `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded" };
+
+    // Idempotence : Stripe rejoue les événements — un PI déjà taggé avec
+    // cette transaction de solde signifie que tout est déjà traité.
+    const srch = await fetch(
+      `https://api.stripe.com/v1/payment_intents/search?query=${encodeURIComponent(`metadata['cash_balance_tx']:'${txId}'`)}`,
+      { headers: { Authorization: `Bearer ${key}` } });
+    const srchBody = await srch.json().catch(() => ({}));
+    if (srch.ok && (srchBody?.data?.length ?? 0) > 0) {
+      console.log(`[cash-balance] tx ${txId} already handled (${srchBody.data[0].id})`);
+      return;
+    }
+
+    const cr = await fetch(`https://api.stripe.com/v1/customers/${customerId}`, { headers: { Authorization: `Bearer ${key}` } });
+    const cust = await cr.json().catch(() => ({}));
+    const email = String(cust?.email ?? "").toLowerCase().trim();
+    if (!email) { console.error(`[cash-balance] customer ${customerId} has no email`); return; }
+
+    const { data: bks } = await admin.from("bookings")
+      .select("id,email,retreat_name,is_test,cancelled_at")
+      .ilike("email", email);
+    const bookings = (bks ?? []).filter((b) => !b.is_test && !b.cancelled_at);
+    const bookingIds = bookings.map((b) => b.id);
+    type I = { id: string; booking_id: string; label: string | null; amount_due: number; status: string; is_cash: boolean | null; category: string | null; processing_since: string | null };
+    const { data: instsData } = bookingIds.length
+      ? await admin.from("payment_installments")
+        .select("id,booking_id,label,amount_due,status,is_cash,category,processing_since")
+        .in("booking_id", bookingIds)
+      : { data: [] as I[] };
+    const open = ((instsData ?? []) as I[]).filter((i) =>
+      i.status !== "paid" && !i.processing_since && !i.is_cash && i.category !== "discount" && Number(i.amount_due) > 0);
+
+    // Règle A : UNE échéance au montant exact. Règle B : la totalité des
+    // impayés d'UN booking. Ambigu (plusieurs candidats) -> on ne touche rien.
+    const close = (a: number, b: number) => Math.abs(a - b) <= 0.02;
+    const exact = open.filter((i) => close(Number(i.amount_due), amount));
+    let matched: I[] | null = null;
+    if (exact.length === 1) matched = [exact[0]];
+    else if (exact.length === 0) {
+      const byBooking = new Map<string, I[]>();
+      for (const i of open) byBooking.set(i.booking_id, [...(byBooking.get(i.booking_id) ?? []), i]);
+      const candidates = [...byBooking.values()].filter((g) => close(g.reduce((s, i) => s + Number(i.amount_due), 0), amount));
+      if (candidates.length === 1) matched = candidates[0];
+    }
+
+    const notifyAdmin = async (subject: string, text: string) => {
+      try {
+        const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+        await resend.emails.send({ from: "Quinta do Amor <hello@quintamor.com>", to: ["hello@quintamor.com"], subject, text });
+      } catch (e) { console.error("[cash-balance] admin email failed:", String((e as Error)?.message ?? e)); }
+    };
+
+    if (!matched) {
+      console.error(`[cash-balance] €${amount.toFixed(2)} from ${email} NOT matched (${open.length} open installments)`);
+      await notifyAdmin(
+        `⚠️ Bank transfer received on Stripe — not matched (€${amount.toFixed(2)})`,
+        `€${amount.toFixed(2)} arrived by direct bank transfer on the Stripe account of ${email}, but it doesn't match any single unpaid installment nor the full balance of one booking.\n\nThe money sits as customer credit in Stripe (Customers → ${customerId} → Cash balance). Apply it manually from the Stripe dashboard, then mark the installments paid in the admin.`);
+      return;
+    }
+
+    const booking = bookings.find((b) => b.id === matched![0].booking_id);
+    const ids = matched.map((i) => i.id);
+    const params = new URLSearchParams();
+    params.set("amount", String(Math.round(cents)));
+    params.set("currency", "eur");
+    params.set("customer", customerId);
+    params.set("payment_method_types[0]", "customer_balance");
+    params.set("payment_method_data[type]", "customer_balance");
+    params.set("confirm", "true");
+    params.set("metadata[installment_ids]", ids.join(","));
+    params.set("metadata[booking_id]", matched[0].booking_id);
+    params.set("metadata[cash_balance_tx]", txId);
+    params.set("description", `${booking?.retreat_name ?? "Quinta do Amor"} — ${matched.map((i) => i.label).join(" + ")} (EPC QR transfer)`.slice(0, 250));
+    const pr = await fetch("https://api.stripe.com/v1/payment_intents", { method: "POST", headers: sHeaders, body: params.toString() });
+    const pi = await pr.json().catch(() => ({}));
+    if (!pr.ok || pi?.status !== "succeeded") {
+      // Solde insuffisant ou refus : on annule le PI éventuel et on alerte.
+      if (pi?.id && pi?.status && pi.status !== "succeeded" && pi.status !== "canceled") {
+        await fetch(`https://api.stripe.com/v1/payment_intents/${pi.id}/cancel`, { method: "POST", headers: sHeaders }).catch(() => null);
+      }
+      console.error(`[cash-balance] PI not succeeded for tx ${txId}: ${JSON.stringify(pi?.error ?? pi?.status).slice(0, 200)}`);
+      await notifyAdmin(
+        `⚠️ Bank transfer received on Stripe — matched but not collected (€${amount.toFixed(2)})`,
+        `€${amount.toFixed(2)} from ${email} matched "${matched.map((i) => i.label).join(" + ")}" (${booking?.retreat_name ?? "?"}) but collecting the customer cash balance failed (${String(pi?.error?.message ?? pi?.status ?? "unknown")}).\n\nHandle it from the Stripe dashboard (Customers → ${customerId}).`);
+      return;
+    }
+    console.log(`[cash-balance] €${amount.toFixed(2)} from ${email} matched ${ids.length} installment(s) — PI ${pi.id} succeeded`);
+    const newlyPaid = await markPaid(ids, String(pi.id), null);
+    await automate(newlyPaid, String(pi.id));
+  } catch (e) {
+    console.error("[cash-balance] error:", String((e as Error)?.message ?? e));
+  }
+}
+
 // Étape 4 — automatisation post-paiement (LIVE uniquement, best-effort) :
 // fatura-recibo Moloni générée puis email de confirmation avec le PDF joint.
 // Auth interne des appels : x-cron-key (app_settings.internal.cron_key).
@@ -268,6 +383,20 @@ serve(async (req) => {
     const event = JSON.parse(payload);
     const type: string = event?.type ?? "";
     const session = event?.data?.object ?? {};
+
+    // Virement direct (QR EPC) arrivé sur le solde client — LIVE uniquement
+    // (jamais de fatura/encaissement sur un événement de test). Traité après
+    // la réponse à Stripe (plusieurs appels API).
+    if (type === "customer_cash_balance_transaction.created") {
+      if (event?.livemode) {
+        const task = handleCashBalanceFunded(session);
+        const rt = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+        if (rt?.waitUntil) rt.waitUntil(task); else await task;
+      } else {
+        console.log("[cash-balance] test event — ignored");
+      }
+      return json({ received: true });
+    }
     const idsRaw: string = session?.metadata?.installment_ids
       ?? session?.metadata?.installment_id
       ?? session?.client_reference_id

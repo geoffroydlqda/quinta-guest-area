@@ -492,7 +492,7 @@ async function buildProFormaPdf(opts: {
       const img = await doc.embedPng(opts.qrPng);
       const S = 58;
       page.drawImage(img, { x: PAGE_W - M - S + 6, y: 34, width: S, height: S });
-      text("Scan to pay", 0, 7, { color: GREY, right: PAGE_W - M + 3, atY: 26 });
+      text("Scan with your banking app", 0, 7, { color: GREY, right: PAGE_W - M + 3, atY: 26 });
     } catch (e) {
       console.error("[pro-forma] QR embed failed:", String((e as Error)?.message ?? e));
     }
@@ -759,11 +759,12 @@ Geo`);
 ${paras(parsed.data.body_top ?? "")}
 <p style="margin:18px 0 6px 0;"><a href="${payUrl}" style="display:inline-block;background:#6d7855;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;">Pay ${esc(amount)}</a></p>
 <p style="margin:0 0 6px 0;font-size:11px;color:#888888;">${esc(snip("stripe_caption"))}${proFormaAttached ? ` ${esc(snip("stripe_caption_attached"))}` : ""}</p>
-<!-- QR du lien de paiement (15 oct 2026) : lu depuis un ordinateur, le guest
-     scanne avec l'appareil photo de son téléphone -> même checkout Stripe. -->
+<!-- QR EPC (15 oct 2026, v2) : scanné depuis le SCANNER DE L'APP BANCAIRE
+     (Girocode), le virement SEPA arrive prérempli — IBAN virtuel Stripe,
+     montant, bénéficiaire, libellé. Sur mobile : bouton Pay au-dessus. -->
 <table cellpadding="0" cellspacing="0" style="margin:10px 0 6px 0;border:1px solid #E5D9C8;border-radius:10px;background:#FDFCF8;"><tr>
-<td style="padding:10px 12px;"><a href="${payUrl}"><img src="${qrUrl}" alt="Scan to pay" width="96" height="96" style="display:block;border:0;" /></a></td>
-<td style="padding:10px 14px 10px 0;font-family:Helvetica,Arial,sans-serif;font-size:11px;line-height:1.5;color:#555555;">Reading this on a computer?<br/>Scan this code with your phone's camera<br/>to pay from your phone — same secure page.</td>
+<td style="padding:10px 12px;"><img src="${qrUrl}" alt="SEPA bank transfer QR" width="110" height="110" style="display:block;border:0;" /></td>
+<td style="padding:10px 14px 10px 0;font-family:Helvetica,Arial,sans-serif;font-size:11px;line-height:1.5;color:#555555;"><span style="font-weight:bold;color:#35532A;">Prefer a direct bank transfer?</span><br/>Open your <b>banking app</b> and scan this code with the app's QR scanner (Girocode / SEPA QR) — IBAN, amount and reference come prefilled, nothing to type.<br/>Reading this on your phone? Use the Pay button above instead.</td>
 </tr></table>
 <p style="margin:0 0 18px 0;font-size:11px;color:#555555;">${(() => {
   const thisPay = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
