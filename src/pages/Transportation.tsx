@@ -136,12 +136,14 @@ const Transportation = () => {
     return getFixedTripPriceNumeric(pickup, dropoff, taxiSizeForPassengers(newTrip.passengers_count));
   }, [newTrip.pickup_location, newTrip.pickup_custom, newTrip.dropoff_location, newTrip.dropoff_custom, newTrip.passengers_count]);
 
-  // Pré-remplit le prix avec le tarif standard tant que l'admin ne l'a pas modifié à la main
+  // Pré-remplit le prix avec le tarif standard tant que l'admin ne l'a pas modifié à la main.
+  // Round trip (15 oct 2026) : le champ représente le TOTAL aller-retour -> défaut = 2x le tarif.
   useEffect(() => {
     if (!tripPriceTouched) {
-      setTripPrice(standardTripPrice !== null ? String(standardTripPrice) : '');
+      const legs = newTrip.trip_type === 'round_trip' ? 2 : 1;
+      setTripPrice(standardTripPrice !== null ? String(standardTripPrice * legs) : '');
     }
-  }, [standardTripPrice, tripPriceTouched]);
+  }, [standardTripPrice, tripPriceTouched, newTrip.trip_type]);
 
   const checkoutDate = profile?.check_out_date || null;
   const MAX_CHECKOUT_TIME = '11:00';
@@ -166,16 +168,26 @@ const Transportation = () => {
     if (isRound && !newTrip.return_time) errors.push('return_time');
     if (!newTrip.passengers_count || newTrip.passengers_count < 1) errors.push('passengers_count');
 
-    // Price (admin mode) : si renseigné, doit être un nombre >= 0
+    // Price (admin mode) : si renseigné, doit être un nombre >= 0.
+    // Round trip (15 oct 2026, demande Geoffroy) : le prix saisi est le TOTAL
+    // aller-retour, réparti moitié-moitié sur les deux legs (avant, il était
+    // appliqué à CHAQUE leg -> facturé double).
     let customPrice: number | undefined = undefined;
+    let customPriceLeg2: number | undefined = undefined;
     if (isAdminMode && tripPrice.trim() !== '') {
       const parsed = Number(tripPrice.replace(',', '.'));
+      const legs = isRound ? 2 : 1;
       if (Number.isNaN(parsed) || parsed < 0) {
         errors.push('price');
-      } else if (standardTripPrice === null || parsed !== standardTripPrice) {
+      } else if (standardTripPrice === null || parsed !== standardTripPrice * legs) {
         // On n'enregistre un override que si le prix diffère du tarif standard
         // (sinon le trip suit automatiquement les évolutions de barème)
-        customPrice = parsed;
+        if (isRound) {
+          customPriceLeg2 = Math.round((parsed / 2) * 100) / 100;
+          customPrice = Math.round((parsed - customPriceLeg2) * 100) / 100;
+        } else {
+          customPrice = parsed;
+        }
       }
     }
 
@@ -215,7 +227,7 @@ const Transportation = () => {
           trip_time: newTrip.return_time,
           passengers_count: newTrip.passengers_count,
           taxi_size: taxiSizeForPassengers(newTrip.passengers_count),
-          custom_price: customPrice,
+          custom_price: customPriceLeg2,
         });
       }
 
@@ -555,22 +567,25 @@ const Transportation = () => {
                   {/* Price (admin mode only) — pré-rempli avec le tarif standard, modifiable */}
                   {isAdminMode && (
                     <div>
-                      <Label>Price (€)</Label>
+                      <Label>{newTrip.trip_type === 'round_trip' ? 'Price (€) — round trip total' : 'Price (€)'}</Label>
                       <Input
                         type="number"
                         min={0}
                         step="1"
                         inputMode="decimal"
-                        placeholder={standardTripPrice !== null ? String(standardTripPrice) : 'Agreed price'}
+                        placeholder={standardTripPrice !== null ? String(standardTripPrice * (newTrip.trip_type === 'round_trip' ? 2 : 1)) : 'Agreed price'}
                         value={tripPrice}
                         onChange={(e) => { setTripPriceTouched(true); setTripPrice(e.target.value); }}
                         className={validationErrors.includes('price') ? 'border-destructive' : ''}
                       />
                       <p className="text-xs text-muted-foreground mt-1">
                         {standardTripPrice !== null
-                          ? `Standard rate for this route: €${standardTripPrice}${newTrip.trip_type === 'round_trip' ? ' per leg' : ''}. Change it to set a custom price.`
-                          : 'No standard rate for this route — enter the agreed price (leave empty for "custom offer").'}
-                        {newTrip.trip_type === 'round_trip' && ' Applied to both legs.'}
+                          ? newTrip.trip_type === 'round_trip'
+                            ? `Standard rate: €${standardTripPrice} per leg (€${standardTripPrice * 2} round trip). Enter the TOTAL for both legs — it will be split between them.`
+                            : `Standard rate for this route: €${standardTripPrice}. Change it to set a custom price.`
+                          : newTrip.trip_type === 'round_trip'
+                            ? 'No standard rate — enter the agreed TOTAL for both legs (it will be split between them); leave empty for "custom offer".'
+                            : 'No standard rate for this route — enter the agreed price (leave empty for "custom offer").'}
                       </p>
                       {validationErrors.includes('price') && (
                         <p className="text-xs text-destructive mt-1">Enter a valid price (number ≥ 0).</p>
