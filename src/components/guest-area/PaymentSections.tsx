@@ -25,11 +25,19 @@ export function fmtDate(d: string | null | undefined) {
 
 // Presentation-only status kind: 'pending' is split into "due soon" (within
 // 14 days) and "scheduled" for the timeline — same underlying data.
-export type InstallmentKind = 'paid' | 'overdue' | 'due_soon' | 'scheduled';
+// 'processing' = paiement bancaire asynchrone (SEPA/virement) initié par le
+// guest, en attente de confirmation (~6 jours ouvrés) : plus de bouton Pay,
+// sorti du "Left to pay" — évite les doubles paiements (15 oct 2026).
+export type InstallmentKind = 'paid' | 'processing' | 'overdue' | 'due_soon' | 'scheduled';
+
+export function isProcessing(s: PaymentInstallment) {
+  return s.status !== 'paid' && !!s.processing_since;
+}
 
 export function installmentKind(s: PaymentInstallment): InstallmentKind {
   const todayIso = todayLisbon();
   if (s.status === 'paid') return 'paid';
+  if (isProcessing(s)) return 'processing';
   if (s.due_date && s.due_date < todayIso) return 'overdue';
   if (s.due_date) {
     const due = new Date(s.due_date + 'T00:00:00');
@@ -44,6 +52,7 @@ function installmentBadge(s: PaymentInstallment) {
   const kind = installmentKind(s);
   const map = {
     paid: { label: 'Paid', cls: 'bg-[#EEF1E4] text-[#6D7855]' },
+    processing: { label: 'Processing', cls: 'bg-[#EAF1F5] text-[#4A7A96]' },
     overdue: { label: 'Overdue', cls: 'bg-destructive/10 text-[#B25C3D]' },
     due_soon: { label: 'Due soon', cls: 'bg-amber-50 text-[#8A6C15]' },
     scheduled: { label: 'Scheduled', cls: 'bg-muted text-muted-foreground' },
@@ -52,6 +61,7 @@ function installmentBadge(s: PaymentInstallment) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${cfg.cls}`}>
       {kind === 'paid' && <Check className="w-3 h-3" />}
+      {kind === 'processing' && <Loader2 className="w-3 h-3 animate-spin" />}
       {cfg.label}
     </span>
   );
@@ -60,13 +70,16 @@ function installmentBadge(s: PaymentInstallment) {
 // Timeline dot colour follows the same status kinds.
 const TIMELINE_DOT: Record<InstallmentKind, string> = {
   paid: 'bg-[#8CA05F] border-[#8CA05F]',
+  processing: 'bg-card border-[#7FA6BC]',
   overdue: 'bg-[#F36F63] border-[#F36F63]',
   due_soon: 'bg-card border-amber-400',
   scheduled: 'bg-card border-border',
 };
 
 export function isPayableOnline(inst: PaymentInstallment) {
-  return inst.status !== 'paid' && !inst.is_cash && String(inst.category ?? 'rental') !== 'discount' && Number(inst.amount_due) > 0;
+  // Une échéance dont le paiement bancaire est déjà en route (processing)
+  // n'est plus payable : elle sort du bouton Pay et du total "Left to pay".
+  return inst.status !== 'paid' && !isProcessing(inst) && !inst.is_cash && String(inst.category ?? 'rental') !== 'discount' && Number(inst.amount_due) > 0;
 }
 
 export function usePayInstallment() {
@@ -123,7 +136,9 @@ function InstallmentRow({ inst, onPay, paying }: { inst: PaymentInstallment; onP
         <div className="min-w-0">
           <div className="text-sm font-medium truncate">{inst.label}</div>
           <div className="text-xs text-muted-foreground">
-            Due {fmtDate(inst.due_date) || '—'}
+            {kind === 'processing'
+              ? 'Bank payment on its way — confirmation can take a few business days'
+              : <>Due {fmtDate(inst.due_date) || '—'}</>}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -268,10 +283,23 @@ export function PaymentOverview({ bookingId }: { bookingId: string | null | unde
   const extrasPaid = extras.filter((i) => i.status === 'paid').reduce((s, i) => s + Number(i.amount_due || 0), 0);
   const extrasOutstanding = Math.max(extrasTotal - extrasPaid, 0);
 
+  const processing = payments.filter(isProcessing);
+  const processingTotal = processing.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+
   return (
     <div className="space-y-4">
       {nextGroup.length > 0 && (
         <NextPaymentCard insts={nextGroup} onPay={payMany} paying={payingId === nextGroup[0].id} />
+      )}
+      {processing.length > 0 && (
+        <section className="guest-card p-5 flex items-start gap-3">
+          <Loader2 className="w-4 h-4 mt-0.5 shrink-0 animate-spin text-[#4A7A96]" />
+          <div className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground tabular-nums">{fmtEur(processingTotal)}</span>
+            {' '}is already on its way ({processing.map((i) => i.label).join(', ')}) — bank payments take a few
+            business days to confirm. {nextGroup.length > 0 ? 'It is not included in the amount above.' : 'Nothing else to pay for now.'}
+          </div>
+        </section>
       )}
       {hasAccommodation && (
         <section className="guest-card p-6">

@@ -252,6 +252,7 @@ async function ctaHtml(rule: Rule, booking: Booking, installment: Inst | null): 
         .select("id,booking_id,label,amount_due,due_date,status,is_cash,category")
         .eq("booking_id", booking.id)
         .neq("status", "paid")
+        .is("processing_since", null) // paiement deja en route : pas de bouton Pay dessus
         .order("due_date", { ascending: true, nullsFirst: false });
       inst = ((data ?? []) as Inst[]).find((x) => !x.is_cash && x.category !== "discount") ?? null;
     }
@@ -301,6 +302,9 @@ async function findMatches(rule: Rule, today: string): Promise<Match[]> {
     let q = admin.from("payment_installments")
       .select("id,booking_id,label,amount_due,due_date,status,is_cash,category")
       .neq("status", "paid")
+      // Paiement bancaire deja initie (SEPA/virement, badge Processing) :
+      // aucun rappel — le guest a paye, la banque confirme sous ~6 j ouvres.
+      .is("processing_since", null)
       .not("due_date", "is", null);
     if (rule.offset_days < 0) {
       q = q.gt("due_date", today).lte("due_date", addDays(today, -rule.offset_days));

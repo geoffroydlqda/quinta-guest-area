@@ -21,6 +21,10 @@ export type PaymentInstallment = {
   invoice_file_name: string | null;
   notes: string | null;
   is_cash: boolean | null;
+  // Paiement asynchrone (SEPA/virement/ACH) initié mais pas encore confirmé
+  // par la banque — posé par stripe-webhook (15 oct 2026).
+  processing_since: string | null;
+  processing_method: string | null;
 };
 
 export function usePaymentData(bookingId: string | null | undefined) {
@@ -46,7 +50,7 @@ export function usePaymentData(bookingId: string | null | undefined) {
           .maybeSingle(),
         supabase
           .from("payment_installments")
-          .select("id,booking_id,label,amount_due,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash")
+          .select("id,booking_id,label,amount_due,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash,processing_since,processing_method")
           .eq("booking_id", bookingId)
           // Le honesty bar (catégorie "bar") est un suivi interne : jamais
           // montré au client dans la guest area.

@@ -21,6 +21,7 @@ import {
   fmtDate,
   NextPaymentCard,
   nextPayableGroup,
+  isProcessing,
   usePayInstallment,
 } from '@/components/guest-area/PaymentSections';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -145,10 +146,16 @@ const DashboardContent = () => {
   const { payments: paymentList } = usePaymentData(activeBookingId);
   const { payMany, payingId } = usePayInstallment();
   const nextGroup = useMemo(() => nextPayableGroup(paymentList), [paymentList]);
+  // Balance due = impayé HORS paiements déjà en route (SEPA/virement initié,
+  // badge Processing) — sinon le guest croit devoir repayer (15 oct 2026).
   const balanceDue = useMemo(
     () => paymentList
-      .filter((i) => i.status !== 'paid' && String(i.category ?? 'rental') !== 'discount')
+      .filter((i) => i.status !== 'paid' && !isProcessing(i) && String(i.category ?? 'rental') !== 'discount')
       .reduce((s, i) => s + Number(i.amount_due || 0), 0),
+    [paymentList],
+  );
+  const processingTotal = useMemo(
+    () => paymentList.filter(isProcessing).reduce((s, i) => s + Number(i.amount_due || 0), 0),
     [paymentList],
   );
 
@@ -511,8 +518,13 @@ const DashboardContent = () => {
               <> {nextGroup.length > 1 ? 'Left to pay' : 'Next payment'} <strong className="text-foreground font-semibold tabular-nums">{fmtEur(nextGroup.reduce((s, i) => s + Number(i.amount_due || 0), 0))}</strong>{nextDueDate ? <> {nextGroup.length > 1 ? ', next installment due' : 'due'} <strong className="text-foreground font-semibold">{fmtDate(nextDueDate)}</strong></> : null}.</>
             ) : balanceDue > 0 ? (
               <> Balance due <strong className="text-foreground font-semibold tabular-nums">{fmtEur(balanceDue)}</strong>.</>
+            ) : processingTotal > 0 ? (
+              <> Your payment of <strong className="text-foreground font-semibold tabular-nums">{fmtEur(processingTotal)}</strong> is on its way — bank payments take a few business days to confirm.</>
             ) : (
               <> All payments are settled.</>
+            )}
+            {processingTotal > 0 && (nextGroup.length > 0 || balanceDue > 0) && (
+              <> {fmtEur(processingTotal)} more is already on its way (bank payment processing).</>
             )}
           </p>
         </div>
@@ -613,7 +625,7 @@ const DashboardContent = () => {
           >
             <span className="text-sm font-medium">All payments & invoices</span>
             <span className="flex items-center gap-1.5 text-sm text-muted-foreground group-hover:text-foreground transition-colors tabular-nums">
-              {balanceDue > 0 ? `${fmtEur(balanceDue)} outstanding` : 'All settled'}
+              {balanceDue > 0 ? `${fmtEur(balanceDue)} outstanding` : processingTotal > 0 ? `${fmtEur(processingTotal)} processing` : 'All settled'}
               <ArrowUpRight className="w-4 h-4" />
             </span>
           </Link>

@@ -4,14 +4,17 @@
 // signing secret whsec_… stocké dans app_settings key='internal'.stripe_webhook_secret).
 // Événements traités :
 //   checkout.session.completed          -> payé si payment_status = paid
-//                                          (SEPA : payment_status = unpaid, on attend)
-//   checkout.session.async_payment_succeeded -> payé (confirmation SEPA, quelques jours)
-//   checkout.session.async_payment_failed    -> log (l'échéance reste pending)
+//                                          (SEPA : payment_status = unpaid -> on pose
+//                                          processing_since/method sur les échéances,
+//                                          visibles admin + guest, 15 oct 2026)
+//   checkout.session.async_payment_succeeded -> payé (confirmation SEPA, ~6 j ouvrés)
+//   checkout.session.async_payment_failed    -> processing effacé + email admin
 // Étape 4 (à venir) : après le marquage payé en mode LIVE, générer la
 // fatura-recibo Moloni + email de confirmation. Volontairement absent tant
 // qu'on est en mode test (pas de vrais documents fiscaux pour de faux paiements).
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Resend } from "npm:resend@2.0.0";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -80,6 +83,8 @@ async function markPaid(installmentIds: string[], sessionId: string, fxRate: num
       status: "paid",
       paid_on: new Date().toISOString().slice(0, 10),
       stripe_session_id: sessionId,
+      processing_since: null,
+      processing_method: null,
       // Paiement présenté en USD : taux figé + montant dollars payé (trace compta)
       ...(fxRate ? {
         usd_rate: fxRate,
@@ -91,6 +96,72 @@ async function markPaid(installmentIds: string[], sessionId: string, fxRate: num
     console.log(`[stripe-webhook] installment ${installmentId} marked paid (session ${sessionId})${fxRate ? ` · USD @ ${fxRate}` : ""}`);
   }
   return newlyPaid;
+}
+
+// Paiement asynchrone initié (SEPA, virement, ACH) : le guest a terminé le
+// checkout mais la banque n'a pas encore confirmé. On marque les échéances
+// "processing" pour que l'admin (et le guest) sachent que le paiement est en
+// route — évite les relances et les doubles paiements. La méthode réelle est
+// lue sur le PaymentIntent (best-effort ; la session ne porte que la liste
+// des méthodes proposées).
+async function markProcessing(installmentIds: string[], session: Record<string, unknown>) {
+  let method: string | null = null;
+  try {
+    const piId = typeof session?.payment_intent === "string" ? session.payment_intent : null;
+    if (piId) {
+      const { data } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
+      const key = (data?.value as Record<string, string> | null)?.stripe_secret_key;
+      if (key) {
+        const r = await fetch(`https://api.stripe.com/v1/payment_intents/${piId}?expand[]=payment_method`, {
+          headers: { Authorization: `Bearer ${key}` },
+        });
+        const pi = await r.json().catch(() => ({}));
+        method = pi?.payment_method?.type ?? (Array.isArray(pi?.payment_method_types) ? pi.payment_method_types[0] : null);
+      }
+    }
+  } catch (e) {
+    console.error("[processing] method lookup failed:", String((e as Error)?.message ?? e));
+  }
+  const { error } = await admin.from("payment_installments")
+    .update({ processing_since: new Date().toISOString(), processing_method: method })
+    .in("id", installmentIds)
+    .neq("status", "paid");
+  if (error) console.error("[processing] update failed:", error.message);
+  else console.log(`[processing] installments ${installmentIds.join(",")} marked processing (${method ?? "unknown method"})`);
+}
+
+// Échec d'un paiement asynchrone (prélèvement refusé, microdépôts expirés…) :
+// on efface l'état processing et on prévient l'admin — avant, l'échec était
+// seulement loggé et personne ne le voyait (cas Shandra, oct 2026).
+async function notifyAsyncFailure(installmentIds: string[], session: Record<string, unknown>) {
+  const { error } = await admin.from("payment_installments")
+    .update({ processing_since: null, processing_method: null })
+    .in("id", installmentIds)
+    .neq("status", "paid");
+  if (error) console.error("[async-fail] clear processing failed:", error.message);
+  if (String(session?.id ?? "").startsWith("cs_test")) {
+    console.log("[async-fail] test session — no admin email");
+    return;
+  }
+  try {
+    const { data: insts } = await admin.from("payment_installments")
+      .select("label,amount_due,booking_id").in("id", installmentIds);
+    const bookingId = insts?.[0]?.booking_id;
+    const { data: booking } = bookingId
+      ? await admin.from("bookings").select("retreat_name,email").eq("id", bookingId).maybeSingle()
+      : { data: null };
+    const lines = (insts ?? []).map((i) => `• ${i.label} — €${Number(i.amount_due).toFixed(2)}`).join("\n");
+    const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+    await resend.emails.send({
+      from: "Quinta do Amor <hello@quintamor.com>",
+      to: ["hello@quintamor.com"],
+      subject: `⚠️ Payment failed — ${booking?.retreat_name ?? "unknown booking"}`,
+      text: `A bank payment (SEPA / bank transfer / ACH) initiated by the guest has FAILED.\n\nBooking: ${booking?.retreat_name ?? "?"} (${booking?.email ?? "?"})\nInstallments back to pending:\n${lines}\n\nStripe session: ${String(session?.id ?? "?")}\nThe guest may believe they have paid — consider reaching out so they can retry (card is the most reliable fallback).`,
+    });
+    console.log("[async-fail] admin notified");
+  } catch (e) {
+    console.error("[async-fail] admin email failed:", String((e as Error)?.message ?? e));
+  }
 }
 
 // Étape 4 — automatisation post-paiement (LIVE uniquement, best-effort) :
@@ -230,7 +301,8 @@ serve(async (req) => {
         scheduleAutomation(newlyPaid, session.id);
       } else {
         // SEPA & co : le débit est en cours, async_payment_succeeded suivra.
-        console.log(`[stripe-webhook] session ${session?.id} completed, payment ${session?.payment_status} — waiting`);
+        console.log(`[stripe-webhook] session ${session?.id} completed, payment ${session?.payment_status} — marking processing`);
+        if (installmentIds.length) await markProcessing(installmentIds, session);
       }
     } else if (type === "checkout.session.async_payment_succeeded") {
       if (installmentIds.length) {
@@ -239,6 +311,7 @@ serve(async (req) => {
       }
     } else if (type === "checkout.session.async_payment_failed") {
       console.error(`[stripe-webhook] async payment FAILED for installments ${idsRaw} (session ${session?.id})`);
+      if (installmentIds.length) await notifyAsyncFailure(installmentIds, session);
     }
 
     return json({ received: true });

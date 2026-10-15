@@ -109,6 +109,34 @@ async function signInstallment(installmentId: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
 }
 
+// URLs du bouton Pay et de son QR (fonction payment-qr) pour un groupe
+// d'échéances — même token signé pour les deux (15 oct 2026).
+async function payLinks(ids: string[]): Promise<{ payUrl: string; qrUrl: string }> {
+  if (ids.length > 1) {
+    const token = await signInstallment([...ids].sort().join(","));
+    return {
+      payUrl: `${FUNCTIONS_BASE}/stripe-checkout?installments=${ids.join(",")}&t=${token}`,
+      qrUrl: `${FUNCTIONS_BASE}/payment-qr?installments=${ids.join(",")}&t=${token}`,
+    };
+  }
+  const token = await signInstallment(ids[0]);
+  return {
+    payUrl: `${FUNCTIONS_BASE}/stripe-checkout?installment=${ids[0]}&t=${token}`,
+    qrUrl: `${FUNCTIONS_BASE}/payment-qr?installment=${ids[0]}&t=${token}`,
+  };
+}
+
+// PNG du QR pour le pro forma (best-effort — null si indisponible).
+async function fetchQrPng(qrUrl: string): Promise<Uint8Array | null> {
+  try {
+    const r = await fetch(qrUrl);
+    if (!r.ok) return null;
+    return new Uint8Array(await r.arrayBuffer());
+  } catch (_e) {
+    return null;
+  }
+}
+
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -218,6 +246,9 @@ async function buildProFormaPdf(opts: {
   guestName: string; retreatName: string | null;
   checkIn: string | null; checkOut: string | null;
   requested: PfInst[]; all: PfInst[];
+  // QR du lien de paiement (PNG, optionnel — 15 oct 2026) : scanné avec
+  // l'appareil photo du téléphone, ouvre le checkout Stripe.
+  qrPng?: Uint8Array | null;
 }): Promise<string> {
   // ------------------------------------------------------------------
   // 1. DONNEES d'abord : lignes par categorie, jours fusionnes, comptage
@@ -455,6 +486,18 @@ async function buildProFormaPdf(opts: {
   text("will be issued and emailed to you as soon as your payment is received.", 0, 8, { color: GREY, center: true, atY: 55 });
   text("Quinta do Amor  ·  www.quintamor.com  ·  hello@quintamor.com  ·  +351 931 377 682", 0, 8, { color: GREY, center: true, atY: 37 });
 
+  // ---- QR "scan to pay" en bas a droite (best-effort, jamais bloquant)
+  if (opts.qrPng && opts.qrPng.length) {
+    try {
+      const img = await doc.embedPng(opts.qrPng);
+      const S = 58;
+      page.drawImage(img, { x: PAGE_W - M - S + 6, y: 34, width: S, height: S });
+      text("Scan to pay", 0, 7, { color: GREY, right: PAGE_W - M + 3, atY: 26 });
+    } catch (e) {
+      console.error("[pro-forma] QR embed failed:", String((e as Error)?.message ?? e));
+    }
+  }
+
   return await doc.saveAsBase64();
 }
 
@@ -579,7 +622,7 @@ ${paras(render(tplRow.body_bottom ?? ""))}
     }
 
     const { data: instsData } = await admin.from("payment_installments")
-      .select("id,booking_id,label,amount_due,amount_excl_vat,status,is_cash,category,due_date,paid_on,vat_rate,product_lines,invoice_file_url,invoice_file_name,invoice_number,stripe_session_id,paid_bank_tx_id")
+      .select("id,booking_id,label,amount_due,amount_excl_vat,status,is_cash,category,due_date,paid_on,vat_rate,product_lines,invoice_file_url,invoice_file_name,invoice_number,stripe_session_id,paid_bank_tx_id,processing_since")
       .in("id", ids);
     const insts = (instsData ?? []);
     if (insts.length !== ids.length) return json({ error: "Installment not found" }, 404);
@@ -601,12 +644,14 @@ ${paras(render(tplRow.body_bottom ?? ""))}
         .select("id,label,amount_due,amount_excl_vat,status,is_cash,category,due_date,paid_on,vat_rate,product_lines")
         .eq("booking_id", inst.booking_id);
       const guestName = `${booking.first_name ?? ""} ${booking.last_name ?? ""}`.trim() || booking.email;
+      const { qrUrl: pvQrUrl } = await payLinks(ids.length > 1 ? ids : [inst.id]);
       const pdfB64 = await buildProFormaPdf({
         guestName,
         retreatName: booking.retreat_name ?? null,
         checkIn: booking.check_in_date, checkOut: booking.check_out_date,
         requested: insts as unknown as PfInst[],
         all: (allInsts ?? []) as unknown as PfInst[],
+        qrPng: await fetchQrPng(pvQrUrl),
       });
       return json({ proforma: pdfB64, filename: "Payment details - Quinta do Amor.pdf" });
     }
@@ -675,17 +720,15 @@ Geo`);
     if (kind === "request") {
       for (const i of insts) {
         if (i.status === "paid") return json({ error: `"${i.label ?? "A payment"}" is already settled` }, 400);
+        // Paiement bancaire deja initie (badge Processing) : demander un
+        // nouveau paiement = risque de double paiement (15 oct 2026).
+        if ((i as { processing_since?: string | null }).processing_since) {
+          return json({ error: `"${i.label ?? "A payment"}" — a bank payment is already processing for this installment (confirmation takes a few business days)` }, 400);
+        }
         if (i.is_cash) return json({ error: `"${i.label ?? "A payment"}" is a cash payment — no online link` }, 400);
         if (i.category === "discount") return json({ error: "Discount lines cannot be requested" }, 400);
       }
-      let payUrl: string;
-      if (ids.length > 1) {
-        const token = await signInstallment([...ids].sort().join(","));
-        payUrl = `${FUNCTIONS_BASE}/stripe-checkout?installments=${ids.join(",")}&t=${token}`;
-      } else {
-        const token = await signInstallment(inst.id);
-        payUrl = `${FUNCTIONS_BASE}/stripe-checkout?installment=${inst.id}&t=${token}`;
-      }
+      const { payUrl, qrUrl } = await payLinks(ids.length > 1 ? ids : [inst.id]);
       const amount = fmtEur(insts.reduce((s, i) => s + Number(i.amount_due || 0), 0));
 
       // Pro forma PDF joint : detail de ce paiement + echeancier du sejour.
@@ -702,6 +745,7 @@ Geo`);
           checkIn: booking.check_in_date, checkOut: booking.check_out_date,
           requested: insts as unknown as PfInst[],
           all: (allInsts ?? []) as unknown as PfInst[],
+          qrPng: await fetchQrPng(qrUrl),
         });
         attachments.push({ filename: "Payment details - Quinta do Amor.pdf", content: pdfB64 });
         proFormaAttached = true;
@@ -715,6 +759,12 @@ Geo`);
 ${paras(parsed.data.body_top ?? "")}
 <p style="margin:18px 0 6px 0;"><a href="${payUrl}" style="display:inline-block;background:#6d7855;color:#ffffff;text-decoration:none;font-weight:bold;padding:11px 26px;border-radius:8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;">Pay ${esc(amount)}</a></p>
 <p style="margin:0 0 6px 0;font-size:11px;color:#888888;">${esc(snip("stripe_caption"))}${proFormaAttached ? ` ${esc(snip("stripe_caption_attached"))}` : ""}</p>
+<!-- QR du lien de paiement (15 oct 2026) : lu depuis un ordinateur, le guest
+     scanne avec l'appareil photo de son téléphone -> même checkout Stripe. -->
+<table cellpadding="0" cellspacing="0" style="margin:10px 0 6px 0;border:1px solid #E5D9C8;border-radius:10px;background:#FDFCF8;"><tr>
+<td style="padding:10px 12px;"><a href="${payUrl}"><img src="${qrUrl}" alt="Scan to pay" width="96" height="96" style="display:block;border:0;" /></a></td>
+<td style="padding:10px 14px 10px 0;font-family:Helvetica,Arial,sans-serif;font-size:11px;line-height:1.5;color:#555555;">Reading this on a computer?<br/>Scan this code with your phone's camera<br/>to pay from your phone — same secure page.</td>
+</tr></table>
 <p style="margin:0 0 18px 0;font-size:11px;color:#555555;">${(() => {
   const thisPay = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
   const after = Math.max(0, Math.round((balTotal - balPaid - thisPay) * 100) / 100);

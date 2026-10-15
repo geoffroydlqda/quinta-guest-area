@@ -279,20 +279,22 @@ async function handlePayLink(req: Request): Promise<Response> {
   if (token !== expected) return invalid();
 
   const { data: instsData } = await admin.from("payment_installments")
-    .select("id,booking_id,label,amount_due,category,status,is_cash")
+    .select("id,booking_id,label,amount_due,category,status,is_cash,processing_since")
     .in("id", ids);
   const insts = instsData ?? [];
   if (insts.length !== ids.length) return invalid();
   if (new Set(insts.map((i) => i.booking_id)).size !== 1) return invalid();
 
   // Un lien groupé reste utilisable si une partie a déjà été réglée :
-  // on encaisse ce qui reste dû.
+  // on encaisse ce qui reste dû. Une échéance dont un paiement bancaire est
+  // déjà en route (processing_since, posé par le webhook) n'est plus payable
+  // — évite le double paiement via un vieux lien email (15 oct 2026).
   const payable = insts.filter((i) =>
-    i.status !== "paid" && !i.is_cash && i.category !== "discount" && Number(i.amount_due) > 0
+    i.status !== "paid" && !i.processing_since && !i.is_cash && i.category !== "discount" && Number(i.amount_due) > 0
   );
   if (!payable.length) {
-    const allPaid = insts.every((i) => i.status === "paid" || i.category === "discount");
-    return allPaid ? redirect(`${PROD_ORIGIN}/payment-success?payment=already`) : invalid();
+    const settled = insts.every((i) => i.status === "paid" || !!i.processing_since || i.category === "discount");
+    return settled ? redirect(`${PROD_ORIGIN}/payment-success?payment=already`) : invalid();
   }
   const { data: booking } = await admin.from("bookings")
     .select("id,email,retreat_name,check_in_date,check_out_date,client_id,is_test")
@@ -334,7 +336,7 @@ serve(async (req) => {
     // Échéances (dédupliquées) + validations
     const uniqueIds = [...new Set(ids)];
     const { data: insts, error: instErr } = await admin.from("payment_installments")
-      .select("id,booking_id,label,amount_due,category,status,is_cash")
+      .select("id,booking_id,label,amount_due,category,status,is_cash,processing_since")
       .in("id", uniqueIds);
     if (instErr) throw instErr;
     if (!insts || insts.length !== uniqueIds.length) return json({ error: "Installment not found" }, 404);
@@ -343,6 +345,7 @@ serve(async (req) => {
     if (bookingIds.size !== 1) return json({ error: "All payments must belong to the same booking" }, 400);
     for (const inst of insts) {
       if (inst.status === "paid") return json({ error: `"${inst.label}" is already settled` }, 400);
+      if (inst.processing_since) return json({ error: `"${inst.label}" — your bank payment is already on its way (confirmation takes a few business days)` }, 400);
       if (inst.is_cash) return json({ error: `"${inst.label}" is a cash payment — not payable online` }, 400);
       if (inst.category === "discount" || !(Number(inst.amount_due) > 0)) {
         return json({ error: `"${inst.label}" is not payable online` }, 400);

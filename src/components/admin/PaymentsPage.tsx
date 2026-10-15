@@ -43,9 +43,13 @@ export interface PayInstallment {
   moloni_document_id?: number | null;
   invoice_number?: string | null;
   paid_on?: string | null;
+  // Paiement bancaire asynchrone (SEPA/virement/ACH) initié par le guest,
+  // en attente de confirmation — posé/effacé par stripe-webhook (15 oct 2026).
+  processing_since?: string | null;
+  processing_method?: string | null;
 }
 
-type Bucket = "paid" | "overdue" | "upcoming";
+type Bucket = "paid" | "processing" | "overdue" | "upcoming";
 
 const fmt2 = (v: number) =>
   `${v < 0 ? "−" : ""}€${Math.abs(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -87,6 +91,7 @@ function SortHeader({
 
 const STATUS_BADGE: Record<Bucket, string> = {
   paid: "bg-green-100 text-green-800 border-green-300",
+  processing: "bg-sky-100 text-sky-800 border-sky-300",
   overdue: "bg-red-100 text-red-800 border-red-300",
   upcoming: "bg-muted text-muted-foreground border-border",
 };
@@ -176,6 +181,9 @@ export function PaymentsPage({
         || booking.email;
       const bucket: Bucket = inst.status === "paid"
         ? "paid"
+        // SEPA/virement initié : le guest a payé, la banque n'a pas encore
+        // confirmé — plus Overdue, plus de rappel à envoyer (15 oct 2026).
+        : inst.processing_since ? "processing"
         : inst.due_date && inst.due_date < todayIso ? "overdue" : "upcoming";
       list.push({
         inst,
@@ -430,7 +438,7 @@ export function PaymentsPage({
           <option value="discount">Discounts</option>
         </select>
         <div className="inline-flex rounded-md border border-input overflow-hidden">
-          {(["all", "overdue", "upcoming", "paid"] as const).map((s) => (
+          {(["all", "overdue", "upcoming", "processing", "paid"] as const).map((s) => (
             <button
               key={s}
               type="button"
@@ -513,8 +521,13 @@ export function PaymentsPage({
                     {r.inst.amount_excl_vat != null ? fmt2(Number(r.inst.amount_excl_vat)) : "—"}
                   </td>
                   <td className="px-3 py-2">
-                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${STATUS_BADGE[r.bucket]}`}>
-                      {r.bucket === "upcoming" ? "Pending" : r.bucket}
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${STATUS_BADGE[r.bucket]}`}
+                      title={r.bucket === "processing"
+                        ? `Bank payment initiated${r.inst.processing_method ? ` (${r.inst.processing_method.replace(/_/g, " ")})` : ""}${r.inst.processing_since ? ` on ${fmtDate(r.inst.processing_since.slice(0, 10))}` : ""} — waiting for bank confirmation (~6 business days)`
+                        : undefined}
+                    >
+                      {r.bucket === "upcoming" ? "Pending" : r.bucket === "processing" ? "⏳ Processing" : r.bucket}
                     </span>
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
