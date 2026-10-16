@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
+import { EmailDigestCard } from "@/components/admin/EmailDigestCard";
 import { PaymentEmailDialog } from "@/components/admin/PaymentEmailDialog";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { calculateFoodCostMulti, distributeDailyGuests, getDietTypes } from "@/lib/foodPricing";
@@ -971,6 +972,9 @@ const AdminGuestDetailContent = () => {
           initialValue={booking?.internal_notes ?? null}
           onSaved={(v) => { if (booking) (booking as BookingRow).internal_notes = v; }}
         />
+
+        {/* Email digest (auto, tache planifiee quotidienne — 16 oct 2026) */}
+        <EmailDigestCard bookingId={booking?.id ?? null} />
 
         {/* Grand Total */}
         {grandTotal > 0 && (

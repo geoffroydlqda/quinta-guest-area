@@ -53,6 +53,10 @@ Interface utilisateur en **anglais**. Communication avec le propriétaire en **f
 - **`notify-trip-added`** (Edge Function) : email à hello@ dès qu'un guest ajoute des trips (appel fire-and-forget depuis Transportation, jamais en mode admin ni booking test) — pour demander les quotes drivers rapidement.
 - Compte sans réservation : le Dashboard affiche un écran d'explication dédié (plus de champs qui ne sauvegardent rien).
 
+## Email digests par booking (16 oct 2026)
+
+Table `booking_email_digests` (booking_id PK→bookings, summary, checklist jsonb `[{id,text,done,done_at}]`, last_email_at, updated_at — migration `20261016100000`, RLS : select/update admin pour cocher, écriture du contenu par service role). Carte **"Email digest"** dans la fiche booking (`EmailDigestCard`, sous les Notes — masquée si aucun digest ; cases cochables, état conservé). Alimentée par la **tâche planifiée Claude "Email digests par booking"** (trig_01R1SvjgB5YEYw6q2q5v8dwL, tous les jours 07:47 Europe/Lisbon, mode auto) : lit Gmail (lecture seule) pour chaque booking non annulé/test des 60 prochains jours, et si nouveaux emails humains depuis last_email_at → réécrit le summary (français, puces datées : convenu / questions sans réponse / engagements) et MERGE la checklist (ne décoche jamais, ajoute les nouvelles actions, passe à done ce que les emails montrent réglé). Les emails automatiques (Stripe/Revolut/newsletters) sont ignorés. Modifier le périmètre/le prompt : update_trigger sur ce trigger (jamais delete+recreate).
+
 ## Onglet Staff (7 août 2026)
 
 - **`staff_profiles`** : annuaire de l'équipe (nom, rôle, team, email, téléphone, `active`). Page `/admin/staff` (`StaffPage`).

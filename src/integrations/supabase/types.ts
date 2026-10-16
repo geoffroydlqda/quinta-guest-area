@@ -449,6 +449,38 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_email_digests: {
+        Row: {
+          booking_id: string
+          summary: string
+          checklist: Json
+          last_email_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          booking_id: string
+          summary?: string
+          checklist?: Json
+          last_email_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          booking_id?: string
+          summary?: string
+          checklist?: Json
+          last_email_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_email_digests_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
           admin_managed: boolean
