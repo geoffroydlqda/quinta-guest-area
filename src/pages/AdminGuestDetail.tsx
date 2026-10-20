@@ -1397,6 +1397,10 @@ type Installment = {
   vat_rate?: number | null;
   group_id?: string | null;
   product_lines?: ProductLine[] | null;
+  // Paiement bancaire asynchrone (SEPA/virement/ACH) initié mais pas encore
+  // confirmé — posé/effacé par stripe-webhook (15 oct 2026).
+  processing_since?: string | null;
+  processing_method?: string | null;
   // Remises uniquement : raison du manque à gagner (24 sept 2026)
   discount_reason?: "negotiation" | "internal" | "other" | null;
 };
@@ -1417,6 +1421,9 @@ type BookingStatus = "pending" | "deposit_paid" | "paid_in_full" | "overdue";
 
 function isOverdue(inst: Installment): boolean {
   if (inst.status === "paid" || !inst.due_date) return false;
+  // Paiement bancaire déjà initié (badge Processing) : le guest a payé, la
+  // banque confirme sous ~6 j ouvrés — plus jamais Overdue (15 oct 2026).
+  if (inst.processing_since) return false;
   const today = new Date(); today.setHours(0, 0, 0, 0);
   return parseLocalDate(inst.due_date) < today;
 }
@@ -1560,7 +1567,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
     const iRes = await supabase
       .from("payment_installments")
-      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash,vat_rate,group_id,product_lines,discount_reason")
+      .select("id,booking_id,label,amount_due,amount_excl_vat,due_date,status,category,invoice_file_url,invoice_file_name,notes,is_cash,vat_rate,group_id,product_lines,discount_reason,processing_since,processing_method")
       .eq("booking_id", b.id)
       .order("due_date", { ascending: true, nullsFirst: false });
     if (!iRes.error) setInstallments((iRes.data || []) as Installment[]);
@@ -2027,6 +2034,14 @@ function PaymentSection({ userId }: { userId: string }) {
             {overdue && (
               <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_STYLES.overdue}`}>
                 Overdue
+              </span>
+            )}
+            {inst.status !== "paid" && inst.processing_since && (
+              <span
+                className="text-xs px-2 py-0.5 rounded-full border bg-sky-100 text-sky-800 border-sky-300 whitespace-nowrap"
+                title={`Bank payment initiated${inst.processing_method ? ` (${inst.processing_method.replace(/_/g, " ")})` : ""} on ${new Date(inst.processing_since).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} — waiting for bank confirmation (~6 business days)`}
+              >
+                ⏳ Processing
               </span>
             )}
             {!inst.is_cash && inst.category !== "discount" && booking.email && (
