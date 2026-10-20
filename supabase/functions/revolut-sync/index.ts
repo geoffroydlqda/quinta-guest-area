@@ -413,17 +413,27 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
     const reconcile = (body as { reconcile?: { from?: string; to?: string; all?: boolean } }).reconcile;
 
+    let tokenErr = "";
     const token = await accessToken().catch((e) => {
       // Refresh token expiré / révoqué -> il faut recliquer "Enable API access"
-      console.error("[revolut-sync] token refresh failed:", String(e));
+      tokenErr = String(e);
+      console.error("[revolut-sync] token refresh failed:", tokenErr);
       return null;
     });
     if (!token) {
       // Alerte email à Geoffroy (max 1 tous les 3 jours) avec la manip exacte.
+      // ⚠ 20 oct 2026 : plus JAMAIS sur un raté isolé (timeout / 5xx Revolut
+      // passager — l'email partait pour rien, cas vécu). Email seulement si
+      // l'erreur est une vraie erreur d'autorisation (400/401, invalid_grant)
+      // OU après 6 échecs consécutifs du cron (~6 h de panne).
       const wasConnected = !!(await internalValue("revolut_b2b_refresh_token"));
       const lastAlert = await internalValue("revolut_reauth_alerted");
       const threeDays = 3 * 86400000;
-      if (viaCron && wasConnected && (!lastAlert || Date.now() - new Date(lastAlert).getTime() > threeDays)) {
+      const isAuthError = /Revolut token 40[013]/.test(tokenErr) || /invalid_grant|unauthorized/i.test(tokenErr);
+      const failStreak = Number((await internalValue("revolut_sync_fail_count")) || "0") + 1;
+      if (viaCron) await setInternalValue("revolut_sync_fail_count", String(failStreak));
+      const shouldAlert = isAuthError || failStreak >= 6;
+      if (viaCron && wasConnected && shouldAlert && (!lastAlert || Date.now() - new Date(lastAlert).getTime() > threeDays)) {
         try {
           await resend.emails.send({
             from: FROM_EMAIL, to: [ADMIN_EMAIL],
@@ -452,6 +462,7 @@ serve(async (req) => {
       }, viaCron ? 200 : 400);
     }
     await setInternalValue("revolut_reauth_alerted", ""); // reconnecté -> réarme l'alerte
+    await setInternalValue("revolut_sync_fail_count", "0"); // série d'échecs remise à zéro
 
     // --- Probe (lecture seule, debug) --------------------------------------
     // POST {probe:{path:"/api/1.0/..."}} : GET brut sur l'API Revolut avec le
