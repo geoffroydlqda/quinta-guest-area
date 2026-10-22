@@ -1240,14 +1240,20 @@ function DashboardView({
     if (!cfg?.net_revenue) return null;
     // CA contracté HT de l'année, ventilé rental / catering / extras, vs P&L.
     // HT manquant : estimation à TVA 23 % (13 % pour le catering — taux food PT).
-    const actual = { rental: 0, catering: 0, extra: 0, bar: 0 };
+    // Service credits (echeances categorie "discount", montants negatifs)
+    // SEPARES du rental (22 oct 2026, demande Geoffroy) : la ligne Rental
+    // montre le brut facture — comparable a l'objectif brut du plan et au
+    // deck board — et les gestes commerciaux ont leur propre ligne. Le total
+    // (et le % de l'en-tete) reste NET, inchange.
+    const actual = { rental: 0, catering: 0, extra: 0, bar: 0, discount: 0 };
     for (const i of installments) {
       // Meme regle d'argent que les KPI : les paiements encaisses d'un booking
       // annule comptent, les impayes d'un annule non (25 aout 2026).
       if (!countsForMoney(i)) continue;
       const ci = finBookingById.get(i.booking_id)?.check_in_date || "";
       if (!ci.startsWith(year)) continue;
-      const cat = i.category === "catering" ? "catering" : i.category === "extra" ? "extra" : i.category === "bar" ? "bar" : "rental";
+      const cat = i.category === "catering" ? "catering" : i.category === "extra" ? "extra"
+        : i.category === "bar" ? "bar" : i.category === "discount" ? "discount" : "rental";
       const vat = cat === "catering" ? 1.13 : 1.23;
       actual[cat] += i.amount_excl_vat != null ? Number(i.amount_excl_vat) : Number(i.amount_due || 0) / vat;
     }
@@ -1297,12 +1303,15 @@ function DashboardView({
     }
     const expectedCatering = expectedCateringTvac / 1.13 + expectedWeddingHt; // HT (TVA food 13 %)
 
-    const total = actual.rental + actual.catering + actual.extra + actual.bar;
+    const total = actual.rental + actual.catering + actual.extra + actual.bar + actual.discount;
     const rows = [
       { label: "Rental", actual: actual.rental, target: cfg.rental ?? null, expected: 0 },
       { label: "Catering", actual: actual.catering, target: cfg.catering ?? null, expected: expectedCatering },
       { label: "Extras", actual: actual.extra, target: cfg.extras ?? null, expected: 0 },
       ...(actual.bar > 0 ? [{ label: "Bar", actual: actual.bar, target: null as number | null, expected: 0 }] : []),
+      ...(Math.abs(actual.discount) > 0.005
+        ? [{ label: "Service credits", actual: actual.discount, target: null as number | null, expected: 0 }]
+        : []),
     ];
     return {
       target: cfg.net_revenue,
