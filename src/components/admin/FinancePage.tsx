@@ -722,11 +722,16 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   }, [txs, installments, bookingById, year]);
 
   const reviewCount = txs.filter((t) => !t.reviewed).length;
+  // Un justificatif attaché au PARENT d'un split couvre toutes ses parts
+  // (23 oct 2026, demande Geoffroy — cas Isabella : une facture, 4 parts) :
+  // les parts sortent du filtre/compteur No receipt comme si elles avaient
+  // leur propre facture.
+  const hasReceipt = (t: FinTx) => docsByTx.has(t.id) || !!(t.parent_id && docsByTx.has(t.parent_id));
   // Convention (1er sept 2026) : les dépenses CASH n'ont jamais de reçu à
   // attendre — exclues d'office du filtre No receipt (en plus du waiver ∅).
-  const noReceiptCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived && !t.is_cash).length;
+  const noReceiptCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash).length;
   // Variante cartes seules (hors virements) pour le toggle "Cards only"
-  const noReceiptCardCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived && !t.is_cash && t.method !== "transfer").length;
+  const noReceiptCardCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash && t.method !== "transfer").length;
 
   // ---- Cash box (caisse espèces) -------------------------------------------
   // Entrées : échéances is_cash payées (hors tests). Sorties/ajustements :
@@ -1127,7 +1132,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     if (filter === "in") arr = arr.filter((t) => t.amount > 0);
     // Dépenses sans justificatif lié (contrôle compta avant envoi au comptable)
     if (filter === "noreceipt") {
-      arr = arr.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !docsByTx.has(t.id) && !t.receipt_waived && !t.is_cash);
+      arr = arr.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash);
       // Toggle "Cards only" : exclut les virements sortants (Bills Revolut &
       // co), dont le justificatif suit un autre circuit.
       if (noReceiptCardsOnly) arr = arr.filter((t) => t.method !== "transfer");
@@ -1578,7 +1583,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                           <button type="button" className="ml-1.5 text-[10px] text-muted-foreground hover:underline"
                             onClick={() => patch(t.id, { kind: "review", reviewed: false })}>edit</button>
                         )}
-                        {(t.kind === "expense" || t.kind === "review") && t.amount < 0 && (
+                        {(t.kind === "expense" || t.kind === "review" || t.kind === "split") && t.amount < 0 && (
                           docsByTx.has(t.id) ? (
                             <>
                               {/* Justificatif lié : icône verte -> ouvre le fichier */}
@@ -1596,6 +1601,15 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                                 {attachBusy === t.id ? "…" : "📎"}
                               </button>
                             </>
+                          ) : t.parent_id && docsByTx.has(t.parent_id) ? (
+                            /* Part d'un split dont le PARENT porte la facture
+                               globale : couverte comme si elle avait la sienne */
+                            <button type="button"
+                              className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-[#E5F5EA] px-1.5 py-0.5 text-[10px] font-semibold text-[#178A3F]/80 hover:bg-[#D3EDDC] align-middle"
+                              title="Receipt attached on the split's full transaction — click to open"
+                              onClick={() => openReceipts(t.parent_id!)}>
+                              <ReceiptText className="w-3 h-3" />↳
+                            </button>
                           ) : t.receipt_waived ? (
                             <button type="button"
                               className="ml-1.5 inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground align-middle"
