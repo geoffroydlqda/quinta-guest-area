@@ -319,9 +319,16 @@ async function buildProFormaPdf(opts: {
     .map(([cat, rows]) => [cat, groupDays(rows)]);
   const multiCat = cats.length > 1;
 
+  // 27 oct 2026 (demande Geoffroy) : le reste à payer d'ABORD, peu importe la
+  // due date — ce paiement, puis les échéances à venir, puis payées/remises.
+  const requestedIds = new Set(opts.requested.map((r) => r.id));
   const sched = opts.all
     .filter((i) => i.category !== "bar")
-    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"));
+    .sort((a, b) => {
+      const rank = (i: typeof a) => requestedIds.has(i.id) ? 0
+        : (i.status !== "paid" && i.category !== "discount") ? 1 : 2;
+      return (rank(a) - rank(b)) || (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999");
+    });
   const withSched = sched.length > 1;
 
   // Densite : nombre reel de lignes a dessiner apres fusion des jours
@@ -387,7 +394,9 @@ async function buildProFormaPdf(opts: {
   const c = { desc: M + 2, qty: M + W - 196, unit: M + W - 134, vat: M + W - 84, tot: M + W - 2 };
   text("Description", c.desc, 8, { font: bold, color: GREY });
   text("Qty", 0, 8, { font: bold, color: GREY, right: c.qty + 20 });
-  text("Unit", 0, 8, { font: bold, color: GREY, right: c.unit + 28 });
+  // 27 oct 2026 (demande Geoffroy) : prix unitaire affiché HORS TVA — le
+  // Total de la ligne reste TVAC (les unit_price stockés restent TVAC).
+  text("Unit excl. VAT", 0, 8, { font: bold, color: GREY, right: c.unit + 28 });
   text("VAT", 0, 8, { font: bold, color: GREY, right: c.vat + 20 });
   text("Total", 0, 8, { font: bold, color: GREY, right: c.tot });
   y -= (dense ? 12 : 14);
@@ -411,7 +420,8 @@ async function buildProFormaPdf(opts: {
         text(r.name.slice(0, 58), M + indent, fs, { color: r.total < 0 ? OLIVE : INK });
         if (r.qty != null) {
           text(String(r.qty), 0, fs, { right: c.qty + 20 });
-          text(pfEur(r.unit as number), 0, fs, { right: c.unit + 28 });
+          // Unitaire HT (arrondi d'affichage) — le total TVAC reste exact
+          text(pfEur(Math.round(((r.unit as number) / (1 + r.vat / 100)) * 100) / 100), 0, fs, { right: c.unit + 28 });
         }
         text(`${r.vat}%`, 0, fs, { right: c.vat + 20 });
         text(pfEur(r.total), 0, fs, { right: c.tot });
@@ -445,7 +455,6 @@ async function buildProFormaPdf(opts: {
     text("Status", M + W - 128, 8, { font: bold, color: GREY });
     text("Amount", 0, 8, { font: bold, color: GREY, right: c.tot });
     y -= (dense ? 12 : 14);
-    const requestedIds = new Set(opts.requested.map((r) => r.id));
     let paidSum = 0, totalSum = 0;
     for (const i of sched) {
       ensure(14);
@@ -783,8 +792,14 @@ ${(() => {
     ? new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
     : "";
   const idSet = new Set(insts.map((i) => i.id));
+  // 27 oct 2026 : même ordre que le pro forma — le reste à payer d'abord
+  // (ce paiement, puis à venir), les payées/remises ensuite.
   const rows = [...balAll]
-    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"))
+    .sort((a, b) => {
+      const rank = (i: typeof a) => idSet.has(i.id) ? 0
+        : (i.status !== "paid" && i.category !== "discount") ? 1 : 2;
+      return (rank(a) - rank(b)) || (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999");
+    })
     .map((r) => {
       const isThis = idSet.has(r.id);
       const isPaid = r.status === "paid";

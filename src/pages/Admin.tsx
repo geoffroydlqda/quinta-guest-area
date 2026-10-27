@@ -868,6 +868,7 @@ const AdminContent = () => {
               check_out_date: b.check_out_date,
               event_type: b.event_type ?? null,
               is_test: !!b.is_test,
+              cancelled_at: (b as any).cancelled_at ?? null,
               rental_discount: b.rental_discount ?? null,
               rental_discount_reason: (b as any).rental_discount_reason ?? null,
             }))}

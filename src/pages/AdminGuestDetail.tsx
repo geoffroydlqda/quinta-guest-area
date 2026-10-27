@@ -1402,13 +1402,16 @@ type Installment = {
   processing_since?: string | null;
   processing_method?: string | null;
   // Remises uniquement : raison du manque à gagner (24 sept 2026)
-  discount_reason?: "negotiation" | "internal" | "other" | null;
+  discount_reason?: "negotiation" | "internal" | "other" | "cancellation" | null;
 };
 
 const DISCOUNT_REASONS: Record<string, string> = {
   negotiation: "Negotiation",
   internal: "Internal",
   other: "Other",
+  // 27 oct 2026 (cas Yuna Moutran) : echeance negative = remboursement sur
+  // annulation — routee vers la ligne P&L "Cancelled events" via cancelled_at.
+  cancellation: "Cancellation",
 };
 
 const fmtEUR = (v: number | string) => {
@@ -1782,7 +1785,7 @@ function PaymentSection({ userId }: { userId: string }) {
 
   const upsertInstallment = async (
     id: string | null,
-    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number; product_lines?: ProductLine[] | null; discount_reason?: "negotiation" | "internal" | "other" | null },
+    values: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number; product_lines?: ProductLine[] | null; discount_reason?: "negotiation" | "internal" | "other" | "cancellation" | null },
     file?: File | null
   ) => {
     if (!booking) return false;
@@ -2422,7 +2425,7 @@ function InstallmentForm({
   transportSuggestion?: PaymentSuggestion | null;
   onCancel: () => void;
   onSave: (
-    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number; product_lines?: ProductLine[] | null; discount_reason?: "negotiation" | "internal" | "other" | null },
+    v: { label: string; amount_due: number; amount_excl_vat: number | null; due_date: string | null; status: "pending" | "paid"; category: "rental" | "catering" | "extra" | "discount"; notes: string | null; is_cash: boolean; vat_rate: number; product_lines?: ProductLine[] | null; discount_reason?: "negotiation" | "internal" | "other" | "cancellation" | null },
     file?: File | null
   ) => Promise<void> | void;
 }) {
@@ -2446,7 +2449,7 @@ function InstallmentForm({
   );
   // Raison de la remise (24 sept 2026) : negotiation / internal / other — la
   // note libre associée passe par le champ Notes existant.
-  const [discountReason, setDiscountReason] = useState<"negotiation" | "internal" | "other">(
+  const [discountReason, setDiscountReason] = useState<"negotiation" | "internal" | "other" | "cancellation">(
     initial?.discount_reason ?? "negotiation"
   );
   const [file, setFile] = useState<File | null>(null);
@@ -2776,10 +2779,11 @@ function InstallmentForm({
               <select
                 className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
                 value={discountReason}
-                onChange={(e) => setDiscountReason(e.target.value as "negotiation" | "internal" | "other")}
+                onChange={(e) => setDiscountReason(e.target.value as "negotiation" | "internal" | "other" | "cancellation")}
               >
                 <option value="negotiation">Negotiation</option>
                 <option value="internal">Internal (friends & family, team…)</option>
+                <option value="cancellation">Cancellation (refund / fee retained)</option>
                 <option value="other">Other</option>
               </select>
             </label>

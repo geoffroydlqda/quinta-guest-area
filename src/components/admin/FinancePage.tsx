@@ -93,6 +93,9 @@ type FinRule = { id: string; pattern: string; kind: string; category: string | n
 export type FinBooking = {
   id: string; name: string; check_in_date: string | null; check_out_date?: string | null;
   event_type: string | null; is_test: boolean;
+  // Annulation (27 oct 2026) : route les échéances vers CANCELLED_LINE au mois
+  // de l'annulation (voir pnl), et neutralise la remise brochure du booking.
+  cancelled_at?: string | null;
   // Remise saisie à côté du Total rental price (fiche booking) — réduit les
   // échéances rental au pro-rata, donc invisible en tant que discount sans elle.
   rental_discount?: number | null;
@@ -141,6 +144,11 @@ const REV_EVENT_LABEL: Record<string, string> = {
 //    il ne route plus rien.
 const DISC_NEGOTIATED = "Discounts — negotiated";
 const DISC_SERVICE = "Discounts — service issues";
+// Bookings annulés (27 oct 2026, cas Yuna Moutran / Lauren O'Donohue) : leurs
+// échéances (hors bar — service réellement rendu) sortent des lignes Venue/
+// Discounts et vont sur cette ligne, au MOIS DE L'ANNULATION (pas du check-in :
+// l'événement n'aura jamais lieu). Net = acomptes conservés − remboursements.
+const CANCELLED_LINE = "Cancelled events — fees retained";
 
 function revenueLine(category: string, eventType: string): string {
   if (category === "bar") return "Bar (merchant)";
@@ -156,7 +164,7 @@ const REV_LINE_ORDER = [
   "Venue — retreats", "Venue — weddings", "Venue — day retreats", "Venue — other events",
   "Catering — retreats", "Catering — weddings", "Catering — day retreats", "Catering — other events",
   "Extras — retreats", "Extras — weddings", "Extras — day retreats", "Extras — other events",
-  DISC_NEGOTIATED, DISC_SERVICE, "Bar (merchant)",
+  DISC_NEGOTIATED, DISC_SERVICE, CANCELLED_LINE, "Bar (merchant)",
 ];
 const revLineRank = (label: string) => {
   const i = REV_LINE_ORDER.indexOf(label);
@@ -579,11 +587,27 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     const revRows = new Map<string, number[]>();
     for (const i of installments) {
       const b = bookingById.get(i.booking_id);
-      if (!b?.check_in_date || !b.check_in_date.startsWith(year)) continue;
-      const m = Number(b.check_in_date.slice(5, 7)) - 1;
+      if (!b) continue;
       const net = i.amount_excl_vat != null
         ? Number(i.amount_excl_vat)
         : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23);
+      // Booking ANNULÉ (27 oct 2026) : les échéances payées et les remises
+      // (remboursements) vont sur CANCELLED_LINE au mois de l'annulation —
+      // l'événement n'aura jamais lieu, le check-in ne veut plus rien dire.
+      // Le bar reste sur sa ligne (consommation réelle, cas LSDR) ; une
+      // échéance restée pending sur un booking annulé ne compte nulle part.
+      if (b.cancelled_at && i.category !== "bar") {
+        if (i.status !== "paid" && i.category !== "discount") continue;
+        if (!b.cancelled_at.startsWith(year)) continue;
+        const cm = Number(b.cancelled_at.slice(5, 7)) - 1;
+        revEvents[cm] += net;
+        const cArr = revRows.get(CANCELLED_LINE) ?? Array.from({ length: 12 }, () => 0);
+        cArr[cm] += net;
+        revRows.set(CANCELLED_LINE, cArr);
+        continue;
+      }
+      if (!b.check_in_date || !b.check_in_date.startsWith(year)) continue;
+      const m = Number(b.check_in_date.slice(5, 7)) - 1;
       if (i.category === "bar") revBar[m] += net;
       else revEvents[m] += net;
       const line = revenueLine(i.category ?? "rental", b.event_type ?? "retreat");
@@ -600,6 +624,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     // ⚠️ Un booking qui cumule le champ ET une ligne discount équivalente
     // compterait double — à nettoyer dans les données, pas ici.
     for (const b of realBookings) {
+      // Annulé : plus de manque à gagner brochure à afficher (27 oct 2026)
+      if (b.cancelled_at) continue;
       const disc = Number(b.rental_discount || 0);
       if (!(disc > 0) || !b.check_in_date || !b.check_in_date.startsWith(year)) continue;
       // Garde hasRental RETIRÉE (7 oct 2026, demande Geoffroy) : un événement
