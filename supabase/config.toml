@@ -45,3 +45,7 @@ verify_jwt = false
 # Identification des payouts Stripe (auth x-cron-key ou JWT admin dans le code).
 [functions.stripe-payout-enrich]
 verify_jwt = false
+
+# Ventes Stripe hors bookings -> faturas Moloni serie TERRA (webhook signe + x-cron-key/JWT admin).
+[functions.stripe-sales]
+verify_jwt = false
