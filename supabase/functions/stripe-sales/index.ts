@@ -63,6 +63,9 @@ type SalesCfg = {
   payment_method_id: number;
   products: { ticket: number; standard: number };
   ticket_patterns: string[];
+  // Prioritaires sur ticket_patterns ("Non-ticket purchases" contient "ticket"
+  // mais doit rester 23 % ; retraites/add-ons = regime normal, 2 nov 2026).
+  standard_patterns?: string[];
 };
 async function salesCfg(): Promise<SalesCfg> {
   const { data } = await admin.from("app_settings").select("value").eq("key", "stripe_sales").maybeSingle();
@@ -109,9 +112,10 @@ const BOOKING_META = ["installment_ids", "installment_id", "booking_id"];
 const isBookingMeta = (m: Record<string, unknown> | null | undefined) =>
   !!m && BOOKING_META.some((k) => k in m);
 
-function classify(name: string, patterns: string[]): "ticket" | "standard" {
+function classify(name: string, cfg: SalesCfg): "ticket" | "standard" {
   const n = name.toLowerCase();
-  return patterns.some((p) => n.includes(p.toLowerCase())) ? "ticket" : "standard";
+  if ((cfg.standard_patterns ?? []).some((p) => n.includes(p.toLowerCase()))) return "standard";
+  return cfg.ticket_patterns.some((p) => n.includes(p.toLowerCase())) ? "ticket" : "standard";
 }
 
 function extractNif(cd: Record<string, unknown> | null | undefined): string | null {
@@ -163,7 +167,7 @@ async function saleFromCharge(account: Account, charge: Record<string, unknown>,
           name: String(l.description ?? "Sale"),
           qty,
           unit_ttc: Math.round((totalTtc / qty) * 1e6) / 1e6,
-          kind: classify(String(l.description ?? ""), cfg.ticket_patterns),
+          kind: classify(String(l.description ?? ""), cfg),
         };
       });
     } catch (e) {
@@ -173,7 +177,7 @@ async function saleFromCharge(account: Account, charge: Record<string, unknown>,
   const amount = Math.round(c.amount) / 100;
   if (!lines.length) {
     const name = c.description || "Stripe sale";
-    lines = [{ name, qty: 1, unit_ttc: amount, kind: classify(name, cfg.ticket_patterns) }];
+    lines = [{ name, qty: 1, unit_ttc: amount, kind: classify(name, cfg) }];
   }
   // Coherence : si la somme des lignes devie du paye (remises Stripe...), on met a l'echelle.
   const sum = lines.reduce((s, l) => s + l.qty * l.unit_ttc, 0);
@@ -232,21 +236,130 @@ async function sync(account: Account) {
 }
 
 // ---------------------------------------------------------------------------
+// action enrich — complete les lignes pending sans detail : les ventes Ticket
+// Tailor (festival/retraites Terra) sont des PaymentIntents SANS session
+// Checkout, mais la charge porte tout en metadata (TicketTailor, event_name,
+// order_id, name, email_address). Recalcule aussi le kind de TOUTES les
+// lignes pending avec les patterns a jour. (2 nov 2026)
+// ---------------------------------------------------------------------------
+async function enrich(account: Account, limit: number) {
+  const cfg = await salesCfg();
+  const { data: rows } = await admin.from("stripe_sales")
+    .select("id,charge_id,email,customer_name,line_items,amount")
+    .eq("account", account).eq("status", "pending_review")
+    .order("paid_at", { ascending: true });
+  const all = rows ?? [];
+  // Converge : on ne re-fetche que les noms generiques. Une ligne renommee
+  // (meme sans email trouvable) ne repasse plus — sinon les ventes sans
+  // aucune donnee client seraient re-fetchees a chaque run.
+  const needsFetch = (r: typeof all[number]) => {
+    const lines = (r.line_items ?? []) as LineItem[];
+    return lines.length === 1 && (lines[0].name === "Stripe sale" || /^Order for /.test(lines[0].name));
+  };
+  const report = { account, reclassified: 0, fetched: 0, enriched: 0, errors: 0, remaining_to_fetch: 0 };
+  let budget = limit;
+  for (const r of all) {
+    let lines = (r.line_items ?? []) as LineItem[];
+    let email = r.email, name = r.customer_name;
+    if (needsFetch(r)) {
+      if (budget <= 0) { report.remaining_to_fetch++; continue; }
+      budget--;
+      report.fetched++;
+      try {
+        type ChargeBits = {
+          description?: string | null;
+          metadata?: Record<string, string> | null;
+          billing_details?: { name?: string; email?: string };
+          receipt_email?: string | null;
+          customer?: { email?: string | null; name?: string | null } | null;
+          payment_intent?: string | null;
+        };
+        // expand[]=customer exige la permission Customers Read sur la cle
+        // restreinte — fallback sans expand si refuse (2 nov 2026).
+        let c: ChargeBits;
+        try {
+          c = await stripeGet(account, `/v1/charges/${r.charge_id}?expand[]=customer`) as ChargeBits;
+        } catch (_e) {
+          c = await stripeGet(account, `/v1/charges/${r.charge_id}`) as ChargeBits;
+        }
+        let m = c.metadata ?? {};
+        let desc = c.description ?? null;
+        // Ticket Tailor pose parfois les metadata sur le PaymentIntent et pas
+        // sur la charge (variable selon la periode) — fallback PI (2 nov 2026).
+        if (!m.event_name && c.payment_intent) {
+          try {
+            const pi = await stripeGet(account, `/v1/payment_intents/${c.payment_intent}`) as ChargeBits;
+            if (pi.metadata && Object.keys(pi.metadata).length) m = { ...pi.metadata, ...m };
+            desc = desc || pi.description || null;
+          } catch (_e) { /* best effort */ }
+        }
+        email = (m.email_address ?? c.billing_details?.email ?? c.receipt_email ?? c.customer?.email ?? email ?? "")
+          .toLowerCase() || null;
+        name = (m.name ?? c.billing_details?.name ?? c.customer?.name ?? name ?? "").trim() || null;
+        // Nom de ligne TOUJOURS non generique pour converger :
+        // event_name — order N > description sans "Order for " > Typeform <form> > ref charge.
+        const lineName = m.event_name
+          ? `${m.event_name}${m.order_id ? ` — order ${m.order_id}` : ""}`
+          : desc
+            ? desc.replace(/^Order for /, "")
+            : m.typeform_form_id
+              ? `Typeform ${m.typeform_form_id}`
+              : `Stripe payment ${r.charge_id}`;
+        if (lines.length <= 1) {
+          lines = [{ name: lineName, qty: 1, unit_ttc: Number(r.amount), kind: classify(lineName, cfg) }];
+        }
+        report.enriched++;
+      } catch (e) {
+        report.errors++;
+        console.error(`[enrich] ${r.charge_id}:`, String((e as Error)?.message ?? e));
+        continue;
+      }
+    }
+    const reclassed = lines.map((l) => ({ ...l, kind: classify(l.name, cfg) }));
+    const changed = JSON.stringify(reclassed) !== JSON.stringify(r.line_items) || email !== r.email || name !== r.customer_name;
+    if (changed) {
+      report.reclassified++;
+      const { error } = await admin.from("stripe_sales").update({
+        email, customer_name: name, line_items: reclassed, updated_at: new Date().toISOString(),
+      }).eq("id", r.id);
+      if (error) { report.errors++; console.error(`[enrich] update ${r.charge_id}:`, error.message); }
+    }
+  }
+  return report;
+}
+
+// ---------------------------------------------------------------------------
 // Facturation Moloni d'une ligne stripe_sales.
 // ---------------------------------------------------------------------------
 async function moloniCustomer(cfg: SalesCfg, sale: { customer_name: string | null; email: string | null; nif: string | null; country: string | null }): Promise<number> {
   const companyId = await moloniCompanyId();
   const isNif = !!sale.nif;
-  const search = sale.nif ?? sale.email ?? "";
+  // Vente anonyme (ni NIF, ni email, ni nom) -> LE client Consumidor Final
+  // (NIF 999999990), jamais un doublon par vente (2 nov 2026).
+  if (!sale.nif && !sale.email && !sale.customer_name) {
+    const res = await gql(`query($c: Int!, $s: String!) {
+      customers(companyId: $c, options: { search: { field: ALL, value: $s }, pagination: { page: 1, qty: 5 } }) {
+        data { customerId name vat } errors { field msg }
+      }
+    }`, { c: companyId, s: "999999990" });
+    const hit = ((res?.data?.customers?.data ?? []) as { customerId: number; vat?: string }[])
+      .find((h) => h.vat === "999999990");
+    if (hit) return hit.customerId;
+  }
+  // Nom sans email : recherche par nom exact pour reutiliser la fiche d'un
+  // acheteur recurrent au lieu d'en creer une par vente.
+  const search = sale.nif ?? sale.email ?? sale.customer_name ?? "";
   if (search) {
     const res = await gql(`query($c: Int!, $s: String!) {
       customers(companyId: $c, options: { search: { field: ALL, value: $s }, pagination: { page: 1, qty: 5 } }) {
         data { customerId name vat email } errors { field msg }
       }
     }`, { c: companyId, s: search });
-    const hits = (res?.data?.customers?.data ?? []) as { customerId: number; vat?: string; email?: string }[];
+    const hits = (res?.data?.customers?.data ?? []) as { customerId: number; vat?: string; email?: string; name?: string }[];
     const exact = hits.find((h) =>
-      (isNif && h.vat === sale.nif) || (!isNif && (h.email ?? "").toLowerCase() === (sale.email ?? ""))
+      (isNif && h.vat === sale.nif) ||
+      (!isNif && !!sale.email && (h.email ?? "").toLowerCase() === sale.email) ||
+      (!isNif && !sale.email && !!sale.customer_name && (h.name ?? "").trim().toLowerCase() === sale.customer_name.trim().toLowerCase())
     ) ?? (isNif ? hits[0] : undefined);
     if (exact) return exact.customerId;
   }
@@ -297,7 +410,7 @@ async function moloniCompanyId(): Promise<number> {
 const fmtDatePt = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
-async function invoiceSale(saleId: string): Promise<Record<string, unknown>> {
+async function invoiceSale(saleId: string, withPdf = true): Promise<Record<string, unknown>> {
   const cfg = await salesCfg();
   const companyId = await moloniCompanyId();
   const { data: sale, error } = await admin.from("stripe_sales").select("*").eq("id", saleId).maybeSingle();
@@ -356,35 +469,43 @@ async function invoiceSale(saleId: string): Promise<Record<string, unknown>> {
       invoice_number: doc.number ?? null, error: null, updated_at: new Date().toISOString(),
     }).eq("id", saleId);
 
-    // PDF -> bucket invoices (best effort)
+    // PDF -> bucket invoices (best effort ; saute en mode lot — l'attente de
+    // generation Moloni (~10-25 s/doc) ferait exploser le temps d'execution.
+    // Rattrapage : action 'pdf').
     let pdfPath: string | null = null;
-    try {
-      await gql(`mutation($c: Int!, $d: Int!) { invoiceReceiptGetPDF(companyId: $c, documentId: $d) }`, { c: companyId, d: doc.documentId });
-      let tok: { token?: string; path?: string } | null = null;
-      for (let i = 0; i < 8 && !tok?.path; i++) {
-        await new Promise((r) => setTimeout(r, 2500));
-        const t = await gql(`query($d: Int!) { invoiceReceiptGetPDFToken(documentId: $d) { data { token path filename } errors { msg } } }`, { d: doc.documentId });
-        tok = t?.data?.invoiceReceiptGetPDFToken?.data ?? null;
-      }
-      if (tok?.path && tok?.token) {
-        const pdfRes = await fetch(`${MEDIA_BASE}${tok.path}?jwt=${tok.token}`);
-        if (pdfRes.ok) {
-          const bytes = new Uint8Array(await pdfRes.arrayBuffer());
-          pdfPath = `stripe-sales/${String(doc.number ?? doc.documentId).replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`;
-          const up = await admin.storage.from("invoices").upload(pdfPath, bytes, { contentType: "application/pdf", upsert: true });
-          if (up.error) { console.error("[pdf] upload:", up.error.message); pdfPath = null; }
-          else await admin.from("stripe_sales").update({ invoice_pdf_path: pdfPath }).eq("id", saleId);
-        }
-      }
-    } catch (e) {
-      console.error("[pdf]", String((e as Error)?.message ?? e));
-    }
+    if (withPdf) pdfPath = await storePdf(saleId, companyId, doc.documentId, doc.number ?? null);
     console.log(`[invoice] ${sale.charge_id} -> ${doc.number ?? doc.documentId} (€${totalTtc})`);
     return { charge_id: sale.charge_id, number: doc.number, document_id: doc.documentId, total: doc.totalValue, pdf: !!pdfPath };
   } catch (e) {
     const msg = String((e as Error)?.message ?? e).slice(0, 500);
     await admin.from("stripe_sales").update({ status: "error", error: msg, updated_at: new Date().toISOString() }).eq("id", saleId);
     return { charge_id: sale.charge_id, error: msg };
+  }
+}
+
+// Genere le PDF Moloni d'une fatura stripe_sales et l'archive dans le bucket
+// invoices (stripe-sales/{numero}.pdf). Renvoie le chemin ou null.
+async function storePdf(saleId: string, companyId: number, documentId: number, number: string | null): Promise<string | null> {
+  try {
+    await gql(`mutation($c: Int!, $d: Int!) { invoiceReceiptGetPDF(companyId: $c, documentId: $d) }`, { c: companyId, d: documentId });
+    let tok: { token?: string; path?: string } | null = null;
+    for (let i = 0; i < 8 && !tok?.path; i++) {
+      await new Promise((r) => setTimeout(r, 2500));
+      const t = await gql(`query($d: Int!) { invoiceReceiptGetPDFToken(documentId: $d) { data { token path filename } errors { msg } } }`, { d: documentId });
+      tok = t?.data?.invoiceReceiptGetPDFToken?.data ?? null;
+    }
+    if (!tok?.path || !tok?.token) return null;
+    const pdfRes = await fetch(`${MEDIA_BASE}${tok.path}?jwt=${tok.token}`);
+    if (!pdfRes.ok) return null;
+    const bytes = new Uint8Array(await pdfRes.arrayBuffer());
+    const pdfPath = `stripe-sales/${String(number ?? documentId).replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`;
+    const up = await admin.storage.from("invoices").upload(pdfPath, bytes, { contentType: "application/pdf", upsert: true });
+    if (up.error) { console.error("[pdf] upload:", up.error.message); return null; }
+    await admin.from("stripe_sales").update({ invoice_pdf_path: pdfPath }).eq("id", saleId);
+    return pdfPath;
+  } catch (e) {
+    console.error("[pdf]", String((e as Error)?.message ?? e));
+    return null;
   }
 }
 
@@ -453,11 +574,12 @@ async function handleWebhookEvent(account: Account, event: Record<string, unknow
 // ---------------------------------------------------------------------------
 
 const BodySchema = z.object({
-  action: z.enum(["sync", "invoice", "status"]),
+  action: z.enum(["sync", "invoice", "status", "enrich", "pdf"]),
   account: z.enum(["quinta", "terra"]).optional(),
   ids: z.array(z.string().uuid()).max(500).optional(),
   all_pending: z.boolean().optional(),
   limit: z.number().int().positive().max(500).optional(),
+  skip_pdf: z.boolean().optional(),
 });
 
 serve(async (req) => {
@@ -496,10 +618,26 @@ serve(async (req) => {
 
     const parsed = BodySchema.safeParse(JSON.parse(payload || "{}"));
     if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
-    const { action, account, ids, all_pending, limit } = parsed.data;
+    const { action, account, ids, all_pending, limit, skip_pdf } = parsed.data;
 
     if (action === "sync") {
       return json(await sync(account ?? "quinta"));
+    }
+    if (action === "enrich") {
+      return json(await enrich(account ?? "terra", limit ?? 60));
+    }
+    if (action === "pdf") {
+      // Rattrapage des PDF manquants sur les lignes deja facturees.
+      const companyId = await moloniCompanyId();
+      const { data: rows } = await admin.from("stripe_sales")
+        .select("id,moloni_document_id,invoice_number")
+        .eq("status", "invoiced").is("invoice_pdf_path", null)
+        .order("paid_at", { ascending: true }).limit(limit ?? 10);
+      let stored = 0;
+      for (const r of rows ?? []) {
+        if (await storePdf(r.id, companyId, Number(r.moloni_document_id), r.invoice_number)) stored++;
+      }
+      return json({ processed: (rows ?? []).length, stored });
     }
     if (action === "status") {
       const { data } = await admin.from("stripe_sales")
@@ -518,7 +656,7 @@ serve(async (req) => {
       }
       if (!targetIds.length) return json({ error: "ids or all_pending required" }, 400);
       const results: Record<string, unknown>[] = [];
-      for (const id of targetIds) results.push(await invoiceSale(id));
+      for (const id of targetIds) results.push(await invoiceSale(id, !skip_pdf));
       const ok = results.filter((r) => r.number).length;
       const failed = results.filter((r) => r.error).length;
       return json({ invoiced: ok, failed, results });
