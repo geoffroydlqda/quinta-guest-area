@@ -66,6 +66,11 @@ type SalesCfg = {
   // Prioritaires sur ticket_patterns ("Non-ticket purchases" contient "ticket"
   // mais doit rester 23 % ; retraites/add-ons = regime normal, 2 nov 2026).
   standard_patterns?: string[];
+  // Routage par lieu (3 nov 2026, demande Geoffroy) : les ventes Dia do Amor
+  // appartiennent a Quinta do Amor -> serie FT2026 (document set 596), pas
+  // TERRA. Meme entite juridique, seule la serie change.
+  quinta_document_set_id?: number;
+  quinta_patterns?: string[];
 };
 async function salesCfg(): Promise<SalesCfg> {
   const { data } = await admin.from("app_settings").select("value").eq("key", "stripe_sales").maybeSingle();
@@ -436,8 +441,11 @@ async function invoiceSale(saleId: string, withPdf = true): Promise<Record<strin
       };
     });
     const totalTtc = Math.round(Number(sale.amount) * 100) / 100;
+    // Serie par lieu : Dia do Amor (quinta_patterns) -> FT2026, sinon TERRA.
+    const isQuinta = (cfg.quinta_patterns ?? []).some((p) =>
+      lines.some((l) => l.name.toLowerCase().includes(p.toLowerCase())));
     const docData: Record<string, unknown> = {
-      documentSetId: cfg.document_set_id,
+      documentSetId: isQuinta && cfg.quinta_document_set_id ? cfg.quinta_document_set_id : cfg.document_set_id,
       customerId,
       date: new Date().toISOString(),
       expirationDate: new Date().toISOString().slice(0, 10),
@@ -464,18 +472,21 @@ async function invoiceSale(saleId: string, withPdf = true): Promise<Record<strin
     const doc = created?.data?.invoiceReceiptCreate?.data;
     if (!doc?.documentId) throw new Error(`invoiceReceiptCreate returned no document: ${JSON.stringify(created).slice(0, 400)}`);
 
+    // Numero prefixe par la serie (TERRA/3 vs FT2026/41) — les deux series
+    // numerotent a partir de 1, le prefixe evite toute ambiguite.
+    const fullNumber = doc.number != null ? `${isQuinta ? "FT2026" : "TERRA"}/${doc.number}` : null;
     await admin.from("stripe_sales").update({
       status: "invoiced", moloni_document_id: doc.documentId,
-      invoice_number: doc.number ?? null, error: null, updated_at: new Date().toISOString(),
+      invoice_number: fullNumber, error: null, updated_at: new Date().toISOString(),
     }).eq("id", saleId);
 
     // PDF -> bucket invoices (best effort ; saute en mode lot — l'attente de
     // generation Moloni (~10-25 s/doc) ferait exploser le temps d'execution.
     // Rattrapage : action 'pdf').
     let pdfPath: string | null = null;
-    if (withPdf) pdfPath = await storePdf(saleId, companyId, doc.documentId, doc.number ?? null);
+    if (withPdf) pdfPath = await storePdf(saleId, companyId, doc.documentId, fullNumber);
     console.log(`[invoice] ${sale.charge_id} -> ${doc.number ?? doc.documentId} (€${totalTtc})`);
-    return { charge_id: sale.charge_id, number: doc.number, document_id: doc.documentId, total: doc.totalValue, pdf: !!pdfPath };
+    return { charge_id: sale.charge_id, number: doc.number, document_id: doc.documentId, total: doc.totalValue, pdf: !!pdfPath, set: isQuinta ? "quinta" : "terra" };
   } catch (e) {
     const msg = String((e as Error)?.message ?? e).slice(0, 500);
     await admin.from("stripe_sales").update({ status: "error", error: msg, updated_at: new Date().toISOString() }).eq("id", saleId);
