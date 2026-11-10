@@ -230,7 +230,9 @@ const AdminContent = () => {
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted">("all");
   // Pilules de navigation Bookings : année courante, années suivantes avec
   // bookings, et Past events (demande Geoffroy, 19 août 2026)
-  const [yearPill, setYearPill] = useState<string>(() => String(new Date().getFullYear()));
+  // null = choix automatique : première année (courante ou future) qui a des
+  // bookings à venir — si 2026 est vide, on ouvre sur 2027, etc. (demande Geoffroy, 10 nov 2026)
+  const [yearPill, setYearPill] = useState<string | null>(null);
   const [cancelledCollapsed, setCancelledCollapsed] = useState(true);
   const [showTests, setShowTests] = useState(false);
   
@@ -427,7 +429,11 @@ const AdminContent = () => {
   }, [upcomingByYear]);
 
   // Si la pilule active n'existe plus (recherche qui vide une année), on retombe sur la 1re
-  const activePill = yearPill === "past" || yearPills.includes(yearPill) ? yearPill : yearPills[0];
+  const defaultPill = useMemo(
+    () => yearPills.find((y) => (upcomingByYear.find(([yy]) => yy === y)?.[1].length ?? 0) > 0) ?? yearPills[0],
+    [yearPills, upcomingByYear]
+  );
+  const activePill = yearPill === "past" || (yearPill && yearPills.includes(yearPill)) ? yearPill : defaultPill;
   const pillEvents = useMemo(() => {
     if (activePill === "past") return [];
     return upcomingByYear.find(([y]) => y === activePill)?.[1] ?? [];
