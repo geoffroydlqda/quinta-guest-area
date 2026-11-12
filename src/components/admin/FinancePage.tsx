@@ -1144,6 +1144,10 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   const [eventFilter, setEventFilter] = useState("");
   const [catFilter, setCatFilter] = useState("");
   const [search, setSearch] = useState("");
+  // Tri par montant (12 nov 2026, demande Geoffroy) : null = ordre par date
+  // d'origine ; "desc" = plus gros montants d'abord ; "asc" = plus petits
+  // d'abord. Valeur absolue : entrées et dépenses se classent ensemble.
+  const [amountSort, setAmountSort] = useState<null | "asc" | "desc">(null);
   const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const monthsAvailable = useMemo(() => {
     const ms = new Set<string>();
@@ -1178,8 +1182,12 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         norm(`${t.description ?? ""} ${t.notes ?? ""} ${t.payer ?? ""} ${t.category ?? ""} ${t.booking_id ? bookingById.get(t.booking_id)?.name ?? "" : ""}`).includes(q)
         || Math.abs(t.amount).toFixed(2).includes(q));
     }
+    if (amountSort) {
+      const dir = amountSort === "asc" ? 1 : -1;
+      arr = [...arr].sort((x, y) => dir * (Math.abs(x.amount) - Math.abs(y.amount)));
+    }
     return arr;
-  }, [txs, filter, noReceiptCardsOnly, monthFilter, eventFilter, catFilter, search, bookingById, docsByTx]);
+  }, [txs, filter, noReceiptCardsOnly, monthFilter, eventFilter, catFilter, search, bookingById, docsByTx, amountSort]);
   const visible = useMemo(() => filtered.slice(0, 300), [filtered]);
 
   // ---- Export CSV de la plage affichée (tous les filtres, sans la limite d'affichage)
@@ -1381,7 +1389,18 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
               <thead className="bg-muted/80">
                 <tr className="text-left">
                   {["Date", "Description", "Payer", "Amount", "VAT", "Category", "Event", "Status"].map((h) => (
-                    <th key={h} className="px-3 py-2.5 text-[11px] uppercase tracking-wider font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-3 py-2.5 text-[11px] uppercase tracking-wider font-semibold text-muted-foreground whitespace-nowrap">
+                      {h === "Amount" ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-foreground"
+                          onClick={() => setAmountSort((s) => (s === null ? "desc" : s === "desc" ? "asc" : null))}
+                          title={amountSort === "desc" ? "Largest first — click for smallest first" : amountSort === "asc" ? "Smallest first — click to sort by date again" : "Sort by amount"}
+                        >
+                          {h} <span aria-hidden className="text-xs">{amountSort === "desc" ? "↓" : amountSort === "asc" ? "↑" : "↕"}</span>
+                        </button>
+                      ) : h}
+                    </th>
                   ))}
                 </tr>
               </thead>
