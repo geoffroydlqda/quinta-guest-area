@@ -8,6 +8,7 @@ import { EventMarginsTab } from "@/components/admin/EventMarginsTab";
 import { PurchaseInvoicesTab } from "@/components/admin/PurchaseInvoicesTab";
 import { EventPicker } from "@/components/admin/EventPicker";
 import { CategoryPicker } from "@/components/admin/CategoryPicker";
+import { PayerFilter, NO_PAYER } from "@/components/admin/PayerFilter";
 
 /**
  * Onglet Finance (4 août 2026) — phase 1, alimentée par import CSV Revolut
@@ -1143,6 +1144,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   const [monthFilter, setMonthFilter] = useState("");
   const [eventFilter, setEventFilter] = useState("");
   const [catFilter, setCatFilter] = useState("");
+  const [payerFilter, setPayerFilter] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   // Tri par montant (12 nov 2026, demande Geoffroy) : null = ordre par date
   // d'origine ; "desc" = plus gros montants d'abord ; "asc" = plus petits
@@ -1176,6 +1178,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
     if (catFilter === "__none__") arr = arr.filter((t) => !t.category && t.kind === "expense");
     else if (catFilter) arr = arr.filter((t) => t.category === catFilter);
+    if (payerFilter.length) arr = arr.filter((t) => payerFilter.includes(t.payer || NO_PAYER));
     const q = norm(search.trim());
     if (q) {
       arr = arr.filter((t) =>
@@ -1187,7 +1190,14 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       arr = [...arr].sort((x, y) => dir * (Math.abs(x.amount) - Math.abs(y.amount)));
     }
     return arr;
-  }, [txs, filter, noReceiptCardsOnly, monthFilter, eventFilter, catFilter, search, bookingById, docsByTx, amountSort]);
+  }, [txs, filter, noReceiptCardsOnly, monthFilter, eventFilter, catFilter, payerFilter, search, bookingById, docsByTx, amountSort]);
+  // Options du filtre Payer (en-tête du tableau) : tous les payeurs connus, par fréquence
+  const payerOptions = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of txs) { const k = t.payer || NO_PAYER; m.set(k, (m.get(k) ?? 0) + 1); }
+    return [...m.entries()].map(([value, count]) => ({ value, count }))
+      .sort((a, b) => (a.value === NO_PAYER ? 1 : b.value === NO_PAYER ? -1 : b.count - a.count));
+  }, [txs]);
   const visible = useMemo(() => filtered.slice(0, 300), [filtered]);
 
   // ---- Export CSV de la plage affichée (tous les filtres, sans la limite d'affichage)
@@ -1211,6 +1221,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     const parts = ["transactions", monthFilter || "all-months"];
     if (eventFilter) parts.push((bookingById.get(eventFilter)?.name ?? "event").toLowerCase().replace(/[^a-z0-9]+/g, "-"));
     if (catFilter) parts.push((catFilter === "__none__" ? "uncategorised" : catFilter).toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+    if (payerFilter.length === 1) parts.push((payerFilter[0] === NO_PAYER ? "no-payer" : payerFilter[0]).toLowerCase().replace(/[^a-z0-9]+/g, "-"));
     a.href = url; a.download = `${parts.join("_")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
@@ -1320,9 +1331,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
               groups={FIN_CATEGORIES} value={catFilter} onChange={setCatFilter}
               allowNone noneLabel="All categories" placeholder="All categories"
               extra={[{ value: "__none__", label: "Uncategorised expenses" }]} />
-            {(monthFilter || eventFilter || catFilter || search) && (
+            {(monthFilter || eventFilter || catFilter || payerFilter.length > 0 || search) && (
               <button type="button" className="text-xs text-muted-foreground hover:underline"
-                onClick={() => { setMonthFilter(""); setEventFilter(""); setCatFilter(""); setSearch(""); }}>
+                onClick={() => { setMonthFilter(""); setEventFilter(""); setCatFilter(""); setPayerFilter([]); setSearch(""); }}>
                 ✕ Clear
               </button>
             )}
@@ -1399,6 +1410,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                         >
                           {h} <span aria-hidden className="text-xs">{amountSort === "desc" ? "↓" : amountSort === "asc" ? "↑" : "↕"}</span>
                         </button>
+                      ) : h === "Payer" ? (
+                        <PayerFilter payers={payerOptions} value={payerFilter} onChange={setPayerFilter} />
                       ) : h}
                     </th>
                   ))}
@@ -1409,7 +1422,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                   <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin inline" /></td></tr>
                 ) : visible.length === 0 ? (
                   <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-muted-foreground italic">
-                    {monthFilter || eventFilter || catFilter || search ? "No transactions match these filters." : filter === "review" ? "Nothing to review — inbox zero 🎉" : "No transactions yet — connect Revolut or import a CSV to start."}
+                    {monthFilter || eventFilter || catFilter || payerFilter.length > 0 || search ? "No transactions match these filters." : filter === "review" ? "Nothing to review — inbox zero 🎉" : "No transactions yet — connect Revolut or import a CSV to start."}
                   </td></tr>
                 ) : visible.map((t) => {
                   const k = KIND_LABEL[t.kind] ?? KIND_LABEL.review;
@@ -1760,7 +1773,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                   <tfoot>
                     <tr className="border-t-2 border-border bg-muted/60">
                       <td colSpan={3} className="px-3 py-2 text-xs font-semibold">
-                        Totals — {rows.length} row{rows.length > 1 ? "s" : ""}{monthFilter || eventFilter || catFilter || filter !== "all" ? " (filtered)" : ""}
+                        Totals — {rows.length} row{rows.length > 1 ? "s" : ""}{monthFilter || eventFilter || catFilter || payerFilter.length > 0 || filter !== "all" ? " (filtered)" : ""}
                       </td>
                       <td className={`px-3 py-2 text-right tabular-nums text-xs font-bold whitespace-nowrap ${tin - tout < 0 ? "text-destructive" : ""}`}>{fmt2(tin - tout)}</td>
                       <td colSpan={4} className="px-3 py-2 text-[11px] text-muted-foreground whitespace-nowrap">
