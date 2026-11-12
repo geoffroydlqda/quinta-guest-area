@@ -19,6 +19,7 @@ import Payments from "./pages/Payments";
 import InvestorReport from "./pages/InvestorReport";
 import Documentation from "./pages/Documentation";
 import Admin from "./pages/Admin";
+import AdminInventory from "./pages/AdminInventory";
 import AdminGuestDetail from "./pages/AdminGuestDetail";
 import BookingSelector from "./pages/BookingSelector";
 import InvitePage from "./pages/InvitePage";
@@ -78,6 +79,7 @@ const App = () => (
               } />
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/guest/:guestId" element={<AdminGuestDetail />} />
+              <Route path="/admin/inventory" element={<AdminInventory />} />
               <Route path="/admin/:section" element={<Admin />} />
               {/* Legacy route redirect */}
               <Route path="/setup" element={

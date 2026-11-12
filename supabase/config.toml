@@ -49,3 +49,6 @@ verify_jwt = false
 # Ventes Stripe hors bookings -> faturas Moloni serie TERRA (webhook signe + x-cron-key/JWT admin).
 [functions.stripe-sales]
 verify_jwt = false
+
+[functions.inventory-reminder]
+verify_jwt = false

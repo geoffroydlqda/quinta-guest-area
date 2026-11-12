@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAllowedTabs } from "@/hooks/useAllowedTabs";
 import {
   LayoutDashboard, CalendarRange, Users, Wallet, Car,
-  BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X, Landmark, UserCog, Package,
+  BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X, Landmark, UserCog, Package, Boxes,
   Moon, Sun, TrendingUp, Paperclip, Mail,
 } from "lucide-react";
 
@@ -29,6 +29,7 @@ const NAV_GROUPS = [
     { to: "/admin/catering", label: "Catering", icon: ChefHat, tab: "catering" },
     { to: "/admin/transportation", label: "Transportation", icon: Car, tab: "transportation" },
     { to: "/admin/rooms", label: "Housekeeping", icon: BedDouble, tab: "rooms" },
+    { to: "/admin/inventory", label: "Inventory", icon: Boxes, tab: "inventory" },
   ]},
   { label: "Finance", items: [
     { to: "/admin/payments", label: "Payments", icon: Wallet, tab: "payments" },

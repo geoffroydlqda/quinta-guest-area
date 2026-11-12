@@ -254,6 +254,134 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_items: {
+        Row: {
+          id: string
+          name: string
+          reference: string | null
+          supplier: string | null
+          category: string
+          location: string
+          unit: string | null
+          par: number
+          reorder_point: number
+          current_qty: number | null
+          last_counted_at: string | null
+          last_counted_by: string | null
+          notes: string | null
+          active: boolean
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          reference?: string | null
+          supplier?: string | null
+          category?: string
+          location?: string
+          unit?: string | null
+          par?: number
+          reorder_point?: number
+          current_qty?: number | null
+          last_counted_at?: string | null
+          last_counted_by?: string | null
+          notes?: string | null
+          active?: boolean
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          reference?: string | null
+          supplier?: string | null
+          category?: string
+          location?: string
+          unit?: string | null
+          par?: number
+          reorder_point?: number
+          current_qty?: number | null
+          last_counted_at?: string | null
+          last_counted_by?: string | null
+          notes?: string | null
+          active?: boolean
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      inventory_counts: {
+        Row: {
+          id: string
+          started_at: string
+          completed_at: string | null
+          counted_by: string | null
+          booking_id: string | null
+          note: string | null
+        }
+        Insert: {
+          id?: string
+          started_at?: string
+          completed_at?: string | null
+          counted_by?: string | null
+          booking_id?: string | null
+          note?: string | null
+        }
+        Update: {
+          id?: string
+          started_at?: string
+          completed_at?: string | null
+          counted_by?: string | null
+          booking_id?: string | null
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_counts_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_count_lines: {
+        Row: {
+          count_id: string
+          item_id: string
+          qty: number
+        }
+        Insert: {
+          count_id: string
+          item_id: string
+          qty: number
+        }
+        Update: {
+          count_id?: string
+          item_id?: string
+          qty?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_count_lines_count_id_fkey"
+            columns: ["count_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_counts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_count_lines_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       housekeeping_sessions: {
         Row: {
           id: string
