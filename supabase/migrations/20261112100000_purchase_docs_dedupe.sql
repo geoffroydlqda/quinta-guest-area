@@ -54,7 +54,7 @@ $$;
 
 revoke all on function public.purchase_docs_dedupe() from public, anon, authenticated;
 
-drop trigger if exists purchase_docs_dedupe on public.purchase_docs;
+-- (pas de "drop trigger if exists" : via MCP il declenche une confirmation destructive qui pend)
 create trigger purchase_docs_dedupe
   before insert or update of storage_path, tx_id, status on public.purchase_docs
   for each row execute function public.purchase_docs_dedupe();
