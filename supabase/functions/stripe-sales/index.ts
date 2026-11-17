@@ -132,7 +132,7 @@ function extractNif(cd: Record<string, unknown> | null | undefined): string | nu
   return null;
 }
 
-async function saleFromCharge(account: Account, charge: Record<string, unknown>, cfg: SalesCfg): Promise<{ sale?: SaleRow; skip?: string }> {
+async function saleFromCharge(account: Account, charge: Record<string, unknown>, cfg: SalesCfg, allowRefunded = false): Promise<{ sale?: SaleRow; skip?: string }> {
   const c = charge as {
     id: string; amount: number; amount_refunded?: number; currency: string; created: number;
     paid: boolean; status: string; livemode: boolean; refunded?: boolean; invoice?: string | null;
@@ -141,7 +141,7 @@ async function saleFromCharge(account: Account, charge: Record<string, unknown>,
     receipt_email?: string | null; description?: string | null;
   };
   if (c.status !== "succeeded" || !c.paid) return { skip: "not succeeded" };
-  if (c.refunded || (c.amount_refunded ?? 0) > 0) return { skip: "refunded (handle manually)" };
+  if (!allowRefunded && (c.refunded || (c.amount_refunded ?? 0) > 0)) return { skip: "refunded (handle manually)" };
   if (c.invoice) return { skip: "stripe invoice payment (likely booking — check manually)" };
   if (isBookingMeta(c.metadata)) return { skip: "booking installment" };
   if ((c.currency ?? "eur").toLowerCase() !== "eur") return { skip: `currency ${c.currency} (handle manually)` };
@@ -494,6 +494,133 @@ async function invoiceSale(saleId: string, withPdf = true): Promise<Record<strin
   }
 }
 
+// ---------------------------------------------------------------------------
+// action refund_docs — regularisation fiscale d'une charge Stripe REMBOURSEE
+// (10 nov 2026, decision Geoffroy) : fatura SIMPLE (invoiceCreate, jamais
+// recibo — une NC ne peut viser qu'une fatura simple) pour le montant encaisse,
+// puis nota de credito liee pour la part remboursee (totale ou partielle, prix
+// HT, taxIds ACTUELS). Trace upsertee dans stripe_sales (status skipped).
+// ---------------------------------------------------------------------------
+async function refundDocs(account: Account, chargeId: string): Promise<Record<string, unknown>> {
+  const cfg = await salesCfg();
+  const companyId = await moloniCompanyId();
+  const charge = await stripeGet(account, `/v1/charges/${chargeId}`);
+  const c = charge as {
+    id: string; amount: number; amount_refunded?: number; metadata?: Record<string, string>;
+    description?: string | null; payment_intent?: string | null;
+  };
+  const refundedTtc = Math.round(Number(c.amount_refunded ?? 0)) / 100;
+  if (refundedTtc <= 0) throw new Error("charge not refunded");
+  const { sale, skip } = await saleFromCharge(account, charge, cfg, true);
+  if (!sale) throw new Error(`extract failed: ${skip}`);
+
+  // Nom de ligne non generique (meme logique qu'enrich : metadata charge puis PI)
+  if (sale.line_items.length === 1 && (sale.line_items[0].name === "Stripe sale" || /^Order for /.test(sale.line_items[0].name))) {
+    let m = c.metadata ?? {};
+    let desc = c.description ?? null;
+    if (!m.event_name && c.payment_intent) {
+      try {
+        const pi = await stripeGet(account, `/v1/payment_intents/${c.payment_intent}`) as { metadata?: Record<string, string>; description?: string | null };
+        if (pi.metadata && Object.keys(pi.metadata).length) m = { ...pi.metadata, ...m };
+        desc = desc || pi.description || null;
+      } catch (_e) { /* best effort */ }
+    }
+    const lineName = m.event_name
+      ? `${m.event_name}${m.order_id ? ` — order ${m.order_id}` : ""}`
+      : desc ? desc.replace(/^Order for /, "")
+      : m.typeform_form_id ? `Typeform ${m.typeform_form_id}` : `Stripe payment ${c.id}`;
+    sale.line_items = [{ name: lineName, qty: 1, unit_ttc: sale.amount, kind: classify(lineName, cfg) }];
+    sale.email = sale.email ?? ((m.email_address ?? "").toLowerCase() || null);
+    sale.customer_name = sale.customer_name ?? ((m.name ?? "").trim() || null);
+  }
+
+  // Trace dans stripe_sales (idempotence : moloni_document_id deja pose = fini)
+  const { data: row, error: upErr } = await admin.from("stripe_sales")
+    .upsert({ ...sale, status: "skipped", skip_reason: "refunded (docs in progress)", updated_at: new Date().toISOString() },
+      { onConflict: "charge_id", ignoreDuplicates: false })
+    .select("id,moloni_document_id,invoice_number,skip_reason").maybeSingle();
+  if (upErr) throw new Error(`stripe_sales upsert: ${upErr.message}`);
+  if (row?.moloni_document_id) return { charge_id: c.id, already_documented: row.invoice_number };
+
+  const customerId = await moloniCustomer(cfg, sale);
+  const lines = sale.line_items;
+  const products = lines.map((l, i) => {
+    const rate = l.kind === "ticket" ? 6 : 23;
+    return {
+      productId: l.kind === "ticket" ? cfg.products.ticket : cfg.products.standard,
+      qty: l.qty, ordering: i + 1,
+      price: Math.round((l.unit_ttc / (1 + rate / 100)) * 1e6) / 1e6,
+      summary: `${l.name} — paid via Stripe ${fmtDatePt(sale.paid_at)}, refunded`,
+      taxes: [{ taxId: TAX_IDS[rate], ordering: 1, cumulative: false }],
+    };
+  });
+  const isQuinta = (cfg.quinta_patterns ?? []).some((p) => lines.some((l) => l.name.toLowerCase().includes(p.toLowerCase())));
+  const setId = isQuinta && cfg.quinta_document_set_id ? cfg.quinta_document_set_id : cfg.document_set_id;
+  const serie = isQuinta ? "FT2026" : "TERRA";
+  const totalTtc = Math.round(sale.amount * 100) / 100;
+
+  // 1) Fatura simple
+  const inv = await gql(`mutation($c: Int!, $d: InvoiceInsert!) {
+    invoiceCreate(companyId: $c, data: $d) {
+      data { documentId number totalValue products { documentProductId ordering price } } errors { field msg }
+    }
+  }`, { c: companyId, d: {
+    documentSetId: setId, customerId, date: new Date().toISOString(),
+    expirationDate: new Date().toISOString().slice(0, 10), status: 1, products,
+  } });
+  const iErrs = inv?.data?.invoiceCreate?.errors;
+  if (iErrs?.length) throw new Error(`invoiceCreate: ${JSON.stringify(iErrs).slice(0, 400)}`);
+  const doc = inv?.data?.invoiceCreate?.data;
+  if (!doc?.documentId) throw new Error(`invoiceCreate no doc: ${JSON.stringify(inv).slice(0, 300)}`);
+  // Prix STOCKES par Moloni (arrondis a 4-5 decimales) : la NC doit reprendre
+  // ces valeurs exactes, sinon "unit price greater than the original" (vecu
+  // 10 nov 2026 sur 3 des 14 remboursements).
+  const docProducts = (doc.products ?? []) as { documentProductId: number; ordering?: number; price?: number }[];
+
+  // 2) Nota de credito : totale (miroir des lignes) ou partielle (une ligne sur
+  // la plus grosse ligne de la fatura, precedent NC2026/4).
+  const fully = Math.abs(refundedTtc - totalTtc) < 0.005;
+  let ncProducts: Record<string, unknown>[];
+  if (fully) {
+    ncProducts = products.map((p, i) => ({
+      productId: p.productId, qty: p.qty, ordering: p.ordering,
+      price: docProducts[i]?.price ?? p.price,
+      summary: `Refund — ${lines[i].name}`, taxes: p.taxes,
+      relatedDocumentId: doc.documentId, relatedDocumentProductId: docProducts[i]?.documentProductId,
+    }));
+  } else {
+    let big = 0;
+    for (let i = 1; i < lines.length; i++) if (lines[i].qty * lines[i].unit_ttc > lines[big].qty * lines[big].unit_ttc) big = i;
+    const rate = lines[big].kind === "ticket" ? 6 : 23;
+    const computed = Math.round((refundedTtc / (1 + rate / 100)) * 1e6) / 1e6;
+    const stored = docProducts[big]?.price;
+    ncProducts = [{
+      productId: products[big].productId, qty: 1, ordering: 1,
+      price: stored != null ? Math.min(computed, stored) : computed,
+      summary: `Partial refund — ${lines[big].name}`,
+      taxes: [{ taxId: TAX_IDS[rate], ordering: 1, cumulative: false }],
+      relatedDocumentId: doc.documentId, relatedDocumentProductId: docProducts[big]?.documentProductId,
+    }];
+  }
+  const nc = await gql(`mutation($c: Int!, $d: CreditNoteInsert!) {
+    creditNoteCreate(companyId: $c, data: $d) { data { documentId number totalValue } errors { field msg } }
+  }`, { c: companyId, d: {
+    documentSetId: setId, customerId, date: new Date().toISOString(), status: 1,
+    relatedWith: [{ relatedDocumentId: doc.documentId, value: refundedTtc }],
+    products: ncProducts,
+  } });
+  const nErrs = nc?.data?.creditNoteCreate?.errors;
+  if (nErrs?.length) throw new Error(`creditNoteCreate (fatura ${serie}/${doc.number} OK, documentId ${doc.documentId}): ${JSON.stringify(nErrs).slice(0, 400)}`);
+  const ncDoc = nc?.data?.creditNoteCreate?.data;
+
+  await admin.from("stripe_sales").update({
+    moloni_document_id: doc.documentId, invoice_number: `${serie}/${doc.number}`,
+    skip_reason: `refunded €${refundedTtc} of €${totalTtc} — fatura ${serie}/${doc.number} (doc ${doc.documentId}) + NC n.${ncDoc?.number ?? "?"} (doc ${ncDoc?.documentId}) du 10 nov 2026`,
+    error: null, updated_at: new Date().toISOString(),
+  }).eq("id", row!.id);
+  return { charge_id: c.id, fatura: `${serie}/${doc.number}`, fatura_doc: doc.documentId, nc_number: ncDoc?.number, nc_doc: ncDoc?.documentId, invoiced: totalTtc, credited: refundedTtc, fully };
+}
+
 // Genere le PDF Moloni d'une fatura stripe_sales et l'archive dans le bucket
 // invoices (stripe-sales/{numero}.pdf). Renvoie le chemin ou null.
 async function storePdf(saleId: string, companyId: number, documentId: number, number: string | null): Promise<string | null> {
@@ -585,9 +712,10 @@ async function handleWebhookEvent(account: Account, event: Record<string, unknow
 // ---------------------------------------------------------------------------
 
 const BodySchema = z.object({
-  action: z.enum(["sync", "invoice", "status", "enrich", "pdf"]),
+  action: z.enum(["sync", "invoice", "status", "enrich", "pdf", "refund_docs"]),
   account: z.enum(["quinta", "terra"]).optional(),
   ids: z.array(z.string().uuid()).max(500).optional(),
+  charge_ids: z.array(z.string().regex(/^(ch|py)_[A-Za-z0-9]+$/)).max(50).optional(),
   all_pending: z.boolean().optional(),
   limit: z.number().int().positive().max(500).optional(),
   skip_pdf: z.boolean().optional(),
@@ -629,7 +757,17 @@ serve(async (req) => {
 
     const parsed = BodySchema.safeParse(JSON.parse(payload || "{}"));
     if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
-    const { action, account, ids, all_pending, limit, skip_pdf } = parsed.data;
+    const { action, account, ids, charge_ids, all_pending, limit, skip_pdf } = parsed.data;
+
+    if (action === "refund_docs") {
+      if (!charge_ids?.length) return json({ error: "charge_ids required" }, 400);
+      const results: Record<string, unknown>[] = [];
+      for (const chId of charge_ids) {
+        try { results.push(await refundDocs(account ?? "terra", chId)); }
+        catch (e) { results.push({ charge_id: chId, error: String((e as Error)?.message ?? e).slice(0, 400) }); }
+      }
+      return json({ processed: results.length, results });
+    }
 
     if (action === "sync") {
       return json(await sync(account ?? "quinta"));
@@ -676,6 +814,6 @@ serve(async (req) => {
   } catch (e) {
     const msg = String((e as Error)?.message ?? e);
     console.error("stripe-sales error:", msg);
-    return json({ error: msg }, 500);
+    return json(msg ? { error: msg } : { error: "unknown" }, 500);
   }
 });

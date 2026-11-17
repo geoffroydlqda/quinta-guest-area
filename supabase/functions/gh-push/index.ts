@@ -7,9 +7,14 @@
 //
 // Auth : header x-cron-key = app_settings.internal.cron_key (appels internes).
 // Entrées :
-//   { ping: true }  -> vérifie token + renvoie le sha de main (test sans écrire)
-//   { message, files: [{ path, content_b64 }] } -> UN commit sur main avec ces
-//     fichiers (création ou remplacement ; ~40 fichiers max, gros binaires OK).
+//   { ping: true, branch? }  -> vérifie token + renvoie le sha de tête (test
+//     sans écrire ; exists:false si la branche n'existe pas).
+//   { create_branch: "section/x" } -> crée la branche depuis main si absente
+//     (idempotent, sans commit) — workflow une-branche-par-section, 10 nov 2026.
+//   { message, branch?, files: [{ path, content_b64 }] } -> UN commit sur la
+//     branche (défaut main ; si elle n'existe pas, elle est créée depuis main
+//     automatiquement) avec ces fichiers (création ou remplacement ; ~40
+//     fichiers max, gros binaires OK).
 //   Variante : { path, blob_sha } référence un blob git DÉJÀ présent dans le
 //   repo (sha calculable localement via `git hash-object`) — évite de
 //   retéléverser un gros fichier qui existe ailleurs dans l'historique.
@@ -39,6 +44,7 @@ function json(body: unknown, status = 200) {
 
 const BodySchema = z.object({
   ping: z.boolean().optional(),
+  create_branch: z.string().min(1).max(100).refine((b) => !b.includes("..") && !b.startsWith("/"), "invalid branch name").optional(),
   message: z.string().min(1).max(2000).optional(),
   branch: z.string().min(1).max(100).default("main"),
   files: z.array(z.object({
@@ -90,15 +96,44 @@ serve(async (req) => {
     const { token } = settings;
     const branch = parsed.data.branch;
 
-    // Tête de branche actuelle
-    const ref = await gh(token, "GET", `/repos/${REPO}/git/ref/heads/${branch}`);
-    const headSha = (ref.object as { sha: string }).sha;
+    // Lecture tolérante d'une tête de branche (null si absente)
+    const headOf = async (name: string): Promise<string | null> => {
+      try {
+        const ref = await gh(token, "GET", `/repos/${REPO}/git/ref/heads/${name}`);
+        return (ref.object as { sha: string }).sha;
+      } catch {
+        return null;
+      }
+    };
+
+    // Création de branche seule, idempotente : { create_branch: "section/x" }
+    if (parsed.data.create_branch) {
+      const name = parsed.data.create_branch;
+      const existing = await headOf(name);
+      if (existing) return json({ ok: true, branch: name, head: existing, created: false });
+      const mainSha = await headOf("main");
+      if (!mainSha) return json({ error: "main not found" }, 500);
+      await gh(token, "POST", `/repos/${REPO}/git/refs`, { ref: `refs/heads/${name}`, sha: mainSha });
+      return json({ ok: true, branch: name, head: mainSha, created: true });
+    }
+
+    // Tête de branche actuelle ; une branche absente (hors main) est créée
+    // depuis main — workflow section/<slug>, 10 nov 2026.
+    let headSha = await headOf(branch);
 
     if (parsed.data.ping) {
-      return json({ ok: true, branch, head: headSha });
+      return json({ ok: true, branch, head: headSha, exists: headSha != null });
     }
+
     if (!parsed.data.message || !parsed.data.files?.length) {
       return json({ error: "message and files required" }, 400);
+    }
+    if (!headSha) {
+      if (branch === "main") return json({ error: "main not found" }, 500);
+      const mainSha = await headOf("main");
+      if (!mainSha) return json({ error: "main not found" }, 500);
+      await gh(token, "POST", `/repos/${REPO}/git/refs`, { ref: `refs/heads/${branch}`, sha: mainSha });
+      headSha = mainSha;
     }
 
     const headCommit = await gh(token, "GET", `/repos/${REPO}/git/commits/${headSha}`);

@@ -128,7 +128,7 @@ Amounts use dot as decimal separator. If a field is unreadable, use null.` },
 }
 
 // Applique la TVA extraite sur la transaction : amount_net POSITIF
-// (convention revolut-sync), vat_rate = taux unique ou null si mixte.
+// (convention revolut-sync), vat_rate = taux unique ; plusieurs taux -> vat_amount en euros.
 async function applyVat(txId: string, ex: { total_ttc: number | null; vat_breakdown: Extract["vat_breakdown"] }) {
   if (!ex.vat_breakdown?.length || ex.total_ttc == null) return false;
   const vatTotal = ex.vat_breakdown.reduce((s, v) => s + (Number(v.vat) || 0), 0);
@@ -136,9 +136,23 @@ async function applyVat(txId: string, ex: { total_ttc: number | null; vat_breakd
   if (!(net > 0)) return false;
   const rates = [...new Set(ex.vat_breakdown.filter((v) => (Number(v.vat) || 0) > 0).map((v) => Number(v.rate)))];
   const singleRate = rates.length === 1 ? rates[0] : null;
+  // Facture a plusieurs taux (17 nov 2026) : la TVA est stockee en euros
+  // (vat_amount, prioritaire cote admin) quand le doc couvre exactement le
+  // paiement ; HT = |montant paye| - TVA.
+  if (rates.length > 1) {
+    const { data: tx } = await admin.from("fin_transactions").select("amount").eq("id", txId).maybeSingle();
+    const paid = tx ? Math.abs(Number(tx.amount)) : null;
+    if (paid != null && Math.abs(paid - ex.total_ttc) <= 0.05 && vatTotal < paid) {
+      const vatAmount = Math.round(vatTotal * 100) / 100;
+      await admin.from("fin_transactions").update({
+        vat_amount: vatAmount, vat_rate: null, amount_net: Math.round((paid - vatAmount) * 100) / 100,
+      }).eq("id", txId);
+      return true;
+    }
+  }
   await admin.from("fin_transactions").update({
     amount_net: net,
-    ...(singleRate != null ? { vat_rate: singleRate } : {}),
+    ...(singleRate != null ? { vat_rate: singleRate, vat_amount: null } : {}),
   }).eq("id", txId);
   return true;
 }
