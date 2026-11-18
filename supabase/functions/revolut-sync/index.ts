@@ -126,13 +126,19 @@ async function accessToken(): Promise<string | null> {
 }
 
 // ---- Comptes synchronisés --------------------------------------------------
-// Le business a plusieurs comptes Revolut ; on ne synchronise QUE ceux de la
-// Quinta do Amor. Sélection : app_settings.internal.revolut_b2b_account_ids
-// (ids séparés par des virgules) ; sinon auto-détection par nom /quinta/i
+// Le business a plusieurs comptes Revolut. Multi-lieux (P1, 18 nov 2026) : on
+// synchronise les poches QUINTA DO AMOR (entity 'quinta') ET, si
+// app_settings.internal.terra_account_ids est renseigné, les poches TERRA DA
+// PAZ + EQUILIBRIO (entity 'terra' — Equilibrio est le festival de Terra).
+// Sélection Quinta : app_settings.internal.revolut_b2b_account_ids (ids
+// séparés par des virgules) ; sinon auto-détection par nom /quinta/i
 // (persistée). Aucun match -> tous les comptes + warning dans les logs.
 type RevAccount = { id: string; name?: string; currency?: string; state?: string };
 
-async function allowedAccounts(token: string): Promise<{ ids: Set<string> | null; allIds: Set<string>; names: string[] }> {
+async function allowedAccounts(token: string): Promise<{
+  ids: Set<string> | null; allIds: Set<string>; names: string[];
+  entityByAccount: Map<string, "quinta" | "terra">;
+}> {
   const r = await fetch("https://b2b.revolut.com/api/1.0/accounts", {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -148,12 +154,20 @@ async function allowedAccounts(token: string): Promise<{ ids: Set<string> | null
     picked = accounts.filter((a) => /quinta/i.test(a.name ?? ""));
     if (picked.length) await setInternalValue("revolut_b2b_account_ids", picked.map((a) => a.id).join(","));
   }
-  if (!picked.length) {
-    console.warn("[revolut-sync] no Quinta account matched — syncing ALL accounts:", accounts.map((a) => `${a.name} (${a.currency})`).join(", "));
-    return { ids: null, allIds, names: accounts.map((a) => a.name ?? a.id) };
+  const entityByAccount = new Map<string, "quinta" | "terra">();
+  for (const a of picked) entityByAccount.set(a.id, "quinta");
+  const terraConfigured = await internalValue("terra_account_ids");
+  if (terraConfigured) {
+    const terraSet = new Set(terraConfigured.split(",").map((s) => s.trim()).filter(Boolean));
+    for (const a of accounts) if (terraSet.has(a.id)) entityByAccount.set(a.id, "terra");
   }
-  console.log("[revolut-sync] syncing accounts:", picked.map((a) => `${a.name} (${a.currency})`).join(", "));
-  return { ids: new Set(picked.map((a) => a.id)), allIds, names: picked.map((a) => a.name ?? a.id) };
+  if (!picked.length && !entityByAccount.size) {
+    console.warn("[revolut-sync] no account matched — syncing ALL accounts:", accounts.map((a) => `${a.name} (${a.currency})`).join(", "));
+    return { ids: null, allIds, names: accounts.map((a) => a.name ?? a.id), entityByAccount };
+  }
+  const scoped = accounts.filter((a) => entityByAccount.has(a.id));
+  console.log("[revolut-sync] syncing accounts:", scoped.map((a) => `${a.name} (${a.currency}, ${entityByAccount.get(a.id)})`).join(", "));
+  return { ids: new Set(scoped.map((a) => a.id)), allIds, names: scoped.map((a) => a.name ?? a.id), entityByAccount };
 }
 
 // ---- Classification (miroir de FinancePage.autoKind, côté serveur) --------
@@ -252,18 +266,24 @@ function lisbonDate(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Lisbon" }).format(new Date(iso));
 }
 
-async function syncTransactions(token: string) {
+// Plancher Terra : les poches TERRA DA PAZ + EQUILIBRIO n'ont JAMAIS été
+// importées (ni CSV ni Sheet) — l'historique complet vient de l'API, sans
+// risque de doublon. Le plancher Quinta (SYNC_FROM) reste intouchable.
+const TERRA_SYNC_FROM = "2025-01-01";
+
+async function syncTransactions(token: string, opts?: { from?: string; to?: string; backfill?: boolean }) {
   const acc = await allowedAccounts(token);
   const from = (await internalValue("revolut_b2b_last_sync")) ?? SYNC_FROM;
   // Fenêtre de sécurité : on repart 7 jours en arrière (transactions SEPA
   // qui passent de pending à completed) — le dedup par id absorbe le reste.
-  const fromDate = new Date(Math.max(
+  const fromDate = opts?.from ?? new Date(Math.max(
     new Date(SYNC_FROM).getTime(),
     new Date(from).getTime() - 7 * 86400000
   )).toISOString().slice(0, 10);
 
   const url = new URL(TX_URL);
   url.searchParams.set("from", fromDate);
+  if (opts?.to) url.searchParams.set("to", opts.to);
   url.searchParams.set("count", "1000");
   const r = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) throw new Error(`Revolut transactions ${r.status}: ${(await r.text()).slice(0, 300)}`);
@@ -294,7 +314,10 @@ async function syncTransactions(token: string) {
     if (!Number.isFinite(amount) || amount === 0) continue;
     const when = t.completed_at ?? t.created_at ?? new Date().toISOString();
     const date = lisbonDate(when);
-    if (date < SYNC_FROM) continue; // l'historique vient des imports, pas de l'API
+    // Plancher par entité : Quinta jamais avant SYNC_FROM (l'historique vient
+    // des imports CSV/Sheet) ; Terra jamais avant TERRA_SYNC_FROM.
+    const entity = (leg.account_id && acc.entityByAccount.get(leg.account_id)) ?? "quinta";
+    if (date < (entity === "terra" ? TERRA_SYNC_FROM : SYNC_FROM)) continue;
     let desc = (leg.description ?? t.type ?? "Revolut transaction").trim();
     let cls;
     if (isInternalMove) {
@@ -333,6 +356,7 @@ async function syncTransactions(token: string) {
     payloads.push({
       source: "revolut", dedup_key: `revapi|${t.id}`,
       date, description: desc, amount, currency: leg.currency ?? "EUR",
+      entity, ...(leg.account_id ? { account_id: leg.account_id } : {}),
       ...cls, ...(booking ? { booking_id: booking } : {}),
       ...(payer ? { payer } : {}),
       ...(method ? { method } : {}),
@@ -357,8 +381,9 @@ async function syncTransactions(token: string) {
         .is("payer", null);
     }
   }
-  await setInternalValue("revolut_b2b_last_sync", new Date().toISOString().slice(0, 10));
-  console.log(`[revolut-sync] window from ${fromDate}: ${txs.length} fetched, ${payloads.length} eligible, ${inserted} upserted`);
+  // Un backfill (fenêtre explicite) ne touche pas au curseur du cron horaire.
+  if (!opts?.backfill) await setInternalValue("revolut_b2b_last_sync", new Date().toISOString().slice(0, 10));
+  console.log(`[revolut-sync] window from ${fromDate}${opts?.to ? ` to ${opts.to}` : ""}: ${txs.length} fetched, ${payloads.length} eligible, ${inserted} upserted`);
   return { fetched: txs.length, eligible: payloads.length, inserted, accounts: acc.names };
 }
 
@@ -527,6 +552,17 @@ serve(async (req) => {
         });
       }
       return json({ connected: true, from: reconcile.from, to: reconcile.to, count: out.length, transactions: out });
+    }
+
+    // --- Backfill fenêtré (P1 multi-lieux, 18 nov 2026) --------------------
+    // POST {backfill:{from:"YYYY-MM-DD",to?:"YYYY-MM-DD"}} : sync une fenêtre
+    // explicite SANS toucher au curseur du cron. Sert à la reprise historique
+    // des poches Terra (les planchers par entité protègent toujours la Quinta
+    // des doublons CSV). Idempotent grâce au dedup par id Revolut.
+    const backfill = (body as { backfill?: { from?: string; to?: string } }).backfill;
+    if (backfill?.from) {
+      const result = await syncTransactions(token, { from: backfill.from, to: backfill.to, backfill: true });
+      return json({ connected: true, backfill: { from: backfill.from, to: backfill.to ?? null }, ...result });
     }
 
     const result = await syncTransactions(token);

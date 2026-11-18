@@ -64,6 +64,8 @@ export type Database = {
           id: string
           source: string
           dedup_key: string | null
+          entity: string
+          account_id: string | null
           date: string
           description: string | null
           amount: number
@@ -89,6 +91,8 @@ export type Database = {
           id?: string
           source?: string
           dedup_key?: string | null
+          entity?: string
+          account_id?: string | null
           date: string
           description?: string | null
           amount: number
@@ -114,6 +118,8 @@ export type Database = {
           id?: string
           source?: string
           dedup_key?: string | null
+          entity?: string
+          account_id?: string | null
           date?: string
           description?: string | null
           amount?: number

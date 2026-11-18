@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Folder, FolderOpen, Loader2, ExternalLink, FileText, Paperclip, Download } from "lucide-react";
+import { usePropertyFilter } from "@/lib/property";
 
 /**
  * Onglet "Purchase invoices" (22 oct 2026, demande Geoffroy) — classeur des
@@ -25,7 +26,7 @@ type LinkedDoc = {
   created_at: string;
 };
 
-type TxLite = { id: string; date: string; description: string | null; amount: number; payer: string | null };
+type TxLite = { id: string; date: string; description: string | null; amount: number; payer: string | null; entity?: string | null };
 
 const YEARS_FIXED = [2026, 2027, 2028, 2029, 2030];
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -59,7 +60,7 @@ export function PurchaseInvoicesTab() {
       const map = new Map<string, TxLite>();
       for (let i = 0; i < ids.length; i += 150) {
         const { data } = await supabase.from("fin_transactions")
-          .select("id,date,description,amount,payer").in("id", ids.slice(i, i + 150));
+          .select("id,date,description,amount,payer,entity").in("id", ids.slice(i, i + 150));
         for (const t of (data ?? []) as TxLite[]) map.set(t.id, t);
       }
       setTxById(map);
@@ -67,11 +68,17 @@ export function PurchaseInvoicesTab() {
     })();
   }, []);
 
+  // Multi-lieux P1 (18 nov 2026) : le classeur suit le switcher de lieu via
+  // l'entité de la transaction liée (All = les deux). Les ZIP téléchargés
+  // suivent le filtre -> export séparé par lieu pour Joongle en deux clics.
+  const [propertyFilter] = usePropertyFilter();
+
   // Rangement : date de la transaction liée > date du document > upload.
   const filed = useMemo(() => {
     const byYM = new Map<string, (LinkedDoc & { tx: TxLite | null; filedDate: string })[]>();
     for (const doc of docs) {
       const tx = txById.get(doc.tx_id) ?? null;
+      if (propertyFilter !== "all" && (tx?.entity ?? "quinta") !== propertyFilter) continue;
       const filedDate = (tx?.date ?? doc.doc_date ?? doc.created_at).slice(0, 10);
       const key = filedDate.slice(0, 7); // YYYY-MM
       const list = byYM.get(key) ?? [];
@@ -80,7 +87,7 @@ export function PurchaseInvoicesTab() {
     }
     for (const list of byYM.values()) list.sort((a, b) => (a.filedDate < b.filedDate ? 1 : -1));
     return byYM;
-  }, [docs, txById]);
+  }, [docs, txById, propertyFilter]);
 
   const years = useMemo(() => {
     const set = new Set<number>(YEARS_FIXED);
@@ -179,7 +186,7 @@ export function PurchaseInvoicesTab() {
           Link receipts from the Receipts page or the 📎 on each row in Transactions.
         </p>
         <button type="button" disabled={!!zipBusy || allDocs.length === 0}
-          onClick={() => downloadZip("all", allDocs, "purchase-invoices-all.zip", true)}
+          onClick={() => downloadZip("all", allDocs, `purchase-invoices-${propertyFilter === "all" ? "grupo-ohm" : propertyFilter}-all.zip`, true)}
           className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
           title="One zip with every filed receipt, organised in Year/Month folders">
           {zipBusy?.key === "all" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
@@ -233,7 +240,7 @@ export function PurchaseInvoicesTab() {
             <span className="text-xs font-normal text-muted-foreground">· {monthDocs.length} invoice{monthDocs.length === 1 ? "" : "s"}</span>
             {monthDocs.length > 0 && (
               <button type="button" disabled={!!zipBusy}
-                onClick={() => downloadZip("month", monthDocs, `purchase-invoices-${monthKey(openYear, openMonth)}.zip`, false)}
+                onClick={() => downloadZip("month", monthDocs, `purchase-invoices-${propertyFilter === "all" ? "grupo-ohm" : propertyFilter}-${monthKey(openYear, openMonth)}.zip`, false)}
                 className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-normal hover:bg-muted disabled:opacity-50"
                 title="Download every receipt of this month in one zip">
                 {zipBusy?.key === "month" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}

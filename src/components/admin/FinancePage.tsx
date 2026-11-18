@@ -11,6 +11,7 @@ import { EventPicker } from "@/components/admin/EventPicker";
 import { CategoryPicker } from "@/components/admin/CategoryPicker";
 import { PayerFilter, NO_PAYER } from "@/components/admin/PayerFilter";
 import { MissingReceiptsDialog, type MissingItem } from "@/components/admin/MissingReceiptsDialog";
+import { usePropertyFilter } from "@/lib/property";
 
 /**
  * Onglet Finance (4 août 2026) — phase 1, alimentée par import CSV Revolut
@@ -92,6 +93,9 @@ type FinTx = {
   // TVA saisie en euros (17 nov 2026) : prioritaire sur vat_rate quand non null
   // (factures a plusieurs taux 6/13/23, retenues...). amount_net = |amount| - vat_amount.
   vat_amount?: number | null;
+  // Multi-lieux P1 (18 nov 2026) : 'quinta' | 'terra' — poche Revolut d'origine.
+  entity?: string | null;
+  account_id?: string | null;
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -286,7 +290,16 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // reset, la capsule active de l'autre mode restait sélectionnée (et Event
   // margins semblait avoir disparu).
   useEffect(() => { setTab(mode === "analytics" ? "pnl" : "tx"); }, [mode]);
-  const [txs, setTxs] = useState<FinTx[]>([]);
+  const [txsAll, setTxs] = useState<FinTx[]>([]);
+  // Multi-lieux P1 (18 nov 2026) : TOUTE la page (Transactions, P&L, cash
+  // flow, marges…) suit le switcher de lieu via l'entité des transactions.
+  // All = Grupo OHM consolidé (aucun filtre). Les lignes d'avant la migration
+  // (entity null) comptent comme quinta.
+  const [propertyFilter] = usePropertyFilter();
+  const txs = useMemo(
+    () => propertyFilter === "all" ? txsAll : txsAll.filter((t) => (t.entity ?? "quinta") === propertyFilter),
+    [txsAll, propertyFilter]
+  );
   const [rules, setRules] = useState<FinRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -545,6 +558,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         // ... et du method/payer du parent (15 oct 2026) : une part de
         // virement reste un virement (badge 🏦, filtres Bills & Cards only)
         method: t.method ?? null, payer: t.payer ?? null,
+        // ... et de l'entité du parent (multi-lieux P1, 18 nov 2026)
+        entity: t.entity ?? "quinta",
       };
     });
     const { error } = await supabase.from("fin_transactions").insert(children);
@@ -1295,6 +1310,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       // Convention (1er sept 2026) : une dépense cash n'a jamais de reçu à
       // attendre — elle n'apparaît pas dans le filtre "No receipt".
       receipt_waived: mCash,
+      // Multi-lieux P1 : la dépense manuelle naît dans le lieu du switcher
+      // (All -> quinta, comme la création de booking).
+      entity: propertyFilter === "terra" ? "terra" : "quinta",
     });
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
     toast({ title: "Expense added" });
