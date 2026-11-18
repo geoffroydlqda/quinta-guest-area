@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounting_faq: {
+        Row: {
+          id: string
+          question: string
+          answer: string | null
+          topic: string | null
+          status: string
+          asked_to: string | null
+          asked_on: string | null
+          answered_on: string | null
+          source: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          question: string
+          answer?: string | null
+          topic?: string | null
+          status?: string
+          asked_to?: string | null
+          asked_on?: string | null
+          answered_on?: string | null
+          source?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          question?: string
+          answer?: string | null
+          topic?: string | null
+          status?: string
+          asked_to?: string | null
+          asked_on?: string | null
+          answered_on?: string | null
+          source?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       fin_transactions: {
         Row: {
           id: string

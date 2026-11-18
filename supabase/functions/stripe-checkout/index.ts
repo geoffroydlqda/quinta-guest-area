@@ -160,23 +160,52 @@ async function createSession(
   // a cliqué "Paying from a US bank?" sur son dashboard.
   const outsideSepa = forceUsd || (!!country && !SEPA_COUNTRIES.some((c) => country.includes(c)));
   const isBelgian = country.includes("belg");
+  // ─── Règle de sélection des moyens (choix Geoffroy, 13 nov 2026) ───
+  // Une option n'est proposée que si sa commission Stripe estimée pour CE
+  // paiement est < 10 €. Grille stripe.com/en-pt/pricing (relevée le 13 nov
+  // 2026) : carte EEA standard 1,5 % + 0,25 · carte internationale 3,15 % +
+  // 0,25 · Bancontact 1,4 % + 0,25 · SEPA debit 0,35 € fixe · virement
+  // (customer_balance) ~5 € plafonnés · ACH 0,8 % plafonné ~5 €. Les rails
+  // plafonnés/fixes passent toujours ; carte et Bancontact dépendent du
+  // montant (carte EUR ≤ ~650 €, carte USD ≤ ~309 €, Bancontact ≤ ~696 €).
+  const totalEur = insts.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+  const MAX_FEE_EUR = 10;
+  const feeOk = (pct: number, fixed: number) => totalEur * pct + fixed < MAX_FEE_EUR;
   // Hors zone SEPA : présentation en USD (ACH ~5 $ plafonnés + carte), montant
   // converti au taux BCE du jour SANS marge — la cliente paie l'équivalent exact.
+  // MAIS la conversion Stripe (~2 % quel que soit le moyen) est à notre charge :
+  // au-delà de ~500 € elle dépasse les 10 € → gros montants US poussés vers le
+  // parcours EUR (virement sur l'IBAN virtuel, la conversion passe côté client,
+  // via sa banque ou Wise). Le guest peut quand même FORCER l'USD en cliquant
+  // "Pay in USD instead" sur son dashboard (forceUsd) — on ne bloque personne.
   // Si le taux est indisponible, repli : EUR piloté par le dashboard.
-  const rate = outsideSepa ? await eurUsdRate() : null;
-  const usdMode = outsideSepa && rate !== null;
+  const usdWorthIt = forceUsd || totalEur * 0.02 < MAX_FEE_EUR;
+  const rate = outsideSepa && usdWorthIt ? await eurUsdRate() : null;
+  const usdMode = outsideSepa && usdWorthIt && rate !== null;
   if (usdMode) {
-    // Parcours international : fixé dans le code (un toggle dashboard est global
-    // et ne peut pas exprimer "carte pour les non-européennes uniquement").
-    ["us_bank_account", "card"].forEach((t, i) => params.set(`payment_method_types[${i}]`, t));
+    // Parcours international : fixé dans le code (un toggle dashboard est
+    // global et ne peut pas exprimer "carte pour les non-européennes
+    // uniquement"). ACH toujours ; carte internationale si < 10 € de frais.
+    const usdTypes = ["us_bank_account", ...(feeOk(0.0315, 0.25) ? ["card"] : [])];
+    usdTypes.forEach((t, i) => params.set(`payment_method_types[${i}]`, t));
   }
-  // Parcours EUR : AUCUN payment_method_types -> ce sont les réglages du
-  // dashboard Stripe (Payment methods) qui décident. (Choix Geoffroy, 31 juil. 2026.)
-  // Exception : fiche guest belge -> Bancontact ajouté explicitement (désactivé
-  // dans le dashboard pour tout le monde, pertinent uniquement pour la Belgique).
-  if (!usdMode && isBelgian) {
-    const beTypes = customerId ? ["sepa_debit", "customer_balance", "bancontact"] : ["sepa_debit", "bancontact"];
-    beTypes.forEach((t, i) => params.set(`payment_method_types[${i}]`, t));
+  // Parcours EUR : par défaut AUCUN payment_method_types -> réglages du
+  // dashboard Stripe (rails bancaires — choix Geoffroy, 31 juil. 2026).
+  // On ne fixe la liste en code QUE quand la règle des 10 € ajoute une option
+  // au-delà du dashboard : carte (petits paiements) et/ou Bancontact (fiche
+  // belge — désactivé dashboard car pertinent seulement pour la Belgique).
+  if (!usdMode) {
+    const cardOk = feeOk(0.015, 0.25);
+    const bancontactOk = isBelgian && feeOk(0.014, 0.25);
+    if (cardOk || bancontactOk) {
+      const eurTypes = [
+        "sepa_debit",
+        ...(customerId ? ["customer_balance"] : []),
+        ...(bancontactOk ? ["bancontact"] : []),
+        ...(cardOk ? ["card"] : []),
+      ];
+      eurTypes.forEach((t, i) => params.set(`payment_method_types[${i}]`, t));
+    }
   }
   if (customerId) {
     params.set("customer", customerId);
