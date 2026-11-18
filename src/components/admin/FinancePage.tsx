@@ -3,9 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote, FolderOpen, Percent as PercentIcon } from "lucide-react";
+import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote, FolderOpen, Percent as PercentIcon, HelpCircle } from "lucide-react";
 import { EventMarginsTab } from "@/components/admin/EventMarginsTab";
 import { PurchaseInvoicesTab } from "@/components/admin/PurchaseInvoicesTab";
+import { AccountingFaqTab } from "@/components/admin/AccountingFaqTab";
 import { EventPicker } from "@/components/admin/EventPicker";
 import { CategoryPicker } from "@/components/admin/CategoryPicker";
 import { PayerFilter, NO_PAYER } from "@/components/admin/PayerFilter";
@@ -278,7 +279,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // Réorganisation 19 août 2026 (demande Geoffroy) : la page sert deux onglets
   // sidebar — "Accounting" (Transactions, Cash box, Event margins) et
   // "Analytics" (P&L, Cash flow, Investor update). Receipts = page à part.
-  const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "box" | "invoices" | "margins" | "report">(mode === "analytics" ? "pnl" : "tx");
+  const [tab, setTab] = useState<"tx" | "pnl" | "cash" | "box" | "invoices" | "faq" | "margins" | "report">(mode === "analytics" ? "pnl" : "tx");
   // Chaque onglet sidebar ouvre sur SA capsule par défaut (15 sept 2026,
   // demande Geoffroy) : Analytics -> P&L, Accounting -> Transactions. Sans ce
   // reset, la capsule active de l'autre mode restait sélectionnée (et Event
@@ -1303,7 +1304,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       <div className="flex items-center gap-2 flex-wrap">
         {(mode === "analytics"
           ? ([["pnl", "P&L", TrendingUp], ["cash", "Cash flow", Wallet2], ["margins", "Event margins", PercentIcon], ["report", "Investor update", Mail]] as const)
-          : ([["tx", "Transactions", ReceiptText], ["box", "Cash box", Banknote], ["invoices", "Purchase invoices", FolderOpen]] as const)
+          : ([["tx", "Transactions", ReceiptText], ["box", "Cash box", Banknote], ["invoices", "Purchase invoices", FolderOpen], ["faq", "FAQ", HelpCircle]] as const)
         ).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm border transition-colors ${
@@ -1317,7 +1318,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         ))}
         {/* Purchase invoices a ses propres dossiers d'années (2026→2030) :
             le sélecteur d'année global n'y pilote rien, on le masque. */}
-        {tab !== "invoices" && (
+        {tab !== "invoices" && tab !== "faq" && (
           <span className="ml-auto flex items-center gap-1.5">
             {years.map((y) => (
               <button key={y} type="button" onClick={() => setYear(y)}
@@ -2213,6 +2214,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       {/* Classeur virtuel Année/Mois des justificatifs liés — il a ses
           propres dossiers d'années, le sélecteur d'année global est masqué. */}
       {tab === "invoices" && <PurchaseInvoicesTab />}
+      {tab === "faq" && <AccountingFaqTab />}
 
 
       {tab === "report" && (
