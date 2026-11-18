@@ -4,6 +4,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
 import { openKitchenSheet } from "@/lib/kitchenSheet";
+import { EMAIL_PREVIEW_SANDBOX, emailPreviewDoc } from "@/lib/emailPreview";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
@@ -3134,8 +3135,8 @@ function EmailLogFeed({ bookingId, email }: { bookingId: string | null; email: s
               {openedEmail.body_html ? (
                 <iframe
                   title="Email content"
-                  sandbox=""
-                  srcDoc={openedEmail.body_html}
+                  sandbox={EMAIL_PREVIEW_SANDBOX}
+                  srcDoc={emailPreviewDoc(openedEmail.body_html)}
                   className="w-full h-[60vh] bg-white"
                 />
               ) : (

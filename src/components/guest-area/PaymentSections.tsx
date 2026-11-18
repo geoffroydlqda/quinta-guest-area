@@ -217,15 +217,36 @@ export function NextPaymentCard({ insts, onPay, paying }: { insts: PaymentInstal
       <div className="mt-4 pt-4 border-t border-border/70 text-xs text-muted-foreground">
         Secure payment — you'll be redirected to our payment partner Stripe, where
         you'll be asked to accept our Terms &amp; Conditions before paying.
-        {' '}
-        <button
-          type="button"
-          onClick={() => onPay(insts, true)}
-          disabled={paying}
-          className="underline underline-offset-2 hover:text-foreground"
-        >
-          Paying from outside Europe? Pay in USD instead (US bank debit or card)
-        </button>
+        {/* Gros montants (conversion USD ~2 % ≥ 10 €) : on pousse le virement EUR
+            — stripe-checkout garde ces paiements en EUR même pour une fiche US
+            (l'IBAN s'affiche via l'option bank transfer du checkout), le bouton
+            USD reste en échappatoire (forceUsd). Petits montants : lien USD
+            classique. Règle "< 10 € de frais par option" (choix Geoffroy,
+            13 nov 2026) : la carte internationale (3,15 % + 0,25 €) n'est
+            proposée que si ses frais restent sous 10 € — le libellé suit. */}
+        {total * 0.02 >= 10 ? (
+          <> Paying from outside Europe? We recommend the bank transfer option
+          shown at checkout — your bank or Wise converts to EUR at your own rate.
+          {' '}
+          <button
+            type="button"
+            onClick={() => onPay(insts, true)}
+            disabled={paying}
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Prefer to pay in USD? ({total * 0.0315 + 0.25 < 10 ? 'US bank debit or card' : 'US bank debit'})
+          </button></>
+        ) : (
+          <>{' '}
+          <button
+            type="button"
+            onClick={() => onPay(insts, true)}
+            disabled={paying}
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Paying from outside Europe? Pay in USD instead ({total * 0.0315 + 0.25 < 10 ? 'US bank debit or card' : 'US bank debit'})
+          </button></>
+        )}
       </div>
     </section>
   );

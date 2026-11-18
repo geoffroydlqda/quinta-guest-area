@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { EMAIL_PREVIEW_SANDBOX, emailPreviewDoc } from "@/lib/emailPreview";
 import { Loader2, Mail, RefreshCw, X } from "lucide-react";
 
 type SentRow = {
@@ -256,7 +257,7 @@ export function SentEmailsCard() {
             </div>
             <div className="flex-1 overflow-hidden min-h-[340px]">
               {opened.body_html ? (
-                <iframe title="Email content" sandbox="" srcDoc={opened.body_html} className="w-full h-[60vh] bg-white" />
+                <iframe title="Email content" sandbox={EMAIL_PREVIEW_SANDBOX} srcDoc={emailPreviewDoc(opened.body_html)} className="w-full h-[60vh] bg-white" />
               ) : (
                 <p className="text-sm text-muted-foreground p-6">
                   The content of this email wasn't stored — only emails sent from 25 August 2026
