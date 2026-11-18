@@ -127,17 +127,20 @@ async function accessToken(): Promise<string | null> {
 
 // ---- Comptes synchronisés --------------------------------------------------
 // Le business a plusieurs comptes Revolut. Multi-lieux (P1, 18 nov 2026) : on
-// synchronise les poches QUINTA DO AMOR (entity 'quinta') ET, si
-// app_settings.internal.terra_account_ids est renseigné, les poches TERRA DA
-// PAZ + EQUILIBRIO (entity 'terra' — Equilibrio est le festival de Terra).
+// synchronise les poches QUINTA DO AMOR (entity 'quinta'), TERRA DA PAZ
+// (entity 'terra', app_settings.internal.terra_account_ids) et EQUILIBRIO
+// (entity 'equilibrio', app_settings.internal.equilibrio_account_ids —
+// décision Geoffroy du 18 nov : le festival est un projet À PART, pas fondu
+// dans Terra ; il n'apparaît que dans la vue All en attendant son intégration).
 // Sélection Quinta : app_settings.internal.revolut_b2b_account_ids (ids
 // séparés par des virgules) ; sinon auto-détection par nom /quinta/i
 // (persistée). Aucun match -> tous les comptes + warning dans les logs.
+type Entity = "quinta" | "terra" | "equilibrio";
 type RevAccount = { id: string; name?: string; currency?: string; state?: string };
 
 async function allowedAccounts(token: string): Promise<{
   ids: Set<string> | null; allIds: Set<string>; names: string[];
-  entityByAccount: Map<string, "quinta" | "terra">;
+  entityByAccount: Map<string, Entity>;
 }> {
   const r = await fetch("https://b2b.revolut.com/api/1.0/accounts", {
     headers: { Authorization: `Bearer ${token}` },
@@ -154,12 +157,14 @@ async function allowedAccounts(token: string): Promise<{
     picked = accounts.filter((a) => /quinta/i.test(a.name ?? ""));
     if (picked.length) await setInternalValue("revolut_b2b_account_ids", picked.map((a) => a.id).join(","));
   }
-  const entityByAccount = new Map<string, "quinta" | "terra">();
+  const entityByAccount = new Map<string, Entity>();
   for (const a of picked) entityByAccount.set(a.id, "quinta");
-  const terraConfigured = await internalValue("terra_account_ids");
-  if (terraConfigured) {
-    const terraSet = new Set(terraConfigured.split(",").map((s) => s.trim()).filter(Boolean));
-    for (const a of accounts) if (terraSet.has(a.id)) entityByAccount.set(a.id, "terra");
+  for (const [key, ent] of [["terra_account_ids", "terra"], ["equilibrio_account_ids", "equilibrio"]] as const) {
+    const configuredIds = await internalValue(key);
+    if (configuredIds) {
+      const set = new Set(configuredIds.split(",").map((s) => s.trim()).filter(Boolean));
+      for (const a of accounts) if (set.has(a.id)) entityByAccount.set(a.id, ent);
+    }
   }
   if (!picked.length && !entityByAccount.size) {
     console.warn("[revolut-sync] no account matched — syncing ALL accounts:", accounts.map((a) => `${a.name} (${a.currency})`).join(", "));
@@ -266,9 +271,9 @@ function lisbonDate(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Lisbon" }).format(new Date(iso));
 }
 
-// Plancher Terra : les poches TERRA DA PAZ + EQUILIBRIO n'ont JAMAIS été
-// importées (ni CSV ni Sheet) — l'historique complet vient de l'API, sans
-// risque de doublon. Le plancher Quinta (SYNC_FROM) reste intouchable.
+// Plancher Terra/Equilibrio : ces poches n'ont JAMAIS été importées (ni CSV
+// ni Sheet) — l'historique complet vient de l'API, sans risque de doublon.
+// Le plancher Quinta (SYNC_FROM) reste intouchable.
 const TERRA_SYNC_FROM = "2025-01-01";
 
 async function syncTransactions(token: string, opts?: { from?: string; to?: string; backfill?: boolean }) {
@@ -298,10 +303,10 @@ async function syncTransactions(token: string, opts?: { from?: string; to?: stri
   for (const t of txs) {
     if ((t.state ?? "").toLowerCase() !== "completed") continue;
     const legsAll = t.legs ?? [];
-    // Seuls les mouvements des comptes Quinta sont retenus
+    // Seuls les mouvements des comptes du périmètre (Quinta/Terra/Equilibrio)
     const legs = acc.ids ? legsAll.filter((l) => l.account_id && acc.ids!.has(l.account_id)) : legsAll;
     if (!legs.length) continue;
-    // Transfert/change entre comptes DU PÉRIMÈTRE Quinta -> internal (exclu
+    // Transfert/change entre comptes DU PÉRIMÈTRE -> internal (exclu
     // P&L + cash). Un mouvement Quinta <-> autre compte du business (ex. EUR
     // Main) reste à classer (apport, revenu…) : du point de vue Quinta, c'est
     // de l'argent qui entre/sort. Un payout Merchant a l'allure d'un
@@ -315,9 +320,9 @@ async function syncTransactions(token: string, opts?: { from?: string; to?: stri
     const when = t.completed_at ?? t.created_at ?? new Date().toISOString();
     const date = lisbonDate(when);
     // Plancher par entité : Quinta jamais avant SYNC_FROM (l'historique vient
-    // des imports CSV/Sheet) ; Terra jamais avant TERRA_SYNC_FROM.
+    // des imports CSV/Sheet) ; Terra et Equilibrio jamais avant TERRA_SYNC_FROM.
     const entity = (leg.account_id && acc.entityByAccount.get(leg.account_id)) ?? "quinta";
-    if (date < (entity === "terra" ? TERRA_SYNC_FROM : SYNC_FROM)) continue;
+    if (date < (entity === "quinta" ? SYNC_FROM : TERRA_SYNC_FROM)) continue;
     let desc = (leg.description ?? t.type ?? "Revolut transaction").trim();
     let cls;
     if (isInternalMove) {
