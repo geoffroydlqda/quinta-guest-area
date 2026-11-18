@@ -5,6 +5,7 @@ import { AdminGuard } from "@/lib/adminGuard";
 import { supabase } from "@/integrations/supabase/client";
 import { openKitchenSheet } from "@/lib/kitchenSheet";
 import { EMAIL_PREVIEW_SANDBOX, emailPreviewDoc } from "@/lib/emailPreview";
+import { PROPERTIES, PROPERTY_LABEL, bookingProperty } from "@/lib/property";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveBooking } from "@/contexts/BookingContext";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,7 @@ type BookingRow = {
   disabled_rooms: number[] | null;
   edit_lock_override: boolean;
   retreat_name?: string | null;
+  property?: string | null;
 };
 
 interface Detail {
@@ -719,6 +721,37 @@ const AdminGuestDetailContent = () => {
                   if (booking) supabase.functions.invoke("sync-booking-calendar", { body: { booking_id: booking.id } }).catch(() => {});
                 }}
               />
+            </div>
+            {/* Multi-lieux (P0b, 18 nov 2026) : lieu du booking, réassignable
+                (utile pour reclasser un event Terra créé avant la phase 0). */}
+            <div className="sm:col-span-2">
+              <div className="text-muted-foreground">Property</div>
+              <div className="mt-1 inline-flex rounded-full bg-secondary p-0.5">
+                {PROPERTIES.map((p) => {
+                  const on = bookingProperty(booking) === p;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={async () => {
+                        if (!booking || on) return;
+                        const { error } = await supabase.from("bookings").update({ property: p } as any).eq("id", booking.id);
+                        if (error) {
+                          toast({ title: "Could not change property", description: error.message, variant: "destructive" });
+                          return;
+                        }
+                        setData((d) => d && d.booking ? { ...d, booking: { ...d.booking, property: p } } : d);
+                        toast({ title: `Moved to ${PROPERTY_LABEL[p]}`, description: "The booking now lives under this property everywhere in the admin." });
+                      }}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                        on ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {PROPERTY_LABEL[p]}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div>
               <div className="text-muted-foreground flex items-center gap-2">

@@ -19,18 +19,41 @@ export const PROPERTY_SHORT: Record<Property, string> = {
   terra: "TDP",
 };
 
+// Le switcher a trois positions (P0b, 18 nov 2026) : un lieu précis, ou "all"
+// (vue consolidée Grupo OHM — aucun filtre). Les actions qui exigent un lieu
+// concret (création de booking…) passent par getProperty(), qui retombe sur
+// 'quinta' quand le filtre est sur All.
+export type PropertyFilter = Property | "all";
+
+export const FILTER_LABEL: Record<PropertyFilter, string> = {
+  ...PROPERTY_LABEL,
+  all: "Grupo OHM",
+};
+
+export const FILTER_SHORT: Record<PropertyFilter, string> = {
+  ...PROPERTY_SHORT,
+  all: "All",
+};
+
 const KEY = "qda-admin-property";
 const EVT = "qda-property-change";
 
-export function getProperty(): Property {
+export function getPropertyFilter(): PropertyFilter {
   try {
-    return localStorage.getItem(KEY) === "terra" ? "terra" : "quinta";
+    const v = localStorage.getItem(KEY);
+    return v === "terra" ? "terra" : v === "all" ? "all" : "quinta";
   } catch {
     return "quinta";
   }
 }
 
-export function setProperty(p: Property) {
+/** Lieu concret pour les actions (création…) : All → quinta. */
+export function getProperty(): Property {
+  const f = getPropertyFilter();
+  return f === "terra" ? "terra" : "quinta";
+}
+
+export function setPropertyFilter(p: PropertyFilter) {
   try {
     localStorage.setItem(KEY, p);
   } catch {
@@ -39,15 +62,15 @@ export function setProperty(p: Property) {
   window.dispatchEvent(new CustomEvent(EVT, { detail: p }));
 }
 
-/** Lieu courant de l'admin, réactif au switcher où qu'il soit monté. */
-export function useProperty(): [Property, (p: Property) => void] {
-  const [prop, setProp] = useState<Property>(getProperty);
+/** Filtre courant de l'admin (lieu ou All), réactif au switcher. */
+export function usePropertyFilter(): [PropertyFilter, (p: PropertyFilter) => void] {
+  const [prop, setProp] = useState<PropertyFilter>(getPropertyFilter);
   useEffect(() => {
-    const onChange = () => setProp(getProperty());
+    const onChange = () => setProp(getPropertyFilter());
     window.addEventListener(EVT, onChange);
     return () => window.removeEventListener(EVT, onChange);
   }, []);
-  return [prop, setProperty];
+  return [prop, setPropertyFilter];
 }
 
 /** Lieu d'un booking, tolérant aux lignes d'avant la migration. */

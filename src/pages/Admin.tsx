@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { useAllowedTabs } from "@/hooks/useAllowedTabs";
-import { bookingProperty, useProperty } from "@/lib/property";
+import { bookingProperty, usePropertyFilter } from "@/lib/property";
 import { StaffPage } from "@/components/admin/StaffPage";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Download, RefreshCw, Trash2, FileDown, Mail, ChevronDown, ChevronLeft, ChevronRight, Plus, Copy, Check, ExternalLink, Pencil, Phone, MapPin, Globe2, ReceiptText } from "lucide-react";
@@ -268,11 +268,18 @@ const AdminContent = () => {
   // Tous les écrans de cette page (dashboard, bookings, catering, guests…)
   // héritent du lieu sélectionné sans autre changement. Le brut reste en ref
   // pour re-filtrer instantanément quand on change de lieu (pas de refetch).
-  const [property] = useProperty();
+  const [property] = usePropertyFilter();
   const rawRef = useRef<{ data: Data | null; installments: Installment[] }>({ data: null, installments: [] });
   const applyPropertyFilter = (prop: string) => {
     const raw = rawRef.current;
-    if (raw.data) {
+    if (!raw.data) return;
+    // Position "All" (P0b) : vue consolidée Grupo OHM, aucun filtre.
+    if (prop === "all") {
+      setData(raw.data);
+      setInstallments(raw.installments);
+      return;
+    }
+    {
       const bookings = (raw.data.bookings || []).filter((b) => bookingProperty(b) === prop);
       const keep = new Set(bookings.map((b) => b.id));
       // Trips, chambres et plans repas ne passent pas tous par data.bookings :
