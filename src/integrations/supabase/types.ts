@@ -26,6 +26,7 @@ export type Database = {
           kind: string
           category: string | null
           vat_rate: number | null
+          vat_amount: number | null
           amount_net: number | null
           booking_id: string | null
           notes: string | null
@@ -50,6 +51,7 @@ export type Database = {
           kind?: string
           category?: string | null
           vat_rate?: number | null
+          vat_amount?: number | null
           amount_net?: number | null
           booking_id?: string | null
           notes?: string | null
@@ -74,6 +76,7 @@ export type Database = {
           kind?: string
           category?: string | null
           vat_rate?: number | null
+          vat_amount?: number | null
           amount_net?: number | null
           booking_id?: string | null
           notes?: string | null

@@ -87,7 +87,15 @@ type FinTx = {
   amortize_months?: number | null;
   // Type Revolut brut (2 sept 2026) : 'card' / 'transfer' (bills & virements) / 'topup'...
   method?: string | null;
+  // TVA saisie en euros (17 nov 2026) : prioritaire sur vat_rate quand non null
+  // (factures a plusieurs taux 6/13/23, retenues...). amount_net = |amount| - vat_amount.
+  vat_amount?: number | null;
 };
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+// HT d'une dépense : montant de TVA saisi en euros s'il existe, sinon taux.
+const netFromVat = (gross: number, rate: number | null | undefined, vatAmount?: number | null) =>
+  vatAmount != null ? round2(Math.abs(gross) - Number(vatAmount)) : round2(Math.abs(gross) / (1 + (rate ?? 0) / 100));
 
 type FinRule = { id: string; pattern: string; kind: string; category: string | null; vat_rate: number | null };
 
@@ -298,10 +306,13 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     setAmtEdit(null);
     if (!Number.isFinite(v) || v <= 0 || Math.abs(v - Math.abs(t.amount)) < 0.005) return;
     const signed = t.amount < 0 ? -Math.abs(v) : Math.abs(v);
-    const vat = t.vat_rate ?? 0;
+    if (t.vat_amount != null && Number(t.vat_amount) > Math.abs(v)) {
+      toast({ title: "VAT higher than the amount", description: "Adjust the VAT amount first.", variant: "destructive" });
+      return;
+    }
     await patch(t.id, {
       amount: signed,
-      ...(t.kind === "expense" ? { amount_net: Math.round(Math.abs(v) / (1 + vat / 100) * 100) / 100 } : {}),
+      ...(t.kind === "expense" ? { amount_net: netFromVat(v, t.vat_rate ?? 0, t.vat_amount) } : {}),
     });
   };
   const [deleteArm, setDeleteArm] = useState<string | null>(null);
@@ -475,19 +486,25 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       toast({ title: "Incoming money is never an expense", description: "Classify it as guest payment, bar payout, internal or other income instead.", variant: "destructive" });
       return;
     }
+    // TVA saisie en euros : conservée tant qu'aucun taux n'est imposé
+    const keepVatAmount = vatOverride == null && t.vat_amount != null;
     const vat = vatOverride ?? t.vat_rate ?? 23;
-    const net = Math.round(Math.abs(t.amount) / (1 + vat / 100) * 100) / 100;
+    const net = keepVatAmount ? netFromVat(t.amount, null, t.vat_amount) : netFromVat(t.amount, vat);
     // Dépense variable sans événement -> rattachement auto si un seul séjour colle avec la date
     const autoEvent = !t.booking_id && VARIABLE_CATS.has(category) ? eventForDate(t.date) : null;
     // reviewed reste false : catégoriser ≠ valider — la ligne attend le clic
     // sur ✓ Confirm (demande Geoffroy, 10 août 2026 : vérifier TVA + événement
     // avant de sortir de "To review").
-    await patch(t.id, { kind: "expense", category, vat_rate: vat, amount_net: net, reviewed: false, ...(autoEvent ? { booking_id: autoEvent.id } : {}) });
+    await patch(t.id, {
+      kind: "expense", category, amount_net: net, reviewed: false,
+      ...(keepVatAmount ? {} : { vat_rate: vat, vat_amount: null }),
+      ...(autoEvent ? { booking_id: autoEvent.id } : {}),
+    });
     // Règle apprenante : la contrepartie retiendra cette catégorie
     const pattern = (t.description ?? "").trim().slice(0, 24);
     if (pattern.length >= 4 && !rules.some((r) => r.pattern.toLowerCase() === pattern.toLowerCase())) {
       const { data } = await supabase.from("fin_rules")
-        .insert({ pattern, kind: "expense", category, vat_rate: vat }).select("*").single();
+        .insert({ pattern, kind: "expense", category, vat_rate: keepVatAmount ? null : vat }).select("*").single();
       if (data) setRules((rs) => [...rs, data as FinRule]);
     }
   };
@@ -529,7 +546,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     });
     const { error } = await supabase.from("fin_transactions").insert(children);
     if (error) { toast({ title: "Split failed", description: error.message, variant: "destructive" }); return; }
-    await supabase.from("fin_transactions").update({ kind: "split", reviewed: true, category: null, amount_net: null }).eq("id", t.id);
+    await supabase.from("fin_transactions").update({ kind: "split", reviewed: true, category: null, amount_net: null, vat_amount: null }).eq("id", t.id);
     toast({ title: "Transaction split", description: `${children.length} parts created — treasury unchanged, P&L per event.` });
     setSplitFor(null);
     load();
@@ -566,8 +583,26 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   };
 
   const setVat = async (t: FinTx, vat: number) => {
-    const net = Math.round(Math.abs(t.amount) / (1 + vat / 100) * 100) / 100;
-    await patch(t.id, { vat_rate: vat, amount_net: t.kind === "expense" ? net : t.amount_net });
+    const net = netFromVat(t.amount, vat);
+    await patch(t.id, { vat_rate: vat, vat_amount: null, amount_net: t.kind === "expense" ? net : t.amount_net });
+  };
+  // TVA en euros (factures multi-taux) : HT = TTC - TVA, taux laissé vide.
+  const [vatEdit, setVatEdit] = useState<{ id: string; value: string } | null>(null);
+  const saveVatAmount = async (t: FinTx, raw: string) => {
+    setVatEdit(null);
+    const v = round2(Number(String(raw).replace(",", ".")));
+    if (!Number.isFinite(v) || v < 0 || v >= Math.abs(t.amount)) {
+      toast({ title: "Invalid VAT amount", description: `Enter a value between 0 and ${fmt2(Math.abs(t.amount))}.`, variant: "destructive" });
+      return;
+    }
+    if (t.vat_amount != null && Math.abs(Number(t.vat_amount) - v) < 0.005) return;
+    await patch(t.id, { vat_amount: v, vat_rate: null, amount_net: t.kind === "expense" ? netFromVat(t.amount, null, v) : t.amount_net });
+  };
+  const startVatAmount = (t: FinTx) => {
+    const cur = t.vat_amount != null ? Number(t.vat_amount)
+      : t.amount_net != null ? round2(Math.abs(t.amount) - Number(t.amount_net))
+      : round2(Math.abs(t.amount) - netFromVat(t.amount, t.vat_rate ?? 23));
+    setVatEdit({ id: t.id, value: cur.toFixed(2) });
   };
 
   // ---- Agrégats P&L / Cash -------------------------------------------------
@@ -1206,12 +1241,12 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       const s = v == null ? "" : String(v);
       return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const header = ["date", "description", "note", "payer", "amount", "currency", "vat_rate", "amount_net", "kind", "category", "event", "pnl_month", "source"];
+    const header = ["date", "description", "note", "payer", "amount", "currency", "vat_rate", "vat_amount", "amount_net", "kind", "category", "event", "pnl_month", "source"];
     const lines = [header.join(",")];
     for (const t of filtered) {
       lines.push([
         t.date, esc(t.description), esc(t.notes), esc(t.payer), t.amount, t.currency,
-        t.vat_rate ?? "", t.amount_net ?? "", t.kind, esc(t.category),
+        t.vat_rate ?? "", t.vat_amount ?? "", t.amount_net ?? "", t.kind, esc(t.category),
         esc(t.booking_id ? bookingById.get(t.booking_id)?.name ?? "" : ""), t.pnl_month ?? "", t.source,
       ].join(","));
     }
@@ -1504,10 +1539,29 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                       </td>
                       <td className="px-3 py-2">
                         {editable ? (
-                          <select className="h-7 rounded-md border border-input bg-background px-1 text-xs"
-                            value={String(t.vat_rate ?? 23)} onChange={(e) => setVat(t, Number(e.target.value))}>
-                            {[23, 13, 6, 0].map((v) => <option key={v} value={v}>{v}%</option>)}
-                          </select>
+                          <div className="flex items-center gap-1">
+                            <select className="h-7 rounded-md border border-input bg-background px-1 text-xs"
+                              title="VAT rate, or € to type the VAT amount (invoices with several rates)"
+                              value={t.vat_amount != null ? "eur" : String(t.vat_rate ?? 23)}
+                              onChange={(e) => e.target.value === "eur" ? startVatAmount(t) : setVat(t, Number(e.target.value))}>
+                              {[23, 13, 6, 0].map((v) => <option key={v} value={v}>{v}%</option>)}
+                              <option value="eur">€</option>
+                            </select>
+                            {vatEdit?.id === t.id ? (
+                              <input autoFocus inputMode="decimal"
+                                className="h-7 w-[72px] rounded-md border border-input bg-background px-1 text-right text-xs tabular-nums"
+                                value={vatEdit.value}
+                                onChange={(e) => setVatEdit({ id: t.id, value: e.target.value })}
+                                onKeyDown={(e) => { if (e.key === "Enter") saveVatAmount(t, vatEdit.value); if (e.key === "Escape") setVatEdit(null); }}
+                                onBlur={() => saveVatAmount(t, vatEdit.value)} />
+                            ) : t.vat_amount != null ? (
+                              <button type="button" className="text-xs tabular-nums hover:underline decoration-dotted underline-offset-2"
+                                title={`VAT entered in euros — net ${fmt2(netFromVat(t.amount, null, t.vat_amount))}. Click to edit.`}
+                                onClick={() => startVatAmount(t)}>
+                                {fmt2(Number(t.vat_amount))}
+                              </button>
+                            ) : null}
+                          </div>
                         ) : "—"}
                       </td>
                       <td className="px-3 py-2">
@@ -1516,7 +1570,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                           // Stripe…) : le menu remplace le badge figé.
                           <select className="h-7 rounded-md border border-input bg-background px-1 text-xs"
                             value={t.kind === "review" ? "" : t.kind}
-                            onChange={(e) => e.target.value && patch(t.id, { kind: e.target.value, category: null, vat_rate: null, amount_net: null, reviewed: true })}>
+                            onChange={(e) => e.target.value && patch(t.id, { kind: e.target.value, category: null, vat_rate: null, vat_amount: null, amount_net: null, reviewed: true })}>
                             <option value="">Money in — classify…</option>
                             <option value="guest_payment">Guest payment (already in P&L)</option>
                             <option value="bar_payout">Bar payout — P&L revenue (bar)</option>
@@ -1545,19 +1599,19 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                                 not an expense?{" "}
                                 <button type="button" className="font-medium text-muted-foreground hover:text-foreground hover:underline"
                                   title="Transfer between own accounts — excluded from P&L and cash flow"
-                                  onClick={() => patch(t.id, { kind: "internal", category: null, vat_rate: null, amount_net: null, reviewed: true })}>
+                                  onClick={() => patch(t.id, { kind: "internal", category: null, vat_rate: null, vat_amount: null, amount_net: null, reviewed: true })}>
                                   internal
                                 </button>
                                 {" · "}
                                 <button type="button" className="font-medium text-muted-foreground hover:text-foreground hover:underline"
                                   title="VAT payment to the tax authority — cash flow only, never a P&L cost"
-                                  onClick={() => patch(t.id, { kind: "vat_payment", category: null, vat_rate: null, amount_net: null, reviewed: true })}>
+                                  onClick={() => patch(t.id, { kind: "vat_payment", category: null, vat_rate: null, vat_amount: null, amount_net: null, reviewed: true })}>
                                   VAT
                                 </button>
                                 {" · "}
                                 <button type="button" className="font-medium text-muted-foreground hover:text-foreground hover:underline"
                                   title="Refund to a guest — cash flow only; the P&L impact already lives in the booking's discount installment (never double-counted)"
-                                  onClick={() => patch(t.id, { kind: "refund", category: null, vat_rate: null, amount_net: null, reviewed: true })}>
+                                  onClick={() => patch(t.id, { kind: "refund", category: null, vat_rate: null, vat_amount: null, amount_net: null, reviewed: true })}>
                                   refund
                                 </button>
                               </span>
@@ -1626,10 +1680,14 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                             className="inline-flex rounded-full bg-[#35532A] px-2.5 py-0.5 text-[10px] font-semibold text-white hover:bg-[#2A4221]"
                             title="Check category, VAT and event, then confirm"
                             onClick={() => {
+                              if (t.vat_amount != null) {
+                                patch(t.id, { kind: "expense", reviewed: true, amount_net: netFromVat(t.amount, null, t.vat_amount) });
+                                return;
+                              }
                               const vat = t.vat_rate ?? 23;
                               patch(t.id, {
                                 kind: "expense", reviewed: true, vat_rate: vat,
-                                amount_net: t.amount_net ?? Math.round(Math.abs(t.amount) / (1 + vat / 100) * 100) / 100,
+                                amount_net: t.amount_net ?? netFromVat(t.amount, vat),
                               });
                             }}>
                             ✓ Confirm
