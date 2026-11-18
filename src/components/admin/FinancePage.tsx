@@ -10,6 +10,7 @@ import { AccountingFaqTab } from "@/components/admin/AccountingFaqTab";
 import { EventPicker } from "@/components/admin/EventPicker";
 import { CategoryPicker } from "@/components/admin/CategoryPicker";
 import { PayerFilter, NO_PAYER } from "@/components/admin/PayerFilter";
+import { MissingReceiptsDialog, type MissingItem } from "@/components/admin/MissingReceiptsDialog";
 
 /**
  * Onglet Finance (4 août 2026) — phase 1, alimentée par import CSV Revolut
@@ -295,6 +296,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // virements (method 'transfer') pour ne garder que cartes/cash a justifier.
   const [noReceiptCardsOnly, setNoReceiptCardsOnly] = useState(false);
   const [showManual, setShowManual] = useState(false);
+  const [showAskPayers, setShowAskPayers] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Ventilation multi-événements (facture staff couvrant 2-3 retraites)
   const [splitFor, setSplitFor] = useState<string | null>(null);
@@ -792,6 +794,13 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   const hasReceipt = (t: FinTx) => docsByTx.has(t.id) || !!(t.parent_id && docsByTx.has(t.parent_id));
   // Convention (1er sept 2026) : les dépenses CASH n'ont jamais de reçu à
   // attendre — exclues d'office du filtre No receipt (en plus du waiver ∅).
+  // Relance mensuelle des payers (18 nov 2026) : toutes les dépenses sans ticket,
+  // le dialogue filtre ensuite par mois et ne garde que les cartes.
+  const missingItems = useMemo<MissingItem[]>(() => txs
+    .filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash)
+    .map((t) => ({ id: t.id, date: t.date, description: t.description, amount: t.amount, payer: t.payer ?? null, method: t.method ?? null })),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [txs, docsByTx]);
   const noReceiptCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash).length;
   // Variante cartes seules (hors virements) pour le toggle "Cards only"
   const noReceiptCardCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash && t.method !== "transfer").length;
@@ -1208,8 +1217,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     // Bills & virements : sorties par virement bancaire (method 'transfer') —
     // c'est là que vivent les Bills Revolut, dont la facture est dans l'app.
     if (filter === "bills") arr = arr.filter((t) => t.method === "transfer" && t.amount < 0 && t.kind !== "internal" && t.kind !== "split");
-    // Vue inverse : tout SAUF les virements sortants (cartes, cash, entrées…)
-    if (filter === "nobills") arr = arr.filter((t) => !(t.method === "transfer" && t.amount < 0));
+    // "Expenses" (18 nov 2026, ex "Without transfers") : les dépenses hors
+    // virements sortants (cartes, cash, saisies manuelles).
+    if (filter === "nobills") arr = arr.filter((t) => t.amount < 0 && t.method !== "transfer" && (t.kind === "expense" || t.kind === "review"));
     if (monthFilter) arr = arr.filter((t) => t.date.startsWith(monthFilter));
     if (eventFilter) arr = arr.filter((t) => t.booking_id === eventFilter);
     if (catFilter === "__none__") arr = arr.filter((t) => !t.category && t.kind === "expense");
@@ -1337,9 +1347,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
             <div className="flex bg-card border border-border rounded-full p-0.5">
               {(["review", "in", "noreceipt", "bills", "nobills", "all"] as const).map((f) => (
                 <button key={f} type="button" onClick={() => setFilter(f)}
-                  title={f === "noreceipt" ? "Expenses without a linked receipt — clear this list before sending the month to the accountant" : f === "bills" ? "Outgoing bank transfers (Revolut Bills & manual transfers) — their invoice usually lives in Revolut's Bills section" : f === "nobills" ? "Everything except outgoing bank transfers — cards, cash and money in" : undefined}
+                  title={f === "noreceipt" ? "Expenses without a linked receipt — clear this list before sending the month to the accountant" : f === "bills" ? "Outgoing bank transfers (Revolut Bills & manual transfers) — their invoice usually lives in Revolut's Bills section" : f === "nobills" ? "Expenses paid by card, cash or entered manually (outgoing bank transfers / Revolut Bills excluded)" : undefined}
                   className={`rounded-full px-3.5 py-1 text-xs font-semibold ${filter === f ? "bg-foreground text-background" : "text-muted-foreground"}`}>
-                  {f === "review" ? `To review (${reviewCount})` : f === "in" ? "Money in" : f === "noreceipt" ? `📎 No receipt (${noReceiptCount})` : f === "bills" ? "🏦 Bills / transfers" : f === "nobills" ? "💳 Without transfers" : "All"}
+                  {f === "review" ? `To review (${reviewCount})` : f === "in" ? "Money in" : f === "noreceipt" ? `📎 No receipt (${noReceiptCount})` : f === "bills" ? "🏦 Bills / transfers" : f === "nobills" ? "💳 Expenses" : "All"}
                 </button>
               ))}
             </div>
@@ -1349,6 +1359,13 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                 className={`rounded-full px-3 py-1 text-xs font-semibold border transition-colors ${
                   noReceiptCardsOnly ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:bg-muted"}`}>
                 💳 Cards only ({noReceiptCardCount})
+              </button>
+            )}
+            {filter === "noreceipt" && (
+              <button type="button" onClick={() => setShowAskPayers(true)}
+                title="Generate one message per card holder listing their card expenses without a receipt (default: last month)"
+                className="rounded-full px-3 py-1 text-xs font-semibold border bg-card border-border hover:bg-muted">
+                ✉ Ask payers
               </button>
             )}
             <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
@@ -1398,6 +1415,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
             </span>
           </div>
 
+          <MissingReceiptsDialog open={showAskPayers} onOpenChange={setShowAskPayers} items={missingItems} />
           {showManual && (
             <div className="rounded-2xl border border-primary/50 bg-primary/5 p-3 grid sm:grid-cols-6 gap-2 items-end text-sm">
               <label className="space-y-1"><div className="text-xs text-muted-foreground">Date</div>
