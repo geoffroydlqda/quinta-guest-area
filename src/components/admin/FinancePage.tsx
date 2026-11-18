@@ -356,14 +356,33 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
 
   // Date de signature de chaque echeance (pipeline de l'investor update)
   const [instCreated, setInstCreated] = useState<Map<string, string>>(new Map());
+  // ⚠️ PostgREST plafonne chaque requête à 1 000 lignes quoi que demande
+  // .limit() — bug vécu le 18 nov 2026 : avec l'arrivée des 581 transactions
+  // Terra/Equilibrio la table a dépassé 1 000 lignes et tout ce qui précédait
+  // le 18 juin disparaissait de l'onglet. On pagine donc par .range() jusqu'à
+  // la page incomplète (tri stable date desc + id).
+  const fetchAllTxs = async (): Promise<FinTx[]> => {
+    const pageSize = 1000;
+    const all: FinTx[] = [];
+    for (let from = 0; from < 20000; from += pageSize) {
+      const { data, error } = await supabase.from("fin_transactions").select("*")
+        .order("date", { ascending: false }).order("id", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error || !data) break;
+      all.push(...(data as FinTx[]));
+      if (data.length < pageSize) break;
+    }
+    return all;
+  };
+
   const load = async () => {
     const [t, r, pd, ic] = await Promise.all([
-      supabase.from("fin_transactions").select("*").order("date", { ascending: false }).limit(2000),
+      fetchAllTxs(),
       supabase.from("fin_rules").select("*"),
       supabase.from("purchase_docs").select("tx_id,storage_path").not("tx_id", "is", null),
       supabase.from("payment_installments").select("id,created_at"),
     ]);
-    setTxs((t.data as FinTx[] | null) ?? []);
+    setTxs(t);
     setRules((r.data as FinRule[] | null) ?? []);
     setDocsByTx(buildDocsMap(pd.data as { tx_id: string; storage_path: string }[] | null));
     setInstCreated(new Map(((ic.data ?? []) as { id: string; created_at: string }[])
