@@ -275,7 +275,21 @@ const AdminContent = () => {
     if (raw.data) {
       const bookings = (raw.data.bookings || []).filter((b) => bookingProperty(b) === prop);
       const keep = new Set(bookings.map((b) => b.id));
-      setData({ ...raw.data, bookings });
+      // Trips, chambres et plans repas ne passent pas tous par data.bookings :
+      // on les filtre aussi (booking_id d'abord, repli user_id pour les lignes
+      // d'avant le rattachement par booking) — sans ça, Transportation et
+      // Housekeeping montraient les données Quinta sur Terra (bug vu par
+      // Geoffroy le 18 nov, jour de la phase 0).
+      const keepUsers = new Set(bookings.map((b) => b.user_id).filter(Boolean));
+      const byBooking = <T extends { booking_id?: string | null; user_id?: string }>(rows: T[] | undefined): T[] =>
+        (rows || []).filter((r) => (r.booking_id ? keep.has(r.booking_id) : r.user_id ? keepUsers.has(r.user_id) : true));
+      setData({
+        ...raw.data,
+        bookings,
+        trips: byBooking(raw.data.trips),
+        rooms: byBooking(raw.data.rooms),
+        food: byBooking(raw.data.food),
+      });
       setInstallments(raw.installments.filter((i) => keep.has(i.booking_id)));
     }
   };
