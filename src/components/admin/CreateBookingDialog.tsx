@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { getProperty, PROPERTIES, PROPERTY_LABEL, type Property } from "@/lib/property";
 import { Loader2, Copy, Check, Plus, X, Search } from "lucide-react";
 
 interface Props {
@@ -41,6 +42,9 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [form, setForm] = useState(initial);
+  // Multi-lieux : le booking naît dans le lieu sélectionné dans la sidebar,
+  // modifiable dans le popup (18 nov 2026).
+  const [property, setProperty] = useState<Property>(getProperty);
   const [submitting, setSubmitting] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -53,6 +57,7 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
 
   useEffect(() => {
     if (!open) return;
+    setProperty(getProperty());
     supabase.from("client_profiles").select("id,email,first_name,last_name")
       .then(({ data }) => {
         if (data) setGuests((data as GuestOption[]).sort((a, b) =>
@@ -110,11 +115,12 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
       return;
     }
     setSubmitting(true);
-    // Règle : un seul booking actif à la fois sur des dates données
+    // Règle : un seul booking actif à la fois sur des dates données, PAR LIEU
     // (la fonction create-booking refait la même vérification côté serveur).
     if (form.check_in_date && form.check_out_date) {
       const { data: conflicts } = await supabase.from("bookings")
         .select("id,retreat_name,first_name,last_name,email,check_in_date,check_out_date,is_test,cancelled_at")
+        .eq("property", property)
         .not("check_in_date", "is", null)
         .not("check_out_date", "is", null)
         .lt("check_in_date", form.check_out_date)
@@ -133,6 +139,7 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
       }
     }
     const payload = {
+      property,
       retreat_name: form.retreat_name.trim(),
       first_name: form.first_name.trim() || null,
       last_name: form.last_name.trim() || null,
@@ -342,6 +349,23 @@ export function CreateBookingDialog({ open, onOpenChange, onCreated }: Props) {
               {guestId !== "new" && (
                 <p className="mt-1 text-xs text-muted-foreground">From the guest's profile — edit it in the Guests tab.</p>
               )}
+            </div>
+            <div>
+              <Label>Property</Label>
+              <div className="mt-1 flex rounded-full bg-secondary p-0.5 max-w-xs">
+                {PROPERTIES.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setProperty(p)}
+                    className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      property === p ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {PROPERTY_LABEL[p]}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <Label htmlFor="retreat_name">Retreat / event name</Label>
