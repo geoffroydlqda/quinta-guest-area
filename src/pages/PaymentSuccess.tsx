@@ -8,7 +8,7 @@ const CONTENT: Record<string, { icon: JSX.Element; title: string; text: string }
   success: {
     icon: <CheckCircle2 className="w-12 h-12 text-green-600" />,
     title: "Payment received — thank you!",
-    text: "You're all set. Your invoice will arrive in your inbox shortly. We look forward to welcoming you at Quinta do Amor.",
+    text: "You're all set. Your invoice will arrive in your inbox shortly. We look forward to welcoming you.",
   },
   cancelled: {
     icon: <Info className="w-12 h-12 text-amber-600" />,

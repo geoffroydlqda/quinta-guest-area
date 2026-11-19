@@ -7,6 +7,7 @@ import { GuestAreaHeader } from '@/components/guest-area/GuestAreaHeader';
 import { Button } from '@/components/ui/button';
 import { Loader2, CalendarDays, ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { guestBrandName } from '@/lib/property';
 
 /**
  * Choix de la retraite (multi-retraites, 3 août 2026 — cas Isabel Muir) :
@@ -112,7 +113,7 @@ function BookingSelectorContent() {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-medium truncate">{b.retreat_name || 'Quinta do Amor stay'}</p>
+              <p className="font-medium truncate">{b.retreat_name || `${guestBrandName()} stay`}</p>
               {chip && (
                 <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${chip.cls}`}>
                   {chip.label}

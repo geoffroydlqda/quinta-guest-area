@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { guestBrandName } from '@/lib/property';
 import { useActiveBooking } from '@/contexts/BookingContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -51,7 +52,7 @@ export function StaySwitcher() {
               {b.id === activeBookingId && <Check className="h-4 w-4" />}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{b.retreat_name || 'Quinta do Amor stay'}</p>
+              <p className="text-sm font-medium truncate">{b.retreat_name || `${guestBrandName()} stay`}</p>
               <p className="text-xs text-muted-foreground">{shortRange(b.check_in_date, b.check_out_date)}</p>
             </div>
           </DropdownMenuItem>

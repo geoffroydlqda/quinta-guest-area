@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import qdaLogo from '@/assets/qda-logo.png';
+import { guestProperty, guestBrandName } from '@/lib/property';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -115,7 +116,7 @@ const ResetPassword = () => {
       <main className="flex-1 flex items-center justify-center px-4">
         <div className="max-w-md w-full space-y-8 animate-fade-up">
           <div className="text-center">
-            <img src={qdaLogo} alt="Quinta do Amor" className="h-16 w-auto mx-auto mb-4" />
+            {guestProperty() === 'quinta' && <img src={qdaLogo} alt={guestBrandName()} className="h-16 w-auto mx-auto mb-4" />}
             <h1 className="text-2xl font-semibold">Create a new password</h1>
             <p className="text-muted-foreground mt-2">
               Choose a new password to continue to your Guest Area.

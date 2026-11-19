@@ -13,6 +13,7 @@ import { usePaymentData } from '@/hooks/usePaymentData';
 import { isPayableOnline } from '@/components/guest-area/PaymentSections';
 import { StaySwitcher } from './StaySwitcher';
 import qdaLogo from '@/assets/qda-logo.png';
+import { guestProperty, guestBrandName } from '@/lib/property';
 
 export type GuestTab = 'overview' | 'rooms' | 'catering' | 'transportation' | 'payments';
 
@@ -32,6 +33,10 @@ function shortDate(s: string | null | undefined) {
 }
 
 export function GuestShell({ active, children }: { active: GuestTab; children: React.ReactNode }) {
+  // Multi-lieux P4a (19 nov 2026) : le lieu vient du domaine
+  // (guest.terradapaz.com = Terra). Logo Terra pas encore fourni → initiales.
+  const brandProperty = guestProperty();
+  const brandName = guestBrandName();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { activeBooking, activeBookingId, isImpersonating, impersonatedBooking, exitImpersonation } = useActiveBooking();
@@ -142,10 +147,12 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
       <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-60 bg-background border-r border-border/70 px-6 py-7 z-40">
         <Link to={withImpersonation('/dashboard')} className="flex items-center gap-2.5">
           <span className="w-9 h-9 rounded-full bg-card border border-border flex items-center justify-center shrink-0 overflow-hidden">
-            <img src={qdaLogo} alt="" className="w-7 h-7 object-contain" />
+            {brandProperty === 'quinta'
+              ? <img src={qdaLogo} alt="" className="w-7 h-7 object-contain" />
+              : <span className="text-xs font-semibold text-[#6D7855]">TP</span>}
           </span>
           <span className="guest-display text-lg font-semibold leading-tight tracking-tight text-foreground">
-            Quinta do Amor
+            {brandName}
           </span>
         </Link>
 
@@ -201,9 +208,9 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
         <div className="lg:hidden sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b border-border/70">
           <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-1">
             <Link to={withImpersonation('/dashboard')} className="flex items-center gap-2 min-w-0">
-              <img src={qdaLogo} alt="Quinta do Amor" className="h-8 w-auto" />
+              {brandProperty === 'quinta' && <img src={qdaLogo} alt={brandName} className="h-8 w-auto" />}
               <span className="guest-display text-base font-semibold tracking-tight text-foreground truncate">
-                Quinta do Amor
+                {brandName}
               </span>
             </Link>
             <div className="flex items-center gap-1.5 shrink-0">
@@ -224,7 +231,7 @@ export function GuestShell({ active, children }: { active: GuestTab; children: R
 
         <footer className="border-t border-border/70 py-6">
           <div className="px-4 sm:px-6 lg:px-10 text-xs text-muted-foreground flex flex-wrap justify-between gap-2">
-            <span>Quinta do Amor © {new Date().getFullYear()}</span>
+            <span>{brandName} © {new Date().getFullYear()}</span>
             <a href="mailto:hello@quintamor.com" className="hover:text-foreground">hello@quintamor.com</a>
           </div>
         </footer>

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import qdaLogo from '@/assets/qda-logo.png';
 import { useAuth } from '@/contexts/AuthContext';
 import { isAdminEmail } from '@/lib/admin';
+import { guestProperty, guestBrandName } from '@/lib/property';
 const Landing = () => {
   const { user, isLoading } = useAuth();
   // Signed-in visitors skip the landing page: admins go to /admin, guests to /dashboard.
@@ -13,15 +14,15 @@ const Landing = () => {
       <main className="flex-1 flex items-center justify-center px-4">
         <div className="max-w-md w-full text-center space-y-8 animate-fade-up">
           <div className="flex flex-col items-center gap-4">
-            <img src={qdaLogo} alt="Quinta do Amor" className="h-24 w-auto" />
+            {guestProperty() === 'quinta' && <img src={qdaLogo} alt={guestBrandName()} className="h-24 w-auto" />}
             <div>
               <h1 className="text-3xl font-medium md:text-2xl">Guest Area</h1>
-              <p className="text-muted-foreground mt-2">Quinta do Amor</p>
+              <p className="text-muted-foreground mt-2">{guestBrandName()}</p>
             </div>
           </div>
 
           <p className="text-muted-foreground">
-            Manage your stay at Quinta do Amor — rooms, transportation, food, and more.
+            Manage your stay at {guestBrandName()} — rooms, transportation, food, and more.
           </p>
 
           <div className="flex flex-col gap-3">
@@ -37,7 +38,7 @@ const Landing = () => {
 
       <footer className="border-t border-border py-6">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>Quinta do Amor © {new Date().getFullYear()}</p>
+          <p>{guestBrandName()} © {new Date().getFullYear()}</p>
         </div>
       </footer>
     </div>;

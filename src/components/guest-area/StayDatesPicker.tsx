@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { isEditingLocked } from '@/lib/editLock';
 import { parseLocalDateString } from '@/lib/localDate';
+import { guestBrandName } from '@/lib/property';
 
 interface StayDatesPickerProps {
   checkInDate: string | null;
@@ -239,7 +240,7 @@ export function StayDatesPicker({
           <div className="flex items-start gap-2">
             <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
             <p className="text-sm text-muted-foreground">
-              Your stay dates will be confirmed by Quinta do Amor — food planning opens once they're set.
+              Your stay dates will be confirmed by {guestBrandName()} — food planning opens once they're set.
             </p>
           </div>
         </div>

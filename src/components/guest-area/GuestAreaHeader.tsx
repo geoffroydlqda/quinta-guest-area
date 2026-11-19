@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import qdaLogo from '@/assets/qda-logo.png';
+import { guestProperty, guestBrandName } from '@/lib/property';
 import { StaySwitcher } from './StaySwitcher';
 import { useActiveBooking } from '@/contexts/BookingContext';
 
@@ -51,10 +52,10 @@ export function GuestAreaHeader({ showLogout = true }: GuestAreaHeaderProps) {
       <header className="bg-card/85 backdrop-blur-md border-b border-border/70 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <img src={qdaLogo} alt="Quinta do Amor" className="h-10 w-auto" />
+            {guestProperty() === 'quinta' && <img src={qdaLogo} alt={guestBrandName()} className="h-10 w-auto" />}
             <div className="hidden sm:block min-w-0">
               <h1 className="guest-display text-base font-semibold leading-tight tracking-tight text-[#6D7855] truncate">
-                Quinta do Amor
+                {guestBrandName()}
               </h1>
               <p className="guest-kicker">Guest Area</p>
             </div>

@@ -77,3 +77,31 @@ export function usePropertyFilter(): [PropertyFilter, (p: PropertyFilter) => voi
 export function bookingProperty(b: { property?: string | null } | null | undefined): Property {
   return b?.property === "terra" ? "terra" : "quinta";
 }
+
+// ---------------------------------------------------------------------------
+// Guest area multi-lieux (P4a, 19 nov 2026).
+// Le lieu de la GUEST AREA ne vient pas d'un switcher : il est déterminé par
+// le domaine — guest.terradapaz.com = Terra da Paz, tout le reste = Quinta.
+// Pour tester avant que le domaine existe : ?property=terra dans l'URL
+// (mémorisé pour la session de l'onglet, previews Vercel incluses).
+// ---------------------------------------------------------------------------
+const GUEST_KEY = "qda-guest-property";
+
+export function guestProperty(): Property {
+  try {
+    const qs = new URLSearchParams(window.location.search).get("property");
+    if (qs === "terra" || qs === "quinta") {
+      try { sessionStorage.setItem(GUEST_KEY, qs); } catch { /* storage indisponible */ }
+      return qs;
+    }
+    const saved = sessionStorage.getItem(GUEST_KEY);
+    if (saved === "terra" || saved === "quinta") return saved as Property;
+    if (window.location.hostname.toLowerCase().endsWith("terradapaz.com")) return "terra";
+  } catch { /* SSR / URL inaccessible */ }
+  return "quinta";
+}
+
+/** Nom affiché du lieu de la guest area (wordmark, footers, alt text…). */
+export function guestBrandName(): string {
+  return PROPERTY_LABEL[guestProperty()];
+}

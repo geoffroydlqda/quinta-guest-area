@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Loader2, Mail } from 'lucide-react';
 import qdaLogo from '@/assets/qda-logo.png';
+import { guestProperty, guestBrandName } from '@/lib/property';
 import { isAdminEmail } from '@/lib/admin';
 
 const Auth = () => {
@@ -179,7 +180,7 @@ const Auth = () => {
         <main className="flex-1 flex items-center justify-center px-4">
           <div className="max-w-md w-full space-y-6 animate-fade-up">
             <div className="text-center">
-              <img src={qdaLogo} alt="Quinta do Amor" className="h-16 w-auto mx-auto mb-4" />
+              {guestProperty() === 'quinta' && <img src={qdaLogo} alt={guestBrandName()} className="h-16 w-auto mx-auto mb-4" />}
               <h1 className="text-2xl font-semibold">Confirmation email sent</h1>
             </div>
             <div className="bg-card rounded-2xl shadow-elegant p-6 space-y-4">
@@ -230,7 +231,7 @@ const Auth = () => {
       <main className="flex-1 flex items-center justify-center px-4">
         <div className="max-w-md w-full space-y-8 animate-fade-up">
           <div className="text-center">
-            <img src={qdaLogo} alt="Quinta do Amor" className="h-16 w-auto mx-auto mb-4" />
+            {guestProperty() === 'quinta' && <img src={qdaLogo} alt={guestBrandName()} className="h-16 w-auto mx-auto mb-4" />}
             <h1 className="text-2xl font-semibold">
               {mode === 'signup' ? 'Create your account' : 'Welcome back'}
             </h1>
@@ -374,7 +375,7 @@ const Auth = () => {
 
       <footer className="border-t border-border py-6">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>Quinta do Amor © {new Date().getFullYear()}</p>
+          <p>{guestBrandName()} © {new Date().getFullYear()}</p>
         </div>
       </footer>
     </div>
