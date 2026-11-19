@@ -116,11 +116,17 @@ serve(async (req) => {
     const amount = Math.round(payable.reduce((s, i) => s + Number(i.amount_due || 0), 0) * 100) / 100;
 
     const { data: booking } = await admin.from("bookings")
-      .select("id,email,retreat_name,is_test")
+      .select("id,email,retreat_name,is_test,property")
       .eq("id", payable[0].booking_id).maybeSingle();
     if (!booking?.email || booking.is_test) return new Response("Not found", { status: 404 });
 
-    const acct = await virtualIban(vals.stripe_secret_key, booking.email);
+    // Multi-lieux P2 (19 nov 2026) : l'IBAN virtuel vient du compte Stripe du
+    // lieu du booking — Terra paie sur le compte Terra da Paz.
+    const stripeKey = (booking as { property?: string | null }).property === "terra"
+      ? vals.stripe_terra_secret_key
+      : vals.stripe_secret_key;
+    if (!stripeKey) return new Response("Config missing", { status: 500 });
+    const acct = await virtualIban(stripeKey, booking.email);
     if (!acct) return new Response("Bank details unavailable", { status: 502 });
 
     const remittance = cleanRemittance(

@@ -73,6 +73,10 @@ async function gql(query: string, variables?: Record<string, unknown>) {
 type MoloniCfg = {
   company_id: number;
   document_set_id: number;
+  // Multi-lieux P2 (19 nov 2026) : les faturas des bookings Terra da Paz
+  // partent dans la série TERRA (documentSetId 6083 — même série que les
+  // ventes Stripe Terra de stripe-sales). Même société, même NIF.
+  terra_document_set_id?: number;
   payment_method_id: number;
   // Produits Moloni par (catégorie -> productId). Les taux de TVA viennent du produit.
   products: Record<string, number>;
@@ -182,7 +186,7 @@ async function generateInvoice(installmentId: string) {
   group.sort((a, b) => (catOrder[a.category ?? "rental"] ?? 3) - (catOrder[b.category ?? "rental"] ?? 3));
 
   const { data: booking, error: bErr } = await admin.from("bookings")
-    .select("id,retreat_name,first_name,last_name,email,check_in_date,check_out_date,client_id,total_rental_price,rental_discount")
+    .select("id,retreat_name,first_name,last_name,email,check_in_date,check_out_date,client_id,total_rental_price,rental_discount,property")
     .eq("id", inst.booking_id).maybeSingle();
   if (bErr) throw bErr;
   if (!booking) throw new Error("Booking not found");
@@ -404,9 +408,13 @@ async function generateInvoice(installmentId: string) {
   }
 
   // 4. Crée la fatura-recibo, finalisée, payée (total = somme des échéances).
+  // Multi-lieux P2 : booking Terra -> série TERRA. On refuse d'émettre dans la
+  // mauvaise série si la config manque (plutôt que polluer la série FR).
+  const isTerraBooking = (booking as { property?: string | null }).property === "terra";
+  if (isTerraBooking && !cfg.terra_document_set_id) throw new Error("TERRA_DOCUMENT_SET_MISSING (app_settings.moloni.terra_document_set_id)");
   const totalTtc = Math.round(group.reduce((s, g) => s + Math.abs(Number(g.amount_due)), 0) * 100) / 100;
   const docData: Record<string, unknown> = {
-    documentSetId: cfg.document_set_id,
+    documentSetId: isTerraBooking ? cfg.terra_document_set_id : cfg.document_set_id,
     customerId,
     date: new Date().toISOString(),
     expirationDate: new Date().toISOString().slice(0, 10),

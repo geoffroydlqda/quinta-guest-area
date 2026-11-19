@@ -27,14 +27,33 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// Deux secrets possibles pendant la transition sandbox -> live :
-// la signature est acceptée si elle correspond à l'un des deux.
-async function webhookSecrets(): Promise<string[]> {
+// Multi-comptes (P2 multi-lieux, 19 nov 2026) : le webhook reçoit les
+// événements des DEUX comptes Stripe — Quinta do Amor (historique) et Terra
+// da Paz (endpoint créé par Geoffroy le 18 nov). Le secret qui valide la
+// signature dit de quel compte vient l'événement, et donc quelle clé API
+// utiliser pour les appels Stripe qui suivent (PaymentIntent, customer…).
+type StripeAccount = "quinta" | "terra";
+
+async function internalSettings(): Promise<Record<string, string>> {
   const { data } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
-  const v = data?.value as Record<string, string> | null;
-  const list = [v?.stripe_webhook_secret, v?.stripe_webhook_secret_live].filter(Boolean) as string[];
+  return (data?.value as Record<string, string> | null) ?? {};
+}
+
+// Plusieurs secrets possibles (transition sandbox -> live côté Quinta, +
+// l'endpoint Terra) : la signature est acceptée si elle correspond à l'un.
+async function webhookSecrets(): Promise<{ secret: string; account: StripeAccount }[]> {
+  const v = await internalSettings();
+  const list: { secret: string; account: StripeAccount }[] = [];
+  if (v.stripe_webhook_secret) list.push({ secret: v.stripe_webhook_secret, account: "quinta" });
+  if (v.stripe_webhook_secret_live) list.push({ secret: v.stripe_webhook_secret_live, account: "quinta" });
+  if (v.stripe_terra_webhook_secret) list.push({ secret: v.stripe_terra_webhook_secret, account: "terra" });
   if (!list.length) throw new Error("WEBHOOK_SECRET_MISSING");
   return list;
+}
+
+async function stripeKeyForAccount(account: StripeAccount): Promise<string | null> {
+  const v = await internalSettings();
+  return (account === "terra" ? v.stripe_terra_secret_key : v.stripe_secret_key) ?? null;
 }
 
 function hexEqual(a: string, b: string): boolean {
@@ -44,28 +63,29 @@ function hexEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-async function verifySignature(payload: string, header: string | null): Promise<boolean> {
-  if (!header) return false;
+// Renvoie le compte Stripe dont le secret valide la signature, ou null.
+async function verifySignature(payload: string, header: string | null): Promise<StripeAccount | null> {
+  if (!header) return null;
   // Pendant une rotation de secret, Stripe envoie PLUSIEURS signatures v1 —
   // il faut toutes les tester (avant, seule la derniere etait comparee et les
   // events valides pouvaient etre rejetes pendant la transition — 25 aout 2026).
   const pairs = header.split(",").map((p) => p.split("=", 2) as [string, string]);
   const t = pairs.find(([k]) => k.trim() === "t")?.[1];
   const v1s = pairs.filter(([k]) => k.trim() === "v1").map(([, v]) => v).filter(Boolean);
-  if (!t || v1s.length === 0) return false;
+  if (!t || v1s.length === 0) return null;
   // Tolérance 10 min contre le rejeu
   const age = Math.abs(Date.now() / 1000 - Number(t));
-  if (!Number.isFinite(age) || age > 600) return false;
+  if (!Number.isFinite(age) || age > 600) return null;
 
-  for (const secret of await webhookSecrets()) {
+  for (const { secret, account } of await webhookSecrets()) {
     const key = await crypto.subtle.importKey(
       "raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
     );
     const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${payload}`));
     const hex = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
-    if (v1s.some((v1) => hexEqual(hex, v1))) return true;
+    if (v1s.some((v1) => hexEqual(hex, v1))) return account;
   }
-  return false;
+  return null;
 }
 
 async function markPaid(installmentIds: string[], sessionId: string, fxRate: number | null): Promise<string[]> {
@@ -104,13 +124,12 @@ async function markPaid(installmentIds: string[], sessionId: string, fxRate: num
 // route — évite les relances et les doubles paiements. La méthode réelle est
 // lue sur le PaymentIntent (best-effort ; la session ne porte que la liste
 // des méthodes proposées).
-async function markProcessing(installmentIds: string[], session: Record<string, unknown>) {
+async function markProcessing(installmentIds: string[], session: Record<string, unknown>, account: StripeAccount) {
   let method: string | null = null;
   try {
     const piId = typeof session?.payment_intent === "string" ? session.payment_intent : null;
     if (piId) {
-      const { data } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
-      const key = (data?.value as Record<string, string> | null)?.stripe_secret_key;
+      const key = await stripeKeyForAccount(account);
       if (key) {
         const r = await fetch(`https://api.stripe.com/v1/payment_intents/${piId}?expand[]=payment_method`, {
           headers: { Authorization: `Bearer ${key}` },
@@ -173,7 +192,9 @@ async function notifyAsyncFailure(installmentIds: string[], session: Record<stri
 // solde par un PaymentIntent customer_balance confirmé immédiatement, puis
 // markPaid + fatura + email de confirmation (chaîne habituelle). Montant non
 // rapproché -> email admin, l'argent reste en crédit sur le customer.
-async function handleCashBalanceFunded(tx: Record<string, unknown>) {
+// Multi-comptes : l'événement arrive du compte dont le secret a validé la
+// signature — toutes les opérations utilisent la clé de CE compte.
+async function handleCashBalanceFunded(tx: Record<string, unknown>, account: StripeAccount) {
   try {
     if (String(tx?.type) !== "funded" || String(tx?.currency ?? "").toLowerCase() !== "eur") return;
     const customerId = typeof tx?.customer === "string" ? tx.customer : null;
@@ -182,9 +203,8 @@ async function handleCashBalanceFunded(tx: Record<string, unknown>) {
     if (!customerId || !(cents > 0) || !txId) return;
     const amount = Math.round(cents) / 100;
 
-    const { data: settings } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
-    const key = (settings?.value as Record<string, string> | null)?.stripe_secret_key;
-    if (!key) { console.error("[cash-balance] stripe key missing"); return; }
+    const key = await stripeKeyForAccount(account);
+    if (!key) { console.error(`[cash-balance] stripe key missing for account '${account}'`); return; }
     const sHeaders = { Authorization: `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded" };
 
     // Idempotence : Stripe rejoue les événements — un PI déjà taggé avec
@@ -241,7 +261,7 @@ async function handleCashBalanceFunded(tx: Record<string, unknown>) {
       console.error(`[cash-balance] €${amount.toFixed(2)} from ${email} NOT matched (${open.length} open installments)`);
       await notifyAdmin(
         `⚠️ Bank transfer received on Stripe — not matched (€${amount.toFixed(2)})`,
-        `€${amount.toFixed(2)} arrived by direct bank transfer on the Stripe account of ${email}, but it doesn't match any single unpaid installment nor the full balance of one booking.\n\nThe money sits as customer credit in Stripe (Customers → ${customerId} → Cash balance). Apply it manually from the Stripe dashboard, then mark the installments paid in the admin.`);
+        `€${amount.toFixed(2)} arrived by direct bank transfer on the Stripe account (${account}) of ${email}, but it doesn't match any single unpaid installment nor the full balance of one booking.\n\nThe money sits as customer credit in Stripe (Customers → ${customerId} → Cash balance). Apply it manually from the Stripe dashboard, then mark the installments paid in the admin.`);
       return;
     }
 
@@ -377,8 +397,10 @@ function scheduleAutomation(newlyPaid: string[], sessionId: string) {
 serve(async (req) => {
   try {
     const payload = await req.text();
-    const ok = await verifySignature(payload, req.headers.get("stripe-signature"));
-    if (!ok) return json({ error: "Invalid signature" }, 400);
+    // Le secret qui valide dit de quel compte Stripe vient l'événement
+    // (quinta | terra) — tout appel API qui suit utilise la clé de ce compte.
+    const account = await verifySignature(payload, req.headers.get("stripe-signature"));
+    if (!account) return json({ error: "Invalid signature" }, 400);
 
     const event = JSON.parse(payload);
     const type: string = event?.type ?? "";
@@ -389,7 +411,7 @@ serve(async (req) => {
     // la réponse à Stripe (plusieurs appels API).
     if (type === "customer_cash_balance_transaction.created") {
       if (event?.livemode) {
-        const task = handleCashBalanceFunded(session);
+        const task = handleCashBalanceFunded(session, account);
         const rt = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
         if (rt?.waitUntil) rt.waitUntil(task); else await task;
       } else {
@@ -431,7 +453,7 @@ serve(async (req) => {
       } else {
         // SEPA & co : le débit est en cours, async_payment_succeeded suivra.
         console.log(`[stripe-webhook] session ${session?.id} completed, payment ${session?.payment_status} — marking processing`);
-        if (installmentIds.length) await markProcessing(installmentIds, session);
+        if (installmentIds.length) await markProcessing(installmentIds, session, account);
       }
     } else if (type === "checkout.session.async_payment_succeeded") {
       if (installmentIds.length) {

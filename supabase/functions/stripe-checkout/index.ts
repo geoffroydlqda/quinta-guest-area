@@ -44,11 +44,19 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 const CHECKOUT_IMAGE = `${PROD_ORIGIN}/checkout-quinta.jpg`;
 
-async function stripeKey(): Promise<string> {
+// Multi-lieux P2 (19 nov 2026) : un booking Terra paie sur le compte Stripe
+// Terra da Paz (stripe_terra_secret_key), un booking Quinta sur le compte
+// historique. Le lieu vient de bookings.property.
+async function stripeKey(property: "quinta" | "terra" = "quinta"): Promise<string> {
   const { data } = await admin.from("app_settings").select("value").eq("key", "internal").maybeSingle();
-  const key = (data?.value as Record<string, string> | null)?.stripe_secret_key;
-  if (!key) throw new Error("STRIPE_KEY_MISSING");
+  const v = data?.value as Record<string, string> | null;
+  const key = property === "terra" ? v?.stripe_terra_secret_key : v?.stripe_secret_key;
+  if (!key) throw new Error(`STRIPE_KEY_MISSING (${property})`);
   return key;
+}
+
+function bookingProperty(b: { property?: string | null } | null | undefined): "quinta" | "terra" {
+  return b?.property === "terra" ? "terra" : "quinta";
 }
 
 async function isAdminEmailDb(email?: string | null): Promise<boolean> {
@@ -134,12 +142,12 @@ async function eurUsdRate(): Promise<number | null> {
 
 async function createSession(
   insts: { id: string; label: string | null; amount_due: number }[],
-  booking: { id: string; email: string | null; retreat_name: string | null; check_in_date: string | null; check_out_date: string | null },
+  booking: { id: string; email: string | null; retreat_name: string | null; check_in_date: string | null; check_out_date: string | null; property?: string | null },
   successUrl: string,
   cancelUrl: string,
   forceUsd = false,
 ) {
-  const key = await stripeKey();
+  const key = await stripeKey(bookingProperty(booking));
   const stay = booking.check_in_date && booking.check_out_date
     ? `Stay ${booking.check_in_date} → ${booking.check_out_date} · ${booking.retreat_name || "Quinta do Amor"}`
     : (booking.retreat_name || "Quinta do Amor");
@@ -326,7 +334,7 @@ async function handlePayLink(req: Request): Promise<Response> {
     return settled ? redirect(`${PROD_ORIGIN}/payment-success?payment=already`) : invalid();
   }
   const { data: booking } = await admin.from("bookings")
-    .select("id,email,retreat_name,check_in_date,check_out_date,client_id,is_test")
+    .select("id,email,retreat_name,check_in_date,check_out_date,client_id,is_test,property")
     .eq("id", payable[0].booking_id).maybeSingle();
   if (!booking) return invalid();
   // Stripe est en mode LIVE : jamais de session de paiement sur un booking test.
@@ -382,7 +390,7 @@ serve(async (req) => {
     }
 
     const { data: booking, error: bErr } = await admin.from("bookings")
-      .select("id,user_id,email,retreat_name,first_name,check_in_date,check_out_date,client_id,is_test")
+      .select("id,user_id,email,retreat_name,first_name,check_in_date,check_out_date,client_id,is_test,property")
       .eq("id", insts[0].booking_id).maybeSingle();
     if (bErr) throw bErr;
     if (!booking) return json({ error: "Booking not found" }, 404);
