@@ -2,6 +2,8 @@ import { ReactNode, useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAllowedTabs } from "@/hooks/useAllowedTabs";
+import { FILTER_LABEL, FILTER_SHORT, PROPERTIES, setPropertyFilter, usePropertyFilter, type PropertyFilter } from "@/lib/property";
+import { useAllowedProperties } from "@/hooks/useAllowedProperties";
 import {
   LayoutDashboard, CalendarRange, Users, Wallet, Car,
   BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X, Landmark, UserCog, Package, Boxes,
@@ -65,6 +67,23 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   // uniquement (la guest area garde son thème). Classe .dark sur .admin-ui.
   const [dark, setDark] = useState(() => localStorage.getItem("qda-admin-theme") === "dark");
   useEffect(() => { localStorage.setItem("qda-admin-theme", dark ? "dark" : "light"); }, [dark]);
+  // Multi-lieux (phase 0 + P0b, 18 nov 2026) : filtre global QDA / TDP / All,
+  // switcher dans la sidebar (desktop) et la feuille More (mobile). "All" =
+  // vue consolidée Grupo OHM. Les choix sont restreints par
+  // staff_profiles.allowed_properties (All réservé à ceux qui voient tout).
+  const [property, switchProperty] = usePropertyFilter();
+  const { allowed: allowedProperties } = useAllowedProperties();
+  const propertyChoices: PropertyFilter[] = allowedProperties
+    ? PROPERTIES.filter((p) => allowedProperties.has(p))
+    : [...PROPERTIES, "all"];
+  useEffect(() => {
+    // Enforcement : un admin restreint à un lieu ne reste jamais sur un filtre
+    // qu'il n'a pas le droit de voir (y compris All).
+    if (allowedProperties && (property === "all" || !allowedProperties.has(property))) {
+      const first = PROPERTIES.find((p) => allowedProperties.has(p));
+      if (first) setPropertyFilter(first);
+    }
+  }, [allowedProperties, property]);
   const location = useLocation();
   // Onglets visibles pour cet admin (onglet Staff) — null = tous
   const { allowed } = useAllowedTabs();
@@ -99,8 +118,26 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       {/* Sidebar desktop — blanche, pilule verte active */}
       <aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-border bg-card sticky top-0 h-screen">
         <div className="px-4 py-5 border-b border-border">
-          <div className="font-bold leading-tight">Quinta do Amor</div>
+          <div className="font-bold leading-tight">{FILTER_LABEL[property]}</div>
           <div className="text-xs text-muted-foreground mt-0.5">Management</div>
+          {/* Switcher de lieu (QDA / TDP / All) — segmenté compact */}
+          {propertyChoices.length > 1 && (
+            <div className="mt-3 flex rounded-full bg-secondary p-0.5">
+              {propertyChoices.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => switchProperty(p)}
+                  title={FILTER_LABEL[p]}
+                  className={`flex-1 rounded-full px-2 py-1 text-[11px] font-semibold transition-colors ${
+                    property === p ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {FILTER_SHORT[p]}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
           {navGroups.map((group, gi) => (
@@ -169,6 +206,23 @@ export function AdminLayout({ children }: { children: ReactNode }) {
                 <X className="w-4 h-4" />
               </button>
             </div>
+            {/* Switcher de lieu (mobile) */}
+            {propertyChoices.length > 1 && (
+              <div className="mb-3 flex rounded-full bg-secondary p-0.5">
+                {propertyChoices.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => switchProperty(p)}
+                    className={`flex-1 rounded-full px-2 py-1.5 text-xs font-semibold transition-colors ${
+                      property === p ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground"
+                    }`}
+                  >
+                    {FILTER_LABEL[p]}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="space-y-1 max-h-[65vh] overflow-y-auto">
               {mobileMoreGroups.map((group, gi) => (
                 <div key={gi} className={gi > 0 ? "pt-1.5" : undefined}>

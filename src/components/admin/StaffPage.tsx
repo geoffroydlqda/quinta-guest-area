@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Plus, ShieldCheck, UserRound } from "lucide-react";
 import { normalizeEmail } from "@/lib/admin";
+import { PROPERTIES, PROPERTY_LABEL } from "@/lib/property";
 
 /**
  * Onglet Staff (7 août 2026) — annuaire de l'équipe :
@@ -45,6 +46,7 @@ const TEAM_LABEL: Record<string, string> = {
 type Staff = {
   id: string; name: string; email: string | null; phone: string | null;
   role: string | null; team: string | null; allowed_tabs: string[] | null;
+  allowed_properties: string[] | null;
   active: boolean; notes: string | null;
 };
 
@@ -122,6 +124,16 @@ export function StaffPage() {
     if (next.length === 0) { toast({ title: "At least one tab", description: "An admin needs at least one visible tab.", variant: "destructive" }); return; }
     // Tous cochés -> null (= tous, y compris les futurs onglets)
     patch(s.id, { allowed_tabs: next.length === all.length ? null : next });
+  };
+
+  // Multi-lieux (P0b, 18 nov 2026) : même logique que les onglets — les deux
+  // cochés -> null (= tous les lieux, y compris All dans le switcher).
+  const toggleProperty = (s: Staff, prop: string) => {
+    const all = PROPERTIES as readonly string[];
+    const current = s.allowed_properties && s.allowed_properties.length > 0 ? s.allowed_properties : [...all];
+    const next = current.includes(prop) ? current.filter((p) => p !== prop) : [...current, prop];
+    if (next.length === 0) { toast({ title: "At least one property", description: "An admin needs access to at least one property.", variant: "destructive" }); return; }
+    patch(s.id, { allowed_properties: next.length === all.length ? null : next });
   };
 
   const grouped = useMemo(() => {
@@ -244,6 +256,22 @@ export function StaffPage() {
                                 className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
                                   on ? "border-[#79B84B] bg-[#EAF6DF] text-[#35532A]" : "border-border bg-background text-muted-foreground/60 line-through"}`}>
                                 {t.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-2 text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                          Properties {s.allowed_properties && s.allowed_properties.length > 0 ? `(${s.allowed_properties.length}/${PROPERTIES.length})` : "(all)"}
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {PROPERTIES.map((p) => {
+                            const eff = s.allowed_properties && s.allowed_properties.length > 0 ? s.allowed_properties : null;
+                            const on = !eff || eff.includes(p);
+                            return (
+                              <button key={p} type="button" onClick={() => toggleProperty(s, p)}
+                                className={`rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                                  on ? "border-[#79B84B] bg-[#EAF6DF] text-[#35532A]" : "border-border bg-background text-muted-foreground/60 line-through"}`}>
+                                {PROPERTY_LABEL[p]}
                               </button>
                             );
                           })}

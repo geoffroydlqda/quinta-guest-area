@@ -64,6 +64,8 @@ export type Database = {
           id: string
           source: string
           dedup_key: string | null
+          entity: string
+          account_id: string | null
           date: string
           description: string | null
           amount: number
@@ -89,6 +91,8 @@ export type Database = {
           id?: string
           source?: string
           dedup_key?: string | null
+          entity?: string
+          account_id?: string | null
           date: string
           description?: string | null
           amount: number
@@ -114,6 +118,8 @@ export type Database = {
           id?: string
           source?: string
           dedup_key?: string | null
+          entity?: string
+          account_id?: string | null
           date?: string
           description?: string | null
           amount?: number
@@ -269,6 +275,7 @@ export type Database = {
           role: string | null
           team: string | null
           allowed_tabs: string[] | null
+          allowed_properties: string[] | null
           active: boolean
           notes: string | null
           created_at: string
@@ -282,6 +289,7 @@ export type Database = {
           role?: string | null
           team?: string | null
           allowed_tabs?: string[] | null
+          allowed_properties?: string[] | null
           active?: boolean
           notes?: string | null
           created_at?: string
@@ -295,6 +303,7 @@ export type Database = {
           role?: string | null
           team?: string | null
           allowed_tabs?: string[] | null
+          allowed_properties?: string[] | null
           active?: boolean
           notes?: string | null
           created_at?: string
@@ -688,6 +697,7 @@ export type Database = {
           last_name: string | null
           payment_status: Database["public"]["Enums"]["payment_status"]
           payment_status_override: string | null
+          property: string
           remaining_balance: number | null
           retreat_name: string
           total_rental_price: number | null
@@ -727,6 +737,7 @@ export type Database = {
           last_name?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
           payment_status_override?: string | null
+          property?: string
           remaining_balance?: number | null
           retreat_name?: string
           total_rental_price?: number | null
@@ -766,6 +777,7 @@ export type Database = {
           last_name?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"]
           payment_status_override?: string | null
+          property?: string
           remaining_balance?: number | null
           retreat_name?: string
           total_rental_price?: number | null

@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminGuard } from "@/lib/adminGuard";
 import { useAllowedTabs } from "@/hooks/useAllowedTabs";
+import { bookingProperty, usePropertyFilter } from "@/lib/property";
 import { StaffPage } from "@/components/admin/StaffPage";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Download, RefreshCw, Trash2, FileDown, Mail, ChevronDown, ChevronLeft, ChevronRight, Plus, Copy, Check, ExternalLink, Pencil, Phone, MapPin, Globe2, ReceiptText } from "lucide-react";
@@ -85,6 +86,7 @@ type BookingRow = {
   check_in_time?: string | null;
   check_out_time?: string | null;
   google_calendar_event_id?: string | null;
+  property?: string | null;
 };
 
 const EVENT_TYPE_LABEL: Record<string, string> = {
@@ -261,6 +263,53 @@ const AdminContent = () => {
 
   const [installments, setInstallments] = useState<Installment[]>([]);
 
+  // Multi-lieux (phase 0, 18 nov 2026) : le serveur renvoie TOUT, le filtre par
+  // lieu se fait ici, en un seul point — bookings + échéances (par booking_id).
+  // Tous les écrans de cette page (dashboard, bookings, catering, guests…)
+  // héritent du lieu sélectionné sans autre changement. Le brut reste en ref
+  // pour re-filtrer instantanément quand on change de lieu (pas de refetch).
+  const [property] = usePropertyFilter();
+  const rawRef = useRef<{ data: Data | null; installments: Installment[] }>({ data: null, installments: [] });
+  const applyPropertyFilter = (prop: string) => {
+    const raw = rawRef.current;
+    if (!raw.data) return;
+    // Position "All" (P0b) : vue consolidée Grupo OHM, aucun filtre.
+    if (prop === "all") {
+      setData(raw.data);
+      setInstallments(raw.installments);
+      return;
+    }
+    {
+      const bookings = (raw.data.bookings || []).filter((b) => bookingProperty(b) === prop);
+      const keep = new Set(bookings.map((b) => b.id));
+      // Trips, chambres et plans repas ne passent pas tous par data.bookings :
+      // on les filtre aussi (booking_id d'abord, repli user_id pour les lignes
+      // d'avant le rattachement par booking) — sans ça, Transportation et
+      // Housekeeping montraient les données Quinta sur Terra (bug vu par
+      // Geoffroy le 18 nov, jour de la phase 0).
+      const keepUsers = new Set(bookings.map((b) => b.user_id).filter(Boolean));
+      const byBooking = <T extends { booking_id?: string | null; user_id?: string }>(rows: T[] | undefined): T[] =>
+        (rows || []).filter((r) => (r.booking_id ? keep.has(r.booking_id) : r.user_id ? keepUsers.has(r.user_id) : true));
+      setData({
+        ...raw.data,
+        bookings,
+        trips: byBooking(raw.data.trips),
+        rooms: byBooking(raw.data.rooms),
+        food: byBooking(raw.data.food),
+      });
+      setInstallments(raw.installments.filter((i) => keep.has(i.booking_id)));
+    }
+  };
+  // Au changement de lieu : re-filtre instantané depuis le brut, puis reload
+  // silencieux (resynchronise les patchs locaux faits depuis le dernier fetch).
+  const propertyMounted = useRef(false);
+  useEffect(() => {
+    if (!propertyMounted.current) { propertyMounted.current = true; return; }
+    applyPropertyFilter(property);
+    load({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [property]);
+
   const load = async (opts?: { silent?: boolean }) => {
     const silent = !!opts?.silent;
     if (!silent) setLoading(true);
@@ -270,15 +319,16 @@ const AdminContent = () => {
     ]);
     if (res.error) {
       toast({ title: "Error", description: res.error.message, variant: "destructive" });
-    } else {
-      setData(res.data as Data);
     }
-    if (!instRes.error && instRes.data) {
-      setInstallments(instRes.data as Installment[]);
-    } else if (instRes.error) {
+    if (instRes.error) {
       // Jamais silencieux : sinon badges Payment et KPI € affichent 0 sans prévenir
       toast({ title: "Failed to load payments", description: instRes.error.message, variant: "destructive" });
     }
+    rawRef.current = {
+      data: res.error ? rawRef.current.data : (res.data as Data),
+      installments: !instRes.error && instRes.data ? (instRes.data as Installment[]) : rawRef.current.installments,
+    };
+    applyPropertyFilter(property);
     if (!silent) setLoading(false);
   };
 

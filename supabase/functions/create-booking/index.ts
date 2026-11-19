@@ -30,6 +30,8 @@ const corsHeaders = {
 
 
 const BodySchema = z.object({
+  // Multi-lieux (18 nov 2026) : Quinta do Amor ou Terra da Paz.
+  property: z.enum(["quinta", "terra"]).default("quinta"),
   retreat_name: z.string().trim().max(200).default(""),
   first_name: z.string().trim().max(100).optional().nullable(),
   last_name: z.string().trim().max(100).optional().nullable(),
@@ -90,11 +92,13 @@ serve(async (req) => {
     // Règle (20 août 2026) : pas de création si un booking actif occupe déjà
     // ces dates. Chevauchement = in < other.out ET out > other.in (le
     // back-to-back check-out/check-in le même jour est autorisé). Les bookings
-    // de test et annulés ne bloquent pas.
+    // de test et annulés ne bloquent pas. Multi-lieux (18 nov 2026) : la
+    // contrainte vaut PAR LIEU — un event Terra n'occupe pas la Quinta.
     if (body.check_in_date && body.check_out_date) {
       const { data: conflicts } = await admin
         .from("bookings")
         .select("id,retreat_name,first_name,last_name,email,check_in_date,check_out_date,is_test,cancelled_at")
+        .eq("property", body.property)
         .not("check_in_date", "is", null)
         .not("check_out_date", "is", null)
         .lt("check_in_date", body.check_out_date)
@@ -113,6 +117,7 @@ serve(async (req) => {
     const token = genToken();
 
     const insertPayload = {
+      property: body.property,
       retreat_name: body.retreat_name || "",
       first_name: body.first_name ?? null,
       last_name: body.last_name ?? null,

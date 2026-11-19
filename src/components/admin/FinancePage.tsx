@@ -11,6 +11,7 @@ import { EventPicker } from "@/components/admin/EventPicker";
 import { CategoryPicker } from "@/components/admin/CategoryPicker";
 import { PayerFilter, NO_PAYER } from "@/components/admin/PayerFilter";
 import { MissingReceiptsDialog, type MissingItem } from "@/components/admin/MissingReceiptsDialog";
+import { usePropertyFilter } from "@/lib/property";
 
 /**
  * Onglet Finance (4 août 2026) — phase 1, alimentée par import CSV Revolut
@@ -92,6 +93,9 @@ type FinTx = {
   // TVA saisie en euros (17 nov 2026) : prioritaire sur vat_rate quand non null
   // (factures a plusieurs taux 6/13/23, retenues...). amount_net = |amount| - vat_amount.
   vat_amount?: number | null;
+  // Multi-lieux P1 (18 nov 2026) : 'quinta' | 'terra' — poche Revolut d'origine.
+  entity?: string | null;
+  account_id?: string | null;
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -286,7 +290,16 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // reset, la capsule active de l'autre mode restait sélectionnée (et Event
   // margins semblait avoir disparu).
   useEffect(() => { setTab(mode === "analytics" ? "pnl" : "tx"); }, [mode]);
-  const [txs, setTxs] = useState<FinTx[]>([]);
+  const [txsAll, setTxs] = useState<FinTx[]>([]);
+  // Multi-lieux P1 (18 nov 2026) : TOUTE la page (Transactions, P&L, cash
+  // flow, marges…) suit le switcher de lieu via l'entité des transactions.
+  // All = Grupo OHM consolidé (aucun filtre). Les lignes d'avant la migration
+  // (entity null) comptent comme quinta.
+  const [propertyFilter] = usePropertyFilter();
+  const txs = useMemo(
+    () => propertyFilter === "all" ? txsAll : txsAll.filter((t) => (t.entity ?? "quinta") === propertyFilter),
+    [txsAll, propertyFilter]
+  );
   const [rules, setRules] = useState<FinRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -343,14 +356,33 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
 
   // Date de signature de chaque echeance (pipeline de l'investor update)
   const [instCreated, setInstCreated] = useState<Map<string, string>>(new Map());
+  // ⚠️ PostgREST plafonne chaque requête à 1 000 lignes quoi que demande
+  // .limit() — bug vécu le 18 nov 2026 : avec l'arrivée des 581 transactions
+  // Terra/Equilibrio la table a dépassé 1 000 lignes et tout ce qui précédait
+  // le 18 juin disparaissait de l'onglet. On pagine donc par .range() jusqu'à
+  // la page incomplète (tri stable date desc + id).
+  const fetchAllTxs = async (): Promise<FinTx[]> => {
+    const pageSize = 1000;
+    const all: FinTx[] = [];
+    for (let from = 0; from < 20000; from += pageSize) {
+      const { data, error } = await supabase.from("fin_transactions").select("*")
+        .order("date", { ascending: false }).order("id", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error || !data) break;
+      all.push(...(data as FinTx[]));
+      if (data.length < pageSize) break;
+    }
+    return all;
+  };
+
   const load = async () => {
     const [t, r, pd, ic] = await Promise.all([
-      supabase.from("fin_transactions").select("*").order("date", { ascending: false }).limit(2000),
+      fetchAllTxs(),
       supabase.from("fin_rules").select("*"),
       supabase.from("purchase_docs").select("tx_id,storage_path").not("tx_id", "is", null),
       supabase.from("payment_installments").select("id,created_at"),
     ]);
-    setTxs((t.data as FinTx[] | null) ?? []);
+    setTxs(t);
     setRules((r.data as FinRule[] | null) ?? []);
     setDocsByTx(buildDocsMap(pd.data as { tx_id: string; storage_path: string }[] | null));
     setInstCreated(new Map(((ic.data ?? []) as { id: string; created_at: string }[])
@@ -545,6 +577,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         // ... et du method/payer du parent (15 oct 2026) : une part de
         // virement reste un virement (badge 🏦, filtres Bills & Cards only)
         method: t.method ?? null, payer: t.payer ?? null,
+        // ... et de l'entité du parent (multi-lieux P1, 18 nov 2026)
+        entity: t.entity ?? "quinta",
       };
     });
     const { error } = await supabase.from("fin_transactions").insert(children);
@@ -798,9 +832,12 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // le dialogue filtre ensuite par mois et ne garde que les cartes.
   const missingItems = useMemo<MissingItem[]>(() => txs
     .filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash)
-    .map((t) => ({ id: t.id, date: t.date, description: t.description, amount: t.amount, payer: t.payer ?? null, method: t.method ?? null })),
+    .map((t) => ({
+      id: t.id, date: t.date, description: t.description, amount: t.amount, payer: t.payer ?? null, method: t.method ?? null,
+      currency: t.currency, category: t.category, event: t.booking_id ? bookingById.get(t.booking_id)?.name ?? null : null,
+    })),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [txs, docsByTx]);
+  [txs, docsByTx, bookingById]);
   const noReceiptCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash).length;
   // Variante cartes seules (hors virements) pour le toggle "Cards only"
   const noReceiptCardCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash && t.method !== "transfer").length;
@@ -1295,6 +1332,9 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
       // Convention (1er sept 2026) : une dépense cash n'a jamais de reçu à
       // attendre — elle n'apparaît pas dans le filtre "No receipt".
       receipt_waived: mCash,
+      // Multi-lieux P1 : la dépense manuelle naît dans le lieu du switcher
+      // (All -> quinta, comme la création de booking).
+      entity: propertyFilter === "terra" ? "terra" : "quinta",
     });
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); return; }
     toast({ title: "Expense added" });
