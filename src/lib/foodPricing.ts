@@ -13,8 +13,13 @@ export interface DietTypeMeta {
   pricing: DietPricing;
 }
 
-export function getDietTypes(stayYear?: number | string | null): DietTypeMeta[] {
-  const pricing = getDietPricing(stayYear);
+// Multi-lieux P3 (19 nov 2026) : property optionnel — barèmes Terra quand ils
+// seront fixés (clés food_terra*), repli automatique sur les tarifs Quinta.
+export function getDietTypes(
+  stayYear?: number | string | null,
+  property: 'quinta' | 'terra' = 'quinta'
+): DietTypeMeta[] {
+  const pricing = getDietPricing(stayYear, property);
   return [
     { type: 'vegetarian',        label: 'Vegetarian',                        countKey: 'vegetarian_count',        pricing: pricing.vegetarian },
     { type: 'meat_dinner',       label: 'Meat or fish for dinner',           countKey: 'meat_dinner_count',       pricing: pricing.meat_dinner },

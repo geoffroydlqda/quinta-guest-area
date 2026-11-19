@@ -30,6 +30,7 @@ import { EmailSnippetsCard, ManualEmailTemplatesCard } from "@/components/admin/
 import { SentEmailsCard } from "@/components/admin/SentEmailsCard";
 import { HonestyBarCard } from "@/components/admin/HonestyBarCard";
 import { HousekeepingScheduler } from "@/components/admin/HousekeepingScheduler";
+import { PropertyRoomsCard } from "@/components/admin/PropertyRoomsCard";
 import { FinancePage } from "@/components/admin/FinancePage";
 import { ProductsPage } from "@/components/admin/ProductsPage";
 import { ReceiptsTab } from "@/components/admin/ReceiptsTab";
@@ -3043,6 +3044,10 @@ function NotifyGuestButton({ userId, bookingId, guestName }: { userId: string; b
  * les autres séjours sont listés et affichables/téléchargeables d'un clic.
  */
 function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) => void }) {
+  // Multi-lieux P3 (19 nov 2026) : les chambres de Terra (pas de plan dessiné)
+  // se gèrent en liste via property_rooms — tool affiché quand le switcher est
+  // sur TDP. Les 11 chambres Quinta restent codées en dur (plan + photos).
+  const [propertyFilter] = usePropertyFilter();
   // Room plans par booking (bedroom arrangement rempli côté guest area)
   const planByBooking = useMemo(() => {
     const m = new Map<string, { entries: RoomMapEntry[]; remarks: string | null; guestsPlaced: number }>();
@@ -3082,7 +3087,12 @@ function RoomsView({ data, onOpen }: { data: Data; onOpen: (bookingId: string) =
       guest_count: b.guest_count ?? null,
     })), [data]);
 
-  return <HousekeepingScheduler bookings={hkBookings} planByBooking={planByBooking} onOpenBooking={onOpen} />;
+  return (
+    <div className="space-y-6">
+      {propertyFilter === "terra" && <PropertyRoomsCard property="terra" />}
+      <HousekeepingScheduler bookings={hkBookings} planByBooking={planByBooking} onOpenBooking={onOpen} />
+    </div>
+  );
 }
 
 const Admin = () => (

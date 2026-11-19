@@ -315,6 +315,7 @@ export type Database = {
         Row: {
           id: string
           name: string
+          property: string
           reference: string | null
           supplier: string | null
           category: string
@@ -334,6 +335,7 @@ export type Database = {
         Insert: {
           id?: string
           name: string
+          property?: string
           reference?: string | null
           supplier?: string | null
           category?: string
@@ -353,6 +355,7 @@ export type Database = {
         Update: {
           id?: string
           name?: string
+          property?: string
           reference?: string | null
           supplier?: string | null
           category?: string
@@ -613,6 +616,48 @@ export type Database = {
           status?: string
           subject?: string | null
           type?: string
+        }
+        Relationships: []
+      }
+      property_rooms: {
+        Row: {
+          id: string
+          property: string
+          name: string
+          bed_type: string | null
+          capacity: number
+          bathroom: string
+          note: string | null
+          sort_order: number
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          property: string
+          name: string
+          bed_type?: string | null
+          capacity?: number
+          bathroom?: string
+          note?: string | null
+          sort_order?: number
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          property?: string
+          name?: string
+          bed_type?: string | null
+          capacity?: number
+          bathroom?: string
+          note?: string | null
+          sort_order?: number
+          active?: boolean
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }

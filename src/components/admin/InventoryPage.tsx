@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { todayLisbon } from "@/lib/dates";
 import { Loader2, Plus, Minus, ClipboardList, ShoppingCart, Boxes, Settings2, Check, Trash2 } from "lucide-react";
+import { getProperty, usePropertyFilter, PROPERTY_SHORT } from "@/lib/property";
 
 /**
  * Onglet Operations > Inventory (12 nov 2026, demande Geoffroy).
@@ -22,6 +23,9 @@ import { Loader2, Plus, Minus, ClipboardList, ShoppingCart, Boxes, Settings2, Ch
 
 type Item = {
   id: string; name: string; reference: string | null; supplier: string | null;
+  // Multi-lieux P3 (19 nov 2026) : 'quinta' | 'terra' | 'shared' — shared =
+  // matos qui circule entre les deux lieux, visible dans les deux vues.
+  property: string;
   category: string; location: string; unit: string | null;
   par: number; reorder_point: number; current_qty: number | null;
   last_counted_at: string | null; last_counted_by: string | null;
@@ -51,7 +55,16 @@ export function InventoryPage() {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  const [items, setItems] = useState<Item[]>([]);
+  // Multi-lieux P3 : la page suit le switcher — un lieu précis montre ses
+  // références + les 'shared' ; la vue All montre tout (chips par lieu).
+  const [propertyFilter] = usePropertyFilter();
+  const [itemsAll, setItemsAll] = useState<Item[]>([]);
+  const items = useMemo(
+    () => propertyFilter === "all"
+      ? itemsAll
+      : itemsAll.filter((i) => (i.property ?? "quinta") === propertyFilter || i.property === "shared"),
+    [itemsAll, propertyFilter]
+  );
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"stock" | "shopping" | "count" | "items">("stock");
   const [busy, setBusy] = useState(false);
@@ -68,27 +81,35 @@ export function InventoryPage() {
   const [showAdd, setShowAdd] = useState(false);
   const emptyDraft = { name: "", reference: "", supplier: "", location: "Cleaning cupboard", unit: "", par: "2", reorder_point: "1" };
   const [draft, setDraft] = useState(emptyDraft);
+  // Lieu de la nouvelle référence : préselectionné sur le lieu courant.
+  const [draftProperty, setDraftProperty] = useState<string>(getProperty());
+  useEffect(() => { setDraftProperty(propertyFilter !== "all" ? propertyFilter : "quinta"); }, [propertyFilter]);
 
   const load = async () => {
     const today = todayLisbon();
+    // Le bandeau "count due" vise le prochain événement DU LIEU courant
+    // (vue All : prochain événement tous lieux confondus).
+    let bookingQuery = supabase.from("bookings")
+      .select("id,retreat_name,check_in_date")
+      .gte("check_in_date", today).eq("is_test", false).is("cancelled_at", null)
+      .order("check_in_date", { ascending: true }).limit(1);
+    if (propertyFilter !== "all") bookingQuery = bookingQuery.eq("property", propertyFilter);
     const [itemsRes, bookingRes, countRes] = await Promise.all([
       supabase.from("inventory_items").select("*").order("location").order("sort_order").order("name"),
-      supabase.from("bookings")
-        .select("id,retreat_name,check_in_date")
-        .gte("check_in_date", today).eq("is_test", false).is("cancelled_at", null)
-        .order("check_in_date", { ascending: true }).limit(1),
+      bookingQuery,
       supabase.from("inventory_counts")
         .select("completed_at,counted_by").not("completed_at", "is", null)
         .order("completed_at", { ascending: false }).limit(1),
     ]);
     if (itemsRes.error) toast({ title: "Failed to load inventory", description: itemsRes.error.message, variant: "destructive" });
-    setItems((itemsRes.data as Item[] | null) ?? []);
+    setItemsAll((itemsRes.data as Item[] | null) ?? []);
     setNextEvent((bookingRes.data?.[0] as typeof nextEvent) ?? null);
     const lc = countRes.data?.[0];
     setLastCount(lc ? { completed_at: lc.completed_at as string, counted_by: lc.counted_by as string | null } : null);
     setLoading(false);
   };
-  useEffect(() => { load(); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [propertyFilter]);
 
   const active = useMemo(() => items.filter((i) => i.active), [items]);
 
@@ -184,7 +205,7 @@ export function InventoryPage() {
   };
 
   const patchItem = async (id: string, p: Partial<Item>) => {
-    setItems((arr) => arr.map((i) => (i.id === id ? { ...i, ...p } : i)));
+    setItemsAll((arr) => arr.map((i) => (i.id === id ? { ...i, ...p } : i)));
     const { error } = await supabase.from("inventory_items")
       .update({ ...p, updated_at: new Date().toISOString() }).eq("id", id);
     if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); load(); }
@@ -197,6 +218,7 @@ export function InventoryPage() {
       supplier: draft.supplier.trim() || null, location: draft.location.trim() || "Storage",
       unit: draft.unit.trim() || null, par: Number(draft.par) || 1,
       reorder_point: Number(draft.reorder_point) || 0, sort_order: 500,
+      property: draftProperty,
     });
     if (error) { toast({ title: "Add failed", description: error.message, variant: "destructive" }); return; }
     setDraft(emptyDraft); setShowAdd(false); await load();
@@ -289,7 +311,14 @@ export function InventoryPage() {
                 return (
                   <tr key={i.id} className="border-b border-border/50 last:border-0">
                     <td className="px-4 py-2.5">
-                      <div className="font-semibold">{i.name}</div>
+                      <div className="font-semibold">
+                        {i.name}
+                        {(propertyFilter === "all" || i.property === "shared") && (
+                          <span className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground align-middle">
+                            {i.property === "shared" ? "Shared" : PROPERTY_SHORT[(i.property === "terra" ? "terra" : "quinta")]}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-muted-foreground">
                         {i.reference || <span className="italic text-amber-600">no approved reference yet</span>}
                         {i.supplier ? ` · ${i.supplier}` : ""}
@@ -401,6 +430,12 @@ export function InventoryPage() {
               <Input placeholder="Unit (pack, bottle…)" value={draft.unit} onChange={(e) => setDraft({ ...draft, unit: e.target.value })} />
               <Input placeholder="Par level" type="number" value={draft.par} onChange={(e) => setDraft({ ...draft, par: e.target.value })} />
               <Input placeholder="Reorder below" type="number" value={draft.reorder_point} onChange={(e) => setDraft({ ...draft, reorder_point: e.target.value })} />
+              <select value={draftProperty} onChange={(e) => setDraftProperty(e.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm" title="Property">
+                <option value="quinta">Quinta do Amor</option>
+                <option value="terra">Terra da Paz</option>
+                <option value="shared">Shared (both)</option>
+              </select>
               <Button onClick={addItem}>Add</Button>
             </div>
           )}
@@ -411,7 +446,8 @@ export function InventoryPage() {
                   <th className="px-3 py-2">Item</th><th className="px-3 py-2">Approved reference</th>
                   <th className="px-3 py-2">Supplier</th><th className="px-3 py-2">Location</th>
                   <th className="px-3 py-2">Unit</th><th className="px-3 py-2">Par</th>
-                  <th className="px-3 py-2">Reorder</th><th className="px-3 py-2">Active</th><th className="px-3 py-2" />
+                  <th className="px-3 py-2">Reorder</th><th className="px-3 py-2">Property</th>
+                  <th className="px-3 py-2">Active</th><th className="px-3 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -424,6 +460,14 @@ export function InventoryPage() {
                     <td className="px-3 py-1.5"><InlineText value={i.unit ?? ""} onSave={(v) => patchItem(i.id, { unit: v || null })} /></td>
                     <td className="px-3 py-1.5 w-16"><InlineText value={String(i.par)} number onSave={(v) => patchItem(i.id, { par: Math.max(1, Number(v) || 1) })} /></td>
                     <td className="px-3 py-1.5 w-16"><InlineText value={String(i.reorder_point)} number onSave={(v) => patchItem(i.id, { reorder_point: Math.max(0, Number(v) || 0) })} /></td>
+                    <td className="px-3 py-1.5">
+                      <select value={i.property ?? "quinta"} onChange={(e) => patchItem(i.id, { property: e.target.value })}
+                        className="rounded-md border border-transparent bg-transparent px-1 py-1 text-sm hover:border-border focus:border-border">
+                        <option value="quinta">QDA</option>
+                        <option value="terra">TDP</option>
+                        <option value="shared">Shared</option>
+                      </select>
+                    </td>
                     <td className="px-3 py-1.5">
                       <button onClick={() => patchItem(i.id, { active: !i.active })}
                         className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${i.active ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground"}`}>
