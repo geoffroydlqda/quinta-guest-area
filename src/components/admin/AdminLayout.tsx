@@ -7,7 +7,7 @@ import { useAllowedProperties } from "@/hooks/useAllowedProperties";
 import {
   LayoutDashboard, CalendarRange, Users, Wallet, Car,
   BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X, Landmark, UserCog, Package, Boxes,
-  Moon, Sun, TrendingUp, Paperclip, Mail,
+  Moon, Sun, TrendingUp, Paperclip, Mail, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 
 /**
@@ -67,6 +67,11 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   // uniquement (la guest area garde son thème). Classe .dark sur .admin-ui.
   const [dark, setDark] = useState(() => localStorage.getItem("qda-admin-theme") === "dark");
   useEffect(() => { localStorage.setItem("qda-admin-theme", dark ? "dark" : "light"); }, [dark]);
+  // Sidebar repliable (19 nov 2026, demande Geoffroy) : vue plein écran sur
+  // l'onglet ouvert. Préférence mémorisée ; bouton flottant en bas à gauche
+  // pour la rouvrir. Desktop uniquement (mobile = tab bar).
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("qda-admin-sidebar") === "collapsed");
+  useEffect(() => { localStorage.setItem("qda-admin-sidebar", collapsed ? "collapsed" : "open"); }, [collapsed]);
   // Multi-lieux (phase 0 + P0b, 18 nov 2026) : filtre global QDA / TDP / All,
   // switcher dans la sidebar (desktop) et la feuille More (mobile). "All" =
   // vue consolidée Grupo OHM. Les choix sont restreints par
@@ -115,10 +120,18 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className={`admin-ui ${dark ? "dark" : ""} min-h-screen bg-background text-foreground md:flex`}>
-      {/* Sidebar desktop — blanche, pilule verte active */}
-      <aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-border bg-card sticky top-0 h-screen">
-        <div className="px-4 py-5 border-b border-border">
-          <div className="font-bold leading-tight">{FILTER_LABEL[property]}</div>
+      {/* Sidebar desktop — blanche, pilule verte active, repliable */}
+      <aside className={`${collapsed ? "hidden" : "hidden md:flex"} w-56 shrink-0 flex-col border-r border-border bg-card sticky top-0 h-screen`}>
+        <div className="px-4 py-5 border-b border-border relative">
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            title="Collapse sidebar"
+            className="absolute top-3 right-2.5 p-1.5 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            <PanelLeftClose className="w-4 h-4" />
+          </button>
+          <div className="font-bold leading-tight pr-7">{FILTER_LABEL[property]}</div>
           <div className="text-xs text-muted-foreground mt-0.5">Management</div>
           {/* Switcher de lieu (QDA / TDP / All) — segmenté compact */}
           {propertyChoices.length > 1 && (
@@ -186,6 +199,18 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
       </aside>
+
+      {/* Sidebar repliée : bouton flottant pour la rouvrir (desktop) */}
+      {collapsed && (
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          title="Open sidebar"
+          className="hidden md:flex fixed bottom-4 left-4 z-40 items-center justify-center w-10 h-10 rounded-full bg-card border border-border shadow-lg text-muted-foreground hover:text-foreground hover:bg-secondary"
+        >
+          <PanelLeftOpen className="w-[18px] h-[18px]" />
+        </button>
+      )}
 
       {/* Contenu — padding bas sur mobile pour la tab bar */}
       <div className="flex-1 min-w-0 pb-24 md:pb-0">
