@@ -832,9 +832,12 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // le dialogue filtre ensuite par mois et ne garde que les cartes.
   const missingItems = useMemo<MissingItem[]>(() => txs
     .filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash)
-    .map((t) => ({ id: t.id, date: t.date, description: t.description, amount: t.amount, payer: t.payer ?? null, method: t.method ?? null })),
+    .map((t) => ({
+      id: t.id, date: t.date, description: t.description, amount: t.amount, payer: t.payer ?? null, method: t.method ?? null,
+      currency: t.currency, category: t.category, event: t.booking_id ? bookingById.get(t.booking_id)?.name ?? null : null,
+    })),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [txs, docsByTx]);
+  [txs, docsByTx, bookingById]);
   const noReceiptCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash).length;
   // Variante cartes seules (hors virements) pour le toggle "Cards only"
   const noReceiptCardCount = txs.filter((t) => (t.kind === "expense" || t.kind === "review") && t.amount < 0 && !hasReceipt(t) && !t.receipt_waived && !t.is_cash && t.method !== "transfer").length;
