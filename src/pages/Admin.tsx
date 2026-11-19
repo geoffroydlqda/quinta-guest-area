@@ -40,6 +40,7 @@ import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass, FlaskConical
 import { calculateTransportationCost, getEffectiveTripPrice } from "@/lib/transportationPricing";
 import { getDietPricing } from "@/lib/pricing";
 import type { TransportationTrip } from "@/types/guest";
+import type { Json } from "@/integrations/supabase/types";
 
 const STATUS_BADGE: Record<GuestStatusKind, { label: string; className: string }> = {
   pending: { label: "Pending completion", className: "bg-muted text-foreground border border-border" },
@@ -1241,13 +1242,85 @@ function DashboardView({
     return { rev, occ };
   }, [installments, bookings, finBookingById, year]);
 
-  // Objectifs P&L + saison d'exploitation (app_settings key='targets')
-  type TargetsCfg = Record<string, { net_revenue?: number; rental?: number; catering?: number; extras?: number; season_start?: string; season_end?: string }>;
-  const [targets, setTargets] = useState<TargetsCfg | null>(null);
+  // Objectifs P&L + saison d'exploitation — PAR LIEU depuis P3 (19 nov 2026) :
+  // app_settings 'targets' = Quinta (clé historique), 'targets_terra' = Terra.
+  // Vue All = somme champ à champ (saison = celle de la Quinta). Éditables
+  // directement dans la carte « Revenue vs target » (demande Geoffroy).
+  type TargetsYear = { net_revenue?: number; rental?: number; catering?: number; extras?: number; season_start?: string; season_end?: string };
+  type TargetsCfg = Record<string, TargetsYear>;
+  const [propertyFilter] = usePropertyFilter();
+  const [targetsByProp, setTargetsByProp] = useState<{ quinta: TargetsCfg | null; terra: TargetsCfg | null }>({ quinta: null, terra: null });
   useEffect(() => {
-    supabase.from("app_settings").select("value").eq("key", "targets").maybeSingle()
-      .then(({ data }) => setTargets((data?.value as TargetsCfg) ?? null));
+    supabase.from("app_settings").select("key,value").in("key", ["targets", "targets_terra"])
+      .then(({ data }) => {
+        const m: { quinta: TargetsCfg | null; terra: TargetsCfg | null } = { quinta: null, terra: null };
+        for (const row of data ?? []) {
+          if (row.key === "targets") m.quinta = (row.value as TargetsCfg) ?? null;
+          if (row.key === "targets_terra") m.terra = (row.value as TargetsCfg) ?? null;
+        }
+        setTargetsByProp(m);
+      });
   }, []);
+  const targets = useMemo<TargetsCfg | null>(() => {
+    if (propertyFilter === "quinta") return targetsByProp.quinta;
+    if (propertyFilter === "terra") return targetsByProp.terra;
+    const q = targetsByProp.quinta, t = targetsByProp.terra;
+    if (!t) return q;
+    if (!q) return t;
+    const out: TargetsCfg = {};
+    for (const y of new Set([...Object.keys(q), ...Object.keys(t)])) {
+      const a = q[y] ?? {}, b = t[y] ?? {};
+      out[y] = {
+        ...a,
+        net_revenue: ((a.net_revenue ?? 0) + (b.net_revenue ?? 0)) || undefined,
+        rental: ((a.rental ?? 0) + (b.rental ?? 0)) || undefined,
+        catering: ((a.catering ?? 0) + (b.catering ?? 0)) || undefined,
+        extras: ((a.extras ?? 0) + (b.extras ?? 0)) || undefined,
+      };
+    }
+    return out;
+  }, [targetsByProp, propertyFilter]);
+
+  // Édition inline des objectifs de l'année courante (lieu précis uniquement —
+  // la vue All est une somme, elle ne s'édite pas).
+  const [editingTargets, setEditingTargets] = useState(false);
+  const [targetsDraft, setTargetsDraft] = useState({ net_revenue: "", rental: "", catering: "", extras: "" });
+  const [savingTargets, setSavingTargets] = useState(false);
+  const openTargetsEditor = () => {
+    const cfg = targets?.[year] ?? {};
+    setTargetsDraft({
+      net_revenue: cfg.net_revenue != null ? String(cfg.net_revenue) : "",
+      rental: cfg.rental != null ? String(cfg.rental) : "",
+      catering: cfg.catering != null ? String(cfg.catering) : "",
+      extras: cfg.extras != null ? String(cfg.extras) : "",
+    });
+    setEditingTargets(true);
+  };
+  const saveTargets = async () => {
+    if (propertyFilter === "all") return;
+    const num = (s: string) => { const n = Number(String(s).replace(/[^\d.,-]/g, "").replace(",", ".")); return Number.isFinite(n) && n > 0 ? Math.round(n) : undefined; };
+    const vals: TargetsYear = {
+      net_revenue: num(targetsDraft.net_revenue),
+      rental: num(targetsDraft.rental),
+      catering: num(targetsDraft.catering),
+      extras: num(targetsDraft.extras),
+    };
+    // Total vide mais lignes remplies : le total = la somme des lignes.
+    if (vals.net_revenue == null) {
+      const sum = (vals.rental ?? 0) + (vals.catering ?? 0) + (vals.extras ?? 0);
+      if (sum > 0) vals.net_revenue = sum;
+    }
+    setSavingTargets(true);
+    const key = propertyFilter === "terra" ? "targets_terra" : "targets";
+    const cur = targetsByProp[propertyFilter] ?? {};
+    const next: TargetsCfg = { ...cur, [year]: { ...(cur[year] ?? {}), ...vals } };
+    const { error } = await supabase.from("app_settings")
+      .upsert({ key, value: next as unknown as Json, updated_at: new Date().toISOString() }, { onConflict: "key" });
+    setSavingTargets(false);
+    if (error) { alert(`Could not save targets: ${error.message}`); return; }
+    setTargetsByProp((prev) => ({ ...prev, [propertyFilter]: next }));
+    setEditingTargets(false);
+  };
 
   const seasonStats = useMemo(() => {
     const cfg = targets?.[year];
@@ -1467,11 +1540,51 @@ function DashboardView({
         </div>
 
         <div className="space-y-4">
-        {targetStats ? (
+        {editingTargets && propertyFilter !== "all" ? (
+          <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="font-medium text-sm">Targets · {year} — {propertyFilter === "terra" ? "Terra da Paz" : "Quinta do Amor"}</div>
+              <div className="text-xs text-muted-foreground">€ net of VAT</div>
+            </div>
+            {([
+              ["rental", "Rental"],
+              ["catering", "Catering"],
+              ["extras", "Extras"],
+              ["net_revenue", "Total net revenue"],
+            ] as const).map(([k, label]) => (
+              <label key={k} className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">{label}</span>
+                <input
+                  type="text" inputMode="numeric"
+                  value={targetsDraft[k]}
+                  onChange={(e) => setTargetsDraft((d) => ({ ...d, [k]: e.target.value }))}
+                  placeholder={k === "net_revenue" ? "auto (sum)" : "—"}
+                  className="h-8 w-[130px] rounded-md border border-input bg-background px-2 text-right text-sm"
+                />
+              </label>
+            ))}
+            <p className="text-[11px] text-muted-foreground">
+              Total left empty = sum of the three lines. These targets feed this card and the P&L.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button size="sm" variant="outline" disabled={savingTargets} onClick={() => setEditingTargets(false)}>Cancel</Button>
+              <Button size="sm" disabled={savingTargets} onClick={saveTargets}>
+                {savingTargets ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null} Save targets
+              </Button>
+            </div>
+          </section>
+        ) : targetStats ? (
           <section className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-baseline justify-between gap-2 flex-wrap">
               <div className="font-medium text-sm">Revenue vs target · {year}</div>
-              <div className="text-xs text-muted-foreground">net of VAT (P&L)</div>
+              <div className="flex items-center gap-2">
+                <div className="text-xs text-muted-foreground">net of VAT (P&L)</div>
+                {propertyFilter !== "all" && (
+                  <button onClick={openTargetsEditor} title="Edit targets" className="text-muted-foreground hover:text-foreground">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex items-baseline gap-3 mt-2">
               <div className="text-3xl font-semibold">{Math.round(targetStats.pct)}%</div>
@@ -1512,8 +1625,13 @@ function DashboardView({
             </div>
           </section>
         ) : (
-          <section className="rounded-xl border border-border bg-card p-4 flex items-center justify-center text-sm text-muted-foreground italic">
-            No revenue target set for {year}.
+          <section className="rounded-xl border border-border bg-card p-4 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+            <span className="italic">No revenue target set for {year}{propertyFilter === "terra" ? " at Terra da Paz" : ""}.</span>
+            {propertyFilter !== "all" && (
+              <Button size="sm" variant="outline" onClick={openTargetsEditor}>
+                <Pencil className="w-3.5 h-3.5 mr-1" /> Set targets
+              </Button>
+            )}
           </section>
         )}
 
