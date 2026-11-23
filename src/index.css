@@ -137,13 +137,15 @@
     --radius: 1rem;
     /* Camembert Events du Dashboard (23 nov 2026) — palette par type
        d'événement validée par le skill dataviz (6 checks, light & dark).
+       Version adoucie le 23 nov (demande Geoffroy : « plus light et
+       accueillantes ») — toujours validée, au plafond de clarté autorisé.
        Ordre FIXE des parts : retreat → day_retreat → other → wedding
        (les paires adjacentes + le raccord du cercle passent les checks CVD —
        ne pas réordonner sans re-valider). */
-    --evt-retreat: #5E9A3C;
-    --evt-day: #D4A72C;
-    --evt-other: #BE5A1F;
-    --evt-wedding: #4a86e0;
+    --evt-retreat: #66A041;
+    --evt-day: #DAAC3B;
+    --evt-other: #C96F3E;
+    --evt-wedding: #85ACEE;
   }
 
   /* ---- Dark mode admin (18 août 2026, demande Geoffroy) ----
