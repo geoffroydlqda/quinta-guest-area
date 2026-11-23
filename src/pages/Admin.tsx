@@ -1261,13 +1261,17 @@ function DashboardView({
     const outstanding = thisYear.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
     // Ventilation rental / catering / other (demande Geoffroy, 23 nov 2026) :
     // le rental est connu longtemps à l'avance, le catering dépend des
-    // participants — les montrer séparément sur la carte Revenue. Other =
-    // extras + bar + discounts (négatifs inclus).
+    // participants — les montrer séparément sur la carte Revenue. EN HT
+    // (même règle d'estimation que contractedHt — « tout hors TVA », 23 nov).
+    // Other = extras + bar + discounts (négatifs inclus).
+    const instHt = (i: Installment) => i.amount_excl_vat != null
+      ? Number(i.amount_excl_vat)
+      : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23);
     const byCat = { rental: 0, catering: 0, other: 0 };
     for (const i of thisYear) {
       const c = i.category === "catering" ? "catering"
         : (i.category === "rental" || !i.category) ? "rental" : "other";
-      byCat[c] += Number(i.amount_due || 0);
+      byCat[c] += instHt(i);
     }
 
     return {
@@ -1565,10 +1569,14 @@ function DashboardView({
   const yoy = useMemo(() => {
     const prevYear = String(Number(year) - 1);
     if (!years.includes(prevYear)) return null;
+    // HT (« tout hors TVA », 23 nov) — même estimation que contractedHt.
     const contracted = installments.reduce((s, i) => {
       if (!countsForMoney(i)) return s;
       const ci = finBookingById.get(i.booking_id)?.check_in_date || "";
-      return ci.startsWith(prevYear) ? s + Number(i.amount_due || 0) : s;
+      if (!ci.startsWith(prevYear)) return s;
+      return s + (i.amount_excl_vat != null
+        ? Number(i.amount_excl_vat)
+        : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23));
     }, 0);
     const events = bookings.filter((b) => (b.check_in_date || "").startsWith(prevYear)).length;
     // Occupation saison N-1 — mêmes règles que seasonStats (sans turnaround).
@@ -1651,18 +1659,18 @@ function DashboardView({
       <div className="grid gap-3 lg:grid-cols-[1.5fr_1fr] items-stretch">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Tile
-            label={`Revenue ${year} (incl. VAT)`}
-            value={fmtMoney(kpis.contracted)}
-            delta={yoyChip(kpis.contracted, yoy?.contracted, "pct")}
+            label={`Revenue ${year} (excl. VAT)`}
+            value={fmtMoney(kpis.contractedHt)}
+            delta={yoyChip(kpis.contractedHt, yoy?.contracted, "pct")}
             sub={
               <>
                 <div>
                   Rental <b className="text-foreground">{fmtMoney(kpis.rental)}</b>
                   {" · "}Catering <b className="text-foreground">{fmtMoney(kpis.catering)}</b>
-                  {cateringProj.tvac > 0.5 && <> <span className="whitespace-nowrap">(+{fmtMoney(cateringProj.tvac)} expected)</span></>}
+                  {cateringProj.ht > 0.5 && <> <span className="whitespace-nowrap">(+{fmtMoney(cateringProj.ht)} expected)</span></>}
                   {Math.abs(kpis.otherRevenue) > 0.005 && <>{" · "}Other <b className="text-foreground">{fmtMoney(kpis.otherRevenue)}</b></>}
                 </div>
-                <div>{fmtMoney(kpis.contractedHt)} excl. VAT</div>
+                <div>{fmtMoney(kpis.contracted)} incl. VAT (invoiced)</div>
               </>
             }
             icon={<Euro className="w-4 h-4" />}
