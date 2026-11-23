@@ -36,7 +36,7 @@ import { ProductsPage } from "@/components/admin/ProductsPage";
 import { ReceiptsTab } from "@/components/admin/ReceiptsTab";
 import { getGuestStatus, type GuestStatusKind } from "@/lib/editLock";
 import { syncTripCalendar, backfillTripCalendars, forceResyncTripCalendars } from "@/lib/calendarSync";
-import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass, FlaskConical } from "lucide-react";
+import { CalendarCheck, AlertTriangle, Euro, TrendingUp, Hourglass, FlaskConical, Users as UsersIcon } from "lucide-react";
 import { calculateTransportationCost, getEffectiveTripPrice } from "@/lib/transportationPricing";
 import { getDietPricing } from "@/lib/pricing";
 import type { TransportationTrip } from "@/types/guest";
@@ -1450,6 +1450,31 @@ function DashboardView({
     };
   }, [installments, bookings, finBookingById, targets, year, todayIso]);
 
+  // Nombre d'événements de l'année + nature (demande Geoffroy, 23 nov 2026).
+  // bookings exclut déjà tests et annulés ; les annulés de l'année restent
+  // mentionnés en sous-ligne. Guests = somme des guest_count renseignés.
+  const eventsKpi = useMemo(() => {
+    const ofYear = bookings.filter((b) => (b.check_in_date || "").startsWith(year));
+    const counts: Record<string, number> = {};
+    let guests = 0;
+    for (const b of ofYear) {
+      const t = ((b as { event_type?: string | null }).event_type ?? "retreat") || "retreat";
+      counts[t] = (counts[t] ?? 0) + 1;
+      if (Number(b.guest_count) > 0) guests += Number(b.guest_count);
+    }
+    const labels: Record<string, string> = { retreat: "retreat", wedding: "wedding", day_retreat: "day retreat", other: "other" };
+    const order = ["retreat", "wedding", "day_retreat", "other"];
+    const parts = [
+      ...order.filter((t) => counts[t]).map((t) =>
+        `${counts[t]} ${labels[t]}${counts[t] > 1 && t !== "other" ? "s" : ""}`),
+      ...Object.keys(counts).filter((t) => !order.includes(t)).map((t) => `${counts[t]} ${t}`),
+    ];
+    const cancelled = (data.bookings || []).filter((b) =>
+      !b.is_test && (b as { cancelled_at?: string | null }).cancelled_at && (b.check_in_date || "").startsWith(year)
+    ).length;
+    return { total: ofYear.length, parts, guests, cancelled };
+  }, [bookings, data, year]);
+
   // Cartes KPI "héro" — icône sur pastille pastel (palette Geoffroy, juil. 2026)
   const Tile = ({ label, value, sub, tone, icon, chip }: {
     label: string; value: string; sub?: string; tone?: "danger" | "success";
@@ -1493,7 +1518,7 @@ function DashboardView({
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
           <Tile
             label={`Revenue ${year} (incl. VAT)`}
             value={fmtMoney(kpis.contracted)}
@@ -1523,6 +1548,17 @@ function DashboardView({
             sub={`${Math.round(seasonStats.pctBlocked)}% incl. turnaround · ${seasonStats.nights}/${seasonStats.totalNights} season nights (${fmtShort(seasonStats.start)} → ${fmtShort(seasonStats.end)})`}
             icon={<CalendarCheck className="w-4 h-4" />}
             chip="bg-[#F3EDFF] text-[#8a63d2]"
+          />
+          <Tile
+            label={`Events ${year}`}
+            value={String(eventsKpi.total)}
+            sub={[
+              eventsKpi.parts.join(" · ") || "no events",
+              eventsKpi.guests > 0 ? `${eventsKpi.guests} guests expected` : null,
+              eventsKpi.cancelled > 0 ? `${eventsKpi.cancelled} cancelled` : null,
+            ].filter(Boolean).join(" · ")}
+            icon={<UsersIcon className="w-4 h-4" />}
+            chip="bg-[#FFEFF6] text-[#d16a9f]"
           />
         </div>
 

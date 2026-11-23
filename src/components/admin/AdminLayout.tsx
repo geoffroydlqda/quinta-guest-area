@@ -206,7 +206,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           type="button"
           onClick={() => setCollapsed(false)}
           title="Open sidebar"
-          className="hidden md:flex fixed bottom-4 left-4 z-40 items-center justify-center w-10 h-10 rounded-full bg-card border border-border shadow-lg text-muted-foreground hover:text-foreground hover:bg-secondary"
+          className="hidden md:flex fixed top-3.5 left-3 z-40 items-center justify-center w-9 h-9 rounded-full bg-card border border-border shadow-lg text-muted-foreground hover:text-foreground hover:bg-secondary"
         >
           <PanelLeftOpen className="w-[18px] h-[18px]" />
         </button>
