@@ -1088,6 +1088,68 @@ function BookingCalendar({ bookings, todayIso, onOpen }: {
 }
 
 // ---------------------------------------------------------------- Dashboard
+/**
+ * Camembert des types d'événements (23 nov 2026) — SVG maison, pattern
+ * DashboardCharts. Interactif : hover sur une part (ou la légende) → la part
+ * s'écarte et le centre affiche le détail ; sinon le centre = total.
+ * Couleurs = variables CSS --evt-* (palette light/dark validée dataviz,
+ * ordre des parts FIXE), 2px d'écart entre les parts (stroke = fond carte).
+ */
+function EventsDonut({ rows, total }: {
+  rows: { type: string; label: string; css: string; count: number }[];
+  total: number;
+}) {
+  const [hover, setHover] = useState<string | null>(null);
+  const R = 72, r = 45, C = 80;
+  const visible = rows.filter((s) => s.count > 0);
+  let angle = -Math.PI / 2;
+  const slices = visible.map((s) => {
+    const frac = s.count / total;
+    const a0 = angle, a1 = angle + frac * 2 * Math.PI;
+    angle = a1;
+    const large = a1 - a0 > Math.PI ? 1 : 0;
+    const pt = (a: number, rad: number) => `${C + rad * Math.cos(a)} ${C + rad * Math.sin(a)}`;
+    const d = `M ${pt(a0, R)} A ${R} ${R} 0 ${large} 1 ${pt(a1, R)} L ${pt(a1, r)} A ${r} ${r} 0 ${large} 0 ${pt(a0, r)} Z`;
+    return { ...s, d, mid: (a0 + a1) / 2, frac };
+  });
+  const active = slices.find((s) => s.type === hover) ?? null;
+  const ring = (R + r) / 2;
+  return (
+    <svg viewBox="0 0 160 160" className="w-[168px] h-[168px] shrink-0" role="img"
+      aria-label={visible.map((s) => `${s.label}: ${s.count}`).join(", ")}>
+      {slices.length === 1 ? (
+        // Une seule part : un anneau plein (l'arc dégénère à 360°).
+        <circle cx={C} cy={C} r={ring} fill="none" stroke={slices[0].css} strokeWidth={R - r}
+          onMouseEnter={() => setHover(slices[0].type)} onMouseLeave={() => setHover(null)} />
+      ) : (
+        slices.map((s) => (
+          <path
+            key={s.type}
+            d={s.d}
+            fill={s.css}
+            stroke="hsl(var(--card))"
+            strokeWidth={2}
+            transform={hover === s.type ? `translate(${3 * Math.cos(s.mid)} ${3 * Math.sin(s.mid)})` : undefined}
+            style={{ transition: "transform 150ms ease" }}
+            onMouseEnter={() => setHover(s.type)}
+            onMouseLeave={() => setHover(null)}
+          >
+            <title>{`${s.label}: ${s.count} (${Math.round(s.frac * 100)}%)`}</title>
+          </path>
+        ))
+      )}
+      <text x={C} y={active ? C - 4 : C - 2} textAnchor="middle"
+        className="fill-foreground" style={{ font: "700 26px Inter, sans-serif" }}>
+        {active ? active.count : total}
+      </text>
+      <text x={C} y={C + 16} textAnchor="middle"
+        className="fill-muted-foreground" style={{ font: "500 10px Inter, sans-serif" }}>
+        {active ? `${active.label.toLowerCase()} · ${Math.round(active.frac * 100)}%` : `event${total === 1 ? "" : "s"}`}
+      </text>
+    </svg>
+  );
+}
+
 function DashboardView({
   data, installments, events, categoryOf, todayIso, onOpen,
 }: {
@@ -1453,26 +1515,28 @@ function DashboardView({
   // Nombre d'événements de l'année + nature (demande Geoffroy, 23 nov 2026).
   // bookings exclut déjà tests et annulés ; les annulés de l'année restent
   // mentionnés en sous-ligne. Guests = somme des guest_count renseignés.
+  // Ordre des parts FIXE (palette validée dataviz — voir index.css) :
+  // retreat → day_retreat → other → wedding ; un type inconnu rejoint other.
   const eventsKpi = useMemo(() => {
     const ofYear = bookings.filter((b) => (b.check_in_date || "").startsWith(year));
-    const counts: Record<string, number> = {};
+    const counts: Record<string, number> = { retreat: 0, day_retreat: 0, other: 0, wedding: 0 };
     let guests = 0;
     for (const b of ofYear) {
-      const t = ((b as { event_type?: string | null }).event_type ?? "retreat") || "retreat";
-      counts[t] = (counts[t] ?? 0) + 1;
+      const raw = ((b as { event_type?: string | null }).event_type ?? "retreat") || "retreat";
+      const t = raw in counts ? raw : "other";
+      counts[t] += 1;
       if (Number(b.guest_count) > 0) guests += Number(b.guest_count);
     }
-    const labels: Record<string, string> = { retreat: "retreat", wedding: "wedding", day_retreat: "day retreat", other: "other" };
-    const order = ["retreat", "wedding", "day_retreat", "other"];
-    const parts = [
-      ...order.filter((t) => counts[t]).map((t) =>
-        `${counts[t]} ${labels[t]}${counts[t] > 1 && t !== "other" ? "s" : ""}`),
-      ...Object.keys(counts).filter((t) => !order.includes(t)).map((t) => `${counts[t]} ${t}`),
+    const rows = [
+      { type: "retreat", label: "Retreats", css: "var(--evt-retreat)", count: counts.retreat },
+      { type: "day_retreat", label: "Day retreats", css: "var(--evt-day)", count: counts.day_retreat },
+      { type: "other", label: "Other", css: "var(--evt-other)", count: counts.other },
+      { type: "wedding", label: "Weddings", css: "var(--evt-wedding)", count: counts.wedding },
     ];
     const cancelled = (data.bookings || []).filter((b) =>
       !b.is_test && (b as { cancelled_at?: string | null }).cancelled_at && (b.check_in_date || "").startsWith(year)
     ).length;
-    return { total: ofYear.length, parts, guests, cancelled };
+    return { total: ofYear.length, rows, guests, cancelled };
   }, [bookings, data, year]);
 
   // Cartes KPI "héro" — icône sur pastille pastel (palette Geoffroy, juil. 2026)
@@ -1518,7 +1582,10 @@ function DashboardView({
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+      {/* 4 KPI en carré à gauche, bloc Events (camembert) à droite —
+          plus d'espace vide (demande Geoffroy, 23 nov 2026). */}
+      <div className="grid gap-3 lg:grid-cols-[1.5fr_1fr] items-stretch">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Tile
             label={`Revenue ${year} (incl. VAT)`}
             value={fmtMoney(kpis.contracted)}
@@ -1549,18 +1616,40 @@ function DashboardView({
             icon={<CalendarCheck className="w-4 h-4" />}
             chip="bg-[#F3EDFF] text-[#8a63d2]"
           />
-          <Tile
-            label={`Events ${year}`}
-            value={String(eventsKpi.total)}
-            sub={[
-              eventsKpi.parts.join(" · ") || "no events",
-              eventsKpi.guests > 0 ? `${eventsKpi.guests} guests expected` : null,
-              eventsKpi.cancelled > 0 ? `${eventsKpi.cancelled} cancelled` : null,
-            ].filter(Boolean).join(" · ")}
-            icon={<UsersIcon className="w-4 h-4" />}
-            chip="bg-[#FFEFF6] text-[#d16a9f]"
-          />
         </div>
+
+        <section className="rounded-2xl bg-card p-4 shadow-sm border border-border/60 flex flex-col">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-medium text-muted-foreground">Events {year}</div>
+            <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-[#FFEFF6] text-[#d16a9f]">
+              <UsersIcon className="w-4 h-4" />
+            </span>
+          </div>
+          {eventsKpi.total === 0 ? (
+            <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground italic py-8">
+              No events in {year}.
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center gap-5 flex-wrap py-2">
+              <EventsDonut rows={eventsKpi.rows} total={eventsKpi.total} />
+              <div className="space-y-1.5 min-w-[150px]">
+                {eventsKpi.rows.filter((r) => r.count > 0).map((r) => (
+                  <div key={r.type} className="flex items-center gap-2 text-sm">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: r.css }} />
+                    <span className="text-muted-foreground flex-1">{r.label}</span>
+                    <span className="font-semibold">{r.count}</span>
+                    <span className="text-xs text-muted-foreground w-9 text-right">{Math.round((r.count / eventsKpi.total) * 100)}%</span>
+                  </div>
+                ))}
+                <div className="pt-1.5 mt-1 border-t border-border/60 text-xs text-muted-foreground">
+                  {eventsKpi.guests > 0 && <div>{eventsKpi.guests} guests expected</div>}
+                  {eventsKpi.cancelled > 0 && <div>{eventsKpi.cancelled} cancelled</div>}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
 
       <div className="grid lg:grid-cols-[1.55fr_1fr] gap-4 items-start">
         <div className="space-y-4">

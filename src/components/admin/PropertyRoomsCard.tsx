@@ -26,7 +26,8 @@ type Room = {
   active: boolean;
 };
 
-const BED_SUGGESTIONS = ["King", "Queen", "Twins", "Double", "Single", "Bunk beds", "Dorm"];
+// « Queen or Twins » = chambre convertible (demande Geoffroy, 23 nov 2026).
+const BED_SUGGESTIONS = ["King", "Queen", "Twins", "Queen or Twins", "Double", "Single", "Bunk beds", "Dorm"];
 
 export function PropertyRoomsCard({ property }: { property: Property }) {
   const { toast } = useToast();
