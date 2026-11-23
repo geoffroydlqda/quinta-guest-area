@@ -1539,10 +1539,54 @@ function DashboardView({
     return { total: ofYear.length, rows, guests, cancelled };
   }, [bookings, data, year]);
 
+  // Comparaison à l'année précédente (demande Geoffroy, 23 nov 2026) :
+  // petit +x% / −x% sur Revenue, Occupancy et Events quand l'année d'avant a
+  // des données. Collected/Overdue : pas de comparaison honnête en milieu de
+  // cycle (2026 est encaissée, 2027 à peine entamée).
+  const yoy = useMemo(() => {
+    const prevYear = String(Number(year) - 1);
+    if (!years.includes(prevYear)) return null;
+    const contracted = installments.reduce((s, i) => {
+      if (!countsForMoney(i)) return s;
+      const ci = finBookingById.get(i.booking_id)?.check_in_date || "";
+      return ci.startsWith(prevYear) ? s + Number(i.amount_due || 0) : s;
+    }, 0);
+    const events = bookings.filter((b) => (b.check_in_date || "").startsWith(prevYear)).length;
+    // Occupation saison N-1 — mêmes règles que seasonStats (sans turnaround).
+    const cfg = targets?.[prevYear];
+    const s0 = new Date(`${cfg?.season_start ?? `${prevYear}-05-01`}T12:00:00`);
+    const e0 = new Date(`${cfg?.season_end ?? `${prevYear}-11-01`}T12:00:00`);
+    const totalNights = Math.max(1, Math.round((e0.getTime() - s0.getTime()) / 86400000));
+    const occupied = new Set<string>();
+    for (const b of bookings) {
+      if (!b.check_in_date || !b.check_out_date) continue;
+      const d = new Date(`${b.check_in_date}T12:00:00`);
+      const endB = new Date(`${b.check_out_date}T12:00:00`);
+      while (d < endB) {
+        if (d >= s0 && d < e0) occupied.add(localIsoDay(d));
+        if (d > e0) break;
+        d.setDate(d.getDate() + 1);
+      }
+    }
+    return { prevYear, contracted, events, occPct: (occupied.size / totalNights) * 100 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [years, year, installments, bookings, finBookingById, targets]);
+
+  // Chip ±x% (ou points / unités) vs N-1. kind pct exige une base > 0.
+  const yoyChip = (now: number, prev: number | null | undefined, kind: "pct" | "pts" | "count") => {
+    if (!yoy || prev == null || (kind === "pct" && !(prev > 0))) return null;
+    const diff = kind === "pct" ? ((now - prev) / prev) * 100 : now - prev;
+    if (!Number.isFinite(diff)) return null;
+    const r = Math.round(diff);
+    const cls = r > 0 ? "text-success" : r < 0 ? "text-destructive" : "text-muted-foreground";
+    const txt = r === 0 ? "=" : `${r > 0 ? "+" : "−"}${Math.abs(r)}${kind === "pct" ? "%" : kind === "pts" ? " pts" : ""}`;
+    return <span className={`text-xs font-semibold whitespace-nowrap ${cls}`}>{txt} vs {yoy.prevYear}</span>;
+  };
+
   // Cartes KPI "héro" — icône sur pastille pastel (palette Geoffroy, juil. 2026)
-  const Tile = ({ label, value, sub, tone, icon, chip }: {
+  const Tile = ({ label, value, sub, tone, icon, chip, delta }: {
     label: string; value: string; sub?: string; tone?: "danger" | "success";
-    icon?: ReactNode; chip?: string;
+    icon?: ReactNode; chip?: string; delta?: ReactNode;
   }) => (
     <div className="rounded-2xl bg-card p-4 shadow-sm border border-border/60">
       <div className="flex items-center justify-between gap-2">
@@ -1553,8 +1597,9 @@ function DashboardView({
           </span>
         )}
       </div>
-      <div className={`text-2xl font-bold tracking-tight mt-1.5 ${tone === "danger" ? "text-destructive" : ""}`}>
+      <div className={`text-2xl font-bold tracking-tight mt-1.5 flex items-baseline gap-2 flex-wrap ${tone === "danger" ? "text-destructive" : ""}`}>
         {value}
+        {delta}
       </div>
       {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
     </div>
@@ -1589,6 +1634,7 @@ function DashboardView({
           <Tile
             label={`Revenue ${year} (incl. VAT)`}
             value={fmtMoney(kpis.contracted)}
+            delta={yoyChip(kpis.contracted, yoy?.contracted, "pct")}
             sub={`${fmtMoney(kpis.contractedHt)} excl. VAT`}
             icon={<Euro className="w-4 h-4" />}
             chip="bg-[#EAF6DF] text-[#679E3F]"
@@ -1612,6 +1658,7 @@ function DashboardView({
           <Tile
             label={`Season occupancy · ${year}`}
             value={`${Math.round(seasonStats.pct)}%`}
+            delta={yoyChip(seasonStats.pct, yoy?.occPct, "pts")}
             sub={`${Math.round(seasonStats.pctBlocked)}% incl. turnaround · ${seasonStats.nights}/${seasonStats.totalNights} season nights (${fmtShort(seasonStats.start)} → ${fmtShort(seasonStats.end)})`}
             icon={<CalendarCheck className="w-4 h-4" />}
             chip="bg-[#F3EDFF] text-[#8a63d2]"
@@ -1620,7 +1667,10 @@ function DashboardView({
 
         <section className="rounded-2xl bg-card p-4 shadow-sm border border-border/60 flex flex-col">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-xs font-medium text-muted-foreground">Events {year}</div>
+            <div className="text-xs font-medium text-muted-foreground flex items-baseline gap-2 flex-wrap">
+              Events {year}
+              {yoyChip(eventsKpi.total, yoy?.events, "count")}
+            </div>
             <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-[#FFEFF6] text-[#d16a9f]">
               <UsersIcon className="w-4 h-4" />
             </span>
