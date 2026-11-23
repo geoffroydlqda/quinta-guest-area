@@ -135,17 +135,17 @@
     --input: 69 13% 90%;
     --ring: 102 48% 70%;
     --radius: 1rem;
-    /* Camembert Events du Dashboard (23 nov 2026) — palette par type
-       d'événement validée par le skill dataviz (6 checks, light & dark).
-       Version adoucie le 23 nov (demande Geoffroy : « plus light et
-       accueillantes ») — toujours validée, au plafond de clarté autorisé.
-       Ordre FIXE des parts : retreat → day_retreat → other → wedding
-       (les paires adjacentes + le raccord du cercle passent les checks CVD —
-       ne pas réordonner sans re-valider). */
-    --evt-retreat: #66A041;
-    --evt-day: #DAAC3B;
-    --evt-other: #C96F3E;
-    --evt-wedding: #85ACEE;
+    /* Camembert Events du Dashboard (23 nov 2026) — MÊME palette que les
+       autres graphes (DashboardCharts : les 4 slots validés dataviz, demande
+       Geoffroy). retreat = vert rental/occupation, wedding = bleu (comme le
+       calendrier), other = apricot extras, day_retreat = lavender (4e slot).
+       Identique en dark, comme les autres graphes. Ordre FIXE des parts :
+       retreat → day_retreat → other → wedding (adjacences + raccord du
+       cercle re-validés CVD dans cet ordre — ne pas réordonner). */
+    --evt-retreat: #8FC46A;
+    --evt-day: #B08CF8;
+    --evt-other: #EF9455;
+    --evt-wedding: #6EA6FF;
   }
 
   /* ---- Dark mode admin (18 août 2026, demande Geoffroy) ----
@@ -153,12 +153,6 @@
      sur le conteneur .admin-ui (toggle dans la sidebar / feuille More).
      Spécificité .admin-ui.dark > .admin-ui : les variables gagnent. */
   .admin-ui.dark {
-    /* Camembert Events — pas dans l'ancienne palette validée : chaque mode a ses
-       propres pas (validés par le skill dataviz contre la surface sombre). */
-    --evt-retreat: #4A7A2E;
-    --evt-day: #B98E10;
-    --evt-other: #CC4327;
-    --evt-wedding: #5B93E8;
     --background: 94 9% 10%;         /* fond olive très sombre */
     --foreground: 72 14% 90%;
     --card: 94 8% 14%;
