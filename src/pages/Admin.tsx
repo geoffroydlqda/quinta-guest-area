@@ -1259,24 +1259,25 @@ function DashboardView({
       (finBookingById.get(i.booking_id)?.check_in_date || "").startsWith(year));
     const overdueTotal = overdueYear.reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const outstanding = thisYear.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
-    // Ventilation rental / catering / other (demande Geoffroy, 23 nov 2026) :
-    // le rental est connu longtemps à l'avance, le catering dépend des
-    // participants — les montrer séparément sur la carte Revenue. EN HT
-    // (même règle d'estimation que contractedHt — « tout hors TVA », 23 nov).
-    // Other = extras + bar + discounts (négatifs inclus).
+    // Ventilation rental / catering / extras&bar / service credits (demande
+    // Geoffroy, 23 nov 2026) : le rental est connu longtemps à l'avance, le
+    // catering dépend des participants. EN HT (même règle d'estimation que
+    // contractedHt). Les discounts (service credits, annulations) sont une
+    // ligne À PART — fondus dans « Other » ils rendaient le net négatif.
     const instHt = (i: Installment) => i.amount_excl_vat != null
       ? Number(i.amount_excl_vat)
       : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23);
-    const byCat = { rental: 0, catering: 0, other: 0 };
+    const byCat = { rental: 0, catering: 0, extrabar: 0, discount: 0 };
     for (const i of thisYear) {
       const c = i.category === "catering" ? "catering"
-        : (i.category === "rental" || !i.category) ? "rental" : "other";
+        : i.category === "discount" ? "discount"
+        : (i.category === "rental" || !i.category) ? "rental" : "extrabar";
       byCat[c] += instHt(i);
     }
 
     return {
       contracted, contractedHt, collected, overdueTotal, outstanding,
-      rental: byCat.rental, catering: byCat.catering, otherRevenue: byCat.other,
+      byCat,
       overdueCount: overdueYear.length,
       overdueAllTotal, overdueAllCount: overdueAll.length,
     };
@@ -1569,15 +1570,23 @@ function DashboardView({
   const yoy = useMemo(() => {
     const prevYear = String(Number(year) - 1);
     if (!years.includes(prevYear)) return null;
-    // HT (« tout hors TVA », 23 nov) — même estimation que contractedHt.
-    const contracted = installments.reduce((s, i) => {
-      if (!countsForMoney(i)) return s;
+    // HT (« tout hors TVA », 23 nov) — même estimation que contractedHt,
+    // ventilé par catégorie pour les deltas par ligne de la carte Revenue.
+    let contracted = 0;
+    const byCat = { rental: 0, catering: 0, extrabar: 0, discount: 0 };
+    for (const i of installments) {
+      if (!countsForMoney(i)) continue;
       const ci = finBookingById.get(i.booking_id)?.check_in_date || "";
-      if (!ci.startsWith(prevYear)) return s;
-      return s + (i.amount_excl_vat != null
+      if (!ci.startsWith(prevYear)) continue;
+      const ht = i.amount_excl_vat != null
         ? Number(i.amount_excl_vat)
-        : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23));
-    }, 0);
+        : Number(i.amount_due || 0) / (i.category === "catering" ? 1.13 : 1.23);
+      contracted += ht;
+      const c = i.category === "catering" ? "catering"
+        : i.category === "discount" ? "discount"
+        : (i.category === "rental" || !i.category) ? "rental" : "extrabar";
+      byCat[c] += ht;
+    }
     const events = bookings.filter((b) => (b.check_in_date || "").startsWith(prevYear)).length;
     // Occupation saison N-1 — mêmes règles que seasonStats (sans turnaround).
     const cfg = targets?.[prevYear];
@@ -1595,7 +1604,7 @@ function DashboardView({
         d.setDate(d.getDate() + 1);
       }
     }
-    return { prevYear, contracted, events, occPct: (occupied.size / totalNights) * 100 };
+    return { prevYear, contracted, byCat, events, occPct: (occupied.size / totalNights) * 100 };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [years, year, installments, bookings, finBookingById, targets]);
 
@@ -1654,55 +1663,95 @@ function DashboardView({
         </div>
       )}
 
-      {/* 4 KPI en carré à gauche, bloc Events (camembert) à droite —
-          plus d'espace vide (demande Geoffroy, 23 nov 2026). */}
-      <div className="grid gap-3 lg:grid-cols-[1.5fr_1fr] items-stretch">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Tile
-            label={`Revenue ${year} (excl. VAT)`}
-            value={fmtMoney(kpis.contractedHt)}
-            delta={yoyChip(kpis.contractedHt, yoy?.contracted, "pct")}
-            sub={
+      {/* Redesign 23 nov 2026 (demande Geoffroy) : la carte Revenue — la plus
+          importante — occupe la gauche en grand : ventilation rental /
+          catering / extras&bar / service credits (sortis d'« Other », qui
+          devenait négatif), delta N-1 PAR ligne, barre de composition aux
+          couleurs des graphes (DashboardCharts). À droite : Collected
+          (Overdue intégré) et Events (Season occupancy intégrée). */}
+      <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr] items-stretch">
+        <section className="rounded-2xl bg-card p-5 shadow-sm border border-border/60 flex flex-col">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-medium text-muted-foreground">Revenue {year} · excl. VAT</div>
+            <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-[#EAF6DF] text-[#679E3F]">
+              <Euro className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="flex items-baseline gap-3 mt-1.5 flex-wrap">
+            <div className="text-4xl font-bold tracking-tight">{fmtMoney(kpis.contractedHt)}</div>
+            {yoyChip(kpis.contractedHt, yoy?.contracted, "pct")}
+          </div>
+          {(() => {
+            const segs = [
+              { key: "rental" as const, label: "Rental", color: "#8FC46A", value: kpis.byCat.rental },
+              { key: "catering" as const, label: "Catering", color: "#6EA6FF", value: kpis.byCat.catering },
+              { key: "extrabar" as const, label: "Extras & bar", color: "#EF9455", value: kpis.byCat.extrabar },
+            ];
+            const posTotal = segs.reduce((s, x) => s + Math.max(0, x.value), 0);
+            return (
               <>
-                <div>
-                  Rental <b className="text-foreground">{fmtMoney(kpis.rental)}</b>
-                  {" · "}Catering <b className="text-foreground">{fmtMoney(kpis.catering)}</b>
-                  {cateringProj.ht > 0.5 && <> <span className="whitespace-nowrap">(+{fmtMoney(cateringProj.ht)} expected)</span></>}
-                  {Math.abs(kpis.otherRevenue) > 0.005 && <>{" · "}Other <b className="text-foreground">{fmtMoney(kpis.otherRevenue)}</b></>}
+                {posTotal > 0 && (
+                  <div className="mt-4 h-2.5 flex gap-[2px]">
+                    {segs.filter((s) => s.value > 0).map((s) => (
+                      <div key={s.key} className="h-full rounded-full" style={{ width: `${(s.value / posTotal) * 100}%`, background: s.color }} />
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3.5 space-y-2.5 flex-1">
+                  {segs.map((s) => (
+                    <div key={s.key} className="flex items-baseline gap-2 text-sm flex-wrap">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0 self-center" style={{ background: s.color }} />
+                      <span className="text-muted-foreground">{s.label}</span>
+                      {s.key === "catering" && cateringProj.ht > 0.5 && (
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">+{fmtMoney(cateringProj.ht)} expected</span>
+                      )}
+                      <span className="flex-1" />
+                      <b className="tabular-nums">{fmtMoney(s.value)}</b>
+                      <span className="text-xs text-muted-foreground w-9 text-right tabular-nums">
+                        {kpis.contractedHt > 0 ? `${Math.round((s.value / kpis.contractedHt) * 100)}%` : "—"}
+                      </span>
+                      <span className="w-[92px] text-right">{yoyChip(s.value, yoy?.byCat?.[s.key], "pct")}</span>
+                    </div>
+                  ))}
+                  {Math.abs(kpis.byCat.discount) > 0.005 && (
+                    <div className="flex items-baseline gap-2 text-sm flex-wrap">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0 self-center border border-border bg-muted" />
+                      <span className="text-muted-foreground">Service credits</span>
+                      <span className="flex-1" />
+                      <b className="tabular-nums text-destructive">{fmtMoney(kpis.byCat.discount)}</b>
+                      <span className="text-xs text-muted-foreground w-9 text-right tabular-nums">
+                        {kpis.contractedHt > 0 ? `${Math.round((kpis.byCat.discount / kpis.contractedHt) * 100)}%` : "—"}
+                      </span>
+                      <span className="w-[92px]" />
+                    </div>
+                  )}
                 </div>
-                <div>{fmtMoney(kpis.contracted)} incl. VAT (invoiced)</div>
               </>
-            }
-            icon={<Euro className="w-4 h-4" />}
-            chip="bg-[#EAF6DF] text-[#679E3F]"
-          />
+            );
+          })()}
+          <div className="text-xs text-muted-foreground mt-3">{fmtMoney(kpis.contracted)} incl. VAT (invoiced)</div>
+        </section>
+
+        <div className="grid gap-3 content-start">
           <Tile
             label={`Collected ${year}`}
             value={fmtMoney(kpis.collected)}
-            sub={kpis.contracted > 0 ? `${Math.round((kpis.collected / kpis.contracted) * 100)}% of contracted` : undefined}
             tone="success"
-            icon={<TrendingUp className="w-4 h-4" />}
-            chip="bg-[#EDF5FF] text-[#4a86e0]"
+            sub={
+              <>
+                {kpis.contracted > 0 && (
+                  <div>{Math.round((kpis.collected / kpis.contracted) * 100)}% of contracted · {fmtMoney(kpis.outstanding)} outstanding</div>
+                )}
+                <div className={kpis.overdueAllTotal > 0 ? "text-destructive font-medium" : undefined}>
+                  Overdue {fmtMoney(kpis.overdueTotal)} ({kpis.overdueCount} this year) · all years {fmtMoney(kpis.overdueAllTotal)} ({kpis.overdueAllCount})
+                </div>
+              </>
+            }
+            icon={kpis.overdueAllTotal > 0 ? <AlertTriangle className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />}
+            chip={kpis.overdueAllTotal > 0 ? "bg-[#FFEAE7] text-[#F36F63]" : "bg-[#EDF5FF] text-[#4a86e0]"}
           />
-          <Tile
-            label={`Overdue ${year}`}
-            value={fmtMoney(kpis.overdueTotal)}
-            sub={`${kpis.overdueCount} payment${kpis.overdueCount === 1 ? "" : "s"} late this year · all years: ${fmtMoney(kpis.overdueAllTotal)} (${kpis.overdueAllCount}) · ${fmtMoney(kpis.outstanding)} outstanding`}
-            tone={kpis.overdueAllTotal > 0 ? "danger" : undefined}
-            icon={kpis.overdueAllTotal > 0 ? <AlertTriangle className="w-4 h-4" /> : <Hourglass className="w-4 h-4" />}
-            chip={kpis.overdueAllTotal > 0 ? "bg-[#FFEAE7] text-[#F36F63]" : "bg-[#FFF8E4] text-[#b8912b]"}
-          />
-          <Tile
-            label={`Season occupancy · ${year}`}
-            value={`${Math.round(seasonStats.pct)}%`}
-            delta={yoyChip(seasonStats.pct, yoy?.occPct, "pts")}
-            sub={`${Math.round(seasonStats.pctBlocked)}% incl. turnaround · ${seasonStats.nights}/${seasonStats.totalNights} season nights (${fmtShort(seasonStats.start)} → ${fmtShort(seasonStats.end)})`}
-            icon={<CalendarCheck className="w-4 h-4" />}
-            chip="bg-[#F3EDFF] text-[#8a63d2]"
-          />
-        </div>
 
-        <section className="rounded-2xl bg-card p-4 shadow-sm border border-border/60 flex flex-col">
+          <section className="rounded-2xl bg-card p-4 shadow-sm border border-border/60 flex flex-col">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium text-muted-foreground flex items-baseline gap-2 flex-wrap">
               Events {year}
@@ -1735,7 +1784,17 @@ function DashboardView({
               </div>
             </div>
           )}
+          {/* Season occupancy, intégrée à la carte Events (redesign 23 nov). */}
+          <div className="pt-2.5 mt-2 border-t border-border/60 flex items-baseline justify-between gap-2 flex-wrap text-xs text-muted-foreground">
+            <span>Season occupancy</span>
+            <span className="flex items-baseline gap-2 flex-wrap justify-end">
+              <b className="text-foreground text-sm">{Math.round(seasonStats.pct)}%</b>
+              {yoyChip(seasonStats.pct, yoy?.occPct, "pts")}
+              <span>{seasonStats.nights}/{seasonStats.totalNights} nights · {Math.round(seasonStats.pctBlocked)}% incl. turnaround</span>
+            </span>
+          </div>
         </section>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-[1.55fr_1fr] gap-4 items-start">
