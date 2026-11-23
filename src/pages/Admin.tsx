@@ -1259,9 +1259,20 @@ function DashboardView({
       (finBookingById.get(i.booking_id)?.check_in_date || "").startsWith(year));
     const overdueTotal = overdueYear.reduce((s, i) => s + Number(i.amount_due || 0), 0);
     const outstanding = thisYear.filter((i) => i.status !== "paid").reduce((s, i) => s + Number(i.amount_due || 0), 0);
+    // Ventilation rental / catering / other (demande Geoffroy, 23 nov 2026) :
+    // le rental est connu longtemps à l'avance, le catering dépend des
+    // participants — les montrer séparément sur la carte Revenue. Other =
+    // extras + bar + discounts (négatifs inclus).
+    const byCat = { rental: 0, catering: 0, other: 0 };
+    for (const i of thisYear) {
+      const c = i.category === "catering" ? "catering"
+        : (i.category === "rental" || !i.category) ? "rental" : "other";
+      byCat[c] += Number(i.amount_due || 0);
+    }
 
     return {
       contracted, contractedHt, collected, overdueTotal, outstanding,
+      rental: byCat.rental, catering: byCat.catering, otherRevenue: byCat.other,
       overdueCount: overdueYear.length,
       overdueAllTotal, overdueAllCount: overdueAll.length,
     };
@@ -1426,6 +1437,56 @@ function DashboardView({
     };
   }, [bookings, year, targets]);
 
+  // Catering ATTENDU (projection) — sorti de targetStats le 23 nov 2026 pour
+  // alimenter AUSSI la carte Revenue (ventilation rental/catering) :
+  // événements pas encore commencés, sans catering validé.
+  //  - Retraites : guest_count du booking (vide tant que le retreat leader ne
+  //    l'a pas rempli → 14 participants par défaut) × prix moyen des
+  //    3 formules : dîner à l'arrivée + full board + petit-déj au départ.
+  //  - Mariages : forfait 10 000 € HT catering/bar (Geoffroy, 4 sept 2026).
+  const cateringProj = useMemo(() => {
+    const dp = getDietPricing(year);
+    const avg = {
+      fullBoard: (dp.vegetarian.fullBoard + dp.meat_dinner.fullBoard + dp.meat_lunch_dinner.fullBoard) / 3,
+      dinner: (dp.vegetarian.dinner + dp.meat_dinner.dinner + dp.meat_lunch_dinner.dinner) / 3,
+      breakfast: (dp.vegetarian.breakfast + dp.meat_dinner.breakfast + dp.meat_lunch_dinner.breakfast) / 3,
+    };
+    const WEDDING_CATERING_EXPECTED_HT = 10000;
+    const hasCatering = new Set(
+      installments.filter((i) => i.category === "catering").map((i) => i.booking_id)
+    );
+    // Mariage : le forfait tombe dès qu'un installment catering OU bar existe.
+    const hasCateringOrBar = new Set(
+      installments.filter((i) => i.category === "catering" || i.category === "bar").map((i) => i.booking_id)
+    );
+    let expectedCateringTvac = 0;
+    let expectedWeddingHt = 0;
+    for (const b of bookings) {
+      const type = b.event_type ?? "retreat";
+      if (type !== "retreat" && type !== "wedding") continue;
+      if (b.catering_expected === false) continue; // organisateur sans catering
+      if ((b as { cancelled_at?: string | null }).cancelled_at) continue;
+      if (!b.check_in_date || !b.check_out_date) continue;
+      if (!b.check_in_date.startsWith(year)) continue;
+      if (b.check_in_date <= todayIso) continue; // déjà commencé / passé
+      if (type === "wedding") {
+        if (!hasCateringOrBar.has(b.id)) expectedWeddingHt += WEDDING_CATERING_EXPECTED_HT;
+        continue;
+      }
+      if (hasCatering.has(b.id)) continue; // catering déjà validé
+      const nights = Math.round(
+        (new Date(`${b.check_out_date}T12:00:00`).getTime() - new Date(`${b.check_in_date}T12:00:00`).getTime()) / 86400000
+      );
+      if (nights <= 0) continue;
+      const perPax = avg.dinner + Math.max(0, nights - 1) * avg.fullBoard + avg.breakfast;
+      expectedCateringTvac += (Number(b.guest_count) > 0 ? Number(b.guest_count) : 14) * perPax;
+    }
+    return {
+      ht: expectedCateringTvac / 1.13 + expectedWeddingHt,
+      tvac: expectedCateringTvac + expectedWeddingHt * 1.13,
+    };
+  }, [installments, bookings, year, todayIso]);
+
   const targetStats = useMemo(() => {
     const cfg = targets?.[year];
     if (!cfg?.net_revenue) return null;
@@ -1448,51 +1509,9 @@ function DashboardView({
       const vat = cat === "catering" ? 1.13 : 1.23;
       actual[cat] += i.amount_excl_vat != null ? Number(i.amount_excl_vat) : Number(i.amount_due || 0) / vat;
     }
-    // Catering ATTENDU (projection) : événements pas encore commencés, sans
-    // catering validé.
-    //  - Retraites : guest_count du booking (vide tant que le retreat leader
-    //    ne l'a pas rempli → 14 participants par défaut) × prix moyen des
-    //    3 formules : dîner à l'arrivée + full board les jours pleins +
-    //    petit-déj au départ. Converti en HT (TVA food 13 %).
-    //  - Mariages : forfait 10 000 € HT catering/bar (Geoffroy, 4 sept 2026).
-    const dp = getDietPricing(year);
-    const avg = {
-      fullBoard: (dp.vegetarian.fullBoard + dp.meat_dinner.fullBoard + dp.meat_lunch_dinner.fullBoard) / 3,
-      dinner: (dp.vegetarian.dinner + dp.meat_dinner.dinner + dp.meat_lunch_dinner.dinner) / 3,
-      breakfast: (dp.vegetarian.breakfast + dp.meat_dinner.breakfast + dp.meat_lunch_dinner.breakfast) / 3,
-    };
-    const WEDDING_CATERING_EXPECTED_HT = 10000;
-    const hasCatering = new Set(
-      installments.filter((i) => i.category === "catering").map((i) => i.booking_id)
-    );
-    // Mariage : le forfait tombe dès qu'un installment catering OU bar existe.
-    const hasCateringOrBar = new Set(
-      installments.filter((i) => i.category === "catering" || i.category === "bar").map((i) => i.booking_id)
-    );
-    let expectedCateringTvac = 0;
-    let expectedWeddingHt = 0;
-    for (const b of bookings) {
-      const type = b.event_type ?? "retreat";
-      if (type !== "retreat" && type !== "wedding") continue;
-      if (b.catering_expected === false) continue; // organisateur sans catering
-      if ((b as { cancelled_at?: string | null }).cancelled_at) continue; // annule : plus de catering attendu
-      if (!b.check_in_date || !b.check_out_date) continue;
-      if (!b.check_in_date.startsWith(year)) continue;
-      if (b.check_in_date <= todayIso) continue; // déjà commencé / passé
-      if (type === "wedding") {
-        if (!hasCateringOrBar.has(b.id)) expectedWeddingHt += WEDDING_CATERING_EXPECTED_HT;
-        continue;
-      }
-      if (hasCatering.has(b.id)) continue;       // catering déjà validé
-      const nights = Math.round(
-        (new Date(`${b.check_out_date}T12:00:00`).getTime() - new Date(`${b.check_in_date}T12:00:00`).getTime()) / 86400000
-      );
-      if (nights <= 0) continue;
-      const perPax = avg.dinner + Math.max(0, nights - 1) * avg.fullBoard + avg.breakfast;
-      // guest_count du booking ; vide (leader pas encore passé) → 14 attendus
-      expectedCateringTvac += (Number(b.guest_count) > 0 ? Number(b.guest_count) : 14) * perPax;
-    }
-    const expectedCatering = expectedCateringTvac / 1.13 + expectedWeddingHt; // HT (TVA food 13 %)
+    // Catering ATTENDU : projection factorisée dans cateringProj (23 nov 2026
+    // — partagée avec la carte Revenue). HT ici (P&L).
+    const expectedCatering = cateringProj.ht;
 
     const total = actual.rental + actual.catering + actual.extra + actual.bar + actual.discount;
     const rows = [
@@ -1510,7 +1529,7 @@ function DashboardView({
       pct: ((total + expectedCatering) / cfg.net_revenue) * 100,
       rows,
     };
-  }, [installments, bookings, finBookingById, targets, year, todayIso]);
+  }, [installments, bookings, finBookingById, targets, year, todayIso, cateringProj]);
 
   // Nombre d'événements de l'année + nature (demande Geoffroy, 23 nov 2026).
   // bookings exclut déjà tests et annulés ; les annulés de l'année restent
@@ -1585,7 +1604,7 @@ function DashboardView({
 
   // Cartes KPI "héro" — icône sur pastille pastel (palette Geoffroy, juil. 2026)
   const Tile = ({ label, value, sub, tone, icon, chip, delta }: {
-    label: string; value: string; sub?: string; tone?: "danger" | "success";
+    label: string; value: string; sub?: ReactNode; tone?: "danger" | "success";
     icon?: ReactNode; chip?: string; delta?: ReactNode;
   }) => (
     <div className="rounded-2xl bg-card p-4 shadow-sm border border-border/60">
@@ -1635,7 +1654,17 @@ function DashboardView({
             label={`Revenue ${year} (incl. VAT)`}
             value={fmtMoney(kpis.contracted)}
             delta={yoyChip(kpis.contracted, yoy?.contracted, "pct")}
-            sub={`${fmtMoney(kpis.contractedHt)} excl. VAT`}
+            sub={
+              <>
+                <div>
+                  Rental <b className="text-foreground">{fmtMoney(kpis.rental)}</b>
+                  {" · "}Catering <b className="text-foreground">{fmtMoney(kpis.catering)}</b>
+                  {cateringProj.tvac > 0.5 && <> <span className="whitespace-nowrap">(+{fmtMoney(cateringProj.tvac)} expected)</span></>}
+                  {Math.abs(kpis.otherRevenue) > 0.005 && <>{" · "}Other <b className="text-foreground">{fmtMoney(kpis.otherRevenue)}</b></>}
+                </div>
+                <div>{fmtMoney(kpis.contractedHt)} excl. VAT</div>
+              </>
+            }
             icon={<Euro className="w-4 h-4" />}
             chip="bg-[#EAF6DF] text-[#679E3F]"
           />
