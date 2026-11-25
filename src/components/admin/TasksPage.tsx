@@ -13,7 +13,8 @@ import { CheckSquare, CornerDownRight, Loader2, Plus, Repeat, Trash2, UserRound,
 /**
  * Onglet Operations > Tasks (25 nov 2026, demande Geoffroy) — centralise le
  * « Quinta task tracker » créé par Loïs. V2 le même jour : sous-tâches
- * (parent_id, cascade), filtre Overdue, vues By date / By area / By person,
+ * (parent_id, cascade), filtre Overdue, filtres déroulants Area et Person
+ * (v3 : des filtres, pas des vues — groupement par date conservé),
  * assignés restreints à Geo / Loïs / Luis, dropdown d'area à la création,
  * récurrence annuelle, priorité en 3 boutons, ligne resserrée (chips collées
  * au titre). Récurrence façon Todoist : compléter une tâche récurrente recrée
@@ -96,7 +97,9 @@ export function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"open" | "overdue" | "done" | "all">("open");
   const [mineOnly, setMineOnly] = useState(false);
-  const [groupBy, setGroupBy] = useState<"date" | "area" | "person">("date");
+  const [areaFilter, setAreaFilter] = useState("");
+  const [personFilter, setPersonFilter] = useState(""); // "" = everyone, "unassigned", ou staff id
+  const [priorityFilter, setPriorityFilter] = useState(""); // "" = toutes
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const emptyDraft = { title: "", area: "", priority: "medium", due_date: "", repeats: "none", assignee_id: "", notes: "" };
@@ -148,12 +151,16 @@ export function TasksPage() {
     let list = tasksAll.filter((t) => !t.parent_id);
     if (propertyFilter !== "all") list = list.filter((t) => t.property === propertyFilter);
     if (mineOnly) list = list.filter((t) => (t.assignee_id && myStaffIds.has(t.assignee_id)) || normalizeEmail(t.created_by) === myEmail);
+    if (areaFilter) list = list.filter((t) => (t.area ?? "").trim() === areaFilter);
+    if (personFilter === "unassigned") list = list.filter((t) => !t.assignee_id);
+    else if (personFilter) list = list.filter((t) => t.assignee_id === personFilter);
+    if (priorityFilter) list = list.filter((t) => t.priority === priorityFilter);
     if (filter === "open") list = list.filter((t) => t.status !== "done");
     if (filter === "overdue") list = list.filter(isOverdue);
     if (filter === "done") list = list.filter((t) => t.status === "done");
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasksAll, propertyFilter, mineOnly, filter, myStaffIds, myEmail, today]);
+  }, [tasksAll, propertyFilter, mineOnly, areaFilter, personFilter, priorityFilter, filter, myStaffIds, myEmail, today]);
 
   const stats = useMemo(() => {
     let scoped = tasksAll.filter((t) => !t.parent_id);
@@ -289,28 +296,6 @@ export function TasksPage() {
   };
 
   const groups: { label: string; items: Task[] }[] = (() => {
-    if (groupBy === "area") {
-      const m = new Map<string, Task[]>();
-      for (const t of tasks) {
-        const k = (t.area ?? "").trim() || "No area";
-        m.set(k, [...(m.get(k) ?? []), t]);
-      }
-      return [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([label, items]) => ({ label, items }));
-    }
-    if (groupBy === "person") {
-      const order = [...assignable.map((a) => a.label), "Unassigned"];
-      const m = new Map<string, Task[]>();
-      for (const t of tasks) {
-        const k = assigneeLabel(t.assignee_id) ?? "Unassigned";
-        m.set(k, [...(m.get(k) ?? []), t]);
-      }
-      return [...m.entries()]
-        .sort(([a], [b]) => {
-          const ia = order.indexOf(a), ib = order.indexOf(b);
-          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
-        })
-        .map(([label, items]) => ({ label, items }));
-    }
     const overdue = tasks.filter(isOverdue);
     const upcoming = tasks.filter((t) => !isOverdue(t) && t.due_date);
     const noDate = tasks.filter((t) => !t.due_date);
@@ -458,14 +443,22 @@ export function TasksPage() {
           My tasks
         </button>
         <span className="flex-1" />
-        <div className="flex rounded-full bg-secondary p-0.5 text-sm">
-          {([["date", "By date"], ["area", "By area"], ["person", "By person"]] as const).map(([g, label]) => (
-            <button key={g} onClick={() => setGroupBy(g)}
-              className={`rounded-full px-3 py-1 font-medium ${groupBy === g ? "bg-card shadow-sm" : "text-muted-foreground"}`}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <select value={areaFilter} onChange={(e) => setAreaFilter(e.target.value)}
+          className={`h-9 rounded-full border px-3 text-sm ${areaFilter ? "border-primary bg-primary/10 font-medium" : "border-border bg-card text-foreground/70"}`}>
+          <option value="">All areas</option>
+          {areas.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)}
+          className={`h-9 rounded-full border px-3 text-sm ${personFilter ? "border-primary bg-primary/10 font-medium" : "border-border bg-card text-foreground/70"}`}>
+          <option value="">Everyone</option>
+          {assignable.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          <option value="unassigned">Unassigned</option>
+        </select>
+        <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}
+          className={`h-9 rounded-full border px-3 text-sm ${priorityFilter ? "border-primary bg-primary/10 font-medium" : "border-border bg-card text-foreground/70"}`}>
+          <option value="">All priorities</option>
+          {PRIORITIES.map((p) => <option key={p.v} value={p.v}>{p.label}</option>)}
+        </select>
         <Button onClick={() => setShowAdd((v) => !v)}>
           <Plus className="w-4 h-4 mr-1" /> Add task
         </Button>
