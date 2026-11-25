@@ -8,24 +8,23 @@ import { todayLisbon } from "@/lib/dates";
 import { getProperty, usePropertyFilter, PROPERTY_SHORT } from "@/lib/property";
 import { notifyAdmins } from "@/lib/notifications";
 import { normalizeEmail } from "@/lib/admin";
-import { CheckSquare, Loader2, Plus, Repeat, Trash2, UserRound } from "lucide-react";
+import { CheckSquare, CornerDownRight, Loader2, Plus, Repeat, Trash2, UserRound, X } from "lucide-react";
 
 /**
  * Onglet Operations > Tasks (25 nov 2026, demande Geoffroy) — centralise le
- * « Quinta task tracker » créé par Loïs en artifact. Modèle repris de son
- * tracker : Area libre, priorité High/Medium/Low, statuts To do / In progress
- * / Done, due date, récurrence (none/weekly/monthly/quarterly), notes, stats
- * Overdue / Due in 7 days / Open / Done, vues By date / By area. Ajouts :
- * assigné (staff), créateur visible, lieu (switcher), notifications fan-out.
- * Récurrence façon Todoist : compléter une tâche récurrente recrée la
- * prochaine occurrence (échéance décalée, même paramètres).
+ * « Quinta task tracker » créé par Loïs. V2 le même jour : sous-tâches
+ * (parent_id, cascade), filtre Overdue, vues By date / By area / By person,
+ * assignés restreints à Geo / Loïs / Luis, dropdown d'area à la création,
+ * récurrence annuelle, priorité en 3 boutons, ligne resserrée (chips collées
+ * au titre). Récurrence façon Todoist : compléter une tâche récurrente recrée
+ * la prochaine occurrence, sous-tâches recopiées non cochées.
  */
 
 type Task = {
   id: string; title: string; notes: string | null; area: string | null;
   property: string; priority: string; status: string; due_date: string | null;
   repeats: string; assignee_id: string | null; created_by: string | null;
-  created_at: string; completed_at: string | null;
+  created_at: string; completed_at: string | null; parent_id: string | null;
 };
 type Staff = { id: string; name: string; email: string | null; active: boolean };
 
@@ -44,6 +43,15 @@ const REPEATS = [
   { v: "weekly", label: "Every week" },
   { v: "monthly", label: "Every month" },
   { v: "quarterly", label: "Every 3 months" },
+  { v: "yearly", label: "Every year" },
+] as const;
+
+// Assignés possibles (25 nov 2026, choix Geoffroy) : seulement Geo, Loïs et
+// Luis — identifiés par email dans staff_profiles, libellé court imposé.
+const ASSIGNEES = [
+  { email: "hello@quintamor.com", label: "Geo" },
+  { email: "lois@quintamor.com", label: "Loïs" },
+  { email: "977luisferreira@gmail.com", label: "Luis" },
 ] as const;
 
 export function nextOccurrence(due: string | null, repeats: string, today: string): string | null {
@@ -53,12 +61,28 @@ export function nextOccurrence(due: string | null, repeats: string, today: strin
   if (repeats === "weekly") base.setDate(base.getDate() + 7);
   else if (repeats === "monthly") base.setMonth(base.getMonth() + 1);
   else if (repeats === "quarterly") base.setMonth(base.getMonth() + 3);
+  else if (repeats === "yearly") base.setFullYear(base.getFullYear() + 1);
   else return null;
   return base.toISOString().slice(0, 10);
 }
 
 const fmtDay = (iso: string | null) =>
   iso ? new Date(`${iso}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
+
+function PriorityButtons({ value, onChange, compact }: { value: string; onChange: (v: string) => void; compact?: boolean }) {
+  return (
+    <div className={`flex gap-1 ${compact ? "" : "items-center"}`}>
+      {PRIORITIES.map((p) => (
+        <button key={p.v} type="button" onClick={() => onChange(p.v)}
+          className={`rounded-full px-3 ${compact ? "py-1" : "py-1.5"} text-xs font-semibold border transition-colors ${
+            value === p.v ? `${p.cls} border-transparent ring-1 ring-foreground/20` : "border-border bg-card text-muted-foreground hover:bg-secondary"
+          }`}>
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function TasksPage() {
   const { toast } = useToast();
@@ -70,13 +94,14 @@ export function TasksPage() {
   const [tasksAll, setTasksAll] = useState<Task[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"open" | "done" | "all">("open");
+  const [filter, setFilter] = useState<"open" | "overdue" | "done" | "all">("open");
   const [mineOnly, setMineOnly] = useState(false);
-  const [groupBy, setGroupBy] = useState<"date" | "area">("date");
+  const [groupBy, setGroupBy] = useState<"date" | "area" | "person">("date");
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const emptyDraft = { title: "", area: "", priority: "medium", due_date: "", repeats: "none", assignee_id: "", notes: "" };
   const [draft, setDraft] = useState(emptyDraft);
+  const [newArea, setNewArea] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = async () => {
@@ -93,21 +118,46 @@ export function TasksPage() {
   useEffect(() => { load(); }, []);
 
   const staffById = useMemo(() => new Map(staff.map((s) => [s.id, s])), [staff]);
+  // Options d'assignation : Geo / Loïs / Luis, dans cet ordre.
+  const assignable = useMemo(() =>
+    ASSIGNEES.flatMap((a) => {
+      const s = staff.find((x) => normalizeEmail(x.email) === a.email);
+      return s ? [{ id: s.id, label: a.label }] : [];
+    }), [staff]);
+  const assigneeLabel = (id: string | null) => {
+    if (!id) return null;
+    const s = staffById.get(id);
+    if (!s) return "?";
+    const short = ASSIGNEES.find((a) => a.email === normalizeEmail(s.email));
+    return short ? short.label : s.name;
+  };
   const myStaffIds = useMemo(
     () => new Set(staff.filter((s) => normalizeEmail(s.email) === myEmail).map((s) => s.id)),
     [staff, myEmail]
   );
 
+  const subsByParent = useMemo(() => {
+    const m = new Map<string, Task[]>();
+    for (const t of tasksAll) if (t.parent_id) m.set(t.parent_id, [...(m.get(t.parent_id) ?? []), t]);
+    return m;
+  }, [tasksAll]);
+
+  const isOverdue = (t: Task) => t.status !== "done" && !!t.due_date && t.due_date < today;
+
   const tasks = useMemo(() => {
-    let list = propertyFilter === "all" ? tasksAll : tasksAll.filter((t) => t.property === propertyFilter);
+    let list = tasksAll.filter((t) => !t.parent_id);
+    if (propertyFilter !== "all") list = list.filter((t) => t.property === propertyFilter);
     if (mineOnly) list = list.filter((t) => (t.assignee_id && myStaffIds.has(t.assignee_id)) || normalizeEmail(t.created_by) === myEmail);
     if (filter === "open") list = list.filter((t) => t.status !== "done");
+    if (filter === "overdue") list = list.filter(isOverdue);
     if (filter === "done") list = list.filter((t) => t.status === "done");
     return list;
-  }, [tasksAll, propertyFilter, mineOnly, filter, myStaffIds, myEmail]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasksAll, propertyFilter, mineOnly, filter, myStaffIds, myEmail, today]);
 
   const stats = useMemo(() => {
-    const scoped = propertyFilter === "all" ? tasksAll : tasksAll.filter((t) => t.property === propertyFilter);
+    let scoped = tasksAll.filter((t) => !t.parent_id);
+    if (propertyFilter !== "all") scoped = scoped.filter((t) => t.property === propertyFilter);
     const open = scoped.filter((t) => t.status !== "done");
     const in7 = new Date(`${today}T12:00:00`); in7.setDate(in7.getDate() + 7);
     const in7Iso = in7.toISOString().slice(0, 10);
@@ -124,15 +174,14 @@ export function TasksPage() {
     [tasksAll]
   );
 
-  const assigneeName = (t: Task) => (t.assignee_id ? staffById.get(t.assignee_id)?.name ?? "?" : null);
-
   const addTask = async () => {
     const title = draft.title.trim();
     if (!title) { toast({ title: "Task title required", variant: "destructive" }); return; }
     setSaving(true);
     const property = propertyFilter !== "all" ? propertyFilter : getProperty();
+    const area = draft.area === "__new__" ? (newArea.trim() || null) : (draft.area.trim() || null);
     const payload = {
-      title, area: draft.area.trim() || null, property,
+      title, area, property,
       priority: draft.priority, due_date: draft.due_date || null,
       repeats: draft.repeats, assignee_id: draft.assignee_id || null,
       notes: draft.notes.trim() || null, created_by: myEmail || null,
@@ -142,14 +191,14 @@ export function TasksPage() {
     if (error) { toast({ title: "Add failed", description: error.message, variant: "destructive" }); return; }
     const assignee = draft.assignee_id ? staffById.get(draft.assignee_id) : null;
     const who = user?.email?.split("@")[0] ?? "Someone";
-    const bits = [assignee ? `for ${assignee.name}` : null, draft.due_date ? `due ${fmtDay(draft.due_date)}` : null].filter(Boolean).join(", ");
+    const bits = [assignee ? `for ${assigneeLabel(assignee.id)}` : null, draft.due_date ? `due ${fmtDay(draft.due_date)}` : null].filter(Boolean).join(", ");
     // Notification : l'assigné d'abord (message dédié), puis les autres admins.
     const assigneeEmail = normalizeEmail(assignee?.email);
     if (assigneeEmail && assigneeEmail !== myEmail) {
       notifyAdmins({ message: `${who} assigned you a task: “${title}”${draft.due_date ? ` (due ${fmtDay(draft.due_date)})` : ""}`, taskId: data.id, only: [assigneeEmail], createdBy: myEmail });
     }
     notifyAdmins({ message: `${who} created a task: “${title}”${bits ? ` (${bits})` : ""}`, taskId: data.id, exclude: [myEmail, assigneeEmail], createdBy: myEmail });
-    setDraft(emptyDraft); setShowAdd(false);
+    setDraft(emptyDraft); setNewArea(""); setShowAdd(false);
     toast({ title: "Task created" });
     load();
   };
@@ -167,28 +216,56 @@ export function TasksPage() {
       status: done ? "done" : "todo",
       completed_at: done ? new Date().toISOString() : null,
     } as Partial<Task>);
-    if (!done) return;
+    if (!done || t.parent_id) return; // les sous-tâches : coche simple, rien d'autre
     const who = user?.email?.split("@")[0] ?? "Someone";
     const creator = normalizeEmail(t.created_by);
     if (creator && creator !== myEmail) {
       notifyAdmins({ message: `${who} completed “${t.title}”`, taskId: t.id, only: [creator], createdBy: myEmail });
     }
-    // Récurrence : recrée la prochaine occurrence (mêmes paramètres).
+    // Récurrence : recrée la prochaine occurrence, sous-tâches recopiées.
     const next = nextOccurrence(t.due_date, t.repeats, today);
     if (next) {
-      const { error } = await supabase.from("admin_tasks").insert({
+      const { data: np, error } = await supabase.from("admin_tasks").insert({
         title: t.title, area: t.area, property: t.property, priority: t.priority,
         due_date: next, repeats: t.repeats, assignee_id: t.assignee_id,
         notes: t.notes, created_by: t.created_by,
-      });
-      if (!error) toast({ title: `Recurring task — next occurrence created (due ${fmtDay(next)})` });
+      }).select("id").single();
+      if (!error && np) {
+        const subs = tasksAll.filter((s) => s.parent_id === t.id);
+        if (subs.length) {
+          await supabase.from("admin_tasks").insert(subs.map((s) => ({
+            title: s.title, parent_id: np.id, property: s.property, priority: s.priority,
+            status: "todo", repeats: "none", notes: s.notes, created_by: s.created_by,
+          })));
+        }
+        toast({ title: `Recurring task — next occurrence created (due ${fmtDay(next)})` });
+      }
       load();
     }
   };
 
+  const addSubtask = async (parent: Task, title: string) => {
+    const v = title.trim();
+    if (!v) return;
+    const { error } = await supabase.from("admin_tasks").insert({
+      title: v, parent_id: parent.id, property: parent.property, priority: "medium",
+      status: "todo", repeats: "none", created_by: myEmail || null,
+    });
+    if (error) { toast({ title: "Add failed", description: error.message, variant: "destructive" }); return; }
+    load();
+  };
+
   const deleteTask = async (t: Task) => {
-    if (!confirm(`Delete task “${t.title}”?`)) return;
+    const subCount = subsByParent.get(t.id)?.length ?? 0;
+    const msg = subCount > 0 ? `Delete task “${t.title}” and its ${subCount} subtask${subCount > 1 ? "s" : ""}?` : `Delete task “${t.title}”?`;
+    if (!confirm(msg)) return;
     const { error } = await supabase.from("admin_tasks").delete().eq("id", t.id);
+    if (error) { toast({ title: "Delete failed", description: error.message, variant: "destructive" }); return; }
+    load();
+  };
+
+  const deleteSubtask = async (s: Task) => {
+    const { error } = await supabase.from("admin_tasks").delete().eq("id", s.id);
     if (error) { toast({ title: "Delete failed", description: error.message, variant: "destructive" }); return; }
     load();
   };
@@ -199,7 +276,7 @@ export function TasksPage() {
 
   const dueChip = (t: Task) => {
     if (!t.due_date) return null;
-    const overdue = t.status !== "done" && t.due_date < today;
+    const overdue = isOverdue(t);
     const in7 = new Date(`${today}T12:00:00`); in7.setDate(in7.getDate() + 7);
     const soon = t.status !== "done" && !overdue && t.due_date <= in7.toISOString().slice(0, 10);
     return (
@@ -220,8 +297,22 @@ export function TasksPage() {
       }
       return [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([label, items]) => ({ label, items }));
     }
-    const overdue = tasks.filter((t) => t.status !== "done" && t.due_date && t.due_date < today);
-    const upcoming = tasks.filter((t) => !(t.status !== "done" && t.due_date && t.due_date < today) && t.due_date);
+    if (groupBy === "person") {
+      const order = [...assignable.map((a) => a.label), "Unassigned"];
+      const m = new Map<string, Task[]>();
+      for (const t of tasks) {
+        const k = assigneeLabel(t.assignee_id) ?? "Unassigned";
+        m.set(k, [...(m.get(k) ?? []), t]);
+      }
+      return [...m.entries()]
+        .sort(([a], [b]) => {
+          const ia = order.indexOf(a), ib = order.indexOf(b);
+          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
+        })
+        .map(([label, items]) => ({ label, items }));
+    }
+    const overdue = tasks.filter(isOverdue);
+    const upcoming = tasks.filter((t) => !isOverdue(t) && t.due_date);
     const noDate = tasks.filter((t) => !t.due_date);
     return [
       { label: "Overdue", items: overdue },
@@ -233,9 +324,13 @@ export function TasksPage() {
   const TaskRow = ({ t }: { t: Task }) => {
     const editing = editingId === t.id;
     const pr = PRIORITIES.find((p) => p.v === t.priority) ?? PRIORITIES[1];
+    const subs = subsByParent.get(t.id) ?? [];
+    const subsDone = subs.filter((s) => s.status === "done").length;
+    const [subDraft, setSubDraft] = useState("");
     return (
       <div className={`border rounded-xl px-3 py-2.5 ${t.status === "done" ? "opacity-55" : ""}`}>
-        <div className="flex items-center gap-2.5 flex-wrap">
+        {/* Ligne principale : chips collées au titre (25 nov 2026) */}
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             type="checkbox"
             checked={t.status === "done"}
@@ -246,35 +341,53 @@ export function TasksPage() {
           <button
             type="button"
             onClick={() => setEditingId(editing ? null : t.id)}
-            className={`text-left text-sm font-medium flex-1 min-w-[140px] ${t.status === "done" ? "line-through" : ""}`}
+            className={`text-left text-sm font-medium ${t.status === "done" ? "line-through" : ""}`}
           >
             {t.title}
             {t.repeats !== "none" && <Repeat className="inline w-3 h-3 ml-1.5 text-muted-foreground" />}
           </button>
+          {t.area && <span className="text-xs rounded-full bg-secondary px-2 py-0.5 text-secondary-foreground">{t.area}</span>}
+          <span className={`text-[11px] font-semibold rounded-full px-2 py-0.5 ${pr.cls}`}>{pr.label}</span>
           {propertyFilter === "all" && (
             <span className="text-[10px] font-semibold rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
               {PROPERTY_SHORT[(t.property === "terra" ? "terra" : "quinta")]}
             </span>
           )}
-          {t.area && <span className="text-xs rounded-full bg-secondary px-2 py-0.5 text-secondary-foreground">{t.area}</span>}
-          <span className={`text-[11px] font-semibold rounded-full px-2 py-0.5 ${pr.cls}`}>{pr.label}</span>
           {t.status === "in_progress" && <span className="text-[11px] rounded-full bg-[#EDF5FF] text-[#4a86e0] px-2 py-0.5 font-semibold">In progress</span>}
           {dueChip(t)}
-          {assigneeName(t) && (
+          {subs.length > 0 && (
+            <span className="text-xs rounded-full bg-muted px-2 py-0.5 text-muted-foreground flex items-center gap-1">
+              <CornerDownRight className="w-3 h-3" />{subsDone}/{subs.length}
+            </span>
+          )}
+          {assigneeLabel(t.assignee_id) && (
             <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <UserRound className="w-3 h-3" />{assigneeName(t)}
+              <UserRound className="w-3 h-3" />{assigneeLabel(t.assignee_id)}
             </span>
           )}
         </div>
+        {!editing && t.notes && <div className="mt-1 ml-6 text-xs text-muted-foreground">{t.notes}</div>}
+        {/* Sous-tâches */}
+        {subs.length > 0 && (
+          <div className="mt-1.5 ml-6 space-y-1">
+            {subs.map((s) => (
+              <div key={s.id} className="flex items-center gap-2 text-sm group">
+                <input type="checkbox" checked={s.status === "done"} onChange={() => toggleDone(s)}
+                  className="w-3.5 h-3.5 accent-[#79B84B] cursor-pointer shrink-0" />
+                <span className={s.status === "done" ? "line-through text-muted-foreground" : ""}>{s.title}</span>
+                <button className="opacity-0 group-hover:opacity-100 text-muted-foreground/60 hover:text-destructive" onClick={() => deleteSubtask(s)} title="Delete subtask">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {editing && (
           <div className="mt-3 pt-3 border-t border-border/60 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             <Input defaultValue={t.title} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== t.title) patchTask(t.id, { title: v }); }} className="h-8 lg:col-span-2" />
             <Input defaultValue={t.area ?? ""} placeholder="Area" list="task-areas"
               onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== t.area) patchTask(t.id, { area: v }); }} className="h-8" />
-            <select value={t.priority} onChange={(e) => patchTask(t.id, { priority: e.target.value })}
-              className="h-8 rounded-md border bg-background px-2 text-sm">
-              {PRIORITIES.map((p) => <option key={p.v} value={p.v}>{p.label} priority</option>)}
-            </select>
+            <PriorityButtons compact value={t.priority} onChange={(v) => patchTask(t.id, { priority: v })} />
             <select value={t.status} onChange={(e) => patchTask(t.id, { status: e.target.value, completed_at: e.target.value === "done" ? new Date().toISOString() : null } as Partial<Task>)}
               className="h-8 rounded-md border bg-background px-2 text-sm">
               {STATUSES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
@@ -288,10 +401,17 @@ export function TasksPage() {
             <select value={t.assignee_id ?? ""} onChange={(e) => patchTask(t.id, { assignee_id: e.target.value || null })}
               className="h-8 rounded-md border bg-background px-2 text-sm">
               <option value="">Unassigned</option>
-              {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {assignable.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
             <Input defaultValue={t.notes ?? ""} placeholder="Notes"
               onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== t.notes) patchTask(t.id, { notes: v }); }} className="h-8 lg:col-span-2" />
+            <div className="flex items-center gap-2 lg:col-span-3">
+              <CornerDownRight className="w-4 h-4 text-muted-foreground shrink-0" />
+              <Input value={subDraft} placeholder="Add a subtask — press Enter"
+                onChange={(e) => setSubDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { addSubtask(t, subDraft); setSubDraft(""); } }}
+                className="h-8" />
+            </div>
             <div className="flex items-center justify-between gap-2 lg:col-span-3 text-xs text-muted-foreground">
               <span>Created by {t.created_by?.split("@")[0] ?? "?"} on {fmtDay(t.created_at.slice(0, 10))}</span>
               <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteTask(t)}>
@@ -300,7 +420,6 @@ export function TasksPage() {
             </div>
           </div>
         )}
-        {!editing && t.notes && <div className="mt-1 ml-7 text-xs text-muted-foreground">{t.notes}</div>}
       </div>
     );
   };
@@ -324,12 +443,12 @@ export function TasksPage() {
 
       {/* Barre d'outils */}
       <div className="flex flex-wrap items-center gap-2">
-        {(["open", "done", "all"] as const).map((f) => (
+        {([["open", "Open"], ["overdue", "Overdue"], ["done", "Done"], ["all", "All"]] as const).map(([f, label]) => (
           <button key={f} onClick={() => setFilter(f)}
             className={`rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
               filter === f ? "border-primary bg-primary font-semibold text-primary-foreground" : "border-border bg-card text-foreground/70 hover:bg-secondary"
             }`}>
-            {f === "open" ? "Open" : f === "done" ? "Done" : "All"}
+            {label}
           </button>
         ))}
         <button onClick={() => setMineOnly((v) => !v)}
@@ -340,10 +459,10 @@ export function TasksPage() {
         </button>
         <span className="flex-1" />
         <div className="flex rounded-full bg-secondary p-0.5 text-sm">
-          {(["date", "area"] as const).map((g) => (
+          {([["date", "By date"], ["area", "By area"], ["person", "By person"]] as const).map(([g, label]) => (
             <button key={g} onClick={() => setGroupBy(g)}
               className={`rounded-full px-3 py-1 font-medium ${groupBy === g ? "bg-card shadow-sm" : "text-muted-foreground"}`}>
-              {g === "date" ? "By date" : "By area"}
+              {label}
             </button>
           ))}
         </div>
@@ -356,21 +475,30 @@ export function TasksPage() {
       {showAdd && (
         <div className="rounded-2xl border border-border bg-card p-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Input placeholder="Task *" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="lg:col-span-2" autoFocus />
-          <Input placeholder="Area (pool, garden…)" list="task-areas" value={draft.area} onChange={(e) => setDraft({ ...draft, area: e.target.value })} />
-          <select value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value })} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-            {PRIORITIES.map((p) => <option key={p.v} value={p.v}>{p.label} priority</option>)}
+          <select value={draft.area} onChange={(e) => setDraft({ ...draft, area: e.target.value })} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+            <option value="">No area</option>
+            {areas.map((a) => <option key={a} value={a}>{a}</option>)}
+            <option value="__new__">+ New area…</option>
           </select>
+          {draft.area === "__new__" ? (
+            <Input placeholder="New area name" value={newArea} onChange={(e) => setNewArea(e.target.value)} autoFocus />
+          ) : (
+            <span className="hidden lg:block" />
+          )}
+          <div className="flex items-center lg:col-span-2">
+            <PriorityButtons value={draft.priority} onChange={(v) => setDraft({ ...draft, priority: v })} />
+          </div>
           <Input type="date" value={draft.due_date} onChange={(e) => setDraft({ ...draft, due_date: e.target.value })} />
           <select value={draft.repeats} onChange={(e) => setDraft({ ...draft, repeats: e.target.value })} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
             {REPEATS.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}
           </select>
           <select value={draft.assignee_id} onChange={(e) => setDraft({ ...draft, assignee_id: e.target.value })} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
             <option value="">Unassigned</option>
-            {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {assignable.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
-          <Input placeholder="Notes" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
+          <Input placeholder="Notes" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} className="lg:col-span-3" />
           <div className="flex gap-2 lg:col-span-4 justify-end">
-            <Button variant="outline" onClick={() => { setShowAdd(false); setDraft(emptyDraft); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowAdd(false); setDraft(emptyDraft); setNewArea(""); }}>Cancel</Button>
             <Button onClick={addTask} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckSquare className="w-4 h-4 mr-1" />} Save task
             </Button>
@@ -385,7 +513,7 @@ export function TasksPage() {
       {/* Liste groupée */}
       {tasks.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
-          No tasks here — add the first one. 🎉
+          {filter === "overdue" ? "Nothing overdue. 🎉" : "No tasks here — add the first one. 🎉"}
         </div>
       ) : (
         groups.map((g) => (

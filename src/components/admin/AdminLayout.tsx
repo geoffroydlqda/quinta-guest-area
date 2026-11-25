@@ -34,7 +34,6 @@ const NAV_GROUPS = [
     { to: "/admin/transportation", label: "Transportation", icon: Car, tab: "transportation" },
     { to: "/admin/rooms", label: "Housekeeping", icon: BedDouble, tab: "rooms" },
     { to: "/admin/inventory", label: "Inventory", icon: Boxes, tab: "inventory" },
-    { to: "/admin/toolbox", label: "Toolbox", icon: Wrench, tab: "toolbox" },
   ]},
   { label: "Finance", items: [
     { to: "/admin/payments", label: "Payments", icon: Wallet, tab: "payments" },
@@ -43,7 +42,10 @@ const NAV_GROUPS = [
     { to: "/admin/receipts", label: "Receipts", icon: Paperclip, tab: "receipts" },
     { to: "/admin/products", label: "Products", icon: Package, tab: "products" },
   ]},
+  // Bloc du bas (25 nov 2026, demande Geoffroy) : Toolbox au-dessus de Staff,
+  // séparé de Finance par une petite ligne (label null = divider au rendu).
   { label: null, items: [
+    { to: "/admin/toolbox", label: "Toolbox", icon: Wrench, tab: "toolbox" },
     { to: "/admin/staff", label: "Staff", icon: UserCog, tab: "staff" },
   ]},
 ] as const;
@@ -160,7 +162,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         </div>
         <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
           {navGroups.map((group, gi) => (
-            <div key={gi} className={gi > 0 ? "pt-2" : undefined}>
+            <div key={gi} className={gi > 0 ? (group.label ? "pt-2" : "mt-2 pt-2 border-t border-border/70") : undefined}>
               {group.label && (
                 <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/70">
                   {group.label}
@@ -259,7 +261,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             )}
             <div className="space-y-1 max-h-[65vh] overflow-y-auto">
               {mobileMoreGroups.map((group, gi) => (
-                <div key={gi} className={gi > 0 ? "pt-1.5" : undefined}>
+                <div key={gi} className={gi > 0 ? (group.label ? "pt-1.5" : "mt-1.5 pt-1.5 border-t border-border/70") : undefined}>
                   {group.label && (
                     <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/70">
                       {group.label}

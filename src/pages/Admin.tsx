@@ -1104,6 +1104,7 @@ function MyTasksCard({ todayIso }: { todayIso: string }) {
     (async () => {
       const [t, s] = await Promise.all([
         supabase.from("admin_tasks").select("id,title,due_date,priority,status,assignee_id,created_by").neq("status", "done")
+          .is("parent_id", null)
           .order("due_date", { ascending: true, nullsFirst: false }).limit(200),
         supabase.from("staff_profiles").select("id,email"),
       ]);
