@@ -667,6 +667,7 @@ export type Database = {
           title: string
           notes: string | null
           area: string | null
+          category: string | null
           property: string
           priority: string
           status: string
@@ -684,6 +685,7 @@ export type Database = {
           title: string
           notes?: string | null
           area?: string | null
+          category?: string | null
           property?: string
           priority?: string
           status?: string
@@ -701,6 +703,7 @@ export type Database = {
           title?: string
           notes?: string | null
           area?: string | null
+          category?: string | null
           property?: string
           priority?: string
           status?: string
