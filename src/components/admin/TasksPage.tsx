@@ -109,6 +109,7 @@ export function TasksPage() {
   const [newArea, setNewArea] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingSubId, setEditingSubId] = useState<string | null>(null); // sous-tâche en cours de renommage
 
   const load = async () => {
     const [tasksRes, staffRes] = await Promise.all([
@@ -378,7 +379,19 @@ export function TasksPage() {
               <div key={s.id} className="flex items-center gap-2 text-sm group">
                 <input type="checkbox" checked={s.status === "done"} onChange={() => toggleDone(s)}
                   className="w-3.5 h-3.5 accent-[#79B84B] cursor-pointer shrink-0" />
-                <span className={s.status === "done" ? "line-through text-muted-foreground" : ""}>{s.title}</span>
+                {editingSubId === s.id ? (
+                  <Input autoFocus defaultValue={s.title} className="h-7 max-w-md"
+                    onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== s.title) patchTask(s.id, { title: v }); setEditingSubId(null); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      if (e.key === "Escape") setEditingSubId(null);
+                    }} />
+                ) : (
+                  <button type="button" onClick={() => setEditingSubId(s.id)} title="Click to edit"
+                    className={`text-left ${s.status === "done" ? "line-through text-muted-foreground" : ""}`}>
+                    {s.title}
+                  </button>
+                )}
                 <button className="opacity-0 group-hover:opacity-100 text-muted-foreground/60 hover:text-destructive" onClick={() => deleteSubtask(s)} title="Delete subtask">
                   <X className="w-3.5 h-3.5" />
                 </button>
