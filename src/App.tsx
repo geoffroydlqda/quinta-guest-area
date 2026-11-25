@@ -20,6 +20,8 @@ import InvestorReport from "./pages/InvestorReport";
 import Documentation from "./pages/Documentation";
 import Admin from "./pages/Admin";
 import AdminInventory from "./pages/AdminInventory";
+import AdminTasks from "./pages/AdminTasks";
+import AdminToolbox from "./pages/AdminToolbox";
 import AdminGuestDetail from "./pages/AdminGuestDetail";
 import BookingSelector from "./pages/BookingSelector";
 import InvitePage from "./pages/InvitePage";
@@ -80,6 +82,8 @@ const App = () => (
               <Route path="/admin" element={<Admin />} />
               <Route path="/admin/guest/:guestId" element={<AdminGuestDetail />} />
               <Route path="/admin/inventory" element={<AdminInventory />} />
+              <Route path="/admin/tasks" element={<AdminTasks />} />
+              <Route path="/admin/toolbox" element={<AdminToolbox />} />
               <Route path="/admin/:section" element={<Admin />} />
               {/* Legacy route redirect */}
               <Route path="/setup" element={

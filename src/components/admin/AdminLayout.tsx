@@ -7,8 +7,9 @@ import { useAllowedProperties } from "@/hooks/useAllowedProperties";
 import {
   LayoutDashboard, CalendarRange, Users, Wallet, Car,
   BedDouble, LogOut, ExternalLink, ChefHat, MoreHorizontal, X, Landmark, UserCog, Package, Boxes,
-  Moon, Sun, TrendingUp, Paperclip, Mail, PanelLeftClose, PanelLeftOpen,
+  Moon, Sun, TrendingUp, Paperclip, Mail, PanelLeftClose, PanelLeftOpen, ListTodo, Wrench,
 } from "lucide-react";
+import { NotificationBell } from "@/components/admin/NotificationBell";
 
 /**
  * Layout commun de l'espace admin — refonte "light & vibrant" (juillet 2026) :
@@ -28,10 +29,12 @@ const NAV_GROUPS = [
     { to: "/admin/emails", label: "Emails", icon: Mail, tab: "emails" },
   ]},
   { label: "Operations", items: [
+    { to: "/admin/tasks", label: "Tasks", icon: ListTodo, tab: "tasks" },
     { to: "/admin/catering", label: "Catering", icon: ChefHat, tab: "catering" },
     { to: "/admin/transportation", label: "Transportation", icon: Car, tab: "transportation" },
     { to: "/admin/rooms", label: "Housekeeping", icon: BedDouble, tab: "rooms" },
     { to: "/admin/inventory", label: "Inventory", icon: Boxes, tab: "inventory" },
+    { to: "/admin/toolbox", label: "Toolbox", icon: Wrench, tab: "toolbox" },
   ]},
   { label: "Finance", items: [
     { to: "/admin/payments", label: "Payments", icon: Wallet, tab: "payments" },
@@ -123,15 +126,18 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       {/* Sidebar desktop — blanche, pilule verte active, repliable */}
       <aside className={`${collapsed ? "hidden" : "hidden md:flex"} w-56 shrink-0 flex-col border-r border-border bg-card sticky top-0 h-screen`}>
         <div className="px-4 py-5 border-b border-border relative">
-          <button
-            type="button"
-            onClick={() => setCollapsed(true)}
-            title="Collapse sidebar"
-            className="absolute top-3 right-2.5 p-1.5 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
-          >
-            <PanelLeftClose className="w-4 h-4" />
-          </button>
-          <div className="font-bold leading-tight pr-7">{FILTER_LABEL[property]}</div>
+          <div className="absolute top-3 right-2.5 flex items-center gap-0.5">
+            <NotificationBell />
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              title="Collapse sidebar"
+              className="p-1.5 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="font-bold leading-tight pr-14">{FILTER_LABEL[property]}</div>
           <div className="text-xs text-muted-foreground mt-0.5">Management</div>
           {/* Switcher de lieu (QDA / TDP / All) — segmenté compact */}
           {propertyChoices.length > 1 && (
@@ -227,9 +233,12 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           >
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-semibold">More</span>
-              <button type="button" onClick={() => setMoreOpen(false)} className="p-1.5 rounded-full hover:bg-muted">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <NotificationBell align="right" />
+                <button type="button" onClick={() => setMoreOpen(false)} className="p-1.5 rounded-full hover:bg-muted">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             {/* Switcher de lieu (mobile) */}
             {propertyChoices.length > 1 && (

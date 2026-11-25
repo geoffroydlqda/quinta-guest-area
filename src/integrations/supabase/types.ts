@@ -661,6 +661,174 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_tasks: {
+        Row: {
+          id: string
+          title: string
+          notes: string | null
+          area: string | null
+          property: string
+          priority: string
+          status: string
+          due_date: string | null
+          repeats: string
+          assignee_id: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+          completed_at: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          notes?: string | null
+          area?: string | null
+          property?: string
+          priority?: string
+          status?: string
+          due_date?: string | null
+          repeats?: string
+          assignee_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          completed_at?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          notes?: string | null
+          area?: string | null
+          property?: string
+          priority?: string
+          status?: string
+          due_date?: string | null
+          repeats?: string
+          assignee_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+          completed_at?: string | null
+        }
+        Relationships: []
+      }
+      admin_notifications: {
+        Row: {
+          id: string
+          recipient_email: string
+          type: string
+          message: string
+          task_id: string | null
+          created_by: string | null
+          created_at: string
+          read_at: string | null
+        }
+        Insert: {
+          id?: string
+          recipient_email: string
+          type?: string
+          message: string
+          task_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          read_at?: string | null
+        }
+        Update: {
+          id?: string
+          recipient_email?: string
+          type?: string
+          message?: string
+          task_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          read_at?: string | null
+        }
+        Relationships: []
+      }
+      toolbox_contacts: {
+        Row: {
+          id: string
+          name: string
+          company: string | null
+          category: string | null
+          phone: string | null
+          email: string | null
+          notes: string | null
+          preferred: boolean
+          property: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          company?: string | null
+          category?: string | null
+          phone?: string | null
+          email?: string | null
+          notes?: string | null
+          preferred?: boolean
+          property?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          company?: string | null
+          category?: string | null
+          phone?: string | null
+          email?: string | null
+          notes?: string | null
+          preferred?: boolean
+          property?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      toolbox_documents: {
+        Row: {
+          id: string
+          title: string
+          category: string | null
+          property: string
+          storage_path: string
+          file_name: string | null
+          mime_type: string | null
+          valid_until: string | null
+          notes: string | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          category?: string | null
+          property?: string
+          storage_path: string
+          file_name?: string | null
+          mime_type?: string | null
+          valid_until?: string | null
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          category?: string | null
+          property?: string
+          storage_path?: string
+          file_name?: string | null
+          mime_type?: string | null
+          valid_until?: string | null
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       pricing_settings: {
         Row: {
           key: string

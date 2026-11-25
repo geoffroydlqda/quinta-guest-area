@@ -1089,6 +1089,75 @@ function BookingCalendar({ bookings, todayIso, onOpen }: {
 
 // ---------------------------------------------------------------- Dashboard
 /**
+ * Widget « My tasks » (25 nov 2026, demande Geoffroy) : l'aperçu personnel du
+ * task tracker sur le Dashboard — tâches ouvertes de l'admin connecté
+ * (assignées à sa fiche staff par email, ou créées par lui et non assignées),
+ * overdue en rouge, lien vers l'onglet Tasks. Données autonomes (léger).
+ */
+function MyTasksCard({ todayIso }: { todayIso: string }) {
+  const { user } = useAuth();
+  const myEmail = (user?.email ?? "").normalize("NFC").toLowerCase().trim();
+  const [tasks, setTasks] = useState<{ id: string; title: string; due_date: string | null; priority: string; status: string }[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [t, s] = await Promise.all([
+        supabase.from("admin_tasks").select("id,title,due_date,priority,status,assignee_id,created_by").neq("status", "done")
+          .order("due_date", { ascending: true, nullsFirst: false }).limit(200),
+        supabase.from("staff_profiles").select("id,email"),
+      ]);
+      if (cancelled) return;
+      const myIds = new Set(((s.data ?? []) as { id: string; email: string | null }[])
+        .filter((r) => (r.email ?? "").toLowerCase().trim() === myEmail).map((r) => r.id));
+      const mine = ((t.data ?? []) as (typeof tasks[number] & { assignee_id: string | null; created_by: string | null })[])
+        .filter((r) => (r.assignee_id && myIds.has(r.assignee_id)) || (!r.assignee_id && (r.created_by ?? "").toLowerCase() === myEmail));
+      setTasks(mine);
+      setLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [myEmail]);
+  if (!loaded) return null;
+  const overdue = tasks.filter((t) => t.due_date && t.due_date < todayIso).length;
+  return (
+    <section className="rounded-2xl bg-card p-4 shadow-sm border border-border/60">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs font-medium text-muted-foreground">My tasks</div>
+        <a href="/admin/tasks" className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
+          Open Tasks →
+        </a>
+      </div>
+      <div className="flex items-baseline gap-2 mt-1.5 flex-wrap">
+        <div className="text-2xl font-bold tracking-tight">{tasks.length}</div>
+        <span className="text-xs text-muted-foreground">open</span>
+        {overdue > 0 && <span className="text-xs font-semibold text-destructive">{overdue} overdue</span>}
+      </div>
+      {tasks.length === 0 ? (
+        <p className="text-sm text-muted-foreground italic mt-2">Nothing on your plate. 🎉</p>
+      ) : (
+        <div className="mt-2 divide-y divide-border/60">
+          {tasks.slice(0, 5).map((t) => {
+            const late = t.due_date && t.due_date < todayIso;
+            return (
+              <div key={t.id} className="py-1.5 flex items-baseline gap-2 text-sm">
+                <span className={`truncate flex-1 ${t.status === "in_progress" ? "font-medium" : ""}`}>{t.title}</span>
+                {t.priority === "high" && <span className="text-[10px] font-bold text-[#C84B3F]">HIGH</span>}
+                {t.due_date && (
+                  <span className={`text-xs whitespace-nowrap ${late ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
+                    {new Date(`${t.due_date}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          {tasks.length > 5 && <div className="pt-1.5 text-xs text-muted-foreground">+ {tasks.length - 5} more</div>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
  * Camembert des types d'événements (23 nov 2026) — SVG maison, pattern
  * DashboardCharts. Interactif : hover sur une part (ou la légende) → la part
  * s'écarte et le centre affiche le détail ; sinon le centre = total.
@@ -1733,6 +1802,7 @@ function DashboardView({
         </section>
 
         <div className="grid gap-3 content-start">
+          <MyTasksCard todayIso={todayIso} />
           <Tile
             label={`Collected ${year}`}
             value={fmtMoney(kpis.collected)}
