@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { todayLisbon } from "@/lib/dates";
 import { usePropertyFilter, PROPERTY_SHORT } from "@/lib/property";
 import { normalizeEmail } from "@/lib/admin";
-import { BookUser, FileText, Loader2, Mail, MessageCircle, Phone, Plus, Star, Trash2, Upload } from "lucide-react";
+import { BookUser, FileText, Loader2, Mail, MessageCircle, Pencil, Phone, Plus, Star, Trash2, Upload } from "lucide-react";
 
 /**
  * Onglet Toolbox (25 nov 2026, demande Geoffroy) — la boîte à outils du lieu :
@@ -83,6 +83,7 @@ export function ToolboxPage() {
   const emptyContact = { name: "", company: "", category: "", phone: "", email: "", notes: "", property: "shared" };
   const [showAddContact, setShowAddContact] = useState(false);
   const [contactDraft, setContactDraft] = useState(emptyContact);
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
 
   const addContact = async () => {
     if (!contactDraft.name.trim()) { toast({ title: "Name required", variant: "destructive" }); return; }
@@ -116,6 +117,17 @@ export function ToolboxPage() {
   const [docDraft, setDocDraft] = useState(emptyDoc);
   const [docFile, setDocFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
+
+  // Édition inline d'un document (25 nov 2026, demande Geoffroy) — titre,
+  // catégorie, lieu, échéance de validité, notes. Le fichier lui-même ne
+  // change pas (supprimer + re-uploader pour ça). Pas d'updated_at sur cette
+  // table.
+  const patchDoc = async (id: string, p: Partial<Doc>) => {
+    setDocsAll((arr) => arr.map((d) => (d.id === id ? { ...d, ...p } : d)));
+    const { error } = await supabase.from("toolbox_documents").update(p).eq("id", id);
+    if (error) { toast({ title: "Save failed", description: error.message, variant: "destructive" }); load(); }
+  };
 
   const addDoc = async () => {
     if (!docFile) { toast({ title: "Pick a file", variant: "destructive" }); return; }
@@ -244,6 +256,9 @@ export function ToolboxPage() {
                         {PROPERTY_SHORT[(c.property === "terra" ? "terra" : "quinta")]}
                       </span>
                     )}
+                    <button className="text-muted-foreground/60 hover:text-foreground" onClick={() => setEditingContactId(editingContactId === c.id ? null : c.id)} title="Edit">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
                     <button className="text-muted-foreground/60 hover:text-destructive" onClick={() => deleteContact(c)} title="Delete">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -263,6 +278,23 @@ export function ToolboxPage() {
                     )}
                   </div>
                   {c.notes && <div className="text-xs text-muted-foreground pt-0.5">{c.notes}</div>}
+                  {editingContactId === c.id && (
+                    <div className="pt-2 mt-1 border-t border-border/60 grid gap-2">
+                      <Input defaultValue={c.name} placeholder="Name"
+                        onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== c.name) patchContact(c.id, { name: v }); }} className="h-8" />
+                      <Input defaultValue={c.company ?? ""} placeholder="Company"
+                        onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== c.company) patchContact(c.id, { company: v }); }} className="h-8" />
+                      <Input defaultValue={c.category ?? ""} placeholder="Category" list="toolbox-cats"
+                        onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== c.category) patchContact(c.id, { category: v }); }} className="h-8" />
+                      <Input defaultValue={c.phone ?? ""} placeholder="Phone (+351…)"
+                        onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== c.phone) patchContact(c.id, { phone: v }); }} className="h-8" />
+                      <Input defaultValue={c.email ?? ""} placeholder="Email"
+                        onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== c.email) patchContact(c.id, { email: v }); }} className="h-8" />
+                      <Input defaultValue={c.notes ?? ""} placeholder="Notes"
+                        onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== c.notes) patchContact(c.id, { notes: v }); }} className="h-8" />
+                      {propertySelect(c.property, (v) => patchContact(c.id, { property: v }), "h-8")}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -314,7 +346,8 @@ export function ToolboxPage() {
                 </thead>
                 <tbody>
                   {docs.map((d) => (
-                    <tr key={d.id} className="border-b border-border/50 last:border-0">
+                    <Fragment key={d.id}>
+                    <tr className="border-b border-border/50 last:border-0">
                       <td className="px-3 py-2.5">
                         <button className="font-semibold text-left hover:underline" onClick={() => openDoc(d)}>{d.title}</button>
                         <div className="text-xs text-muted-foreground">{d.file_name}{d.notes ? ` · ${d.notes}` : ""}</div>
@@ -326,13 +359,40 @@ export function ToolboxPage() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5">{validityChip(d) ?? <span className="text-muted-foreground">—</span>}</td>
-                      <td className="px-3 py-2.5 text-right">
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <Button size="sm" variant="ghost" onClick={() => openDoc(d)}>Open</Button>
+                        <button className="ml-1 text-muted-foreground/60 hover:text-foreground align-middle" onClick={() => setEditingDocId(editingDocId === d.id ? null : d.id)} title="Edit">
+                          <Pencil className="w-4 h-4" />
+                        </button>
                         <button className="ml-1 text-muted-foreground/60 hover:text-destructive align-middle" onClick={() => deleteDoc(d)} title="Delete">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </td>
                     </tr>
+                    {editingDocId === d.id && (
+                      <tr className="border-b border-border/50 last:border-0 bg-muted/30">
+                        <td colSpan={5} className="px-3 py-3">
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            <Input defaultValue={d.title} placeholder="Title"
+                              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== d.title) patchDoc(d.id, { title: v }); }} className="h-8 lg:col-span-2" />
+                            <select value={d.category ?? ""} onChange={(e) => patchDoc(d.id, { category: e.target.value || null })}
+                              className="h-8 rounded-md border border-input bg-background px-2 text-sm">
+                              <option value="">No category</option>
+                              {DOC_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            {propertySelect(d.property, (v) => patchDoc(d.id, { property: v }), "h-8")}
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">Valid until</span>
+                              <Input type="date" defaultValue={d.valid_until ?? ""}
+                                onBlur={(e) => { const v = e.target.value || null; if (v !== d.valid_until) patchDoc(d.id, { valid_until: v }); }} className="h-8" />
+                            </div>
+                            <Input defaultValue={d.notes ?? ""} placeholder="Notes"
+                              onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== d.notes) patchDoc(d.id, { notes: v }); }} className="h-8 lg:col-span-3" />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
