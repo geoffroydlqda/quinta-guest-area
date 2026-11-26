@@ -184,14 +184,18 @@ const AdminGuestDetailContent = () => {
     if (!b?.check_in_date || !b?.check_out_date) { setOverlapConflicts([]); return; }
     (async () => {
       const { data: rows } = await supabase.from("bookings")
-        .select("id,retreat_name,first_name,last_name,email,check_in_date,check_out_date,is_test,cancelled_at")
+        .select("id,retreat_name,first_name,last_name,email,check_in_date,check_out_date,is_test,cancelled_at,property")
         .neq("id", b.id)
         .not("check_in_date", "is", null)
         .not("check_out_date", "is", null)
         .lt("check_in_date", b.check_out_date)
         .gt("check_out_date", b.check_in_date);
+      // Multi-lieux (26 nov 2026, demande Geoffroy) : deux événements peuvent
+      // avoir lieu en même temps sur des lieux DIFFÉRENTS — le chevauchement
+      // n'est un conflit que sur le même lieu.
+      const myProperty = ((b as any).property ?? "quinta") as string;
       setOverlapConflicts(((rows ?? []) as any[])
-        .filter((r) => !r.is_test && !r.cancelled_at)
+        .filter((r) => !r.is_test && !r.cancelled_at && (r.property ?? "quinta") === myProperty)
         .map((r) => ({
           id: r.id,
           label: r.retreat_name || `${r.first_name ?? ""} ${r.last_name ?? ""}`.trim() || r.email,
