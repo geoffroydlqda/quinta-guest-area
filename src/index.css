@@ -140,10 +140,12 @@
        Geoffroy). retreat = vert rental/occupation, wedding = bleu (comme le
        calendrier), other = apricot extras, day_retreat = lavender (4e slot).
        Identique en dark, comme les autres graphes. Ordre FIXE des parts :
-       retreat → day_retreat → other → wedding (adjacences + raccord du
-       cercle re-validés CVD dans cet ordre — ne pas réordonner). */
+       retreat → day_retreat → in_house → other → wedding (adjacences +
+       raccord du cercle re-validés ΔE/deutan dans cet ordre le 26 nov 2026 —
+       ne pas réordonner sans re-valider). */
     --evt-retreat: #8FC46A;
     --evt-day: #B08CF8;
+    --evt-inhouse: #F08CB4;
     --evt-other: #EF9455;
     --evt-wedding: #6EA6FF;
   }

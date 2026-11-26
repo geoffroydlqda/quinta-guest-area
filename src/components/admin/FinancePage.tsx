@@ -147,7 +147,7 @@ export type FinInstallment = {
 // Chaque échéance est classée par flux : catégorie (rental/catering/extra/
 // discount/bar) × type d'événement du booking (retreat/wedding/…).
 const REV_EVENT_LABEL: Record<string, string> = {
-  retreat: "retreats", wedding: "weddings", day_retreat: "day retreats", other: "other events",
+  retreat: "retreats", wedding: "weddings", day_retreat: "day retreats", other: "other events", in_house: "in-house events",
 };
 
 // Deux familles de remises dans le P&L — règle PAR SOURCE (7 oct 2026,

@@ -835,6 +835,51 @@ export type Database = {
         }
         Relationships: []
       }
+      event_participants: {
+        Row: {
+          id: string
+          booking_id: string
+          name: string
+          email: string | null
+          amount_ttc: number | null
+          paid_on: string | null
+          source: string
+          moloni_document_id: number | null
+          invoice_path: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          booking_id: string
+          name: string
+          email?: string | null
+          amount_ttc?: number | null
+          paid_on?: string | null
+          source?: string
+          moloni_document_id?: number | null
+          invoice_path?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          booking_id?: string
+          name?: string
+          email?: string | null
+          amount_ttc?: number | null
+          paid_on?: string | null
+          source?: string
+          moloni_document_id?: number | null
+          invoice_path?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pricing_settings: {
         Row: {
           key: string

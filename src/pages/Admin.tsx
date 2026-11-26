@@ -92,7 +92,7 @@ type BookingRow = {
 };
 
 const EVENT_TYPE_LABEL: Record<string, string> = {
-  retreat: "Retreat", wedding: "Wedding", other: "Other", day_retreat: "Day",
+  retreat: "Retreat", wedding: "Wedding", other: "Other", day_retreat: "Day", in_house: "In-house",
 };
 
 type Installment = {
@@ -953,6 +953,7 @@ const EVENT_TYPE_COLOR: Record<string, { bg: string; ink: string }> = {
   wedding: { bg: "#A8CBF7", ink: "#1D4F96" },
   other: { bg: "#F6C69B", ink: "#8A4A1B" },
   day_retreat: { bg: "#F3E0A2", ink: "#6F5B15" },
+  in_house: { bg: "#F7CADB", ink: "#86335B" },
 };
 
 function BookingCalendar({ bookings, todayIso, onOpen }: {
@@ -1610,10 +1611,12 @@ function DashboardView({
   // bookings exclut déjà tests et annulés ; les annulés de l'année restent
   // mentionnés en sous-ligne. Guests = somme des guest_count renseignés.
   // Ordre des parts FIXE (palette validée dataviz — voir index.css) :
-  // retreat → day_retreat → other → wedding ; un type inconnu rejoint other.
+  // retreat → day_retreat → in_house → other → wedding ; un type inconnu
+  // rejoint other. In-house inséré le 26 nov 2026 (rose #F08CB4, adjacences
+  // lavender-rose et rose-apricot re-validées ΔE/deutan).
   const eventsKpi = useMemo(() => {
     const ofYear = bookings.filter((b) => (b.check_in_date || "").startsWith(year));
-    const counts: Record<string, number> = { retreat: 0, day_retreat: 0, other: 0, wedding: 0 };
+    const counts: Record<string, number> = { retreat: 0, day_retreat: 0, in_house: 0, other: 0, wedding: 0 };
     let guests = 0;
     for (const b of ofYear) {
       const raw = ((b as { event_type?: string | null }).event_type ?? "retreat") || "retreat";
@@ -1624,6 +1627,7 @@ function DashboardView({
     const rows = [
       { type: "retreat", label: "Retreats", css: "var(--evt-retreat)", count: counts.retreat },
       { type: "day_retreat", label: "Day retreats", css: "var(--evt-day)", count: counts.day_retreat },
+      { type: "in_house", label: "In-house", css: "var(--evt-inhouse)", count: counts.in_house },
       { type: "other", label: "Other", css: "var(--evt-other)", count: counts.other },
       { type: "wedding", label: "Weddings", css: "var(--evt-wedding)", count: counts.wedding },
     ];
@@ -3810,6 +3814,7 @@ function EventTable({
                     <option value="wedding">Wedding</option>
                     <option value="other">Other</option>
                     <option value="day_retreat">Day retreat</option>
+                    <option value="in_house">In-house</option>
                   </select>
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">

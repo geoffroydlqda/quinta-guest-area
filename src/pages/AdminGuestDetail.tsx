@@ -24,6 +24,7 @@ import {
 import { generateAirportSignPdf, resolveAirportSignNames } from "@/lib/airportSignPdf";
 import { DeleteGuestDialog } from "@/components/admin/DeleteGuestDialog";
 import { EmailDigestCard } from "@/components/admin/EmailDigestCard";
+import { InHouseEventPanel } from "@/components/admin/InHouseEventPanel";
 import { PaymentEmailDialog } from "@/components/admin/PaymentEmailDialog";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { calculateFoodCostMulti, distributeDailyGuests, getDietTypes } from "@/lib/foodPricing";
@@ -926,6 +927,7 @@ const AdminGuestDetailContent = () => {
                 <option value="wedding">Wedding</option>
                 <option value="other">Other</option>
                 <option value="day_retreat">Day retreat</option>
+                <option value="in_house">In-house</option>
               </select>
             </div>
             <div>
@@ -1003,6 +1005,11 @@ const AdminGuestDetailContent = () => {
             </p>
           )}
         </section>
+
+        {/* Events in-house (26 nov 2026) : marge + participants avec facture individuelle */}
+        {(booking as { event_type?: string | null } | null)?.event_type === "in_house" && booking?.id && (
+          <InHouseEventPanel bookingId={booking.id} />
+        )}
 
         {/* Internal Notes (admin-only) */}
         <NotesBlock

@@ -4,7 +4,12 @@
 // récapitulative du booking (invoice_file_url, bucket privé `invoices`).
 // ⚠️ NE CRÉE AUCUN document Moloni — lecture de PDFs existants uniquement.
 // Auth : x-cron-key (= app_settings.internal.cron_key).
-// Body : { document_ids: number[], installment_id: uuid, filename?: string }
+// Deux modes :
+// - bundle (défaut) : { document_ids, installment_id, filename? } → un seul
+//   PDF fusionné attaché à l'échéance (invoice_file_url).
+// - store_each : { document_ids, booking_id, store_each: true } → un PDF par
+//   document dans invoices/<booking>/participants/<docId>.pdf, lié à la ligne
+//   event_participants correspondante (invoice_path) — events in-house.
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://esm.sh/zod@3.23.8";
@@ -25,8 +30,10 @@ const corsHeaders = {
 
 const BodySchema = z.object({
   document_ids: z.array(z.number().int().positive()).min(1).max(40),
-  installment_id: z.string().uuid(),
+  installment_id: z.string().uuid().optional(),
   filename: z.string().max(120).regex(/^[A-Za-z0-9._-]+\.pdf$/).optional(),
+  store_each: z.boolean().optional(),
+  booking_id: z.string().uuid().optional(),
 });
 
 function json(body: unknown, status = 200) {
@@ -90,8 +97,35 @@ serve(async (req) => {
 
     const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return json({ error: parsed.error.flatten() }, 400);
-    const { document_ids, installment_id, filename } = parsed.data;
+    const { document_ids, installment_id, filename, store_each, booking_id } = parsed.data;
 
+    // --- Mode store_each : un PDF par document, lié au participant ----------
+    if (store_each) {
+      if (!booking_id) return json({ error: "booking_id required with store_each" }, 400);
+      const stored: { document_id: number; path: string }[] = [];
+      const failedEach: { document_id: number; error: string }[] = [];
+      for (const docId of document_ids) {
+        try {
+          const tok = await pdfToken(docId);
+          if (!tok?.path || !tok?.token) { failedEach.push({ document_id: docId, error: "PDF token not ready" }); continue; }
+          const pdfRes = await fetch(`${MEDIA_BASE}${tok.path}?jwt=${tok.token}`);
+          if (!pdfRes.ok) { failedEach.push({ document_id: docId, error: `mediaapi HTTP ${pdfRes.status}` }); continue; }
+          const bytes = new Uint8Array(await pdfRes.arrayBuffer());
+          const path = `${booking_id}/participants/${docId}.pdf`;
+          const up = await admin.storage.from("invoices").upload(path, bytes, { contentType: "application/pdf", upsert: true });
+          if (up.error) { failedEach.push({ document_id: docId, error: up.error.message }); continue; }
+          await admin.from("event_participants").update({ invoice_path: path, updated_at: new Date().toISOString() })
+            .eq("booking_id", booking_id).eq("moloni_document_id", docId);
+          stored.push({ document_id: docId, path });
+        } catch (e) {
+          failedEach.push({ document_id: docId, error: String((e as Error)?.message ?? e).slice(0, 200) });
+        }
+      }
+      console.log(`[moloni-bundle-pdf] store_each: ${stored.length}/${document_ids.length} stored for booking ${booking_id}`);
+      return json({ stored: stored.length, failed: failedEach });
+    }
+
+    if (!installment_id) return json({ error: "installment_id required" }, 400);
     const { data: inst } = await admin.from("payment_installments")
       .select("id,booking_id").eq("id", installment_id).maybeSingle();
     if (!inst) return json({ error: "Installment not found" }, 404);

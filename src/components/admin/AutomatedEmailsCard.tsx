@@ -68,7 +68,7 @@ const TRIGGER_LABEL: Record<string, string> = {
   due_date: 'payment due date',
 };
 
-const EVENT_TYPES = ['retreat', 'wedding', 'other', 'day_retreat'];
+const EVENT_TYPES = ['retreat', 'wedding', 'other', 'day_retreat', 'in_house'];
 
 const VARIABLES_HINT =
   '{{first_name}} {{name}} {{retreat_name}} {{check_in_date}} {{check_out_date}} {{amount}} {{label}} {{due_date}} {{next_due_date}} {{next_amount}} {{balance}}';
