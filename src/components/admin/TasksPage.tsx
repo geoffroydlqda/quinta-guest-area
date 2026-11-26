@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -8,7 +8,7 @@ import { todayLisbon } from "@/lib/dates";
 import { getProperty, usePropertyFilter, PROPERTY_SHORT } from "@/lib/property";
 import { notifyAdmins } from "@/lib/notifications";
 import { normalizeEmail } from "@/lib/admin";
-import { CheckSquare, CornerDownRight, Loader2, Plus, Repeat, Trash2, UserRound, X } from "lucide-react";
+import { CheckSquare, CornerDownRight, Loader2, Mic, Plus, Repeat, Sparkles, Trash2, UserRound, X } from "lucide-react";
 
 /**
  * Onglet Operations > Tasks (25 nov 2026, demande Geoffroy) — centralise le
@@ -111,6 +111,25 @@ export function TasksPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingSubId, setEditingSubId] = useState<string | null>(null); // sous-tâche en cours de renommage
 
+  // Barre IA (26 nov 2026, demande Geoffroy) : taper OU dicter une liste de
+  // tâches en vrac — la dictée passe par la Web Speech API du navigateur
+  // (aucun audio envoyé à nos serveurs), le texte part à l'Edge Function
+  // tasks-ai (Claude) qui renvoie des tâches structurées, montrées en aperçu
+  // avant création.
+  type AiTask = { title: string; area: string | null; category: string | null; priority: string; due_date: string | null; repeats: string; assignee: string | null; notes: string | null; checked: boolean };
+  const [aiText, setAiText] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiPreview, setAiPreview] = useState<AiTask[] | null>(null);
+  const [listening, setListening] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recRef = useRef<any>(null);
+  const aiBaseRef = useRef("");
+  const speechSupported = typeof window !== "undefined"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  useEffect(() => () => { recRef.current?.stop?.(); }, []);
+
   const load = async () => {
     const [tasksRes, staffRes] = await Promise.all([
       supabase.from("admin_tasks").select("*").order("due_date", { ascending: true, nullsFirst: false }).order("created_at"),
@@ -198,6 +217,88 @@ export function TasksPage() {
     () => [...new Set(tasksAll.map((t) => (t.category ?? "").trim()).filter(Boolean))].sort(),
     [tasksAll]
   );
+
+  const toggleMic = () => {
+    if (listening) { recRef.current?.stop(); return; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { toast({ title: "Voice input not supported in this browser", variant: "destructive" }); return; }
+    const rec = new SR();
+    rec.lang = navigator.language || "fr-FR";
+    rec.continuous = true;
+    rec.interimResults = true;
+    aiBaseRef.current = aiText ? aiText.trim() + " " : "";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      let final = "", interim = "";
+      for (let i = 0; i < e.results.length; i++) {
+        const res = e.results[i];
+        if (res.isFinal) final += res[0].transcript;
+        else interim += res[0].transcript;
+      }
+      setAiText((aiBaseRef.current + final + interim).trimStart());
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    rec.start();
+    setListening(true);
+  };
+
+  const aiGenerate = async () => {
+    const text = aiText.trim();
+    if (text.length < 3) return;
+    if (listening) recRef.current?.stop();
+    setAiBusy(true);
+    const { data, error } = await supabase.functions.invoke("tasks-ai", {
+      body: {
+        text,
+        context: {
+          areas, categories,
+          assignees: assignable.map((a) => a.label),
+          today,
+          property: propertyFilter !== "all" ? propertyFilter : getProperty(),
+        },
+      },
+    });
+    setAiBusy(false);
+    if (error || data?.error) { toast({ title: "AI parsing failed", description: String(data?.error ?? error?.message ?? ""), variant: "destructive" }); return; }
+    const tasks = ((data?.tasks ?? []) as Omit<AiTask, "checked">[]).map((t) => ({ ...t, checked: true }));
+    if (!tasks.length) { toast({ title: "No tasks found in the note" }); return; }
+    setAiPreview(tasks);
+  };
+
+  const aiCreate = async () => {
+    const picked = (aiPreview ?? []).filter((t) => t.checked);
+    if (!picked.length) return;
+    setAiSaving(true);
+    const property = propertyFilter !== "all" ? propertyFilter : getProperty();
+    const labelToId = new Map(assignable.map((a) => [a.label.toLowerCase(), a.id]));
+    const payloads = picked.map((t) => ({
+      title: t.title, area: t.area, category: t.category, property,
+      priority: t.priority, due_date: t.due_date, repeats: t.repeats,
+      assignee_id: t.assignee ? (labelToId.get(t.assignee.toLowerCase()) ?? null) : null,
+      notes: t.notes, created_by: myEmail || null,
+    }));
+    const { error } = await supabase.from("admin_tasks").insert(payloads);
+    setAiSaving(false);
+    if (error) { toast({ title: "Create failed", description: error.message, variant: "destructive" }); return; }
+    const who = user?.email?.split("@")[0] ?? "Someone";
+    // Une notification par assigné, puis un broadcast aux autres (sans doublon)
+    const byAssignee = new Map<string, number>();
+    for (const p of payloads) {
+      if (!p.assignee_id) continue;
+      const em = normalizeEmail(staffById.get(p.assignee_id)?.email);
+      if (em && em !== myEmail) byAssignee.set(em, (byAssignee.get(em) ?? 0) + 1);
+    }
+    for (const [em, n] of byAssignee) {
+      notifyAdmins({ message: `${who} assigned you ${n} task${n > 1 ? "s" : ""}`, only: [em], createdBy: myEmail });
+    }
+    notifyAdmins({ message: `${who} created ${payloads.length} task${payloads.length > 1 ? "s" : ""} via the AI bar`, exclude: [myEmail, ...byAssignee.keys()], createdBy: myEmail });
+    setAiPreview(null); setAiText("");
+    toast({ title: `${payloads.length} task${payloads.length > 1 ? "s" : ""} created` });
+    load();
+  };
 
   const addTask = async () => {
     const title = draft.title.trim();
@@ -461,6 +562,66 @@ export function TasksPage() {
             <div className="text-xs text-muted-foreground">{k.l}</div>
           </button>
         ))}
+      </div>
+
+      {/* Barre IA : taper ou dicter une liste de tâches en vrac */}
+      <div className="rounded-2xl border border-border bg-card p-3 space-y-2">
+        <div className="flex items-start gap-2">
+          <Sparkles className="w-4 h-4 text-[#79B84B] mt-3 shrink-0" />
+          <textarea
+            value={aiText}
+            onChange={(e) => setAiText(e.target.value)}
+            placeholder={speechSupported
+              ? "Describe your tasks — type or tap the mic and speak (e.g. “fix the pool pump before Friday, Luis mows the field every month…”)"
+              : "Describe your tasks, one sentence each…"}
+            rows={aiText.length > 120 ? 3 : 1}
+            className="flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm min-h-[40px]"
+          />
+          {speechSupported && (
+            <button type="button" onClick={toggleMic}
+              title={listening ? "Stop dictation" : "Dictate your tasks"}
+              className={`p-2.5 rounded-full border transition-colors ${listening ? "bg-[#F36F63] border-[#F36F63] text-white animate-pulse" : "border-border text-muted-foreground hover:bg-secondary"}`}>
+              <Mic className="w-4 h-4" />
+            </button>
+          )}
+          <Button onClick={aiGenerate} disabled={aiBusy || aiText.trim().length < 3}>
+            {aiBusy ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />} Generate
+          </Button>
+        </div>
+        {listening && <div className="pl-6 text-xs font-medium text-[#C84B3F]">● Listening — speak your task list, tap the mic again to stop.</div>}
+        {aiPreview && (
+          <div className="pl-6 space-y-1.5">
+            <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground/70">
+              Preview · untick what you don't want
+            </div>
+            {aiPreview.map((t, i) => (
+              <div key={i} className="flex items-center gap-2 flex-wrap rounded-xl border px-3 py-2 text-sm">
+                <input type="checkbox" checked={t.checked}
+                  onChange={() => setAiPreview((p) => p!.map((x, xi) => (xi === i ? { ...x, checked: !x.checked } : x)))}
+                  className="w-4 h-4 accent-[#79B84B] cursor-pointer" />
+                <span className={`font-medium ${t.checked ? "" : "line-through text-muted-foreground"}`}>{t.title}</span>
+                {t.area && <span className="text-xs rounded-full bg-secondary px-2 py-0.5 text-secondary-foreground">{t.area}</span>}
+                {t.category && <span className="text-xs rounded-full border border-border px-2 py-0.5 text-muted-foreground">{t.category}</span>}
+                <span className={`text-[11px] font-semibold rounded-full px-2 py-0.5 ${(PRIORITIES.find((p) => p.v === t.priority) ?? PRIORITIES[1]).cls}`}>
+                  {(PRIORITIES.find((p) => p.v === t.priority) ?? PRIORITIES[1]).label}
+                </span>
+                {t.due_date && <span className="text-xs rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{fmtDay(t.due_date)}</span>}
+                {t.repeats !== "none" && <Repeat className="w-3 h-3 text-muted-foreground" />}
+                {t.assignee && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1"><UserRound className="w-3 h-3" />{t.assignee}</span>
+                )}
+                {t.notes && <span className="w-full pl-6 text-xs text-muted-foreground">{t.notes}</span>}
+              </div>
+            ))}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAiPreview(null)}>Cancel</Button>
+              <Button onClick={aiCreate} disabled={aiSaving || !aiPreview.some((t) => t.checked)}>
+                {aiSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckSquare className="w-4 h-4 mr-1" />}
+                Create {aiPreview.filter((t) => t.checked).length} task{aiPreview.filter((t) => t.checked).length > 1 ? "s" : ""}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Barre d'outils */}
