@@ -423,7 +423,16 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   };
 
   // ---- Import CSV Revolut --------------------------------------------------
+  // ⚠️ 26 nov 2026 : la synchro API horaire couvre déjà TOUTES les poches
+  // (Quinta, Terra, Equilibrio) avec le bon lieu sur chaque ligne. Un import
+  // CSV tague tout "quinta" et son dédoublonnage ne voit pas les lignes API
+  // -> doublons (vécu : export de la poche Terra importé, Intermarché Portel
+  // apparu dans la vue QDA). L'import ne sert plus qu'à l'historique pré-août
+  // 2026 — d'où le garde-fou.
   const importCsv = async (file: File) => {
+    if (!window.confirm(
+      "The hourly Revolut sync already imports every pocket (Quinta, Terra, Equilibrio) with the right property on each line.\n\nImporting a CSV tags everything as Quinta and will DUPLICATE lines the sync already has. Only use it for pre-August 2026 history.\n\nImport anyway?"
+    )) { if (fileRef.current) fileRef.current.value = ""; return; }
     setImporting(true);
     try {
       const rows = parseCsv(await file.text());

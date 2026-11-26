@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Folder, FolderOpen, Loader2, ExternalLink, FileText, Paperclip, Download } from "lucide-react";
+import { Folder, FolderOpen, Loader2, ExternalLink, FileText, Paperclip, Download, Trash2 } from "lucide-react";
 import { usePropertyFilter } from "@/lib/property";
 
 /**
@@ -108,6 +108,20 @@ export function PurchaseInvoicesTab() {
     const { data } = await supabase.storage.from("purchase-docs").createSignedUrl(doc.storage_path, 3600);
     setOpening(null);
     if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener");
+  };
+
+  // Suppression d'une PJ uploadée par erreur (26 nov 2026, demande Geoffroy).
+  // Le fichier Storage part avec la ligne ; la transaction liée n'est pas
+  // touchée (elle garde ses montants/TVA, et repasse simplement "sans reçu").
+  const deleteDoc = async (doc: LinkedDoc) => {
+    if (!window.confirm(`Delete this receipt (${doc.vendor ?? doc.file_name ?? "file"})? The file is removed too — the linked transaction is kept.`)) return;
+    setOpening(doc.id);
+    await supabase.storage.from("purchase-docs").remove([doc.storage_path]);
+    const { error } = await supabase.from("purchase_docs").delete().eq("id", doc.id);
+    setOpening(null);
+    if (error) { toast({ title: "Delete failed", description: error.message, variant: "destructive" }); return; }
+    setDocs((arr) => arr.filter((x) => x.id !== doc.id));
+    toast({ title: "Receipt deleted" });
   };
 
   // ---- Téléchargements -----------------------------------------------------
@@ -277,6 +291,11 @@ export function PurchaseInvoicesTab() {
                           className="inline-flex items-center rounded-full border border-border p-1.5 hover:bg-muted"
                           title="Download this receipt">
                           <Download className="w-3.5 h-3.5" />
+                        </button>
+                        <button type="button" onClick={() => deleteDoc(d)} disabled={opening === d.id}
+                          className="inline-flex items-center rounded-full border border-border p-1.5 text-muted-foreground/70 hover:bg-muted hover:text-destructive"
+                          title="Delete this receipt (uploaded by mistake)">
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </span>
                     </td>
