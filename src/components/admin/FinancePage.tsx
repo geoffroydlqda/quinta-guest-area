@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote, FolderOpen, Percent as PercentIcon, HelpCircle } from "lucide-react";
+import { Landmark, Loader2, Plus, Upload, TrendingUp, Wallet2, ReceiptText, Mail, Copy, Banknote, FolderOpen, Percent as PercentIcon, HelpCircle, Trash2 } from "lucide-react";
 import { EventMarginsTab } from "@/components/admin/EventMarginsTab";
 import { PurchaseInvoicesTab } from "@/components/admin/PurchaseInvoicesTab";
 import { AccountingFaqTab } from "@/components/admin/AccountingFaqTab";
@@ -333,18 +333,36 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   };
   const [deleteArm, setDeleteArm] = useState<string | null>(null);
   // Justificatifs d'achat : tx qui ont au moins un doc + rattachement "2 clics"
-  // tx_id -> chemins storage des justificatifs liés (icône verte cliquable)
-  const [docsByTx, setDocsByTx] = useState<Map<string, string[]>>(new Map());
-  const buildDocsMap = (rows: { tx_id: string; storage_path: string }[] | null) => {
-    const m = new Map<string, string[]>();
-    for (const r of rows ?? []) m.set(r.tx_id, [...(m.get(r.tx_id) ?? []), r.storage_path]);
+  // tx_id -> PJ liées {id, path, name}. Clic sur l'icône verte = petit panneau
+  // (26 nov 2026, demande Geoffroy) : chaque PJ s'ouvre d'un clic DIRECT (les
+  // window.open en boucle étaient bloqués par le navigateur au-delà du 1er)
+  // et se supprime à la corbeille sans quitter la ligne.
+  type TxDoc = { id: string; path: string; name: string | null };
+  const [docsByTx, setDocsByTx] = useState<Map<string, TxDoc[]>>(new Map());
+  const buildDocsMap = (rows: { id: string; tx_id: string; storage_path: string; file_name: string | null }[] | null) => {
+    const m = new Map<string, TxDoc[]>();
+    for (const r of rows ?? []) m.set(r.tx_id, [...(m.get(r.tx_id) ?? []), { id: r.id, path: r.storage_path, name: r.file_name }]);
     return m;
   };
-  const openReceipts = async (txId: string) => {
-    for (const p of docsByTx.get(txId) ?? []) {
-      const { data } = await supabase.storage.from("purchase-docs").createSignedUrl(p, 300);
-      if (data?.signedUrl) window.open(data.signedUrl, "_blank");
-    }
+  // Panneau PJ ouvert : row = la ligne où il s'affiche, tx = la transaction
+  // dont on liste les PJ (différentes pour une part de split -> parent).
+  const [docPanel, setDocPanel] = useState<{ row: string; tx: string } | null>(null);
+  const openOneDoc = async (doc: TxDoc) => {
+    const { data } = await supabase.storage.from("purchase-docs").createSignedUrl(doc.path, 300);
+    if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener");
+  };
+  const deleteTxDoc = async (txId: string, doc: TxDoc) => {
+    if (!window.confirm(`Delete this receipt${doc.name ? ` (${doc.name})` : ""}? The file is removed too — the transaction keeps its amounts.`)) return;
+    await supabase.storage.from("purchase-docs").remove([doc.path]);
+    const { error } = await supabase.from("purchase_docs").delete().eq("id", doc.id);
+    if (error) { toast({ title: "Delete failed", description: error.message, variant: "destructive" }); return; }
+    setDocsByTx((m) => {
+      const n = new Map(m);
+      const rest = (n.get(txId) ?? []).filter((d) => d.id !== doc.id);
+      if (rest.length) n.set(txId, rest); else { n.delete(txId); setDocPanel(null); }
+      return n;
+    });
+    toast({ title: "Receipt deleted" });
   };
   const [attachTxId, setAttachTxId] = useState<string | null>(null);
   const [attachBusy, setAttachBusy] = useState<string | null>(null);
@@ -379,12 +397,12 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
     const [t, r, pd, ic] = await Promise.all([
       fetchAllTxs(),
       supabase.from("fin_rules").select("*"),
-      supabase.from("purchase_docs").select("tx_id,storage_path").not("tx_id", "is", null),
+      supabase.from("purchase_docs").select("id,tx_id,storage_path,file_name").not("tx_id", "is", null),
       supabase.from("payment_installments").select("id,created_at"),
     ]);
     setTxs(t);
     setRules((r.data as FinRule[] | null) ?? []);
-    setDocsByTx(buildDocsMap(pd.data as { tx_id: string; storage_path: string }[] | null));
+    setDocsByTx(buildDocsMap(pd.data as { id: string; tx_id: string; storage_path: string; file_name: string | null }[] | null));
     setInstCreated(new Map(((ic.data ?? []) as { id: string; created_at: string }[])
       .map((x) => [x.id, x.created_at.slice(0, 10)])));
     setLoading(false);
@@ -395,8 +413,8 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
   // être lié depuis l'onglet Receipts entre-temps).
   useEffect(() => {
     if (tab !== "tx") return;
-    supabase.from("purchase_docs").select("tx_id,storage_path").not("tx_id", "is", null)
-      .then(({ data }) => setDocsByTx(buildDocsMap(data as { tx_id: string; storage_path: string }[] | null)));
+    supabase.from("purchase_docs").select("id,tx_id,storage_path,file_name").not("tx_id", "is", null)
+      .then(({ data }) => setDocsByTx(buildDocsMap(data as { id: string; tx_id: string; storage_path: string; file_name: string | null }[] | null)));
   }, [tab]);
 
   // ---- Justificatif "2 clics" : photo/PDF -> doc lié à la transaction ->
@@ -412,7 +430,7 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
         .insert({ storage_path: path, file_name: file.name, mime_type: file.type || "image/jpeg", tx_id: txId, status: "matched" })
         .select("id").single();
       if (insErr) throw new Error(insErr.message);
-      setDocsByTx((m) => { const n = new Map(m); n.set(txId, [...(n.get(txId) ?? []), path]); return n; });
+      setDocsByTx((m) => { const n = new Map(m); n.set(txId, [...(n.get(txId) ?? []), { id: row.id, path, name: file.name }]); return n; });
       const { data, error } = await supabase.functions.invoke("receipt-extract", { body: { doc_id: row.id } });
       if (error || data?.error) throw new Error(data?.error || error?.message);
       toast({ title: "Receipt attached", description: data?.vat_applied ? "VAT read — net amount updated on the transaction." : "Attached (VAT breakdown not readable)." });
@@ -1770,14 +1788,33 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                         {(t.kind === "expense" || t.kind === "review" || t.kind === "split") && t.amount < 0 && (
                           docsByTx.has(t.id) ? (
                             <>
-                              {/* Justificatif lié : icône verte -> ouvre le fichier */}
-                              <button type="button"
-                                className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-[#E5F5EA] px-1.5 py-0.5 text-[10px] font-semibold text-[#178A3F] hover:bg-[#D3EDDC] align-middle"
-                                title={`${docsByTx.get(t.id)!.length > 1 ? `${docsByTx.get(t.id)!.length} receipts` : "Receipt"} attached — click to open`}
-                                onClick={() => openReceipts(t.id)}>
-                                <ReceiptText className="w-3 h-3" />
-                                {docsByTx.get(t.id)!.length > 1 ? docsByTx.get(t.id)!.length : ""}
-                              </button>
+                              {/* Justificatif lié : icône verte -> panneau PJ (ouvrir / supprimer) */}
+                              <span className="relative inline-block align-middle ml-1.5">
+                                <button type="button"
+                                  className="inline-flex items-center gap-0.5 rounded-full bg-[#E5F5EA] px-1.5 py-0.5 text-[10px] font-semibold text-[#178A3F] hover:bg-[#D3EDDC]"
+                                  title={`${docsByTx.get(t.id)!.length > 1 ? `${docsByTx.get(t.id)!.length} receipts` : "Receipt"} attached — click to open or delete`}
+                                  onClick={() => setDocPanel(docPanel?.row === t.id ? null : { row: t.id, tx: t.id })}>
+                                  <ReceiptText className="w-3 h-3" />
+                                  {docsByTx.get(t.id)!.length > 1 ? docsByTx.get(t.id)!.length : ""}
+                                </button>
+                                {docPanel?.row === t.id && (
+                                  <span className="absolute left-0 top-full mt-1 z-50 w-[250px] rounded-xl border border-border bg-card shadow-xl p-1 text-left">
+                                    {(docsByTx.get(docPanel.tx) ?? []).map((d, di) => (
+                                      <span key={d.id} className="flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-muted/60">
+                                        <button type="button" className="flex-1 min-w-0 truncate text-left text-xs hover:underline"
+                                          title={`${d.name ?? `Receipt ${di + 1}`} — open in a new tab`}
+                                          onClick={() => openOneDoc(d)}>
+                                          {d.name ?? `Receipt ${di + 1}`}
+                                        </button>
+                                        <button type="button" className="shrink-0 text-muted-foreground/60 hover:text-destructive"
+                                          title="Delete this receipt" onClick={() => deleteTxDoc(docPanel.tx, d)}>
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </span>
+                                )}
+                              </span>
                               <button type="button"
                                 className="ml-1 text-[11px] text-muted-foreground/50 hover:text-foreground"
                                 title="Attach another receipt"
@@ -1788,12 +1825,31 @@ export function FinancePage({ bookings, installments, mode = "accounting" }: {
                           ) : t.parent_id && docsByTx.has(t.parent_id) ? (
                             /* Part d'un split dont le PARENT porte la facture
                                globale : couverte comme si elle avait la sienne */
-                            <button type="button"
-                              className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-[#E5F5EA] px-1.5 py-0.5 text-[10px] font-semibold text-[#178A3F]/80 hover:bg-[#D3EDDC] align-middle"
-                              title="Receipt attached on the split's full transaction — click to open"
-                              onClick={() => openReceipts(t.parent_id!)}>
-                              <ReceiptText className="w-3 h-3" />↳
-                            </button>
+                            <span className="relative inline-block align-middle ml-1.5">
+                              <button type="button"
+                                className="inline-flex items-center gap-0.5 rounded-full bg-[#E5F5EA] px-1.5 py-0.5 text-[10px] font-semibold text-[#178A3F]/80 hover:bg-[#D3EDDC]"
+                                title="Receipt attached on the split's full transaction — click to open or delete"
+                                onClick={() => setDocPanel(docPanel?.row === t.id ? null : { row: t.id, tx: t.parent_id! })}>
+                                <ReceiptText className="w-3 h-3" />↳
+                              </button>
+                              {docPanel?.row === t.id && (
+                                <span className="absolute left-0 top-full mt-1 z-50 w-[250px] rounded-xl border border-border bg-card shadow-xl p-1 text-left">
+                                  {(docsByTx.get(docPanel.tx) ?? []).map((d, di) => (
+                                    <span key={d.id} className="flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-muted/60">
+                                      <button type="button" className="flex-1 min-w-0 truncate text-left text-xs hover:underline"
+                                        title={`${d.name ?? `Receipt ${di + 1}`} — open in a new tab`}
+                                        onClick={() => openOneDoc(d)}>
+                                        {d.name ?? `Receipt ${di + 1}`}
+                                      </button>
+                                      <button type="button" className="shrink-0 text-muted-foreground/60 hover:text-destructive"
+                                        title="Delete this receipt" onClick={() => deleteTxDoc(docPanel.tx, d)}>
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </span>
+                                  ))}
+                                </span>
+                              )}
+                            </span>
                           ) : t.receipt_waived ? (
                             <button type="button"
                               className="ml-1.5 inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground align-middle"
