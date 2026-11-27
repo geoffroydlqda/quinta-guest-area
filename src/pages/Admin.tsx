@@ -1095,7 +1095,7 @@ function BookingCalendar({ bookings, todayIso, onOpen }: {
  * (assignées à sa fiche staff par email, ou créées par lui et non assignées),
  * overdue en rouge, lien vers l'onglet Tasks. Données autonomes (léger).
  */
-function MyTasksCard({ todayIso }: { todayIso: string }) {
+function MyTasksCard({ todayIso, className = "" }: { todayIso: string; className?: string }) {
   const { user } = useAuth();
   const myEmail = (user?.email ?? "").normalize("NFC").toLowerCase().trim();
   const [tasks, setTasks] = useState<{ id: string; title: string; due_date: string | null; priority: string; status: string }[]>([]);
@@ -1122,7 +1122,7 @@ function MyTasksCard({ todayIso }: { todayIso: string }) {
   if (!loaded) return null;
   const overdue = tasks.filter((t) => t.due_date && t.due_date < todayIso).length;
   return (
-    <section className="rounded-2xl bg-card p-4 shadow-sm border border-border/60">
+    <section className={`rounded-2xl bg-card p-4 shadow-sm border border-border/60 ${className}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="text-xs font-medium text-muted-foreground">My tasks</div>
         <a href="/admin/tasks" className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
@@ -1743,8 +1743,13 @@ function DashboardView({
           devenait négatif), delta N-1 PAR ligne, barre de composition aux
           couleurs des graphes (DashboardCharts). À droite : Collected
           (Overdue intégré) et Events (Season occupancy intégrée). */}
+      {/* Rééquilibrage 27 nov (demande Geoffroy — trop de blanc dans Revenue) :
+          My tasks passe à GAUCHE sous Revenue et absorbe la hauteur restante
+          (flex-1) ; la droite garde Collected + Events (flex-1). Aucun trou
+          entre les blocs des deux colonnes. */}
       <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr] items-stretch">
-        <section className="rounded-2xl bg-card p-5 shadow-sm border border-border/60 flex flex-col">
+        <div className="flex flex-col gap-3">
+        <section className="rounded-2xl bg-card p-5 shadow-sm border border-border/60">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium text-muted-foreground">Revenue {year} · excl. VAT</div>
             <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-[#EAF6DF] text-[#679E3F]">
@@ -1771,7 +1776,7 @@ function DashboardView({
                     ))}
                   </div>
                 )}
-                <div className="mt-3.5 space-y-2.5 flex-1">
+                <div className="mt-3.5 space-y-2.5">
                   {segs.map((s) => (
                     <div key={s.key} className="flex items-baseline gap-2 text-sm flex-wrap">
                       <span className="w-2.5 h-2.5 rounded-full shrink-0 self-center" style={{ background: s.color }} />
@@ -1805,9 +1810,10 @@ function DashboardView({
           })()}
           <div className="text-xs text-muted-foreground mt-3">{fmtMoney(kpis.contracted)} incl. VAT (invoiced)</div>
         </section>
+        <MyTasksCard todayIso={todayIso} className="flex-1" />
+        </div>
 
-        <div className="grid gap-3 content-start">
-          <MyTasksCard todayIso={todayIso} />
+        <div className="flex flex-col gap-3">
           <Tile
             label={`Collected ${year}`}
             value={fmtMoney(kpis.collected)}
@@ -1826,7 +1832,7 @@ function DashboardView({
             chip={kpis.overdueAllTotal > 0 ? "bg-[#FFEAE7] text-[#F36F63]" : "bg-[#EDF5FF] text-[#4a86e0]"}
           />
 
-          <section className="rounded-2xl bg-card p-4 shadow-sm border border-border/60 flex flex-col">
+          <section className="rounded-2xl bg-card p-4 shadow-sm border border-border/60 flex flex-col flex-1">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium text-muted-foreground flex items-baseline gap-2 flex-wrap">
               Events {year}
